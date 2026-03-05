@@ -1,10 +1,15 @@
 ---
+claimed_at: "2026-03-05T21:17:37Z"
+claimed_by: cli-user
+completed_at: "2026-03-05T21:17:40Z"
 complexity: medium
 depends_on: []
+duration_minutes: 0.06353099976666667
 estimate_hours: 1
 id: B017
 priority: high
-status: pending
+started_at: "2026-03-05T21:17:37Z"
+status: done
 tags: []
 title: add better editing tooling (research what opencode provides among others)
 ---

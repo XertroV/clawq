@@ -300,6 +300,45 @@ let is_workspace_safe_command_token token =
 let resolve_path ~workspace path =
   if Filename.is_relative path then Filename.concat workspace path else path
 
+let file_read_default_limit = 200
+let file_read_max_limit = 2000
+let file_read_max_full_chars = 50000
+
+let sanitize_window ~offset ~limit =
+  let offset = if offset < 1 then 1 else offset in
+  let limit = if limit < 1 then file_read_default_limit else limit in
+  let limit = min limit file_read_max_limit in
+  (offset, limit)
+
+let format_lines_window ~content ~offset ~limit =
+  let lines = String.split_on_char '\n' content in
+  let total = List.length lines in
+  let start = offset - 1 in
+  let indexed = List.mapi (fun i line -> (i + 1, line)) lines in
+  let selected =
+    indexed
+    |> List.filter (fun (n, _) -> n >= offset && n < offset + limit)
+  in
+  if selected = [] then
+    Printf.sprintf
+      "No lines in requested range. File has %d lines. Try a smaller offset."
+      total
+  else
+    let rendered =
+      selected
+      |> List.map (fun (n, line) -> Printf.sprintf "%d: %s" n line)
+      |> String.concat "\n"
+    in
+    let last_line = fst (List.hd (List.rev selected)) in
+    let suffix =
+      if start + List.length selected < total then
+        Printf.sprintf
+          "\n\n(Showing lines %d-%d of %d. Use offset=%d to continue.)"
+          offset last_line total (last_line + 1)
+      else Printf.sprintf "\n\n(End of file - total %d lines)" total
+    in
+    rendered ^ suffix
+
 let shell_exec ~workspace ~workspace_only ~allowed_commands ~extra_allowed_paths
     =
   let description =
@@ -429,6 +468,23 @@ let file_read ~workspace ~workspace_only ~extra_allowed_paths =
                       ("type", `String "string");
                       ("description", `String "Path to the file to read");
                     ] );
+                ( "offset",
+                  `Assoc
+                    [
+                      ("type", `String "integer");
+                      ( "description",
+                        `String
+                          "Optional 1-indexed line offset for paged reads" );
+                    ] );
+                ( "limit",
+                  `Assoc
+                    [
+                      ("type", `String "integer");
+                      ( "description",
+                        `String
+                          "Optional max lines to read when using offset (default 200, max 2000)"
+                      );
+                    ] );
               ] );
           ("required", `List [ `String "path" ]);
         ];
@@ -436,6 +492,19 @@ let file_read ~workspace ~workspace_only ~extra_allowed_paths =
       (fun args ->
         let open Yojson.Safe.Util in
         let path = try args |> member "path" |> to_string with _ -> "" in
+        let has_offset = args |> member "offset" <> `Null in
+        let has_limit = args |> member "limit" <> `Null in
+        let offset =
+          if has_offset then
+            try args |> member "offset" |> to_int with _ -> 1
+          else 1
+        in
+        let limit =
+          if has_limit then
+            try args |> member "limit" |> to_int with _ -> file_read_default_limit
+          else file_read_default_limit
+        in
+        let offset, limit = sanitize_window ~offset ~limit in
         if path = "" then Lwt.return "Error: path is required"
         else if
           not
@@ -450,9 +519,80 @@ let file_read ~workspace ~workspace_only ~extra_allowed_paths =
               let* content =
                 Lwt_io.with_file ~mode:Lwt_io.Input path Lwt_io.read
               in
-              Lwt.return content)
+              if has_offset || has_limit then
+                Lwt.return (format_lines_window ~content ~offset ~limit)
+              else if String.length content > file_read_max_full_chars then
+                Lwt.return
+                  (Printf.sprintf
+                     "File too large for full read (%d chars, limit %d chars). \
+                      Use file_read with offset/limit to read in parts (for \
+                      example: offset=1, limit=200), or use shell_exec with \
+                      grep to search first."
+                     (String.length content) file_read_max_full_chars)
+              else Lwt.return content)
             (fun exn -> Lwt.return ("Error: " ^ Printexc.to_string exn)));
     risk_level = Low;
+  }
+
+let file_append ~workspace ~workspace_only ~extra_allowed_paths =
+  {
+    Tool.name = "file_append";
+    description = "Append content to the end of a file";
+    parameters_schema =
+      `Assoc
+        [
+          ("type", `String "object");
+          ( "properties",
+            `Assoc
+              [
+                ( "path",
+                  `Assoc
+                    [
+                      ("type", `String "string");
+                      ("description", `String "Path to the file to append");
+                    ] );
+                ( "content",
+                  `Assoc
+                    [
+                      ("type", `String "string");
+                      ("description", `String "Content to append to the file");
+                    ] );
+              ] );
+          ("required", `List [ `String "path"; `String "content" ]);
+        ];
+    invoke =
+      (fun args ->
+        let open Yojson.Safe.Util in
+        let path = try args |> member "path" |> to_string with _ -> "" in
+        let content =
+          try args |> member "content" |> to_string with _ -> ""
+        in
+        if path = "" then Lwt.return "Error: path is required"
+        else if
+          not
+            (is_path_allowed ~workspace ~workspace_only ~extra_allowed_paths
+               path)
+        then Lwt.return "Error: path is outside workspace"
+        else
+          Lwt.catch
+            (fun () ->
+              let open Lwt.Syntax in
+              let path = resolve_path ~workspace path in
+              let* existing =
+                Lwt.catch
+                  (fun () ->
+                    Lwt_io.with_file ~mode:Lwt_io.Input path Lwt_io.read)
+                  (fun _ -> Lwt.return "")
+              in
+              let* () =
+                Lwt_io.with_file ~mode:Lwt_io.Output path (fun oc ->
+                    Lwt_io.write oc (existing ^ content))
+              in
+              Lwt.return
+                (Printf.sprintf "Appended %d bytes to %s"
+                   (String.length content) path))
+            (fun exn -> Lwt.return ("Error: " ^ Printexc.to_string exn)));
+    risk_level = Medium;
   }
 
 let file_write ~workspace ~workspace_only ~extra_allowed_paths =
@@ -540,6 +680,15 @@ let file_edit ~workspace ~workspace_only ~extra_allowed_paths =
                       ("type", `String "string");
                       ("description", `String "Replacement text");
                     ] );
+                ( "replace_all",
+                  `Assoc
+                    [
+                      ("type", `String "boolean");
+                      ( "description",
+                        `String
+                          "Optional: replace all occurrences (default false)"
+                      );
+                    ] );
               ] );
           ( "required",
             `List [ `String "path"; `String "old_text"; `String "new_text" ] );
@@ -553,6 +702,9 @@ let file_edit ~workspace ~workspace_only ~extra_allowed_paths =
         in
         let new_text =
           try args |> member "new_text" |> to_string with _ -> ""
+        in
+        let replace_all =
+          try args |> member "replace_all" |> to_bool with _ -> false
         in
         if path = "" then Lwt.return "Error: path is required"
         else if old_text = "" then Lwt.return "Error: old_text is required"
@@ -581,20 +733,150 @@ let file_edit ~workspace ~workspace_only ~extra_allowed_paths =
               in
               if idx < 0 then Lwt.return "Error: old_text not found in file"
               else
-                let before = String.sub content 0 idx in
-                let after =
-                  String.sub content
-                    (idx + String.length old_text)
-                    (String.length content - idx - String.length old_text)
+                let replacements =
+                  let rec count i acc =
+                    if i + String.length old_text > String.length content then acc
+                    else if String.sub content i (String.length old_text) = old_text
+                    then count (i + String.length old_text) (acc + 1)
+                    else count (i + 1) acc
+                  in
+                  count 0 0
                 in
-                let new_content = before ^ new_text ^ after in
+                let new_content =
+                  if replace_all then
+                    let rec build i acc =
+                      if i + String.length old_text > String.length content then
+                        acc
+                        ^ String.sub content i (String.length content - i)
+                      else if
+                        String.sub content i (String.length old_text) = old_text
+                      then build (i + String.length old_text) (acc ^ new_text)
+                      else build (i + 1) (acc ^ String.make 1 content.[i])
+                    in
+                    build 0 ""
+                  else
+                    let before = String.sub content 0 idx in
+                    let after =
+                      String.sub content
+                        (idx + String.length old_text)
+                        (String.length content - idx - String.length old_text)
+                    in
+                    before ^ new_text ^ after
+                in
                 let* () =
                   Lwt_io.with_file ~mode:Lwt_io.Output path (fun oc ->
                       Lwt_io.write oc new_content)
                 in
                 Lwt.return
-                  (Printf.sprintf "Edited %s: replaced %d chars with %d chars"
-                     path (String.length old_text) (String.length new_text)))
+                  (Printf.sprintf
+                     "Edited %s: replaced %d chars with %d chars (%d occurrence%s)"
+                     path (String.length old_text) (String.length new_text)
+                     (if replace_all then replacements else 1)
+                     (if (if replace_all then replacements else 1) = 1 then ""
+                      else "s")))
+            (fun exn -> Lwt.return ("Error: " ^ Printexc.to_string exn)));
+    risk_level = Medium;
+  }
+
+let file_edit_lines ~workspace ~workspace_only ~extra_allowed_paths =
+  {
+    Tool.name = "file_edit_lines";
+    description =
+      "Replace an inclusive line range [start_line, end_line] with new content";
+    parameters_schema =
+      `Assoc
+        [
+          ("type", `String "object");
+          ( "properties",
+            `Assoc
+              [
+                ( "path",
+                  `Assoc
+                    [
+                      ("type", `String "string");
+                      ("description", `String "Path to the file to edit");
+                    ] );
+                ( "start_line",
+                  `Assoc
+                    [
+                      ("type", `String "integer");
+                      ( "description",
+                        `String "1-indexed start line (inclusive)" );
+                    ] );
+                ( "end_line",
+                  `Assoc
+                    [
+                      ("type", `String "integer");
+                      ( "description",
+                        `String "1-indexed end line (inclusive)" );
+                    ] );
+                ( "content",
+                  `Assoc
+                    [
+                      ("type", `String "string");
+                      ("description", `String "Replacement content");
+                    ] );
+              ] );
+          ( "required",
+            `List
+              [
+                `String "path";
+                `String "start_line";
+                `String "end_line";
+                `String "content";
+              ] );
+        ];
+    invoke =
+      (fun args ->
+        let open Yojson.Safe.Util in
+        let path = try args |> member "path" |> to_string with _ -> "" in
+        let start_line =
+          try args |> member "start_line" |> to_int with _ -> 0
+        in
+        let end_line = try args |> member "end_line" |> to_int with _ -> 0 in
+        let replacement =
+          try args |> member "content" |> to_string with _ -> ""
+        in
+        if path = "" then Lwt.return "Error: path is required"
+        else if start_line < 1 || end_line < 1 then
+          Lwt.return "Error: start_line and end_line must be >= 1"
+        else if end_line < start_line then
+          Lwt.return "Error: end_line must be >= start_line"
+        else if
+          not
+            (is_path_allowed ~workspace ~workspace_only ~extra_allowed_paths
+               path)
+        then Lwt.return "Error: path is outside workspace"
+        else
+          Lwt.catch
+            (fun () ->
+              let open Lwt.Syntax in
+              let path = resolve_path ~workspace path in
+              let* content =
+                Lwt_io.with_file ~mode:Lwt_io.Input path Lwt_io.read
+              in
+              let lines = String.split_on_char '\n' content in
+              let total = List.length lines in
+              if start_line > total || end_line > total then
+                Lwt.return
+                  (Printf.sprintf
+                     "Error: line range %d-%d out of bounds for %d-line file"
+                     start_line end_line total)
+              else
+                let before =
+                  lines |> List.filteri (fun i _ -> i < start_line - 1)
+                in
+                let after = lines |> List.filteri (fun i _ -> i >= end_line) in
+                let replacement_lines = String.split_on_char '\n' replacement in
+                let new_lines = before @ replacement_lines @ after in
+                let new_content = String.concat "\n" new_lines in
+                let* () =
+                  Lwt_io.with_file ~mode:Lwt_io.Output path (fun oc ->
+                      Lwt_io.write oc new_content)
+                in
+                Lwt.return
+                  (Printf.sprintf "Edited %s: replaced lines %d-%d"
+                     path start_line end_line))
             (fun exn -> Lwt.return ("Error: " ^ Printexc.to_string exn)));
     risk_level = Medium;
   }
@@ -738,7 +1020,11 @@ let register_all ~(config : Runtime_config.t) registry =
   Tool_registry.register registry
     (file_write ~workspace ~workspace_only ~extra_allowed_paths);
   Tool_registry.register registry
+    (file_append ~workspace ~workspace_only ~extra_allowed_paths);
+  Tool_registry.register registry
     (file_edit ~workspace ~workspace_only ~extra_allowed_paths);
+  Tool_registry.register registry
+    (file_edit_lines ~workspace ~workspace_only ~extra_allowed_paths);
   Tool_registry.register registry (http_get ~workspace_only);
   if config.stt <> None then
     Tool_registry.register registry (transcribe ~config)

@@ -309,6 +309,117 @@ let test_is_localhost_url_rejects_host_spoofing () =
     "userinfo spoof rejected" false
     (Tools_builtin.is_localhost_url "http://localhost@evil.com/x")
 
+let test_file_read_large_file_requires_paged_read () =
+  with_temp_workspace (fun workspace ->
+      let path = "big.txt" in
+      let oc = open_out path in
+      output_string oc (String.make 60000 'a');
+      close_out oc;
+      let tool =
+        Tools_builtin.file_read ~workspace ~workspace_only:true
+          ~extra_allowed_paths:[]
+      in
+      let out = Lwt_main.run (tool.invoke (`Assoc [ ("path", `String path) ])) in
+      Alcotest.(check bool)
+        "oversized read blocked with guidance" true
+        (contains out "offset/limit"))
+
+let test_file_read_paged_window_with_line_numbers () =
+  with_temp_workspace (fun workspace ->
+      let path = "paged.txt" in
+      let oc = open_out path in
+      output_string oc "one\ntwo\nthree\nfour\nfive";
+      close_out oc;
+      let tool =
+        Tools_builtin.file_read ~workspace ~workspace_only:true
+          ~extra_allowed_paths:[]
+      in
+      let out =
+        Lwt_main.run
+          (tool.invoke
+             (`Assoc
+               [
+                 ("path", `String path);
+                 ("offset", `Int 2);
+                 ("limit", `Int 2);
+               ]))
+      in
+      Alcotest.(check bool) "includes line 2" true (contains out "2: two");
+      Alcotest.(check bool) "includes line 3" true (contains out "3: three");
+      Alcotest.(check bool) "omits line 1" false (contains out "1: one"))
+
+let test_file_append_creates_and_appends () =
+  with_temp_workspace (fun workspace ->
+      let path = "append.txt" in
+      let tool =
+        Tools_builtin.file_append ~workspace ~workspace_only:true
+          ~extra_allowed_paths:[]
+      in
+      ignore
+        (Lwt_main.run
+           (tool.invoke
+              (`Assoc
+                [ ("path", `String path); ("content", `String "hello") ])));
+      ignore
+        (Lwt_main.run
+           (tool.invoke
+              (`Assoc
+                [ ("path", `String path); ("content", `String " world") ])));
+      let ic = open_in path in
+      let content = really_input_string ic (in_channel_length ic) in
+      close_in ic;
+      Alcotest.(check string) "append content" "hello world" content)
+
+let test_file_edit_replace_all () =
+  with_temp_workspace (fun workspace ->
+      let path = "replace_all.txt" in
+      let oc = open_out path in
+      output_string oc "a b a b";
+      close_out oc;
+      let tool =
+        Tools_builtin.file_edit ~workspace ~workspace_only:true
+          ~extra_allowed_paths:[]
+      in
+      ignore
+        (Lwt_main.run
+           (tool.invoke
+              (`Assoc
+                [
+                  ("path", `String path);
+                  ("old_text", `String "a");
+                  ("new_text", `String "z");
+                  ("replace_all", `Bool true);
+                ])));
+      let ic = open_in path in
+      let content = really_input_string ic (in_channel_length ic) in
+      close_in ic;
+      Alcotest.(check string) "all replaced" "z b z b" content)
+
+let test_file_edit_lines_replaces_range () =
+  with_temp_workspace (fun workspace ->
+      let path = "lines.txt" in
+      let oc = open_out path in
+      output_string oc "one\ntwo\nthree\nfour";
+      close_out oc;
+      let tool =
+        Tools_builtin.file_edit_lines ~workspace ~workspace_only:true
+          ~extra_allowed_paths:[]
+      in
+      ignore
+        (Lwt_main.run
+           (tool.invoke
+              (`Assoc
+                [
+                  ("path", `String path);
+                  ("start_line", `Int 2);
+                  ("end_line", `Int 3);
+                  ("content", `String "TWO\nTHREE");
+                ])));
+      let ic = open_in path in
+      let content = really_input_string ic (in_channel_length ic) in
+      close_in ic;
+      Alcotest.(check string) "line range replaced" "one\nTWO\nTHREE\nfour" content)
+
 let suite =
   [
     Alcotest.test_case "path traversal rejected" `Quick
@@ -337,6 +448,16 @@ let suite =
       test_file_edit_replaces_first_match;
     Alcotest.test_case "file_read uses configured workspace" `Quick
       test_file_read_uses_configured_workspace_root;
+    Alcotest.test_case "file_read large file requires paging" `Quick
+      test_file_read_large_file_requires_paged_read;
+    Alcotest.test_case "file_read paged window" `Quick
+      test_file_read_paged_window_with_line_numbers;
+    Alcotest.test_case "file_append creates and appends" `Quick
+      test_file_append_creates_and_appends;
+    Alcotest.test_case "file_edit replace_all" `Quick
+      test_file_edit_replace_all;
+    Alcotest.test_case "file_edit_lines range replace" `Quick
+      test_file_edit_lines_replaces_range;
     Alcotest.test_case "extra_allowed_paths grants access" `Quick
       test_extra_allowed_paths_grants_access;
     Alcotest.test_case "transcribe path policy" `Quick
