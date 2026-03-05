@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+exec opam exec --switch=clawq-5.1 -- dune exec src/main.exe -- "$@"
