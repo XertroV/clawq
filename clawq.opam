@@ -1,0 +1,26 @@
+opam-version: "2.0"
+synopsis: "Coq port scaffold of nullclaw"
+description: "Coq-first assistant runtime scaffold with extraction to OCaml."
+maintainer: ["xertrov"]
+authors: ["xertrov"]
+license: "MIT"
+homepage: "https://example.invalid/clawq"
+bug-reports: "https://example.invalid/clawq/issues"
+depends: [
+  "ocaml" {>= "5.1.0"}
+  "dune" {>= "3.21"}
+  "coq" {>= "8.19"}
+  "coq-stdlib"
+  "cmdliner"
+  "yojson"
+  "sqlite3"
+  "lwt"
+  "cohttp-lwt-unix"
+  "tls-lwt"
+  "logs"
+  "fmt"
+  "alcotest" {with-test}
+]
+build: [
+  ["dune" "build" "-p" name "-j" jobs]
+]

@@ -1,0 +1,47 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup OCaml + opam
+        uses: avsm/setup-ocaml@v3
+        with:
+          ocaml-compiler: 5.1.1
+
+      - name: Install system package for sqlite bindings
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
+
+      - name: Install opam deps
+        run: |
+          opam update
+          opam install -y . --deps-only --with-test
+
+      - name: Build
+        run: |
+          eval "$(opam env)"
+          dune build
+
+      - name: Extraction check
+        run: |
+          eval "$(opam env)"
+          ./scripts/extract.sh
+          git diff --exit-code src/extracted/clawq_core.ml src/extracted/clawq_core.mli
+
+      - name: Run tests
+        run: |
+          eval "$(opam env)"
+          dune runtest
+
+      - name: Format check
+        run: |
+          eval "$(opam env)"
+          opam install -y ocamlformat.0.27.0
+          dune fmt 2>&1 || true
+          git diff --exit-code

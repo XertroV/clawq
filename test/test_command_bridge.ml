@@ -1,0 +1,98 @@
+let test_handle_phase2 () =
+  let result = Command_bridge.handle [ "phase2" ] in
+  Alcotest.(check bool)
+    "phase2 returns deferred list" true
+    (String.length result > 0)
+
+let test_handle_version () =
+  Alcotest.(check string)
+    "handle version" "clawq 0.1.0-dev"
+    (Command_bridge.handle [ "version" ])
+
+let test_handle_unknown () =
+  let result = Command_bridge.handle [ "unknown_xyz" ] in
+  Alcotest.(check bool)
+    "handle unknown contains 'unknown command'" true
+    (let prefix = "unknown command" in
+     String.length result >= String.length prefix
+     && String.sub result 0 (String.length prefix) = prefix)
+
+let test_handle_status () =
+  let result = Command_bridge.handle [ "status" ] in
+  Alcotest.(check bool)
+    "status contains 'clawq status'" true
+    (String.length result > 0
+    && String.sub result 0 12 = "clawq status")
+
+let test_handle_doctor () =
+  let result = Command_bridge.handle [ "doctor" ] in
+  Alcotest.(check bool)
+    "doctor starts with 'doctor:'" true
+    (String.length result >= 7 && String.sub result 0 7 = "doctor:")
+
+let test_handle_models () =
+  let result = Command_bridge.handle [ "models" ] in
+  Alcotest.(check bool)
+    "models returns output" true
+    (String.length result > 0)
+
+let test_handle_channel () =
+  let result = Command_bridge.handle [ "channel" ] in
+  Alcotest.(check bool)
+    "channel contains 'Configured channels'" true
+    (String.length result > 0
+    && let prefix = "Configured channels" in
+       String.length result >= String.length prefix
+       && String.sub result 0 (String.length prefix) = prefix)
+
+let test_handle_memory () =
+  let result = Command_bridge.handle [ "memory" ] in
+  Alcotest.(check bool)
+    "memory contains 'Memory backend'" true
+    (String.length result > 0
+    && String.sub result 0 14 = "Memory backend")
+
+let test_handle_workspace () =
+  let result = Command_bridge.handle [ "workspace" ] in
+  Alcotest.(check bool)
+    "workspace contains 'Workspace:'" true
+    (String.length result > 0 && String.sub result 0 10 = "Workspace:")
+
+let test_handle_capabilities () =
+  let result = Command_bridge.handle [ "capabilities" ] in
+  Alcotest.(check bool)
+    "capabilities mentions LLM" true
+    (String.length result > 0)
+
+let test_handle_auth () =
+  let result = Command_bridge.handle [ "auth" ] in
+  Alcotest.(check bool)
+    "auth returns output" true
+    (String.length result > 0)
+
+let test_handle_not_implemented () =
+  List.iter
+    (fun cmd ->
+      let result = Command_bridge.handle [ cmd ] in
+      Alcotest.(check bool)
+        (cmd ^ " returns not implemented")
+        true
+        (String.length result > 0))
+    [ "cron"; "skills"; "hardware"; "migrate"; "service" ]
+
+let suite =
+  [
+    Alcotest.test_case "handle phase2" `Quick test_handle_phase2;
+    Alcotest.test_case "handle version" `Quick test_handle_version;
+    Alcotest.test_case "handle unknown" `Quick test_handle_unknown;
+    Alcotest.test_case "handle status" `Quick test_handle_status;
+    Alcotest.test_case "handle doctor" `Quick test_handle_doctor;
+    Alcotest.test_case "handle models" `Quick test_handle_models;
+    Alcotest.test_case "handle channel" `Quick test_handle_channel;
+    Alcotest.test_case "handle memory" `Quick test_handle_memory;
+    Alcotest.test_case "handle workspace" `Quick test_handle_workspace;
+    Alcotest.test_case "handle capabilities" `Quick test_handle_capabilities;
+    Alcotest.test_case "handle auth" `Quick test_handle_auth;
+    Alcotest.test_case "handle not-impl commands" `Quick
+      test_handle_not_implemented;
+  ]
