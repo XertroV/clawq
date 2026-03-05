@@ -1,10 +1,15 @@
 ---
+claimed_at: "2026-03-05T17:03:55Z"
+claimed_by: cli-user
+completed_at: "2026-03-05T17:03:55Z"
 complexity: medium
 depends_on: []
+duration_minutes: 0.0039136303333333336
 estimate_hours: 1
 id: B013
 priority: high
-status: pending
+started_at: "2026-03-05T17:03:55Z"
+status: done
 tags: []
 title: 'relax auth requirements (see failure: Insecure gateway config: set gateway.require_pairing=true or configure gateway.auth_token)'
 ---
