@@ -220,7 +220,26 @@ let contains_substr s sub =
   in
   nlen = 0 || loop 0
 
-let is_workspace_safe_arg arg =
+let expand_home_in_arg arg =
+  let a = String.trim arg in
+  if String.length a > 0 && a.[0] = '-' then
+    match String.index_opt a '=' with
+    | Some i when i + 1 < String.length a ->
+        let key = String.sub a 0 (i + 1) in
+        let value = String.sub a (i + 1) (String.length a - i - 1) in
+        key ^ Runtime_config.expand_home value
+    | _ -> a
+  else Runtime_config.expand_home a
+
+let is_path_within_allowed_roots ~workspace ~extra_allowed_paths path =
+  is_path_safe ~workspace path
+  || List.exists
+       (fun extra ->
+         let extra = Runtime_config.expand_home extra |> normalize_path in
+         is_path_safe ~workspace:extra path)
+       extra_allowed_paths
+
+let is_workspace_safe_arg ~workspace ~extra_allowed_paths arg =
   let a = String.trim arg in
   let a =
     if String.length a > 0 && a.[0] = '-' then
@@ -233,16 +252,22 @@ let is_workspace_safe_arg arg =
   if a = "" then true
   else
     let len = String.length a in
-    not
-      ((len > 0 && (a.[0] = '/' || a.[0] = '~'))
-      || contains_substr a ".." || contains_substr a "://")
+    (not (contains_substr a ".." || contains_substr a "://"))
+    &&
+    if len > 0 && (a.[0] = '/' || a.[0] = '~') then
+      let expanded = Runtime_config.expand_home a in
+      is_path_within_allowed_roots ~workspace ~extra_allowed_paths expanded
+    else true
 
-let has_workspace_unsafe_args argv =
+let has_workspace_unsafe_args ~workspace ~extra_allowed_paths argv =
   match argv with
   | [] -> true
   | cmd :: args ->
       let unsafe_args =
-        List.exists (fun arg -> not (is_workspace_safe_arg arg)) args
+        List.exists
+          (fun arg ->
+            not (is_workspace_safe_arg ~workspace ~extra_allowed_paths arg))
+          args
       in
       let git_unsafe =
         if cmd = "git" then
@@ -275,7 +300,8 @@ let is_workspace_safe_command_token token =
 let resolve_path ~workspace path =
   if Filename.is_relative path then Filename.concat workspace path else path
 
-let shell_exec ~workspace ~workspace_only ~allowed_commands =
+let shell_exec ~workspace ~workspace_only ~allowed_commands ~extra_allowed_paths
+    =
   let description =
     if workspace_only then
       "Execute a shell command from the workspace directory and return stdout \
@@ -334,6 +360,10 @@ let shell_exec ~workspace ~workspace_only ~allowed_commands =
           match split_command_words command with
           | Error msg -> Lwt.return ("Error: " ^ msg)
           | Ok argv -> (
+              let argv =
+                if workspace_only then List.map expand_home_in_arg argv
+                else argv
+              in
               match argv with
               | [] -> Lwt.return "Error: command is required"
               | cmd :: _
@@ -342,7 +372,10 @@ let shell_exec ~workspace ~workspace_only ~allowed_commands =
                   Lwt.return
                     "Error: command binary path is disallowed in \
                      workspace_only mode"
-              | _ when workspace_only && has_workspace_unsafe_args argv ->
+              | _
+                when workspace_only
+                     && has_workspace_unsafe_args ~workspace
+                          ~extra_allowed_paths argv ->
                   Lwt.return
                     "Error: command contains paths/targets disallowed in \
                      workspace_only mode"
@@ -377,13 +410,7 @@ let shell_exec ~workspace ~workspace_only ~allowed_commands =
 
 let is_path_allowed ~workspace ~workspace_only ~extra_allowed_paths path =
   if not workspace_only then true
-  else if is_path_safe ~workspace path then true
-  else
-    List.exists
-      (fun extra ->
-        let extra = normalize_path extra in
-        is_path_safe ~workspace:extra path)
-      extra_allowed_paths
+  else is_path_within_allowed_roots ~workspace ~extra_allowed_paths path
 
 let file_read ~workspace ~workspace_only ~extra_allowed_paths =
   {
@@ -705,7 +732,7 @@ let register_all ~(config : Runtime_config.t) registry =
   let extra_allowed_paths = config.security.extra_allowed_paths in
   Tool_registry.register registry
     (shell_exec ~workspace ~workspace_only
-       ~allowed_commands:default_shell_allowlist);
+       ~allowed_commands:default_shell_allowlist ~extra_allowed_paths);
   Tool_registry.register registry
     (file_read ~workspace ~workspace_only ~extra_allowed_paths);
   Tool_registry.register registry

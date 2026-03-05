@@ -90,7 +90,9 @@ let load_skill ?(workspace_only = true)
                          workspace_only mode"
                   | _
                     when workspace_only
-                         && Tools_builtin.has_workspace_unsafe_args argv ->
+                         && Tools_builtin.has_workspace_unsafe_args
+                              ~workspace:(Sys.getcwd ()) ~extra_allowed_paths:[]
+                              argv ->
                       Lwt.return
                         "Error: skill command contains paths/targets \
                          disallowed in workspace_only mode"

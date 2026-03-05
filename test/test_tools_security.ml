@@ -37,7 +37,7 @@ let test_path_traversal_rejected () =
 let test_shell_allowlist_rejects_disallowed () =
   let tool =
     Tools_builtin.shell_exec ~workspace:(Sys.getcwd ()) ~workspace_only:true
-      ~allowed_commands:[ "ls" ]
+      ~allowed_commands:[ "ls" ] ~extra_allowed_paths:[]
   in
   let args = `Assoc [ ("command", `String "echo hi") ] in
   let out = Lwt_main.run (tool.invoke args) in
@@ -46,7 +46,7 @@ let test_shell_allowlist_rejects_disallowed () =
 let test_shell_allowlist_allows_command () =
   let tool =
     Tools_builtin.shell_exec ~workspace:(Sys.getcwd ()) ~workspace_only:true
-      ~allowed_commands:[ "ls" ]
+      ~allowed_commands:[ "ls" ] ~extra_allowed_paths:[]
   in
   let args = `Assoc [ ("command", `String "ls .") ] in
   let out = Lwt_main.run (tool.invoke args) in
@@ -55,7 +55,7 @@ let test_shell_allowlist_allows_command () =
 let test_shell_rejects_command_chaining () =
   let tool =
     Tools_builtin.shell_exec ~workspace:(Sys.getcwd ()) ~workspace_only:true
-      ~allowed_commands:[ "ls" ]
+      ~allowed_commands:[ "ls" ] ~extra_allowed_paths:[]
   in
   let args = `Assoc [ ("command", `String "ls && whoami") ] in
   let out = Lwt_main.run (tool.invoke args) in
@@ -66,7 +66,7 @@ let test_shell_rejects_command_chaining () =
 let test_shell_rejects_dollar_expansion () =
   let tool =
     Tools_builtin.shell_exec ~workspace:(Sys.getcwd ()) ~workspace_only:true
-      ~allowed_commands:[ "ls" ]
+      ~allowed_commands:[ "ls" ] ~extra_allowed_paths:[]
   in
   let args = `Assoc [ ("command", `String "ls $HOME") ] in
   let out = Lwt_main.run (tool.invoke args) in
@@ -77,7 +77,7 @@ let test_shell_rejects_dollar_expansion () =
 let test_shell_handles_quoted_args () =
   let tool =
     Tools_builtin.shell_exec ~workspace:(Sys.getcwd ()) ~workspace_only:true
-      ~allowed_commands:[ "ls" ]
+      ~allowed_commands:[ "ls" ] ~extra_allowed_paths:[]
   in
   let args = `Assoc [ ("command", `String "ls \".\"") ] in
   let out = Lwt_main.run (tool.invoke args) in
@@ -86,7 +86,7 @@ let test_shell_handles_quoted_args () =
 let test_shell_rejects_absolute_path_arg () =
   let tool =
     Tools_builtin.shell_exec ~workspace:(Sys.getcwd ()) ~workspace_only:true
-      ~allowed_commands:[ "cat" ]
+      ~allowed_commands:[ "cat" ] ~extra_allowed_paths:[]
   in
   let args = `Assoc [ ("command", `String "cat /etc/passwd") ] in
   let out = Lwt_main.run (tool.invoke args) in
@@ -97,7 +97,7 @@ let test_shell_rejects_absolute_path_arg () =
 let test_shell_rejects_url_arg () =
   let tool =
     Tools_builtin.shell_exec ~workspace:(Sys.getcwd ()) ~workspace_only:true
-      ~allowed_commands:[ "git" ]
+      ~allowed_commands:[ "git" ] ~extra_allowed_paths:[]
   in
   let args =
     `Assoc [ ("command", `String "git clone https://example.com/repo") ]
@@ -110,7 +110,7 @@ let test_shell_rejects_url_arg () =
 let test_shell_rejects_binary_path_bypass () =
   let tool =
     Tools_builtin.shell_exec ~workspace:(Sys.getcwd ()) ~workspace_only:true
-      ~allowed_commands:[ "ls" ]
+      ~allowed_commands:[ "ls" ] ~extra_allowed_paths:[]
   in
   let args = `Assoc [ ("command", `String "./ls") ] in
   let out = Lwt_main.run (tool.invoke args) in
@@ -121,7 +121,7 @@ let test_shell_rejects_binary_path_bypass () =
 let test_shell_rejects_option_assigned_absolute_path () =
   let tool =
     Tools_builtin.shell_exec ~workspace:(Sys.getcwd ()) ~workspace_only:true
-      ~allowed_commands:[ "tar" ]
+      ~allowed_commands:[ "tar" ] ~extra_allowed_paths:[]
   in
   let args =
     `Assoc [ ("command", `String "tar --file=/tmp/out.tar -cf out.tar .") ]
@@ -134,13 +134,55 @@ let test_shell_rejects_option_assigned_absolute_path () =
 let test_shell_rejects_git_network_subcommand () =
   let tool =
     Tools_builtin.shell_exec ~workspace:(Sys.getcwd ()) ~workspace_only:true
-      ~allowed_commands:[ "git" ]
+      ~allowed_commands:[ "git" ] ~extra_allowed_paths:[]
   in
   let args = `Assoc [ ("command", `String "git clone repo") ] in
   let out = Lwt_main.run (tool.invoke args) in
   Alcotest.(check bool)
     "git clone blocked" true
     (contains out "disallowed in workspace_only mode")
+
+let test_shell_extra_allowed_paths_grants_access () =
+  let base = Filename.get_temp_dir_name () in
+  let workspace =
+    Filename.concat base
+      (Printf.sprintf "clawq_shell_ws_%d_%d" (Unix.getpid ()) (Random.bits ()))
+  in
+  let extra_dir =
+    Filename.concat base
+      (Printf.sprintf "clawq_shell_extra_%d_%d" (Unix.getpid ())
+         (Random.bits ()))
+  in
+  Unix.mkdir workspace 0o755;
+  Unix.mkdir extra_dir 0o755;
+  Fun.protect
+    (fun () ->
+      let tool =
+        Tools_builtin.shell_exec ~workspace ~workspace_only:true
+          ~allowed_commands:[ "ls" ] ~extra_allowed_paths:[ extra_dir ]
+      in
+      let out =
+        Lwt_main.run
+          (tool.invoke (`Assoc [ ("command", `String ("ls " ^ extra_dir)) ]))
+      in
+      Alcotest.(check bool)
+        "extra allowed path usable in shell" true
+        (contains out "exit_code: 0");
+      let tool_no_extra =
+        Tools_builtin.shell_exec ~workspace ~workspace_only:true
+          ~allowed_commands:[ "ls" ] ~extra_allowed_paths:[]
+      in
+      let out2 =
+        Lwt_main.run
+          (tool_no_extra.invoke
+             (`Assoc [ ("command", `String ("ls " ^ extra_dir)) ]))
+      in
+      Alcotest.(check bool)
+        "without extra_allowed_paths blocked in shell" true
+        (contains out2 "disallowed in workspace_only mode"))
+    ~finally:(fun () ->
+      (try Unix.rmdir extra_dir with _ -> ());
+      try Unix.rmdir workspace with _ -> ())
 
 let test_file_edit_replaces_first_match () =
   with_temp_workspace (fun workspace ->
@@ -289,6 +331,8 @@ let suite =
       test_shell_rejects_option_assigned_absolute_path;
     Alcotest.test_case "shell git network subcommand blocked" `Quick
       test_shell_rejects_git_network_subcommand;
+    Alcotest.test_case "shell extra_allowed_paths grants access" `Quick
+      test_shell_extra_allowed_paths_grants_access;
     Alcotest.test_case "file_edit first match" `Quick
       test_file_edit_replaces_first_match;
     Alcotest.test_case "file_read uses configured workspace" `Quick
