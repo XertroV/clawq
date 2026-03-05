@@ -55,7 +55,7 @@ let extract_event_body (payload : Yojson.Safe.t) : string =
   with _ -> Yojson.Safe.to_string payload
 
 let run_connection ~(config : Runtime_config.slack_config)
-    ~(session_manager : Session.t) =
+    ~(session_manager : Session.t) ~(event_limiter : Rate_limiter.t) =
   let open Lwt.Syntax in
   let* url = get_wss_url ~app_token:config.app_token in
   Logs.info (fun m -> m "Slack Socket Mode: connecting to WSS");
@@ -78,7 +78,9 @@ let run_connection ~(config : Runtime_config.slack_config)
               Lwt.return_unit
           | "events_api" ->
               let body = extract_event_body env.payload in
-              let* _resp = Slack.handle_event ~config ~session_manager body in
+              let* _resp =
+                Slack.handle_event ~config ~session_manager ~event_limiter body
+              in
               Lwt.return_unit
           | other ->
               Logs.debug (fun m ->
@@ -87,7 +89,7 @@ let run_connection ~(config : Runtime_config.slack_config)
   let* () = Lwt.pick [ done_p; Ws_client.closed ws ] in
   Lwt.return_unit
 
-let start ~config ~session_manager =
+let start ~config ~session_manager ~(event_limiter : Rate_limiter.t) =
   match config.Runtime_config.channels.slack with
   | None -> Lwt.return_unit
   | Some sc when (not sc.socket_mode) || sc.app_token = "" -> Lwt.return_unit
@@ -99,7 +101,9 @@ let start ~config ~session_manager =
         let result =
           Lwt.catch
             (fun () ->
-              let* () = run_connection ~config:sc ~session_manager in
+              let* () =
+                run_connection ~config:sc ~session_manager ~event_limiter
+              in
               backoff := 1.0;
               Lwt.return (Ok ()))
             (fun exn -> Lwt.return (Error (Printexc.to_string exn)))

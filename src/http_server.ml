@@ -32,7 +32,7 @@ let rate_limit_response () =
     ~headers:json_headers ~body:{|{"error":"rate limit exceeded"}|} ()
 
 let handler ~session_manager ~require_pairing ~auth_token ?slack_config
-    ?ip_limiter ?session_limiter _conn req body =
+    ?ip_limiter ?session_limiter ?slack_event_limiter _conn req body =
   let open Lwt.Syntax in
   let uri = Cohttp.Request.uri req in
   let path = Uri.path uri in
@@ -278,7 +278,10 @@ let handler ~session_manager ~require_pairing ~auth_token ?slack_config
         Cohttp_lwt_unix.Server.respond_string ~status:`Unauthorized
           ~headers:json_headers ~body:{|{"error":"invalid signature"}|} ()
       else
-        let* result = Slack.handle_event ~config:sc ~session_manager body_str in
+        let* result =
+          Slack.handle_event ~config:sc ~session_manager
+            ?event_limiter:slack_event_limiter body_str
+        in
         Cohttp_lwt_unix.Server.respond_string ~status:`OK ~headers:json_headers
           ~body:result ()
   | _ ->
@@ -287,11 +290,11 @@ let handler ~session_manager ~require_pairing ~auth_token ?slack_config
         ~headers:json_headers ~body:{|{"error":"not found"}|} ()
 
 let start ~port ~host ~require_pairing ~auth_token ~session_manager
-    ?slack_config ?ip_limiter ?session_limiter () =
+    ?slack_config ?ip_limiter ?session_limiter ?slack_event_limiter () =
   let open Lwt.Syntax in
   let callback =
     handler ~session_manager ~require_pairing ~auth_token ?slack_config
-      ?ip_limiter ?session_limiter
+      ?ip_limiter ?session_limiter ?slack_event_limiter
   in
   let* ctx = Conduit_lwt_unix.init ~src:host () in
   let ctx = Cohttp_lwt_unix.Net.init ~ctx () in

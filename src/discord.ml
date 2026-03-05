@@ -46,6 +46,7 @@ type route_bucket = { mutable remaining : int; mutable reset_at : float }
 let route_buckets : (string, route_bucket) Hashtbl.t = Hashtbl.create 32
 let route_mutex = Lwt_mutex.create ()
 let global_rate_limit : float ref = ref 0.0
+let _rate_limit_warnings : (string, float) Hashtbl.t = Hashtbl.create 32
 
 let wait_for_rate_limit ~route =
   let open Lwt.Syntax in
@@ -190,7 +191,7 @@ let is_bot_message json =
   with _ -> false
 
 let handle_message ~(discord_config : Runtime_config.discord_config)
-    ~(session_mgr : Session.t) (msg : message) =
+    ~(session_mgr : Session.t) ?message_limiter (msg : message) =
   let open Lwt.Syntax in
   if msg.author_bot then Lwt.return_unit
   else if
@@ -206,42 +207,68 @@ let handle_message ~(discord_config : Runtime_config.discord_config)
   end
   else if msg.content = "" then Lwt.return_unit
   else
-    let key = session_key ~channel_id:msg.channel_id ~author_id:msg.author_id in
-    match Slash_commands.handle msg.content with
-    | Reply text ->
+    let limiter_key = msg.channel_id ^ ":" ^ msg.author_id in
+    let* rate_ok =
+      match message_limiter with
+      | Some lim -> Rate_limiter.check_and_consume lim ~key:limiter_key
+      | None -> Lwt.return true
+    in
+    if not rate_ok then begin
+      let now = Unix.gettimeofday () in
+      let should_warn =
+        match Hashtbl.find_opt _rate_limit_warnings limiter_key with
+        | Some last -> now -. last >= 60.0
+        | None -> true
+      in
+      if should_warn then begin
+        Hashtbl.replace _rate_limit_warnings limiter_key now;
         send_message ~bot_token:discord_config.bot_token
-          ~channel_id:msg.channel_id ~text
-    | Reset ->
-        Session.reset session_mgr ~key;
-        send_message ~bot_token:discord_config.bot_token
-          ~channel_id:msg.channel_id ~text:Slash_commands.reset_message
-    | NotACommand -> (
-        let* result =
-          Lwt.catch
-            (fun () ->
-              let* response =
-                Session.turn session_mgr ~key ~message:msg.content
-              in
-              Lwt.return (Ok response))
-            (fun exn -> Lwt.return (Error (Printexc.to_string exn)))
-        in
-        match result with
-        | Ok response ->
-            send_message ~bot_token:discord_config.bot_token
-              ~channel_id:msg.channel_id ~text:response
-        | Error err ->
-            Logs.err (fun m ->
-                m "Discord agent error for channel=%s user=%s: %s"
-                  msg.channel_id msg.author_id err);
-            send_message ~bot_token:discord_config.bot_token
-              ~channel_id:msg.channel_id
-              ~text:"Sorry, an error occurred processing your message.")
+          ~channel_id:msg.channel_id
+          ~text:
+            "Please slow down, I can only process a limited number of messages \
+             per minute."
+      end
+      else Lwt.return_unit
+    end
+    else
+      let key =
+        session_key ~channel_id:msg.channel_id ~author_id:msg.author_id
+      in
+      match Slash_commands.handle msg.content with
+      | Reply text ->
+          send_message ~bot_token:discord_config.bot_token
+            ~channel_id:msg.channel_id ~text
+      | Reset ->
+          Session.reset session_mgr ~key;
+          send_message ~bot_token:discord_config.bot_token
+            ~channel_id:msg.channel_id ~text:Slash_commands.reset_message
+      | NotACommand -> (
+          let* result =
+            Lwt.catch
+              (fun () ->
+                let* response =
+                  Session.turn session_mgr ~key ~message:msg.content
+                in
+                Lwt.return (Ok response))
+              (fun exn -> Lwt.return (Error (Printexc.to_string exn)))
+          in
+          match result with
+          | Ok response ->
+              send_message ~bot_token:discord_config.bot_token
+                ~channel_id:msg.channel_id ~text:response
+          | Error err ->
+              Logs.err (fun m ->
+                  m "Discord agent error for channel=%s user=%s: %s"
+                    msg.channel_id msg.author_id err);
+              send_message ~bot_token:discord_config.bot_token
+                ~channel_id:msg.channel_id
+                ~text:"Sorry, an error occurred processing your message.")
 
 (* Close code classification for reconnect behavior *)
 let is_fatal_close_code code =
   match code with 4004 | 4010 | 4011 | 4012 | 4013 | 4014 -> true | _ -> false
 
-let start ~config ~session_manager =
+let start ~config ~session_manager ~(message_limiter : Rate_limiter.t) =
   match config.Runtime_config.channels.discord with
   | None ->
       Logs.info (fun m -> m "No Discord config found, skipping");
@@ -262,12 +289,15 @@ let start ~config ~session_manager =
         let rec connect_loop () =
           let close_p, close_u = Lwt.wait () in
           let on_dispatch event_name d =
-            if event_name = "MESSAGE_CREATE" then
+            if event_name = "MESSAGE_CREATE" then (
               match parse_dispatch_message d with
               | Some msg ->
                   handle_message ~discord_config ~session_mgr:session_manager
-                    msg
-              | None -> Lwt.return_unit
+                    ~message_limiter msg
+              | None ->
+                  Logs.debug (fun m ->
+                      m "Discord: dropping malformed MESSAGE_CREATE dispatch");
+                  Lwt.return_unit)
             else Lwt.return_unit
           in
           let on_close code =

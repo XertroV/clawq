@@ -56,8 +56,8 @@ let run ~(config : Runtime_config.t) =
   Workspace_scaffold.ensure_dir workspace;
   let active_provider, _, active_model = Provider.select_provider ~config in
   Logs.info (fun m ->
-      m "Provider: %s | Model: %s | Temp: %.2f" active_provider
-        active_model config.default_temperature);
+      m "Provider: %s | Model: %s | Temp: %.2f" active_provider active_model
+        config.default_temperature);
   Logs.info (fun m -> m "Workspace: %s" workspace);
   Logs.info (fun m ->
       m "Channels: cli=%b telegram=%b discord=%b slack=%b" config.channels.cli
@@ -143,20 +143,35 @@ let run ~(config : Runtime_config.t) =
     Rate_limiter.create ~rate_per_minute:rl.telegram_per_chat_rpm
       ~burst_multiplier:rl.burst_multiplier
   in
+  let discord_message_limiter =
+    Rate_limiter.create ~rate_per_minute:rl.telegram_per_chat_rpm
+      ~burst_multiplier:rl.burst_multiplier
+  in
+  let slack_event_limiter =
+    Rate_limiter.create ~rate_per_minute:rl.telegram_per_chat_rpm
+      ~burst_multiplier:rl.burst_multiplier
+  in
   if config.security.landlock_enabled then begin
     Logs.info (fun m -> m "Landlock sandbox requested, activating...");
     Landlock.sandbox_workspace ~config
   end;
   let session_manager = Session.create ~config ?tool_registry ?db () in
   write_state ~config
-    ~components:[ ("gateway", "starting"); ("telegram", "starting") ];
+    ~components:
+      [
+        ("gateway", "starting");
+        ("telegram", "starting");
+        ("discord", "starting");
+        ("slack", "starting");
+      ];
   let gateway =
     Lwt.catch
       (fun () ->
         Http_server.start ~port:config.gateway.port ~host:config.gateway.host
           ~require_pairing:config.gateway.require_pairing
           ~auth_token:config.gateway.auth_token ~session_manager
-          ?slack_config:config.channels.slack ~ip_limiter ~session_limiter ())
+          ?slack_config:config.channels.slack ~ip_limiter ~session_limiter
+          ~slack_event_limiter ())
       (fun exn ->
         Logs.err (fun m ->
             m "Gateway server error: %s" (Printexc.to_string exn));
@@ -202,7 +217,13 @@ let run ~(config : Runtime_config.t) =
   in
   write_state ~config
     ~components:
-      ([ ("gateway", "running"); ("telegram", "running"); ("cron", "running") ]
+      ([
+         ("gateway", "running");
+         ("telegram", "running");
+         ("discord", "running");
+         ("slack", "running");
+         ("cron", "running");
+       ]
       @ if slack_socket_enabled then [ ("slack_socket", "running") ] else []);
   (match db with
   | Some db when config.security.audit_enabled ->
@@ -220,7 +241,9 @@ let run ~(config : Runtime_config.t) =
   Lwt.async (fun () -> telegram);
   Lwt.async (fun () ->
       Lwt.catch
-        (fun () -> Discord.start ~config ~session_manager)
+        (fun () ->
+          Discord.start ~config ~session_manager
+            ~message_limiter:discord_message_limiter)
         (fun exn ->
           Logs.err (fun m ->
               m "Discord channel error: %s" (Printexc.to_string exn));
@@ -229,7 +252,9 @@ let run ~(config : Runtime_config.t) =
   | Some sc when sc.socket_mode && sc.app_token <> "" ->
       Lwt.async (fun () ->
           Lwt.catch
-            (fun () -> Slack_socket.start ~config ~session_manager)
+            (fun () ->
+              Slack_socket.start ~config ~session_manager
+                ~event_limiter:slack_event_limiter)
             (fun exn ->
               Logs.err (fun m ->
                   m "Slack Socket Mode error: %s" (Printexc.to_string exn));
@@ -275,6 +300,14 @@ let run ~(config : Runtime_config.t) =
                   Rate_limiter.cleanup_expired chat_limiter
                     ~max_idle_seconds:300.0
                 in
+                let* () =
+                  Rate_limiter.cleanup_expired discord_message_limiter
+                    ~max_idle_seconds:300.0
+                in
+                let* () =
+                  Rate_limiter.cleanup_expired slack_event_limiter
+                    ~max_idle_seconds:300.0
+                in
                 loop ()
               in
               loop ())
@@ -286,7 +319,13 @@ let run ~(config : Runtime_config.t) =
   | None -> Logs.info (fun m -> m "Cron scheduler disabled (no database)"));
   let* () = Lwt.pick [ shutdown_waiter; gateway ] in
   write_state ~config
-    ~components:[ ("gateway", "stopped"); ("telegram", "stopped") ];
+    ~components:
+      [
+        ("gateway", "stopped");
+        ("telegram", "stopped");
+        ("discord", "stopped");
+        ("slack", "stopped");
+      ];
   (match db with
   | Some db when config.security.audit_enabled ->
       Audit.log ~db ?signing_key

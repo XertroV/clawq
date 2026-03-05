@@ -8,6 +8,7 @@ let redact_token token =
 type update = {
   update_id : int;
   chat_id : string;
+  user_id : string;
   text : string;
   voice_file_id : string option;
   photo_file_id : string option;
@@ -38,6 +39,10 @@ let get_updates ~bot_token ~offset ~timeout =
             let msg = u |> member "message" in
             let chat = msg |> member "chat" in
             let chat_id = chat |> member "id" |> to_int |> string_of_int in
+            let user_id =
+              try msg |> member "from" |> member "id" |> to_int |> string_of_int
+              with _ -> chat_id
+            in
             let text = try msg |> member "text" |> to_string with _ -> "" in
             let voice_file_id =
               try Some (msg |> member "voice" |> member "file_id" |> to_string)
@@ -69,6 +74,7 @@ let get_updates ~bot_token ~offset ~timeout =
               {
                 update_id;
                 chat_id;
+                user_id;
                 text;
                 voice_file_id;
                 photo_file_id;
@@ -76,7 +82,14 @@ let get_updates ~bot_token ~offset ~timeout =
                 document_name;
                 caption;
               }
-          with _ -> None)
+          with _ ->
+            let update_id =
+              try Yojson.Safe.Util.(u |> member "update_id" |> to_int)
+              with _ -> -1
+            in
+            Logs.debug (fun m ->
+                m "Telegram: dropping malformed update (update_id=%d)" update_id);
+            None)
         results
     in
     Lwt.return updates
@@ -196,7 +209,7 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
       else Lwt.return_unit
     end
     else
-      let key = "telegram:" ^ update.chat_id in
+      let key = "telegram:" ^ update.chat_id ^ ":" ^ update.user_id in
       let* user_text =
         match update.voice_file_id with
         | Some file_id ->

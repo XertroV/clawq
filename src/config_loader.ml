@@ -145,7 +145,7 @@ let parse_config ?(resolve_secrets = true) json =
                 in
                 let allow_from =
                   try v |> member "allow_from" |> to_list |> List.map to_string
-                  with _ -> []
+                  with _ -> [ "*" ]
                 in
                 ( name,
                   ({ bot_token; allow_from } : Runtime_config.telegram_account)
@@ -273,7 +273,22 @@ let parse_config ?(resolve_secrets = true) json =
       let enabled =
         try t |> member "enabled" |> to_bool with _ -> default.tunnel.enabled
       in
-      ({ provider; enabled } : Runtime_config.tunnel_config)
+      let url =
+        try t |> member "url" |> to_string with _ -> default.tunnel.url
+      in
+      let managed =
+        try t |> member "managed" |> to_bool with _ -> default.tunnel.managed
+      in
+      let tunnel_name =
+        try t |> member "tunnel_name" |> to_string
+        with _ -> default.tunnel.tunnel_name
+      in
+      let config_dir =
+        try t |> member "config_dir" |> to_string
+        with _ -> default.tunnel.config_dir
+      in
+      ({ provider; enabled; url; managed; tunnel_name; config_dir }
+        : Runtime_config.tunnel_config)
     with _ -> default.tunnel
   in
   let memory =

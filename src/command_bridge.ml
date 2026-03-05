@@ -89,6 +89,21 @@ let cmd_status () =
        (match cfg.channels.telegram with
        | None -> "not configured"
        | Some tg -> Printf.sprintf "%d account(s)" (List.length tg.accounts)));
+  add
+    (Printf.sprintf "  discord: %s"
+       (match cfg.channels.discord with
+       | None -> "not configured"
+       | Some d ->
+           Printf.sprintf "configured (guilds=%d users=%d)"
+             (List.length d.allow_guilds)
+             (List.length d.allow_users)));
+  add
+    (Printf.sprintf "  slack: %s"
+       (match cfg.channels.slack with
+       | None -> "not configured"
+       | Some s ->
+           Printf.sprintf "configured (path=%s socket_mode=%b)" s.events_path
+             s.socket_mode));
   add (Printf.sprintf "  memory backend: %s" cfg.memory.backend);
   add (Printf.sprintf "  providers: %d configured" (List.length cfg.providers));
   (match read_daemon_state () with
@@ -220,7 +235,11 @@ let cmd_onboard () =
   },
   "tunnel": {
     "provider": "cloudflare",
-    "enabled": false
+    "enabled": false,
+    "url": "",
+    "managed": false,
+    "tunnel_name": "",
+    "config_dir": ""
   },
   "memory": {
     "backend": "sqlite",
@@ -289,6 +308,26 @@ let cmd_channel () =
                (if acct.bot_token = "" then "no token" else "configured")
                (String.concat ", " acct.allow_from)))
         tg.accounts);
+  (match cfg.channels.discord with
+  | None -> add "  discord: not configured"
+  | Some d ->
+      add
+        (Printf.sprintf
+           "  discord: configured (allow_guilds: %s; allow_users: %s; intents: \
+            %d)"
+           (String.concat ", " d.allow_guilds)
+           (String.concat ", " d.allow_users)
+           d.intents));
+  (match cfg.channels.slack with
+  | None -> add "  slack: not configured"
+  | Some s ->
+      add
+        (Printf.sprintf
+           "  slack: configured (events_path: %s; socket_mode: %b; \
+            allow_channels: %s; allow_users: %s)"
+           s.events_path s.socket_mode
+           (String.concat ", " s.allow_channels)
+           (String.concat ", " s.allow_users)));
   List.rev !lines |> String.concat "\n"
 
 let cmd_memory () =
@@ -773,7 +812,9 @@ let cmd_tunnel args =
     in
     match args with
     | [ "start" ] -> (
-        let tunnel = Tunnel_cloudflare.create ~port:cfg.gateway.port in
+        let tunnel =
+          Tunnel_cloudflare.create ~port:cfg.gateway.port ~config:cfg.tunnel
+        in
         Lwt_main.run (Tunnel_cloudflare.start tunnel);
         match
           (Tunnel_cloudflare.get_pid tunnel, Tunnel_cloudflare.get_url tunnel)

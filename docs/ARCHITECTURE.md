@@ -15,7 +15,9 @@ src/extracted/clawq_core.{ml,mli}  Generated OCaml (tracked in git)
   clawq_extracted library      src/extracted/dune
         |
         v
-  clawq_runtime library        src/dune (command_bridge, phase2)
+  clawq_runtime_core library   src/dune (core runtime)
+        |
+        +--> clawq_runtime_integrations library src/dune (channels, daemon, gateway)
         |
         v
     clawq executable            src/dune (main.ml + cmdliner)
@@ -78,8 +80,9 @@ src/extracted/clawq_core.{ml,mli}  Generated OCaml (tracked in git)
 | Library | Modules | Dependencies |
 |---------|---------|-------------|
 | `clawq_extracted` | `clawq_core` | (none) — unwrapped, `-w -39` for extraction artifacts |
-| `clawq_runtime` | `command_bridge`, `runtime_config`, `config_loader`, `agent`, `session`, `provider`, `memory`, `vector`, `tool`, `tool_registry`, `tools_builtin`, `mcp_server`, `skills`, `http_server`, `http_client`, `telegram`, `daemon`, `service`, `scheduler`, `audit`, `secret_store`, `migrate`, `resilience`, `runtime_native`, `runtime_docker`, `tunnel_cloudflare`, `stt`, `phase2` | `yojson`, `sqlite3`, `lwt`, `cohttp-lwt-unix`, `conduit-lwt-unix`, `tls-lwt`, `logs`, `fmt`, `mirage-crypto`, `mirage-crypto-rng`, `mirage-crypto-rng.unix`, `kdf.pbkdf`, `digestif.c`, `base64`, `clawq_extracted` — unwrapped |
-| `clawq` (executable) | `main` | `clawq_runtime`, `cmdliner` |
+| `clawq_runtime_core` | `phase2`, `runtime_config`, `config_loader`, `http_client`, `provider`, `prompt_builder`, `workspace_scaffold`, `agent`, `session`, `stt`, `tool`, `tool_registry`, `tools_builtin`, `memory`, `rate_limiter`, `scheduler`, `migrate`, `audit`, `skills`, `vector`, `secret_store`, `resilience`, `landlock`, `channel`, `slash_commands`, `command_bridge_min` | `yojson`, `sqlite3`, `lwt`, `cohttp-lwt-unix`, `conduit-lwt-unix`, `logs`, `fmt`, `mirage-crypto`, `mirage-crypto-rng`, `mirage-crypto-rng.unix`, `kdf.pbkdf`, `digestif.c`, `base64`, `eqaf`, `clawq_extracted` — unwrapped |
+| `clawq_runtime_integrations` | `http_server`, `telegram`, `daemon`, `mcp_server`, `service`, `runtime_native`, `runtime_docker`, `tunnel_cloudflare`, `command_bridge`, `slack`, `discord`, `ws_client`, `discord_gateway`, `slack_socket` | `clawq_runtime_core` + integration/network deps (`httpun-ws-lwt-unix`, `httpun-ws`, `gluten-lwt-unix`, `ca-certs`, `bigstringaf`, `faraday`) |
+| `clawq` (executable) | `main` | `clawq_runtime_core`, `clawq_runtime_integrations`, `cmdliner` |
 
 Both libraries use `(wrapped false)` so modules are accessible directly (e.g., `Clawq_core.dispatch` rather than `Clawq_extracted.Clawq_core.dispatch`). The extracted library also suppresses warning 39 (`-w -39`) since Coq extraction sometimes emits unnecessary `rec` flags.
 
@@ -114,15 +117,8 @@ Interfaces.v  (no deps)
 
 OCaml side:
 ```
-clawq_extracted  -->  clawq_runtime  -->  clawq (executable)
-   (no deps)        (yojson, sqlite3,       (cmdliner)
-                     lwt, cohttp-lwt-unix,
-                     conduit-lwt-unix,
-                     tls-lwt, logs, fmt,
-                     mirage-crypto,
-                     mirage-crypto-rng,
-                     kdf.pbkdf,
-                     digestif.c, base64)
+clawq_extracted --> clawq_runtime_core --> clawq_runtime_integrations --> clawq
+   (no deps)       (core runtime)          (channels, gateway, daemon)  (cmdliner)
 ```
 
 ## Build Commands

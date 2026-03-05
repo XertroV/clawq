@@ -211,16 +211,20 @@ let complete ~(config : Runtime_config.t) ~messages ?tools () =
         in
         if tool_calls_json <> [] then
           let calls =
-            List.filter_map
-              (fun tc ->
+            List.mapi
+              (fun i tc ->
                 try
                   let id = tc |> member "id" |> to_string in
                   let fn = tc |> member "function" in
                   let function_name = fn |> member "name" |> to_string in
                   let arguments = fn |> member "arguments" |> to_string in
                   Some { id; function_name; arguments }
-                with _ -> None)
+                with _ ->
+                  Logs.warn (fun m ->
+                      m "LLM response dropped malformed tool_call at index=%d" i);
+                  None)
               tool_calls_json
+            |> List.filter_map (fun x -> x)
           in
           Lwt.return (ToolCalls { calls; model = resp_model; usage })
         else

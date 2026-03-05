@@ -62,7 +62,14 @@ type runtime_config = {
   docker_port : int;
 }
 
-type tunnel_config = { provider : string; enabled : bool }
+type tunnel_config = {
+  provider : string;
+  enabled : bool;
+  url : string;
+  managed : bool;
+  tunnel_name : string;
+  config_dir : string;
+}
 
 type memory_config = {
   backend : string;
@@ -197,7 +204,15 @@ let default =
         docker_container_name = "clawq";
         docker_port = 3000;
       };
-    tunnel = { provider = "cloudflare"; enabled = false };
+    tunnel =
+      {
+        provider = "cloudflare";
+        enabled = false;
+        url = "";
+        managed = false;
+        tunnel_name = "";
+        config_dir = "";
+      };
     memory =
       {
         backend = "sqlite";
@@ -445,6 +460,10 @@ let to_json (cfg : t) : Yojson.Safe.t =
             [
               ("provider", `String cfg.tunnel.provider);
               ("enabled", `Bool cfg.tunnel.enabled);
+              ("url", `String cfg.tunnel.url);
+              ("managed", `Bool cfg.tunnel.managed);
+              ("tunnel_name", `String cfg.tunnel.tunnel_name);
+              ("config_dir", `String cfg.tunnel.config_dir);
             ] );
         ( "memory",
           `Assoc
