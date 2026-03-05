@@ -154,3 +154,7 @@ Comments:
 3. Run focused test(s), then `make test`.
 4. Run formatting checks if OCaml files changed.
 5. Summarize behavior changes and verification commands in final handoff.
+
+## Research Source: nullclaw
+
+- See `nullclaw/` in this repo's root.
