@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B016
+priority: high
+status: pending
+tags: []
+title: add safety check to read file -- if it's too long, needs to be searched and/or read in parts
+---
+
+add safety check to read file -- if it's too long, needs to be searched and/or read in parts

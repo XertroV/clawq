@@ -14,3 +14,4 @@ bugs:
     - file: B013-relax-auth-requirements-see-fa.todo
     - file: B014-task-impelemnt-telegram-typing.todo
     - file: B015-the-agent-is-locked-to-the-wor.todo
+    - file: B016-add-safety-check-to-read-file.todo
