@@ -170,6 +170,9 @@ let compact_history_if_needed agent =
     let compact_count = total - keep in
     if compact_count = 0 then Lwt.return_unit
     else begin
+      Logs.info (fun m ->
+          m "Compacting history: %d messages -> summarise %d, keep %d recent"
+            total compact_count keep);
       let to_compact =
         List.filteri (fun i _ -> i < compact_count) history_chrono
       in
