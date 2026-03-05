@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on:
+    - P1.M2.E4.T002
+estimate_hours: 3
+id: P1.M2.E4.T003
+priority: medium
+status: pending
+tags: []
+title: Channel-conditional group chat section in prompt
+---
+The [NO_REPLY] guidance and group chat conduct section currently lives in AGENTS.md and is always loaded, even for CLI/DM sessions where it is irrelevant. Inject this section conditionally: only when the active channel type is a group/multi-participant channel. Requires channel-type metadata from task T002.

@@ -1,0 +1,58 @@
+complexity: medium
+depends_on: []
+estimate_hours: 4
+id: P1.M2.E4
+locked: false
+name: Prompt Context & Channel Awareness
+status: pending
+tasks:
+    - complexity: low
+      depends_on: []
+      estimate_hours: 2
+      file: T001-inject-channel-attachment-synt.todo
+      id: T001
+      priority: medium
+      status: pending
+      title: Inject channel attachment syntax into prompt
+    - complexity: medium
+      depends_on: []
+      estimate_hours: 4
+      file: T002-per-message-conversation-conte.todo
+      id: T002
+      priority: medium
+      status: pending
+      title: Per-message conversation context injection
+    - complexity: medium
+      depends_on:
+        - P1.M2.E4.T002
+      estimate_hours: 3
+      file: T003-channel-conditional-group-chat.todo
+      id: T003
+      priority: medium
+      status: pending
+      title: Channel-conditional group chat section in prompt
+    - complexity: medium
+      depends_on: []
+      estimate_hours: 4
+      file: T004-skills-section-with-always-loa.todo
+      id: T004
+      priority: medium
+      status: pending
+      title: Skills section with always-loaded vs available distinction
+    - complexity: low
+      depends_on: []
+      estimate_hours: 3
+      file: T005-scheduled-tasks-guidance-secti.todo
+      id: T005
+      priority: medium
+      status: pending
+      title: Scheduled tasks guidance section in prompt
+    - complexity: low
+      depends_on:
+        - P1.M2.E4.T003
+      estimate_hours: 2
+      file: T006-remove-no-reply-from-agents-md.todo
+      id: T006
+      priority: medium
+      status: pending
+      title: Remove [NO_REPLY] from AGENTS.md; make fully channel-conditional

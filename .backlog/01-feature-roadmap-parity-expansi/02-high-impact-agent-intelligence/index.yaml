@@ -19,6 +19,24 @@ epics:
       name: Security Hardening
       path: 02-security-hardening
       status: pending
+    - complexity: medium
+      depends_on: []
+      description: 'Bring prompt assembly to parity with nullclaw: per-message conversation context, channel-conditional sections, attachment syntax, skills distinction.'
+      estimate_hours: 4
+      id: E3
+      locked: false
+      name: Prompt Context & Channel Awareness
+      path: 03-prompt-context-channel-awarene
+      status: pending
+    - complexity: medium
+      depends_on: []
+      description: 'Inject channel-specific context into prompts: attachments, conversation metadata, conditional group chat guidance, skills registry, scheduled tasks, and [NO_REPLY] suppression.'
+      estimate_hours: 4
+      id: E4
+      locked: false
+      name: Prompt Context & Channel Awareness
+      path: 04-prompt-context-channel-awarene
+      status: pending
 estimate_hours: 80
 id: P1.M2
 locked: false

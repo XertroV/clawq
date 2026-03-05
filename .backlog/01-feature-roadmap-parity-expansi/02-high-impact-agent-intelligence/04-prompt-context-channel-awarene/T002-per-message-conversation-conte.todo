@@ -1,0 +1,11 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 4
+id: P1.M2.E4.T002
+priority: medium
+status: pending
+tags: []
+title: Per-message conversation context injection
+---
+Before each agent turn, inject a structured context block containing: channel name, channel type (DM/group/CLI), sender identity (username, display name, platform ID), thread/room metadata. This gives the agent situational awareness about who it is speaking with and where.

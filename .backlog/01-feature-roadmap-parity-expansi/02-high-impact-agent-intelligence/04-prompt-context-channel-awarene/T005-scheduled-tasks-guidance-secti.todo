@@ -1,0 +1,11 @@
+---
+complexity: low
+depends_on: []
+estimate_hours: 3
+id: P1.M2.E4.T005
+priority: medium
+status: pending
+tags: []
+title: Scheduled tasks guidance section in prompt
+---
+Inject a Scheduled Tasks section when cron/heartbeat tasks are configured. Should list active scheduled jobs with their schedule expressions and descriptions, so the agent understands its own periodic obligations and can reason about timing without being told each session.

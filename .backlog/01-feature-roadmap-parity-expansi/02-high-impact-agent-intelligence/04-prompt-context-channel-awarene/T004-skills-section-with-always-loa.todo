@@ -1,0 +1,11 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 4
+id: P1.M2.E4.T004
+priority: medium
+status: pending
+tags: []
+title: Skills section with always-loaded vs available distinction
+---
+Inject a Skills section into the prompt that distinguishes: (a) skills currently loaded into context, and (b) skills available but not yet loaded (by name + brief description). Mirrors nullclaw's skills section. Enables the agent to reference or request skill loading without hallucinating capabilities.

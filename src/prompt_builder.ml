@@ -90,27 +90,7 @@ let build ~(config : Runtime_config.t) ~tool_registry =
       add base_prompt;
       add ""
     end;
-    add "## Operating Stance";
-    add "- Act, then report. Prefer execution to speculation.";
-    add
-      "- State what you know, what you verified, and what remains uncertain — \
-       never conflate the three.";
-    add "- Scope every intervention to what was actually requested.";
-    if config.prompt.include_safety_section then begin
-      add "";
-      add "## Safety Invariants";
-      add
-        "- Secrets, tokens, credentials, and private data are never revealed, \
-         logged, or echoed.";
-      add
-        "- Destructive or irreversible actions require explicit prior \
-         authorization.";
-      add
-        "- Workspace boundaries and configured security policies are hard \
-         constraints, not suggestions."
-    end;
     if config.prompt.include_workspace_section then begin
-      add "";
       add "## Workspace Context";
       add ("Root: " ^ workspace);
       let docs = workspace_doc_blocks ~config in
@@ -133,6 +113,26 @@ let build ~(config : Runtime_config.t) ~tool_registry =
           docs
       end
     end;
+    if config.prompt.include_safety_section then begin
+      add "";
+      add "## Safety Invariants";
+      add
+        "- Secrets, tokens, credentials, and private data are never revealed, \
+         logged, or echoed.";
+      add
+        "- Destructive or irreversible actions require explicit prior \
+         authorization.";
+      add
+        "- Workspace boundaries and configured security policies are hard \
+         constraints, not suggestions."
+    end;
+    add "";
+    add "## Operating Stance";
+    add "- Act, then report. Prefer execution to speculation.";
+    add
+      "- State what you know, what you verified, and what remains uncertain — \
+       never conflate the three.";
+    add "- Scope every intervention to what was actually requested.";
     if config.prompt.include_tools_section then begin
       add "";
       add "## Tools";

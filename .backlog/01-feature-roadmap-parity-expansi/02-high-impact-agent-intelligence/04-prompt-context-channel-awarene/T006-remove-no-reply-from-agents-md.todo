@@ -1,0 +1,12 @@
+---
+complexity: low
+depends_on:
+    - P1.M2.E4.T003
+estimate_hours: 2
+id: P1.M2.E4.T006
+priority: medium
+status: pending
+tags: []
+title: Remove [NO_REPLY] from AGENTS.md; make fully channel-conditional
+---
+Currently [NO_REPLY] is documented in AGENTS.md (always loaded) but only meaningful in group channels. Remove the [NO_REPLY] reference from AGENTS.md. Instead, inject the [NO_REPLY] suppression documentation only when the active channel type supports it. Depends on T003 (channel-conditional group chat section).

@@ -1,0 +1,11 @@
+---
+complexity: low
+depends_on: []
+estimate_hours: 2
+id: P1.M2.E4.T001
+priority: medium
+status: pending
+tags: []
+title: Inject channel attachment syntax into prompt
+---
+When a message includes attachments, inject a block into the system prompt (or pre-user-turn context) documenting the available attachment reference syntax: [FILE:/path], [IMAGE:/path], [VOICE:/path], [DOCUMENT:/path], [AUDIO:/path]. The agent must know these tokens exist before it sees them in a message.
