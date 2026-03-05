@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B015
+priority: high
+status: pending
+tags: []
+title: The agent is locked to the workspace and can't access files I refer to. how can I control that? can we add controls if absent?
+---
+
+The agent is locked to the workspace and can't access files I refer to. how can I control that? can we add controls if absent?
