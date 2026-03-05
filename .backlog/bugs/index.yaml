@@ -1,3 +1,5 @@
 bugs:
     - file: B001-task-add-slash-command-support.todo
     - file: B002-task-commands-like-clawq-agent.todo
+    - file: B003-for-whatever-reason-the-help-o.todo
+    - file: B004-for-whatever-reason-the-help-o.todo

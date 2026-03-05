@@ -1,0 +1,14 @@
+---
+completed_at: null
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B003
+priority: high
+started_at: null
+status: done
+tags: []
+title: 'for whatever reason, the --help outputs escape codes as text: ~/src/clawq master'
+---
+
+for whatever reason, the --help outputs escape codes as text: ~/src/clawq master

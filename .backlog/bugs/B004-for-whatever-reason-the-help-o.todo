@@ -1,0 +1,29 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B004
+priority: high
+status: pending
+tags: []
+title: |-
+    for whatever reason, the --help outputs escape codes as text:
+    > dune exec clawq -- agent --help
+    4mCLAWQ24m(1)                         Clawq Manual                         4mCLAWQ24m(1)
+
+    1mNAME0m
+           clawq - Coq port scaffold of nullclaw (runtime skeleton)
+
+    1mSYNOPSIS0m
+           1mclawq 22m[4mOPTION24m]… 4mCOMMAND24m [4mARGS24m]…
+---
+
+for whatever reason, the --help outputs escape codes as text:
+> dune exec clawq -- agent --help
+4mCLAWQ24m(1)                         Clawq Manual                         4mCLAWQ24m(1)
+
+1mNAME0m
+       clawq - Coq port scaffold of nullclaw (runtime skeleton)
+
+1mSYNOPSIS0m
+       1mclawq 22m[4mOPTION24m]… 4mCOMMAND24m [4mARGS24m]…
