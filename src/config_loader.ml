@@ -5,6 +5,10 @@ let parse_config json =
     try json |> member "default_temperature" |> to_float
     with _ -> default.default_temperature
   in
+  let default_provider =
+    try Some (json |> member "default_provider" |> to_string)
+    with _ -> default.default_provider
+  in
   let providers =
     try
       json |> member "providers" |> to_assoc
@@ -133,6 +137,7 @@ let parse_config json =
   in
   {
     Runtime_config.default_temperature;
+    default_provider;
     providers;
     agent_defaults;
     channels;
@@ -141,6 +146,35 @@ let parse_config json =
     security;
     stt;
   }
+
+let rec merge_json (original : Yojson.Safe.t) (complete : Yojson.Safe.t) : Yojson.Safe.t =
+  match original, complete with
+  | `Assoc orig_fields, `Assoc comp_fields ->
+    let merged =
+      List.map (fun (k, v) ->
+        match List.assoc_opt k comp_fields with
+        | Some cv -> (k, merge_json v cv)
+        | None -> (k, v))
+        orig_fields
+    in
+    let new_fields =
+      List.filter (fun (k, _) -> not (List.mem_assoc k orig_fields)) comp_fields
+    in
+    `Assoc (merged @ new_fields)
+  | _ -> original
+
+let backfill_config ~path ~original_json ~config =
+  let complete_json = Runtime_config.to_json config in
+  let merged = merge_json original_json complete_json in
+  if merged <> original_json then begin
+    try
+      let s = Yojson.Safe.pretty_to_string ~std:true merged in
+      let oc = open_out path in
+      output_string oc s;
+      output_char oc '\n';
+      close_out oc
+    with _ -> ()
+  end
 
 let load ?(path = "") () : Runtime_config.t =
   let config_path =
@@ -162,4 +196,7 @@ let load ?(path = "") () : Runtime_config.t =
     in
     match json with
     | None -> Runtime_config.default
-    | Some json -> parse_config json
+    | Some json ->
+      let config = parse_config json in
+      backfill_config ~path:config_path ~original_json:json ~config;
+      config

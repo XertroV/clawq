@@ -65,17 +65,31 @@ let complete ~(config : Runtime_config.t) ~messages ?tools () =
   let open Lwt.Syntax in
   let model = config.agent_defaults.primary_model in
   let provider_name, provider =
+    let find_named name =
+      List.find_opt (fun (n, _) -> n = name) config.providers
+    in
     let with_key =
       List.filter (fun (_, p) -> Runtime_config.is_key_set p.Runtime_config.api_key) config.providers
     in
-    match with_key with
-    | (name, p) :: _ -> (name, p)
-    | [] ->
-      (match config.providers with
+    let preferred =
+      match config.default_provider with
+      | Some name ->
+        (match find_named name with
+         | Some (n, p) when Runtime_config.is_key_set p.api_key -> Some (n, p)
+         | _ -> None)
+      | None -> None
+    in
+    match preferred with
+    | Some pair -> pair
+    | None ->
+      (match with_key with
        | (name, p) :: _ -> (name, p)
        | [] ->
-         ( "default",
-           { Runtime_config.api_key = ""; base_url = None } ))
+         (match config.providers with
+          | (name, p) :: _ -> (name, p)
+          | [] ->
+            ( "default",
+              { Runtime_config.api_key = ""; base_url = None } )))
   in
   let base_url =
     match provider.base_url with

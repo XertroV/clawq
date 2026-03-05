@@ -34,6 +34,25 @@ let run ~(config : Runtime_config.t) =
   Logs.set_reporter (Logs_fmt.reporter ());
   Logs.set_level (Some Logs.Info);
   Logs.info (fun m -> m "clawq daemon starting (pid=%d)" (Unix.getpid ()));
+  let active_provider =
+    let with_key =
+      List.filter (fun (_, p) -> Runtime_config.is_key_set p.Runtime_config.api_key) config.providers
+    in
+    let preferred = match config.default_provider with
+      | Some name ->
+        (match List.find_opt (fun (n, _) -> n = name) config.providers with
+         | Some (n, p) when Runtime_config.is_key_set p.api_key -> Some n
+         | _ -> None)
+      | None -> None
+    in
+    match preferred with
+    | Some n -> n
+    | None -> (match with_key with (n, _) :: _ -> n | [] -> "(none)")
+  in
+  Logs.info (fun m -> m "Provider: %s | Model: %s | Temp: %.2f"
+    active_provider config.agent_defaults.primary_model config.default_temperature);
+  Logs.info (fun m -> m "Channels: cli=%b telegram=%b"
+    config.channels.cli (config.channels.telegram <> None));
   let tool_registry =
     if config.security.tools_enabled then begin
       let registry = Tool_registry.create () in

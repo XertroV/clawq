@@ -26,6 +26,7 @@ type stt_config = {
 
 type t = {
   default_temperature : float;
+  default_provider : string option;
   providers : (string * provider_config) list;
   agent_defaults : agent_defaults;
   channels : channel_config;
@@ -38,6 +39,7 @@ type t = {
 let default =
   {
     default_temperature = 0.7;
+    default_provider = None;
     providers = [];
     agent_defaults = {
       primary_model = "openai/gpt-4o";
@@ -53,6 +55,73 @@ let default =
 
 let is_key_set key =
   key <> "" && not (String.length key > 4 && String.sub key 0 4 = "YOUR")
+
+let to_json (cfg : t) : Yojson.Safe.t =
+  let opt_string = function Some s -> `String s | None -> `Null in
+  let provider_json (p : provider_config) =
+    let fields = [ ("api_key", `String p.api_key) ] in
+    let fields = match p.base_url with
+      | Some url -> fields @ [ ("base_url", `String url) ]
+      | None -> fields
+    in
+    `Assoc fields
+  in
+  let ad = cfg.agent_defaults in
+  let telegram_json = match cfg.channels.telegram with
+    | None -> `Null
+    | Some tg ->
+      `Assoc [ ("accounts",
+        `Assoc (List.map (fun (name, (acct : telegram_account)) ->
+          (name, `Assoc [
+            ("bot_token", `String acct.bot_token);
+            ("allow_from", `List (List.map (fun s -> `String s) acct.allow_from));
+          ])) tg.accounts)) ]
+  in
+  let stt_json = match cfg.stt with
+    | None -> `Null
+    | Some s ->
+      `Assoc ([ ("provider", `String s.provider); ("model", `String s.model) ]
+              @ (match s.language with Some l -> [ ("language", `String l) ] | None -> []))
+  in
+  let fields = [
+    ("default_temperature", `Float cfg.default_temperature);
+  ] in
+  let fields = match cfg.default_provider with
+    | Some p -> fields @ [ ("default_provider", `String p) ]
+    | None -> fields
+  in
+  let fields = fields @ [
+    ("providers", `Assoc (List.map (fun (name, p) -> (name, provider_json p)) cfg.providers));
+    ("agent_defaults", `Assoc [
+      ("primary_model", `String ad.primary_model);
+      ("system_prompt", `String ad.system_prompt);
+      ("max_tool_iterations", `Int ad.max_tool_iterations);
+    ]);
+    ("channels", `Assoc (
+      [ ("cli", `Bool cfg.channels.cli) ]
+      @ (match telegram_json with `Null -> [] | j -> [ ("telegram", j) ])
+    ));
+    ("gateway", `Assoc [
+      ("host", `String cfg.gateway.host);
+      ("port", `Int cfg.gateway.port);
+      ("require_pairing", `Bool cfg.gateway.require_pairing);
+    ]);
+    ("memory", `Assoc ([
+      ("backend", `String cfg.memory.backend);
+      ("search_enabled", `Bool cfg.memory.search_enabled);
+    ] @ (if cfg.memory.db_path <> "" then [ ("db_path", `String cfg.memory.db_path) ] else [])));
+    ("security", `Assoc [
+      ("workspace_only", `Bool cfg.security.workspace_only);
+      ("audit_enabled", `Bool cfg.security.audit_enabled);
+      ("tools_enabled", `Bool cfg.security.tools_enabled);
+    ]);
+  ] in
+  let fields = match stt_json with
+    | `Null -> fields
+    | j -> fields @ [ ("stt", j) ]
+  in
+  ignore opt_string;
+  `Assoc fields
 
 let merge_with_coq (coq_cfg : Clawq_core.clawqConfig) (cfg : t) : t =
   let gw = coq_cfg.config_gateway in

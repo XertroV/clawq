@@ -59,6 +59,15 @@ let cmd_doctor () =
       if not (Runtime_config.is_key_set p.api_key) then
         add (Printf.sprintf "WARNING: Provider '%s' has no API key" name))
     cfg.providers;
+  (match cfg.default_provider with
+  | Some name when not (List.exists (fun (n, _) -> n = name) cfg.providers) ->
+    add (Printf.sprintf "WARNING: default_provider '%s' not found in providers" name)
+  | Some name ->
+    (match List.assoc_opt name cfg.providers with
+     | Some p when not (Runtime_config.is_key_set p.api_key) ->
+       add (Printf.sprintf "WARNING: default_provider '%s' has no API key" name)
+     | _ -> ())
+  | None -> ());
   (match cfg.channels.telegram with
   | None -> ()
   | Some tg ->
@@ -94,6 +103,7 @@ let cmd_onboard () =
     let template =
       {|{
   "default_temperature": 0.7,
+  "default_provider": "openrouter",
   "providers": {
     "openrouter": {
       "api_key": "YOUR_API_KEY_HERE",
@@ -165,6 +175,8 @@ let cmd_models () =
         providers
     in
     "Configured providers:\n" ^ String.concat "\n" lines
+    ^ Printf.sprintf "\nDefault provider: %s"
+        (match cfg.default_provider with Some p -> p | None -> "(auto)")
     ^ Printf.sprintf "\nDefault model: %s" cfg.agent_defaults.primary_model
 
 let cmd_channel () =
