@@ -4,8 +4,11 @@ let make_config
     ?(events_path = "/slack/events")
     ?(allow_channels = [ "*" ])
     ?(allow_users = [ "*" ])
+    ?(app_token = "")
+    ?(socket_mode = false)
     () : Runtime_config.slack_config =
-  { bot_token; signing_secret; events_path; allow_channels; allow_users }
+  { bot_token; signing_secret; events_path; allow_channels; allow_users;
+    app_token; socket_mode }
 
 let test_is_allowed_wildcard () =
   let config = make_config () in
@@ -80,6 +83,22 @@ let test_bot_message_ignored () =
     Alcotest.(check (option string)) "has bot_id" (Some "B789") bot_id
   | _ -> Alcotest.fail "expected Message with bot_id"
 
+let test_parse_event_invalid_json () =
+  Alcotest.(check bool) "invalid json returns None" true
+    (Slack.parse_event "not json at all" = None)
+
+let test_parse_event_unknown_type () =
+  let body = {|{"type":"app_rate_limited"}|} in
+  match Slack.parse_event body with
+  | Some Slack.Other -> ()
+  | _ -> Alcotest.fail "expected Some Other for unknown type"
+
+let test_parse_event_non_message_callback () =
+  let body = {|{"type":"event_callback","event":{"type":"app_mention","channel":"C1","user":"U1","text":"hey"}}|} in
+  match Slack.parse_event body with
+  | Some Slack.Other -> ()
+  | _ -> Alcotest.fail "expected Some Other for non-message event_callback"
+
 let test_session_key_format () =
   (* Verify handle_event produces the right session key format by checking
      that the parse_event output would yield "slack:{channel}:{user}" *)
@@ -102,5 +121,8 @@ let suite =
     Alcotest.test_case "parse url_verification" `Quick test_parse_url_verification;
     Alcotest.test_case "parse message event" `Quick test_parse_message_event;
     Alcotest.test_case "bot message has bot_id" `Quick test_bot_message_ignored;
+    Alcotest.test_case "parse event invalid json" `Quick test_parse_event_invalid_json;
+    Alcotest.test_case "parse event unknown type" `Quick test_parse_event_unknown_type;
+    Alcotest.test_case "parse event non-message callback" `Quick test_parse_event_non_message_callback;
     Alcotest.test_case "session key format" `Quick test_session_key_format;
   ]

@@ -194,8 +194,13 @@ let run ~(config : Runtime_config.t) =
      with exn ->
        Logs.err (fun m -> m "Config reload failed: %s" (Printexc.to_string exn))))
   in
+  let slack_socket_enabled = match config.channels.slack with
+    | Some sc when sc.socket_mode && sc.app_token <> "" -> true
+    | _ -> false
+  in
   write_state ~config
-    ~components:[ ("gateway", "running"); ("telegram", "running"); ("cron", "running") ];
+    ~components:([ ("gateway", "running"); ("telegram", "running"); ("cron", "running") ]
+      @ (if slack_socket_enabled then [ ("slack_socket", "running") ] else []));
   (match db with
    | Some db when config.security.audit_enabled ->
      Audit.log ~db ?signing_key (DaemonEvent { action = "start";
@@ -213,6 +218,16 @@ let run ~(config : Runtime_config.t) =
         Logs.err (fun m ->
             m "Discord channel error: %s" (Printexc.to_string exn));
         Lwt.return_unit));
+  (match config.channels.slack with
+   | Some sc when sc.socket_mode && sc.app_token <> "" ->
+     Lwt.async (fun () ->
+       Lwt.catch
+         (fun () -> Slack_socket.start ~config ~session_manager)
+         (fun exn ->
+           Logs.err (fun m ->
+               m "Slack Socket Mode error: %s" (Printexc.to_string exn));
+           Lwt.return_unit))
+   | _ -> ());
   (match db with
    | Some db ->
      Scheduler.init_schema db;

@@ -4,7 +4,7 @@
            http_client provider prompt_builder workspace_scaffold agent session
            stt tool tool_registry tools_builtin memory rate_limiter scheduler
            migrate audit skills vector secret_store resilience landlock channel
-           slack discord command_bridge_min)
+           command_bridge_min)
  (foreign_stubs (language c) (names landlock_stubs))
  (wrapped false)
  (libraries yojson sqlite3 clawq_extracted
@@ -15,12 +15,14 @@
 (library
  (name clawq_runtime_integrations)
  (modules http_server telegram daemon mcp_server service
-           runtime_native runtime_docker tunnel_cloudflare command_bridge)
+           runtime_native runtime_docker tunnel_cloudflare command_bridge
+           slack discord ws_client discord_gateway slack_socket)
  (wrapped false)
  (libraries clawq_runtime_core yojson sqlite3 clawq_extracted
             lwt lwt.unix cohttp-lwt-unix conduit-lwt-unix logs logs.fmt fmt
             mirage-crypto mirage-crypto-rng mirage-crypto-rng.unix
-            kdf.pbkdf digestif.c base64 eqaf))
+            kdf.pbkdf digestif.c base64 eqaf
+            httpun-ws-lwt-unix httpun-ws gluten-lwt-unix ca-certs bigstringaf faraday))
 
 (executable
  (name main)

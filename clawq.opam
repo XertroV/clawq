@@ -25,6 +25,9 @@ depends: [
   "kdf"
   "digestif"
   "base64"
+  "httpun-ws-lwt-unix"
+  "gluten-lwt-unix"
+  "ca-certs"
   "alcotest" {with-test}
 ]
 build: [

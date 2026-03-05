@@ -10,7 +10,9 @@ let contains hay needle =
 
 let with_temp_workspace f =
   let base = Filename.get_temp_dir_name () in
-  let dir = Filename.concat base ("clawq_tools_" ^ string_of_int (Random.bits ())) in
+  let dir = Filename.concat base
+    (Printf.sprintf "clawq_tools_%d_%d" (Unix.getpid ()) (Random.bits ())) in
+  (try Unix.rmdir dir with _ -> ());
   Unix.mkdir dir 0o755;
   let cwd = Sys.getcwd () in
   Fun.protect

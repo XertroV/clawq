@@ -97,6 +97,100 @@ let test_bot_message_ignored () =
   | None -> Alcotest.fail "should parse bot message"
   | Some msg -> Alcotest.(check bool) "parsed bot flag" true msg.author_bot
 
+let test_update_rate_limit_headers () =
+  let route = "test-route-1" in
+  Hashtbl.clear Discord.route_buckets;
+  let headers = Cohttp.Header.of_list [
+    ("x-ratelimit-remaining", "4");
+    ("x-ratelimit-reset", "1700000010.0");
+  ] in
+  Discord.update_rate_limit ~route ~headers;
+  match Hashtbl.find_opt Discord.route_buckets route with
+  | None -> Alcotest.fail "expected bucket to be created"
+  | Some bucket ->
+    Alcotest.(check int) "remaining" 4 bucket.remaining;
+    Alcotest.(check (float 0.1)) "reset_at" 1700000010.0 bucket.reset_at
+
+let test_update_rate_limit_global () =
+  let route = "test-route-2" in
+  Hashtbl.clear Discord.route_buckets;
+  Discord.global_rate_limit := 0.0;
+  let headers = Cohttp.Header.of_list [
+    ("x-ratelimit-global", "true");
+    ("retry-after", "2.5");
+  ] in
+  Discord.update_rate_limit ~route ~headers;
+  Alcotest.(check bool) "global rate limit set" true
+    (!Discord.global_rate_limit > Unix.gettimeofday ());
+  Discord.global_rate_limit := 0.0
+
+let test_wait_for_rate_limit_no_bucket () =
+  Hashtbl.clear Discord.route_buckets;
+  Discord.global_rate_limit := 0.0;
+  let t0 = Unix.gettimeofday () in
+  Lwt_main.run (Discord.wait_for_rate_limit ~route:"unknown-route");
+  let elapsed = Unix.gettimeofday () -. t0 in
+  Alcotest.(check bool) "no delay for unknown route" true (elapsed < 0.1)
+
+let test_is_fatal_close_code () =
+  Alcotest.(check bool) "4004 fatal" true (Discord.is_fatal_close_code 4004);
+  Alcotest.(check bool) "4010 fatal" true (Discord.is_fatal_close_code 4010);
+  Alcotest.(check bool) "4011 fatal" true (Discord.is_fatal_close_code 4011);
+  Alcotest.(check bool) "4012 fatal" true (Discord.is_fatal_close_code 4012);
+  Alcotest.(check bool) "4013 fatal" true (Discord.is_fatal_close_code 4013);
+  Alcotest.(check bool) "4014 fatal" true (Discord.is_fatal_close_code 4014);
+  Alcotest.(check bool) "4000 not fatal" false (Discord.is_fatal_close_code 4000);
+  Alcotest.(check bool) "4001 not fatal" false (Discord.is_fatal_close_code 4001);
+  Alcotest.(check bool) "1000 not fatal" false (Discord.is_fatal_close_code 1000)
+
+let test_is_allowed_dm_non_wildcard_guild () =
+  let config = make_config ~allow_guilds:["guild1"] () in
+  Alcotest.(check bool) "DM with non-wildcard guild list"
+    false (Discord.is_allowed ~config ~guild_id:None ~user_id:"any")
+
+let test_parse_message_create_wrong_type () =
+  let json = Yojson.Safe.from_string {|{
+    "t": "GUILD_CREATE",
+    "d": {
+      "channel_id": "456",
+      "author": {"id": "111"},
+      "content": "hello"
+    }
+  }|} in
+  Alcotest.(check bool) "non-MESSAGE_CREATE returns None" true
+    (Discord.parse_message_create json = None)
+
+let test_parse_dispatch_message_malformed () =
+  let d = Yojson.Safe.from_string {|{"not_valid": true}|} in
+  Alcotest.(check bool) "malformed dispatch returns None" true
+    (Discord.parse_dispatch_message d = None)
+
+let test_parse_dispatch_message () =
+  let d = Yojson.Safe.from_string
+    {|{"channel_id":"ch1","guild_id":"g1","author":{"id":"u1","bot":false},"content":"test"}|}
+  in
+  match Discord.parse_dispatch_message d with
+  | None -> Alcotest.fail "expected Some message"
+  | Some msg ->
+    Alcotest.(check string) "channel_id" "ch1" msg.channel_id;
+    Alcotest.(check (option string)) "guild_id" (Some "g1") msg.guild_id;
+    Alcotest.(check string) "author_id" "u1" msg.author_id;
+    Alcotest.(check bool) "author_bot" false msg.author_bot;
+    Alcotest.(check string) "content" "test" msg.content
+
+let test_parse_dispatch_message_dm () =
+  let d = Yojson.Safe.from_string
+    {|{"channel_id":"dm1","author":{"id":"u2"},"content":"dm test"}|}
+  in
+  match Discord.parse_dispatch_message d with
+  | None -> Alcotest.fail "expected Some message"
+  | Some msg ->
+    Alcotest.(check string) "channel_id" "dm1" msg.channel_id;
+    Alcotest.(check (option string)) "guild_id" None msg.guild_id;
+    Alcotest.(check string) "author_id" "u2" msg.author_id;
+    Alcotest.(check bool) "author_bot" false msg.author_bot;
+    Alcotest.(check string) "content" "dm test" msg.content
+
 let suite : unit Alcotest.test_case list =
   [
     Alcotest.test_case "is_allowed wildcard" `Quick test_is_allowed_wildcard;
@@ -107,4 +201,13 @@ let suite : unit Alcotest.test_case list =
     Alcotest.test_case "parse_message_create" `Quick test_parse_message_create;
     Alcotest.test_case "session_key format" `Quick test_session_key_format;
     Alcotest.test_case "bot_message ignored" `Quick test_bot_message_ignored;
+    Alcotest.test_case "rate limit header update" `Quick test_update_rate_limit_headers;
+    Alcotest.test_case "rate limit global" `Quick test_update_rate_limit_global;
+    Alcotest.test_case "wait no bucket" `Quick test_wait_for_rate_limit_no_bucket;
+    Alcotest.test_case "fatal close codes" `Quick test_is_fatal_close_code;
+    Alcotest.test_case "is_allowed DM non-wildcard guild" `Quick test_is_allowed_dm_non_wildcard_guild;
+    Alcotest.test_case "parse_message_create wrong type" `Quick test_parse_message_create_wrong_type;
+    Alcotest.test_case "parse dispatch message malformed" `Quick test_parse_dispatch_message_malformed;
+    Alcotest.test_case "parse dispatch message" `Quick test_parse_dispatch_message;
+    Alcotest.test_case "parse dispatch message dm" `Quick test_parse_dispatch_message_dm;
   ]

@@ -23,4 +23,6 @@ let () =
       ("rate_limiter", Test_rate_limiter.suite);
       ("slack", Test_slack.suite);
       ("discord", Test_discord.suite);
+      ("discord_gateway", Test_discord_gateway.suite);
+      ("slack_socket", Test_slack_socket.suite);
     ]

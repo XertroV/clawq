@@ -23,6 +23,8 @@ type slack_config = {
   events_path : string;
   allow_channels : string list;
   allow_users : string list;
+  app_token : string;
+  socket_mode : bool;
 }
 
 type channel_config = {
@@ -332,6 +334,8 @@ let to_json (cfg : t) : Yojson.Safe.t =
              ("events_path", `String s.events_path);
              ("allow_channels", `List (List.map (fun c -> `String c) s.allow_channels));
              ("allow_users", `List (List.map (fun u -> `String u) s.allow_users));
+             ("app_token", `String s.app_token);
+             ("socket_mode", `Bool s.socket_mode);
            ]) ])
     ));
     ("gateway", `Assoc gateway_fields);

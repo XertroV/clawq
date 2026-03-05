@@ -194,7 +194,14 @@ let parse_config ?(resolve_secrets = true) json =
           let allow_users =
             try s |> member "allow_users" |> to_list |> List.map to_string with _ -> ["*"]
           in
-          Some ({ bot_token; signing_secret; events_path; allow_channels; allow_users } : Runtime_config.slack_config)
+          let app_token =
+            try s |> member "app_token" |> to_string |> resolve_secret with _ -> ""
+          in
+          let socket_mode =
+            try s |> member "socket_mode" |> to_bool with _ -> false
+          in
+          Some ({ bot_token; signing_secret; events_path; allow_channels; allow_users;
+                  app_token; socket_mode } : Runtime_config.slack_config)
         with _ -> None
       in
       ({ cli; telegram; discord; slack } : Runtime_config.channel_config)
