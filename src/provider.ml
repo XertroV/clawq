@@ -58,7 +58,7 @@ let message_to_json m =
                            ("arguments", `String tc.arguments);
                          ] );
                    ])
-                m.tool_calls)
+               m.tool_calls)
         in
         fields @ [ ("content", `String m.content); ("tool_calls", tc_json) ]
     | _ -> fields @ [ ("content", `String m.content) ]

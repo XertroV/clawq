@@ -319,7 +319,9 @@ let test_file_read_large_file_requires_paged_read () =
         Tools_builtin.file_read ~workspace ~workspace_only:true
           ~extra_allowed_paths:[]
       in
-      let out = Lwt_main.run (tool.invoke (`Assoc [ ("path", `String path) ])) in
+      let out =
+        Lwt_main.run (tool.invoke (`Assoc [ ("path", `String path) ]))
+      in
       Alcotest.(check bool)
         "oversized read blocked with guidance" true
         (contains out "offset/limit"))
@@ -338,15 +340,13 @@ let test_file_read_paged_window_with_line_numbers () =
         Lwt_main.run
           (tool.invoke
              (`Assoc
-               [
-                 ("path", `String path);
-                 ("offset", `Int 2);
-                 ("limit", `Int 2);
-               ]))
+                [
+                  ("path", `String path); ("offset", `Int 2); ("limit", `Int 2);
+                ]))
       in
       Alcotest.(check bool) "includes line 2" true (contains out "2: two");
-       Alcotest.(check bool) "includes line 3" true (contains out "3: three");
-       Alcotest.(check bool) "omits line 1" false (contains out "1: one"))
+      Alcotest.(check bool) "includes line 3" true (contains out "3: three");
+      Alcotest.(check bool) "omits line 1" false (contains out "1: one"))
 
 let test_file_read_paged_truncates_pathological_long_line () =
   with_temp_workspace (fun workspace ->
@@ -362,17 +362,18 @@ let test_file_read_paged_truncates_pathological_long_line () =
         Lwt_main.run
           (tool.invoke
              (`Assoc
-               [
-                 ("path", `String path);
-                 ("offset", `Int 1);
-                 ("limit", `Int 1);
-               ]))
+                [
+                  ("path", `String path); ("offset", `Int 1); ("limit", `Int 1);
+                ]))
       in
-      Alcotest.(check bool) "long line is truncated" true
+      Alcotest.(check bool)
+        "long line is truncated" true
         (contains out "(truncated");
-      Alcotest.(check bool) "truncation note included" true
+      Alcotest.(check bool)
+        "truncation note included" true
         (contains out "long lines are truncated");
-      Alcotest.(check bool) "paged output stays bounded" true
+      Alcotest.(check bool)
+        "paged output stays bounded" true
         (String.length out < 10000))
 
 let test_file_read_rejects_invalid_offset_limit () =
@@ -389,37 +390,36 @@ let test_file_read_rejects_invalid_offset_limit () =
         Lwt_main.run
           (tool.invoke
              (`Assoc
-               [
-                 ("path", `String path);
-                 ("offset", `Int 0);
-                 ("limit", `Int 1);
-               ]))
+                [
+                  ("path", `String path); ("offset", `Int 0); ("limit", `Int 1);
+                ]))
       in
-      Alcotest.(check bool) "offset validation error" true
+      Alcotest.(check bool)
+        "offset validation error" true
         (contains offset_err "offset must be >= 1");
       let limit_low_err =
         Lwt_main.run
           (tool.invoke
              (`Assoc
-               [
-                 ("path", `String path);
-                 ("offset", `Int 1);
-                 ("limit", `Int 0);
-               ]))
+                [
+                  ("path", `String path); ("offset", `Int 1); ("limit", `Int 0);
+                ]))
       in
-      Alcotest.(check bool) "limit lower bound validation error" true
+      Alcotest.(check bool)
+        "limit lower bound validation error" true
         (contains limit_low_err "limit must be >= 1");
       let limit_high_err =
         Lwt_main.run
           (tool.invoke
              (`Assoc
-               [
-                 ("path", `String path);
-                 ("offset", `Int 1);
-                 ("limit", `Int 2001);
-               ]))
+                [
+                  ("path", `String path);
+                  ("offset", `Int 1);
+                  ("limit", `Int 2001);
+                ]))
       in
-      Alcotest.(check bool) "limit upper bound validation error" true
+      Alcotest.(check bool)
+        "limit upper bound validation error" true
         (contains limit_high_err "limit must be <= 2000"))
 
 let test_file_read_rejects_symlink_escape () =
@@ -450,7 +450,8 @@ let test_file_read_rejects_symlink_escape () =
       let out =
         Lwt_main.run (tool.invoke (`Assoc [ ("path", `String "escape.txt") ]))
       in
-      Alcotest.(check bool) "symlink escape blocked" true
+      Alcotest.(check bool)
+        "symlink escape blocked" true
         (contains out "outside workspace"))
     ~finally:(fun () ->
       (try Unix.unlink link_path with _ -> ());
@@ -468,13 +469,11 @@ let test_file_append_creates_and_appends () =
       ignore
         (Lwt_main.run
            (tool.invoke
-              (`Assoc
-                [ ("path", `String path); ("content", `String "hello") ])));
+              (`Assoc [ ("path", `String path); ("content", `String "hello") ])));
       ignore
         (Lwt_main.run
            (tool.invoke
-              (`Assoc
-                [ ("path", `String path); ("content", `String " world") ])));
+              (`Assoc [ ("path", `String path); ("content", `String " world") ])));
       let ic = open_in path in
       let content = really_input_string ic (in_channel_length ic) in
       close_in ic;
@@ -494,12 +493,12 @@ let test_file_edit_replace_all () =
         (Lwt_main.run
            (tool.invoke
               (`Assoc
-                [
-                  ("path", `String path);
-                  ("old_text", `String "a");
-                  ("new_text", `String "z");
-                  ("replace_all", `Bool true);
-                ])));
+                 [
+                   ("path", `String path);
+                   ("old_text", `String "a");
+                   ("new_text", `String "z");
+                   ("replace_all", `Bool true);
+                 ])));
       let ic = open_in path in
       let content = really_input_string ic (in_channel_length ic) in
       close_in ic;
@@ -519,16 +518,17 @@ let test_file_edit_lines_replaces_range () =
         (Lwt_main.run
            (tool.invoke
               (`Assoc
-                [
-                  ("path", `String path);
-                  ("start_line", `Int 2);
-                  ("end_line", `Int 3);
-                  ("content", `String "TWO\nTHREE");
-                ])));
+                 [
+                   ("path", `String path);
+                   ("start_line", `Int 2);
+                   ("end_line", `Int 3);
+                   ("content", `String "TWO\nTHREE");
+                 ])));
       let ic = open_in path in
       let content = really_input_string ic (in_channel_length ic) in
       close_in ic;
-      Alcotest.(check string) "line range replaced" "one\nTWO\nTHREE\nfour" content)
+      Alcotest.(check string)
+        "line range replaced" "one\nTWO\nTHREE\nfour" content)
 
 let suite =
   [
@@ -570,8 +570,7 @@ let suite =
       test_file_read_rejects_symlink_escape;
     Alcotest.test_case "file_append creates and appends" `Quick
       test_file_append_creates_and_appends;
-    Alcotest.test_case "file_edit replace_all" `Quick
-      test_file_edit_replace_all;
+    Alcotest.test_case "file_edit replace_all" `Quick test_file_edit_replace_all;
     Alcotest.test_case "file_edit_lines range replace" `Quick
       test_file_edit_lines_replaces_range;
     Alcotest.test_case "extra_allowed_paths grants access" `Quick

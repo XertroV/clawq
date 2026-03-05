@@ -252,8 +252,8 @@ let handle_message ~(discord_config : Runtime_config.discord_config)
                 let* response =
                   Session.turn session_mgr ~key ~message:msg.content
                     ~channel_name:msg.channel_id
-                    ~channel_type:discord_channel_type
-                    ~sender_id:msg.author_id ()
+                    ~channel_type:discord_channel_type ~sender_id:msg.author_id
+                    ()
                 in
                 Lwt.return (Ok response))
               (fun exn -> Lwt.return (Error (Printexc.to_string exn)))

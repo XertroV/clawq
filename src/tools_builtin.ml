@@ -318,15 +318,13 @@ let validate_file_read_window ~offset ~limit =
   if offset < 1 then Error "Error: offset must be >= 1"
   else if limit < 1 then Error "Error: limit must be >= 1"
   else if limit > file_read_max_limit then
-    Error
-      (Printf.sprintf "Error: limit must be <= %d" file_read_max_limit)
+    Error (Printf.sprintf "Error: limit must be <= %d" file_read_max_limit)
   else Ok ()
 
 let canonicalize_for_read path =
   try Ok (Unix.realpath path)
   with Unix.Unix_error (err, _, _) ->
-    Error
-      (Printf.sprintf "Error: %s" (Unix.error_message err))
+    Error (Printf.sprintf "Error: %s" (Unix.error_message err))
 
 let truncate_line_for_paging line =
   if String.length line <= file_read_max_line_chars then (line, false)
@@ -342,8 +340,7 @@ let format_lines_window ~content ~offset ~limit =
   let start = offset - 1 in
   let indexed = List.mapi (fun i line -> (i + 1, line)) lines in
   let selected =
-    indexed
-    |> List.filter (fun (n, _) -> n >= offset && n < offset + limit)
+    indexed |> List.filter (fun (n, _) -> n >= offset && n < offset + limit)
   in
   if selected = [] then
     Printf.sprintf
@@ -354,17 +351,17 @@ let format_lines_window ~content ~offset ~limit =
     let rendered =
       selected
       |> List.map (fun (n, line) ->
-             let line, truncated = truncate_line_for_paging line in
-             if truncated then truncated_any := true;
-             Printf.sprintf "%d: %s" n line)
+          let line, truncated = truncate_line_for_paging line in
+          if truncated then truncated_any := true;
+          Printf.sprintf "%d: %s" n line)
       |> String.concat "\n"
     in
     let last_line = fst (List.hd (List.rev selected)) in
     let suffix =
       if start + List.length selected < total then
         Printf.sprintf
-          "\n\n(Showing lines %d-%d of %d. Use offset=%d to continue.)"
-          offset last_line total (last_line + 1)
+          "\n\n(Showing lines %d-%d of %d. Use offset=%d to continue.)" offset
+          last_line total (last_line + 1)
       else Printf.sprintf "\n\n(End of file - total %d lines)" total
     in
     let trunc_suffix =
@@ -510,8 +507,8 @@ let file_read ~workspace ~workspace_only ~extra_allowed_paths =
                     [
                       ("type", `String "integer");
                       ( "description",
-                        `String
-                          "Optional 1-indexed line offset for paged reads" );
+                        `String "Optional 1-indexed line offset for paged reads"
+                      );
                     ] );
                 ( "limit",
                   `Assoc
@@ -519,8 +516,8 @@ let file_read ~workspace ~workspace_only ~extra_allowed_paths =
                       ("type", `String "integer");
                       ( "description",
                         `String
-                          "Optional max lines to read when using offset (default 200, max 2000)"
-                      );
+                          "Optional max lines to read when using offset \
+                           (default 200, max 2000)" );
                     ] );
               ] );
           ("required", `List [ `String "path" ]);
@@ -533,14 +530,16 @@ let file_read ~workspace ~workspace_only ~extra_allowed_paths =
         let limit_input = parse_optional_int_field args "limit" in
         if path = "" then Lwt.return "Error: path is required"
         else
-          match offset_input, limit_input with
+          match (offset_input, limit_input) with
           | Error msg, _ | _, Error msg -> Lwt.return msg
-          | Ok offset_opt, Ok limit_opt ->
+          | Ok offset_opt, Ok limit_opt -> (
               let has_offset = offset_opt <> None in
               let has_limit = limit_opt <> None in
               let offset = Option.value offset_opt ~default:1 in
-              let limit = Option.value limit_opt ~default:file_read_default_limit in
-              (match validate_file_read_window ~offset ~limit with
+              let limit =
+                Option.value limit_opt ~default:file_read_default_limit
+              in
+              match validate_file_read_window ~offset ~limit with
               | Error msg -> Lwt.return msg
               | Ok () ->
                   if
@@ -554,7 +553,7 @@ let file_read ~workspace ~workspace_only ~extra_allowed_paths =
                         let open Lwt.Syntax in
                         let path = resolve_path ~workspace path in
                         let canonical_path = canonicalize_for_read path in
-                        (match canonical_path with
+                        match canonical_path with
                         | Error msg -> Lwt.return msg
                         | Ok canonical_path ->
                             if
@@ -568,18 +567,23 @@ let file_read ~workspace ~workspace_only ~extra_allowed_paths =
                                   Lwt_io.read
                               in
                               if has_offset || has_limit then
-                                Lwt.return (format_lines_window ~content ~offset ~limit)
-                              else if String.length content > file_read_max_full_chars then
+                                Lwt.return
+                                  (format_lines_window ~content ~offset ~limit)
+                              else if
+                                String.length content > file_read_max_full_chars
+                              then
                                 Lwt.return
                                   (Printf.sprintf
-                                     "File too large for full read (%d chars, limit %d chars). \
-                                      Use file_read with offset/limit to read in parts (for \
-                                      example: offset=1, limit=200), or use shell_exec with \
-                                      grep to search first."
-                                     (String.length content) file_read_max_full_chars)
-                              else Lwt.return content))
-                      (fun exn -> Lwt.return ("Error: " ^ Printexc.to_string exn)))
-        );
+                                     "File too large for full read (%d chars, \
+                                      limit %d chars). Use file_read with \
+                                      offset/limit to read in parts (for \
+                                      example: offset=1, limit=200), or use \
+                                      shell_exec with grep to search first."
+                                     (String.length content)
+                                     file_read_max_full_chars)
+                              else Lwt.return content)
+                      (fun exn ->
+                        Lwt.return ("Error: " ^ Printexc.to_string exn))));
     risk_level = Low;
   }
 
@@ -735,8 +739,7 @@ let file_edit ~workspace ~workspace_only ~extra_allowed_paths =
                       ("type", `String "boolean");
                       ( "description",
                         `String
-                          "Optional: replace all occurrences (default false)"
-                      );
+                          "Optional: replace all occurrences (default false)" );
                     ] );
               ] );
           ( "required",
@@ -784,8 +787,10 @@ let file_edit ~workspace ~workspace_only ~extra_allowed_paths =
               else
                 let replacements =
                   let rec count i acc =
-                    if i + String.length old_text > String.length content then acc
-                    else if String.sub content i (String.length old_text) = old_text
+                    if i + String.length old_text > String.length content then
+                      acc
+                    else if
+                      String.sub content i (String.length old_text) = old_text
                     then count (i + String.length old_text) (acc + 1)
                     else count (i + 1) acc
                   in
@@ -795,8 +800,7 @@ let file_edit ~workspace ~workspace_only ~extra_allowed_paths =
                   if replace_all then
                     let rec build i acc =
                       if i + String.length old_text > String.length content then
-                        acc
-                        ^ String.sub content i (String.length content - i)
+                        acc ^ String.sub content i (String.length content - i)
                       else if
                         String.sub content i (String.length old_text) = old_text
                       then build (i + String.length old_text) (acc ^ new_text)
@@ -818,7 +822,8 @@ let file_edit ~workspace ~workspace_only ~extra_allowed_paths =
                 in
                 Lwt.return
                   (Printf.sprintf
-                     "Edited %s: replaced %d chars with %d chars (%d occurrence%s)"
+                     "Edited %s: replaced %d chars with %d chars (%d \
+                      occurrence%s)"
                      path (String.length old_text) (String.length new_text)
                      (if replace_all then replacements else 1)
                      (if (if replace_all then replacements else 1) = 1 then ""
@@ -849,15 +854,13 @@ let file_edit_lines ~workspace ~workspace_only ~extra_allowed_paths =
                   `Assoc
                     [
                       ("type", `String "integer");
-                      ( "description",
-                        `String "1-indexed start line (inclusive)" );
+                      ("description", `String "1-indexed start line (inclusive)");
                     ] );
                 ( "end_line",
                   `Assoc
                     [
                       ("type", `String "integer");
-                      ( "description",
-                        `String "1-indexed end line (inclusive)" );
+                      ("description", `String "1-indexed end line (inclusive)");
                     ] );
                 ( "content",
                   `Assoc
@@ -924,8 +927,8 @@ let file_edit_lines ~workspace ~workspace_only ~extra_allowed_paths =
                       Lwt_io.write oc new_content)
                 in
                 Lwt.return
-                  (Printf.sprintf "Edited %s: replaced lines %d-%d"
-                     path start_line end_line))
+                  (Printf.sprintf "Edited %s: replaced lines %d-%d" path
+                     start_line end_line))
             (fun exn -> Lwt.return ("Error: " ^ Printexc.to_string exn)));
     risk_level = Medium;
   }
