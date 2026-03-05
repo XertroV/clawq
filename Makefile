@@ -1,13 +1,72 @@
 SHELL := opam exec --switch=clawq-5.1 -- /usr/bin/env bash
 .SHELLFLAGS := -c
 
-.PHONY: bootstrap build extract extract-check run phase2 test fmt fmt-check clean release docker-build docker-run
+.PHONY: bootstrap build build-opt build-opt-all build-opt-speed build-opt-size build-opt-stripped build-opt-stripped-all build-opt-speed-stripped build-opt-size-stripped extract extract-check run phase2 test fmt fmt-check clean release docker-build docker-run
+
+OPT ?= speed
+DIST_DIR := dist
+SPEED_EXE := _build_opt_speed/default/src/main.exe
+SIZE_EXE := _build_opt_size/default/src/main.exe
 
 bootstrap:
 	./scripts/bootstrap_coq.sh
 
 build:
 	dune build
+
+build-opt:
+	@if [ "$(OPT)" = "speed" ]; then \
+		$(MAKE) --no-print-directory build-opt-speed; \
+	elif [ "$(OPT)" = "size" ]; then \
+		$(MAKE) --no-print-directory build-opt-size; \
+	else \
+		echo "Unknown OPT='$(OPT)'. Use OPT=speed or OPT=size."; \
+		exit 1; \
+	fi
+
+build-opt-all: build-opt-speed build-opt-size
+
+build-opt-stripped:
+	@if [ "$(OPT)" = "speed" ]; then \
+		$(MAKE) --no-print-directory build-opt-speed-stripped; \
+	elif [ "$(OPT)" = "size" ]; then \
+		$(MAKE) --no-print-directory build-opt-size-stripped; \
+	else \
+		echo "Unknown OPT='$(OPT)'. Use OPT=speed or OPT=size."; \
+		exit 1; \
+	fi
+
+build-opt-stripped-all: build-opt-speed-stripped build-opt-size-stripped
+
+build-opt-speed:
+	@DUNE_BUILD_DIR=_build_opt_speed dune build --profile=release-speed src/main.exe
+	@exe="$(SPEED_EXE)"; \
+		size_kb=$$((($$(stat -c%s "$$exe") + 1023) / 1024)); \
+		echo "$$exe $$size_kb KB"
+
+build-opt-size:
+	@DUNE_BUILD_DIR=_build_opt_size dune build --profile=release-size src/main.exe
+	@exe="$(SIZE_EXE)"; \
+		size_kb=$$((($$(stat -c%s "$$exe") + 1023) / 1024)); \
+		echo "$$exe $$size_kb KB"
+
+build-opt-speed-stripped: build-opt-speed
+	@mkdir -p "$(DIST_DIR)"
+	@out="$(DIST_DIR)/clawq-speed"; \
+		cp "$(SPEED_EXE)" "$$out"; \
+		chmod u+w "$$out"; \
+		strip "$$out"; \
+		size_kb=$$((($$(stat -c%s "$$out") + 1023) / 1024)); \
+		echo "$$out $$size_kb KB"
+
+build-opt-size-stripped: build-opt-size
+	@mkdir -p "$(DIST_DIR)"
+	@out="$(DIST_DIR)/clawq-size"; \
+		cp "$(SIZE_EXE)" "$$out"; \
+		chmod u+w "$$out"; \
+		strip "$$out"; \
+		size_kb=$$((($$(stat -c%s "$$out") + 1023) / 1024)); \
+		echo "$$out $$size_kb KB"
 
 extract:
 	./scripts/extract.sh

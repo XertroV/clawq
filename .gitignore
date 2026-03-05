@@ -1,5 +1,7 @@
 nullclaw
 _build
+_build*/
+dist/
 _opam
 *.install
 *.vo
@@ -14,3 +16,5 @@ _opam
 .env
 
 **/*.tmp.*
+dune-workspace
+main.stripped.test
