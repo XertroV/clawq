@@ -145,6 +145,33 @@ let test_backfill_does_not_persist_resolved_secrets () =
         (out |> member "providers" |> member "p" |> member "api_key"
        |> to_string))
 
+let test_backfill_infers_default_provider_from_model_priority () =
+  let json =
+    {|{
+      "providers": {
+        "groq": {"api_key": "sk-groq"},
+        "zai_coding": {"api_key": "sk-zai"}
+      },
+      "agent_defaults": {
+        "primary_model": "glm-5",
+        "model_priority": [
+          {"provider": "zai_coding", "model": "glm-5"},
+          {"provider": "groq", "model": "llama-3.3-70b-versatile"}
+        ]
+      }
+    }|}
+  in
+  with_temp_file json (fun path ->
+      let cfg = Config_loader.load ~path () in
+      Alcotest.(check (option string))
+        "runtime default_provider inferred" (Some "zai_coding")
+        cfg.default_provider;
+      let out = Yojson.Safe.from_file path in
+      let open Yojson.Safe.Util in
+      Alcotest.(check string)
+        "default_provider backfilled" "zai_coding"
+        (out |> member "default_provider" |> to_string))
+
 let suite =
   [
     Alcotest.test_case "load backfill preserves unknown keys" `Quick
@@ -163,4 +190,6 @@ let suite =
       test_parse_gateway_auth_token;
     Alcotest.test_case "backfill does not persist resolved secrets" `Quick
       test_backfill_does_not_persist_resolved_secrets;
+    Alcotest.test_case "backfill infers default provider" `Quick
+      test_backfill_infers_default_provider_from_model_priority;
   ]

@@ -29,6 +29,13 @@ let write_state ~(config : Runtime_config.t) ~components =
 
 let run ~(config : Runtime_config.t) =
   let open Lwt.Syntax in
+  let pp_header_with_ts ppf h =
+    let t = Unix.gettimeofday () in
+    let tm = Unix.localtime t in
+    let ms = int_of_float ((t -. floor t) *. 1000.0) in
+    Fmt.pf ppf "[%02d:%02d:%02d.%03d] %a" tm.Unix.tm_hour tm.Unix.tm_min
+      tm.Unix.tm_sec ms Logs_fmt.pp_header h
+  in
   let is_loopback_host host =
     let h = String.lowercase_ascii (String.trim host) in
     h = "127.0.0.1" || h = "localhost" || h = "::1"
@@ -43,7 +50,7 @@ let run ~(config : Runtime_config.t) =
         m
           "Gateway running without require_pairing or auth_token; suitable \
            only for local development on loopback");
-  Logs.set_reporter (Logs_fmt.reporter ());
+  Logs.set_reporter (Logs_fmt.reporter ~pp_header:pp_header_with_ts ());
   Logs.set_level (Some Logs.Info);
   List.iter
     (fun src ->

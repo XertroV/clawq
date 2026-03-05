@@ -187,19 +187,25 @@ let turn agent ~user_message ?db ?session_key () =
   let resilient_complete config messages tools =
     let res = config.Runtime_config.resilience in
     let open Lwt.Syntax in
+    let primary () = Provider.complete ~config ~messages ?tools () in
+    let with_optional_fallback () =
+      match res.fallback_provider with
+      | Some fb_name ->
+          let fb_config = { config with default_provider = Some fb_name } in
+          let primary_name, _, _ = Provider.select_provider ~config in
+          let fallback_name, _, _ =
+            Provider.select_provider ~config:fb_config
+          in
+          if fallback_name = primary_name then primary ()
+          else
+            Resilience.with_fallback ~primary ~fallback:(fun () ->
+                Provider.complete ~config:fb_config ~messages ?tools ())
+      | None -> primary ()
+    in
     let* timed =
       Resilience.with_timeout_retry ~timeout_s:res.timeout_s
-        ~max_retries:res.max_retries ~base_delay_s:res.base_delay_s (fun () ->
-          Resilience.with_fallback
-            ~primary:(fun () -> Provider.complete ~config ~messages ?tools ())
-            ~fallback:(fun () ->
-              match res.fallback_provider with
-              | Some fb_name ->
-                  let fb_config =
-                    { config with default_provider = Some fb_name }
-                  in
-                  Provider.complete ~config:fb_config ~messages ?tools ()
-              | None -> Provider.complete ~config ~messages ?tools ()))
+        ~max_retries:res.max_retries ~base_delay_s:res.base_delay_s
+        with_optional_fallback
     in
     match timed with Ok v -> Lwt.return v | Error e -> Lwt.fail_with e
   in
@@ -272,22 +278,28 @@ let turn_stream agent ~user_message ?db ?session_key ~on_chunk () =
   let resilient_stream config messages tools on_chunk =
     let res = config.Runtime_config.resilience in
     let open Lwt.Syntax in
+    let primary () =
+      Provider.complete_stream ~config ~messages ?tools ~on_chunk ()
+    in
+    let with_optional_fallback () =
+      match res.fallback_provider with
+      | Some fb_name ->
+          let fb_config = { config with default_provider = Some fb_name } in
+          let primary_name, _, _ = Provider.select_provider ~config in
+          let fallback_name, _, _ =
+            Provider.select_provider ~config:fb_config
+          in
+          if fallback_name = primary_name then primary ()
+          else
+            Resilience.with_fallback ~primary ~fallback:(fun () ->
+                Provider.complete_stream ~config:fb_config ~messages ?tools
+                  ~on_chunk ())
+      | None -> primary ()
+    in
     let* timed =
       Resilience.with_timeout_retry ~timeout_s:res.timeout_s
-        ~max_retries:res.max_retries ~base_delay_s:res.base_delay_s (fun () ->
-          Resilience.with_fallback
-            ~primary:(fun () ->
-              Provider.complete_stream ~config ~messages ?tools ~on_chunk ())
-            ~fallback:(fun () ->
-              match res.fallback_provider with
-              | Some fb_name ->
-                  let fb_config =
-                    { config with default_provider = Some fb_name }
-                  in
-                  Provider.complete_stream ~config:fb_config ~messages ?tools
-                    ~on_chunk ()
-              | None ->
-                  Provider.complete_stream ~config ~messages ?tools ~on_chunk ()))
+        ~max_retries:res.max_retries ~base_delay_s:res.base_delay_s
+        with_optional_fallback
     in
     match timed with Ok v -> Lwt.return v | Error e -> Lwt.fail_with e
   in

@@ -10,7 +10,7 @@ let parse_config ?(resolve_secrets = true) json =
     try json |> member "default_temperature" |> to_float
     with _ -> default.default_temperature
   in
-  let default_provider =
+  let parsed_default_provider =
     try Some (json |> member "default_provider" |> to_string)
     with _ -> default.default_provider
   in
@@ -516,6 +516,26 @@ let parse_config ?(resolve_secrets = true) json =
       ({ timeout_s; max_retries; base_delay_s; fallback_provider }
         : Runtime_config.resilience_config)
     with _ -> default.resilience
+  in
+  let default_provider =
+    match parsed_default_provider with
+    | Some _ as explicit -> explicit
+    | None -> (
+        let inferred =
+          match Runtime_config.effective_primary_provider agent_defaults with
+          | Some p -> Some p
+          | None -> (
+              try
+                let first =
+                  json |> member "agent_defaults" |> member "model_priority"
+                  |> to_list |> List.hd
+                in
+                Some (first |> member "provider" |> to_string)
+              with _ -> None)
+        in
+        match inferred with
+        | Some p when List.exists (fun (n, _) -> n = p) providers -> Some p
+        | _ -> None)
   in
   {
     workspace;

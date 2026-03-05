@@ -146,13 +146,42 @@ let test_select_provider_prefers_colon_model_provider () =
             } );
         ];
       default_provider = Some "groq";
-      agent_defaults = { Runtime_config.default.agent_defaults with primary_model = "zai_coding:glm-5" };
+      agent_defaults =
+        {
+          Runtime_config.default.agent_defaults with
+          primary_model = "zai_coding:glm-5";
+        };
     }
   in
   let provider_name, _, model = Provider.select_provider ~config in
-  Alcotest.(check string) "provider chosen from model target" "zai_coding"
-    provider_name;
+  Alcotest.(check string)
+    "provider chosen from model target" "zai_coding" provider_name;
   Alcotest.(check string) "model parsed from colon target" "glm-5" model
+
+let test_select_provider_keeps_raw_model_when_target_provider_missing () =
+  let config : Runtime_config.t =
+    {
+      Runtime_config.default with
+      providers =
+        [
+          ( "groq",
+            {
+              api_key = "sk-groq";
+              base_url = Some "https://api.groq.com/openai/v1";
+              default_model = None;
+            } );
+        ];
+      default_provider = Some "groq";
+      agent_defaults =
+        {
+          Runtime_config.default.agent_defaults with
+          primary_model = "zai_coding:glm-5";
+        };
+    }
+  in
+  let provider_name, _, model = Provider.select_provider ~config in
+  Alcotest.(check string) "fallback provider selected" "groq" provider_name;
+  Alcotest.(check string) "raw model preserved" "zai_coding:glm-5" model
 
 let suite =
   [
@@ -172,4 +201,6 @@ let suite =
       test_provider_config_default_model;
     Alcotest.test_case "select provider with colon target" `Quick
       test_select_provider_prefers_colon_model_provider;
+    Alcotest.test_case "preserve raw model when provider missing" `Quick
+      test_select_provider_keeps_raw_model_when_target_provider_missing;
   ]

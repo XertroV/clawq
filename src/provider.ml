@@ -85,6 +85,7 @@ let select_provider ~(config : Runtime_config.t) =
   let model_target =
     Runtime_config.effective_primary_target config.agent_defaults
   in
+  let raw_model = String.trim config.agent_defaults.primary_model in
   let model_provider_preferred =
     match model_target.provider with
     | Some name -> (
@@ -125,10 +126,9 @@ let select_provider ~(config : Runtime_config.t) =
   let model =
     match model_target.provider with
     | Some requested when requested = provider_name -> model_target.model
+    | Some _ -> raw_model
     | _ -> (
-        match provider.default_model with
-        | Some m -> m
-        | None -> model_target.model)
+        match provider.default_model with Some m -> m | None -> raw_model)
   in
   (provider_name, provider, model)
 
