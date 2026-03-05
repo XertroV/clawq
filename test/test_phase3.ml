@@ -193,8 +193,9 @@ let test_config_new_fields () =
     {|{
       "agent_defaults": {
         "primary_model": "test-model",
+        "model_priority": ["priority-model", "fallback-model"],
         "system_prompt": "Custom prompt",
-        "max_tool_iterations": 5
+        "max_tool_interactions": 5
       },
       "memory": {
         "backend": "sqlite",
@@ -209,6 +210,9 @@ let test_config_new_fields () =
   let config = Config_loader.parse_config json in
   Alcotest.(check string)
     "system_prompt" "Custom prompt" config.agent_defaults.system_prompt;
+  Alcotest.(check string)
+    "effective model from priority list" "priority-model"
+    (Runtime_config.effective_primary_model config.agent_defaults);
   Alcotest.(check int)
     "max_tool_iterations" 5 config.agent_defaults.max_tool_iterations;
   Alcotest.(check string) "db_path" "/tmp/test.db" config.memory.db_path;

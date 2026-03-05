@@ -10,4 +10,5 @@ let () =
       ("skills", Test_skills.suite);
       ("memory_search", Test_memory_search.suite);
       ("streaming", Test_streaming.suite);
+      ("config_loader", Test_config_loader.suite);
     ]

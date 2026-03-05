@@ -55,7 +55,9 @@ Fill in these fields:
     }
   },
   "agent_defaults": {
-    "primary_model": "openai/gpt-4o"
+    "primary_model": "openai/gpt-4o",
+    "model_priority": ["openai/gpt-4o", "openai/gpt-4o-mini"],
+    "max_tool_iterations": 10
   },
   "channels": {
     "cli": true,
@@ -71,6 +73,18 @@ Fill in these fields:
   "gateway": {
     "host": "127.0.0.1",
     "port": 3000
+  },
+  "tunnel": {
+    "enabled": false,
+    "provider": "cloudflare",
+    "cloudflare": {
+      "api_token": "$CLOUDFLARE_API_TOKEN",
+      "account_id": "",
+      "tunnel_id": "",
+      "tunnel_name": "clawq",
+      "hostname": "",
+      "ingress_service": "http://127.0.0.1:3000"
+    }
   }
 }
 ```
@@ -78,8 +92,10 @@ Fill in these fields:
 ### Configuration notes
 
 - **allow_from**: `["*"]` allows all Telegram users. To restrict access, list specific chat IDs (as strings): `["123456789", "987654321"]`. Find your chat ID by messaging [@userinfobot](https://t.me/userinfobot).
-- **primary_model**: Any model your provider supports. For OpenRouter, see [openrouter.ai/models](https://openrouter.ai/models).
+- **model_priority**: Ordered model preference list (first is used now, later items are reserved for fallback behavior).
+- **primary_model**: Backward-compatible alias for the first entry in `model_priority`.
 - **base_url**: Change this if using OpenAI directly (`https://api.openai.com/v1`) or a self-hosted endpoint.
+- **tunnel.cloudflare**: Predeclared for future tunnel support; keep disabled unless you are wiring Cloudflare in your own build.
 
 ## 5. Validate
 

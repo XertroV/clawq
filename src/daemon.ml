@@ -55,7 +55,8 @@ let run ~(config : Runtime_config.t) =
     | None -> (match with_key with (n, _) :: _ -> n | [] -> "(none)")
   in
   Logs.info (fun m -> m "Provider: %s | Model: %s | Temp: %.2f"
-    active_provider config.agent_defaults.primary_model config.default_temperature);
+    active_provider (Runtime_config.effective_primary_model config.agent_defaults)
+    config.default_temperature);
   Logs.info (fun m -> m "Channels: cli=%b telegram=%b"
     config.channels.cli (config.channels.telegram <> None));
   let tool_registry =

@@ -101,6 +101,7 @@ let convert (json : Yojson.Safe.t) =
     agent_defaults = {
       default.agent_defaults with
       primary_model;
+      model_priority = [ primary_model ];
     };
     channels;
     gateway;
@@ -110,6 +111,7 @@ let convert (json : Yojson.Safe.t) =
                  encrypt_secrets = default.security.encrypt_secrets };
     stt = None;
     zai_mcp = None;
+    tunnel = default.tunnel;
   } in
   (config, List.rev !warnings)
 

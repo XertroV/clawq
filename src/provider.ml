@@ -98,7 +98,7 @@ let complete ~(config : Runtime_config.t) ~messages ?tools () =
   in
   let model = match provider.default_model with
     | Some m -> m
-    | None -> config.agent_defaults.primary_model
+    | None -> Runtime_config.effective_primary_model config.agent_defaults
   in
   let base_url =
     match provider.base_url with
@@ -342,7 +342,7 @@ let complete_stream ~(config : Runtime_config.t) ~messages ?tools ~on_chunk () =
   in
   let model = match provider.default_model with
     | Some m -> m
-    | None -> config.agent_defaults.primary_model
+    | None -> Runtime_config.effective_primary_model config.agent_defaults
   in
   let base_url =
     match provider.base_url with

@@ -39,15 +39,32 @@ let resolve_secret s =
         try ad |> member "primary_model" |> to_string
         with _ -> default.agent_defaults.primary_model
       in
+      let model_priority =
+        try
+          ad |> member "model_priority" |> to_list
+          |> List.map to_string
+          |> List.filter (fun s -> s <> "")
+        with _ -> []
+      in
+      let model_priority =
+        if model_priority <> [] then model_priority else [ primary_model ]
+      in
+      let primary_model =
+        match model_priority with
+        | first :: _ -> first
+        | [] -> primary_model
+      in
       let system_prompt =
         try ad |> member "system_prompt" |> to_string
         with _ -> default.agent_defaults.system_prompt
       in
       let max_tool_iterations =
         try ad |> member "max_tool_iterations" |> to_int
-        with _ -> default.agent_defaults.max_tool_iterations
+        with _ ->
+          (try ad |> member "max_tool_interactions" |> to_int
+           with _ -> default.agent_defaults.max_tool_iterations)
       in
-      ({ primary_model; system_prompt; max_tool_iterations } : Runtime_config.agent_defaults)
+      ({ primary_model; model_priority; system_prompt; max_tool_iterations } : Runtime_config.agent_defaults)
     with _ -> default.agent_defaults
   in
   let channels =
@@ -152,14 +169,87 @@ let resolve_secret s =
   let zai_mcp =
     try
       let v = json |> member "zai_mcp" in
-      let web_search_enabled =
-        try v |> member "web_search_enabled" |> to_bool with _ -> false
-      in
-      let web_reader_enabled =
-        try v |> member "web_reader_enabled" |> to_bool with _ -> false
-      in
-      Some ({ Runtime_config.web_search_enabled; web_reader_enabled } : Runtime_config.zai_mcp_config)
-    with _ -> None
+      match v with
+      | `Null -> default.zai_mcp
+      | _ ->
+        let web_search_enabled =
+          try v |> member "web_search_enabled" |> to_bool
+          with _ -> Runtime_config.default_zai_mcp.web_search_enabled
+        in
+        let web_reader_enabled =
+          try v |> member "web_reader_enabled" |> to_bool
+          with _ -> Runtime_config.default_zai_mcp.web_reader_enabled
+        in
+        Some
+          ({ Runtime_config.web_search_enabled; web_reader_enabled }
+            : Runtime_config.zai_mcp_config)
+    with _ -> default.zai_mcp
+  in
+  let tunnel =
+    try
+      let t = json |> member "tunnel" in
+      match t with
+      | `Null -> default.tunnel
+      | _ ->
+        let default_tunnel = Runtime_config.default_tunnel in
+        let enabled =
+          try t |> member "enabled" |> to_bool
+          with _ -> default_tunnel.enabled
+        in
+        let provider =
+          try t |> member "provider" |> to_string
+          with _ -> default_tunnel.provider
+        in
+        let cloudflare =
+          try
+            let c = t |> member "cloudflare" in
+            match c with
+            | `Null -> default_tunnel.cloudflare
+            | _ ->
+              let d = Runtime_config.default_cloudflare_tunnel in
+              let api_token =
+                try c |> member "api_token" |> to_string |> resolve_secret
+                with _ -> d.api_token
+              in
+              let account_id =
+                try Some (c |> member "account_id" |> to_string) with _ -> d.account_id
+              in
+              let tunnel_id =
+                try Some (c |> member "tunnel_id" |> to_string) with _ -> d.tunnel_id
+              in
+              let tunnel_name =
+                try Some (c |> member "tunnel_name" |> to_string) with _ -> d.tunnel_name
+              in
+              let hostname =
+                try Some (c |> member "hostname" |> to_string) with _ -> d.hostname
+              in
+              let config_path =
+                try Some (c |> member "config_path" |> to_string) with _ -> d.config_path
+              in
+              let credentials_path =
+                try Some (c |> member "credentials_path" |> to_string)
+                with _ -> d.credentials_path
+              in
+              let ingress_service =
+                try Some (c |> member "ingress_service" |> to_string)
+                with _ -> d.ingress_service
+              in
+              Some
+                ({
+                   Runtime_config.api_token;
+                   account_id;
+                   tunnel_id;
+                   tunnel_name;
+                   hostname;
+                   config_path;
+                   credentials_path;
+                   ingress_service;
+                 }
+                  : Runtime_config.cloudflare_tunnel_config)
+          with _ -> default_tunnel.cloudflare
+        in
+        Some ({ Runtime_config.enabled; provider; cloudflare } : Runtime_config.tunnel_config)
+    with _ -> default.tunnel
   in
   {
     Runtime_config.default_temperature;
@@ -172,6 +262,7 @@ let resolve_secret s =
     security;
     stt;
     zai_mcp;
+    tunnel;
   }
 
 let rec merge_json (original : Yojson.Safe.t) (complete : Yojson.Safe.t) : Yojson.Safe.t =
@@ -190,8 +281,18 @@ let rec merge_json (original : Yojson.Safe.t) (complete : Yojson.Safe.t) : Yojso
     `Assoc (merged @ new_fields)
   | _ -> original
 
-let backfill_config ~path ~original_json ~config =
-  let complete_json = Runtime_config.to_json config in
+let backfill_config ~path ~original_json ~(config : Runtime_config.t) =
+  let config_for_backfill : Runtime_config.t =
+    {
+      config with
+      providers = Runtime_config.with_zai_coding_provider config.providers;
+      zai_mcp =
+        (match config.zai_mcp with
+        | Some _ -> config.zai_mcp
+        | None -> Some Runtime_config.default_zai_mcp);
+    }
+  in
+  let complete_json = Runtime_config.to_json config_for_backfill in
   let merged = merge_json original_json complete_json in
   if merged <> original_json then begin
     try

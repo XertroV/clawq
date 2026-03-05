@@ -22,7 +22,9 @@ let cmd_status () =
   let lines = ref [] in
   let add s = lines := s :: !lines in
   add "clawq status";
-  add (Printf.sprintf "  model: %s" cfg.agent_defaults.primary_model);
+  add
+    (Printf.sprintf "  model: %s"
+       (Runtime_config.effective_primary_model cfg.agent_defaults));
   add
     (Printf.sprintf "  temperature: %.2f" cfg.default_temperature);
   add (Printf.sprintf "  gateway: %s:%d" cfg.gateway.host cfg.gateway.port);
@@ -137,7 +139,9 @@ let cmd_onboard () =
     "language": "en"
   },
   "agent_defaults": {
-    "primary_model": "openai/gpt-4o"
+    "primary_model": "openai/gpt-4o",
+    "model_priority": ["openai/gpt-4o", "openai/gpt-4o-mini"],
+    "max_tool_iterations": 10
   },
   "channels": {
     "cli": true,
@@ -163,6 +167,18 @@ let cmd_onboard () =
     "workspace_only": true,
     "audit_enabled": false,
     "tools_enabled": true
+  },
+  "tunnel": {
+    "enabled": false,
+    "provider": "cloudflare",
+    "cloudflare": {
+      "api_token": "$CLOUDFLARE_API_TOKEN",
+      "account_id": "",
+      "tunnel_id": "",
+      "tunnel_name": "clawq",
+      "hostname": "",
+      "ingress_service": "http://127.0.0.1:3000"
+    }
   }
 }|}
     in
@@ -198,7 +214,8 @@ let cmd_models () =
         providers
     in
     "Configured providers:\n" ^ String.concat "\n" lines
-    ^ Printf.sprintf "\nDefault model: %s" cfg.agent_defaults.primary_model
+    ^ Printf.sprintf "\nDefault model: %s"
+        (Runtime_config.effective_primary_model cfg.agent_defaults)
     ^ Printf.sprintf "\nDefault provider: %s"
         (match cfg.default_provider with Some p -> p | None -> "(auto)")
 
@@ -240,16 +257,17 @@ let cmd_capabilities () =
 
 let cmd_auth () =
   let cfg = get_config () in
-  match cfg.providers with
+  let providers = Runtime_config.with_zai_coding_provider cfg.providers in
+  match providers with
   | [] -> "No providers configured. No API keys set."
-  | providers ->
+  | listed_providers ->
     let lines =
       List.map
         (fun (name, (p : Runtime_config.provider_config)) ->
           Printf.sprintf "  %s: %s" name
             (if Runtime_config.is_key_set p.api_key then redact_key p.api_key
              else "not set"))
-        providers
+        listed_providers
     in
     "API key status:\n" ^ String.concat "\n" lines
 
