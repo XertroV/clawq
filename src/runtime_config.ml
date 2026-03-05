@@ -29,6 +29,11 @@ type stt_config = {
   language : string option;
 }
 
+type zai_mcp_config = {
+  web_search_enabled : bool;
+  web_reader_enabled : bool;
+}
+
 type t = {
   default_temperature : float;
   default_provider : string option;
@@ -39,6 +44,7 @@ type t = {
   memory : memory_config;
   security : security_config;
   stt : stt_config option;
+  zai_mcp : zai_mcp_config option;
 }
 
 let default =
@@ -56,6 +62,7 @@ let default =
     memory = { backend = "sqlite"; search_enabled = false; db_path = "" };
     security = { workspace_only = true; audit_enabled = false; tools_enabled = true; encrypt_secrets = false };
     stt = None;
+    zai_mcp = None;
   }
 
 let is_key_set key =

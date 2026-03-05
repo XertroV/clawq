@@ -121,7 +121,15 @@ let cmd_onboard () =
     "groq": {
       "api_key": "YOUR_GROQ_API_KEY_HERE",
       "base_url": "https://api.groq.com/openai/v1"
+    },
+    "zai_coding": {
+      "api_key": "$ZAI_CODING_API_KEY",
+      "default_model": "glm-5"
     }
+  },
+  "zai_mcp": {
+    "web_search_enabled": true,
+    "web_reader_enabled": true
   },
   "stt": {
     "provider": "groq",

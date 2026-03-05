@@ -61,6 +61,12 @@ let message_to_json m =
 
 let messages_to_json messages = `List (List.map message_to_json messages)
 
+let default_base_url_for name =
+  match name with
+  | "zai_coding" -> "https://api.z.ai/api/coding/paas/v4"
+  | "zai"        -> "https://api.z.ai/api/paas/v4"
+  | _            -> "https://openrouter.ai/api/v1"
+
 let complete ~(config : Runtime_config.t) ~messages ?tools () =
   let open Lwt.Syntax in
   let provider_name, provider =
@@ -97,7 +103,7 @@ let complete ~(config : Runtime_config.t) ~messages ?tools () =
   let base_url =
     match provider.base_url with
     | Some url -> url
-    | None -> "https://openrouter.ai/api/v1"
+    | None -> default_base_url_for provider_name
   in
   let uri = base_url ^ "/chat/completions" in
   let body_fields =
@@ -341,7 +347,7 @@ let complete_stream ~(config : Runtime_config.t) ~messages ?tools ~on_chunk () =
   let base_url =
     match provider.base_url with
     | Some url -> url
-    | None -> "https://openrouter.ai/api/v1"
+    | None -> default_base_url_for provider_name
   in
   let uri = base_url ^ "/chat/completions" in
   let body_fields =

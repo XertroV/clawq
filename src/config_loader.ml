@@ -149,6 +149,18 @@ let resolve_secret s =
       Some ({ provider; model; language } : Runtime_config.stt_config)
     with _ -> None
   in
+  let zai_mcp =
+    try
+      let v = json |> member "zai_mcp" in
+      let web_search_enabled =
+        try v |> member "web_search_enabled" |> to_bool with _ -> false
+      in
+      let web_reader_enabled =
+        try v |> member "web_reader_enabled" |> to_bool with _ -> false
+      in
+      Some ({ Runtime_config.web_search_enabled; web_reader_enabled } : Runtime_config.zai_mcp_config)
+    with _ -> None
+  in
   {
     Runtime_config.default_temperature;
     default_provider;
@@ -159,6 +171,7 @@ let resolve_secret s =
     memory;
     security;
     stt;
+    zai_mcp;
   }
 
 let rec merge_json (original : Yojson.Safe.t) (complete : Yojson.Safe.t) : Yojson.Safe.t =

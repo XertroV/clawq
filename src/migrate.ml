@@ -109,6 +109,7 @@ let convert (json : Yojson.Safe.t) =
                  tools_enabled = default.security.tools_enabled;
                  encrypt_secrets = default.security.encrypt_secrets };
     stt = None;
+    zai_mcp = None;
   } in
   (config, List.rev !warnings)
 

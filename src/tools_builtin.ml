@@ -284,6 +284,99 @@ let transcribe ~(config : Runtime_config.t) =
     risk_level = Low;
   }
 
+let call_zai_mcp ~api_key ~endpoint ~tool_name ~arguments =
+  let body =
+    `Assoc [
+      ("jsonrpc", `String "2.0");
+      ("method",  `String "tools/call");
+      ("id",      `Int 1);
+      ("params",  `Assoc [
+        ("name",      `String tool_name);
+        ("arguments", arguments);
+      ]);
+    ] |> Yojson.Safe.to_string
+  in
+  let headers = [
+    ("Authorization", "Bearer " ^ api_key);
+  ] in
+  Http_client.post_json ~uri:endpoint ~headers ~body
+
+let make_web_search_tool api_key =
+  {
+    Tool.name = "zai_web_search";
+    description = "Search the web using Z.AI web search service";
+    parameters_schema =
+      `Assoc [
+        ("type", `String "object");
+        ("properties", `Assoc [
+          ("query", `Assoc [
+            ("type", `String "string");
+            ("description", `String "Search query");
+          ]);
+        ]);
+        ("required", `List [ `String "query" ]);
+      ];
+    invoke =
+      (fun args ->
+        let open Yojson.Safe.Util in
+        let query =
+          try args |> member "query" |> to_string with _ -> ""
+        in
+        if query = "" then Lwt.return "Error: query is required"
+        else
+          Lwt.catch
+            (fun () ->
+              let open Lwt.Syntax in
+              let arguments = `Assoc [ ("query", `String query) ] in
+              let* _status, body =
+                call_zai_mcp ~api_key
+                  ~endpoint:"https://api.z.ai/api/mcp/web_search_prime/mcp"
+                  ~tool_name:"webSearchPrime"
+                  ~arguments
+              in
+              Lwt.return body)
+            (fun exn -> Lwt.return ("Error: " ^ Printexc.to_string exn)));
+    risk_level = Low;
+  }
+
+let make_web_reader_tool api_key =
+  {
+    Tool.name = "zai_web_reader";
+    description = "Read the content of a web page using Z.AI web reader service";
+    parameters_schema =
+      `Assoc [
+        ("type", `String "object");
+        ("properties", `Assoc [
+          ("url", `Assoc [
+            ("type", `String "string");
+            ("description", `String "URL of the web page to read");
+          ]);
+        ]);
+        ("required", `List [ `String "url" ]);
+      ];
+    invoke =
+      (fun args ->
+        let open Yojson.Safe.Util in
+        let url =
+          try args |> member "url" |> to_string with _ -> ""
+        in
+        if url = "" then Lwt.return "Error: url is required"
+        else
+          Lwt.catch
+            (fun () ->
+              let open Lwt.Syntax in
+              let arguments = `Assoc [ ("url", `String url) ] in
+              let* _status, body =
+                call_zai_mcp ~api_key
+                  ~endpoint:"https://api.z.ai/api/mcp/web_reader/mcp"
+                  ~tool_name:"webReader"
+                  ~arguments
+              in
+              Lwt.return body)
+            (fun exn -> Lwt.return ("Error: " ^ Printexc.to_string exn)));
+    risk_level = Low;
+  }
+
 let register_all ~(config : Runtime_config.t) registry =
   let workspace_only = config.security.workspace_only in
   Tool_registry.register registry (shell_exec ~workspace_only);
@@ -291,4 +384,19 @@ let register_all ~(config : Runtime_config.t) registry =
   Tool_registry.register registry (file_write ~workspace_only);
   Tool_registry.register registry (http_get ~workspace_only);
   if config.stt <> None then
-    Tool_registry.register registry (transcribe ~config)
+    Tool_registry.register registry (transcribe ~config);
+  let zai_api_key =
+    match List.assoc_opt "zai_coding" config.providers with
+    | Some p when Runtime_config.is_key_set p.api_key -> Some p.api_key
+    | _ ->
+      (match List.assoc_opt "zai" config.providers with
+       | Some p when Runtime_config.is_key_set p.api_key -> Some p.api_key
+       | _ -> None)
+  in
+  (match config.zai_mcp, zai_api_key with
+   | Some mcp, Some key ->
+     if mcp.web_search_enabled then
+       Tool_registry.register registry (make_web_search_tool key);
+     if mcp.web_reader_enabled then
+       Tool_registry.register registry (make_web_reader_tool key)
+   | _ -> ())
