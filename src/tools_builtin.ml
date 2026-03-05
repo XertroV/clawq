@@ -303,12 +303,38 @@ let resolve_path ~workspace path =
 let file_read_default_limit = 200
 let file_read_max_limit = 2000
 let file_read_max_full_chars = 50000
+let file_read_max_line_chars = 2000
 
-let sanitize_window ~offset ~limit =
-  let offset = if offset < 1 then 1 else offset in
-  let limit = if limit < 1 then file_read_default_limit else limit in
-  let limit = min limit file_read_max_limit in
-  (offset, limit)
+let parse_optional_int_field args field_name =
+  let open Yojson.Safe.Util in
+  match args |> member field_name with
+  | `Null -> Ok None
+  | _ -> (
+      try Ok (Some (args |> member field_name |> to_int))
+      with _ ->
+        Error (Printf.sprintf "Error: %s must be an integer" field_name))
+
+let validate_file_read_window ~offset ~limit =
+  if offset < 1 then Error "Error: offset must be >= 1"
+  else if limit < 1 then Error "Error: limit must be >= 1"
+  else if limit > file_read_max_limit then
+    Error
+      (Printf.sprintf "Error: limit must be <= %d" file_read_max_limit)
+  else Ok ()
+
+let canonicalize_for_read path =
+  try Ok (Unix.realpath path)
+  with Unix.Unix_error (err, _, _) ->
+    Error
+      (Printf.sprintf "Error: %s" (Unix.error_message err))
+
+let truncate_line_for_paging line =
+  if String.length line <= file_read_max_line_chars then (line, false)
+  else
+    ( String.sub line 0 file_read_max_line_chars
+      ^ Printf.sprintf " ...(truncated %d chars)"
+          (String.length line - file_read_max_line_chars),
+      true )
 
 let format_lines_window ~content ~offset ~limit =
   let lines = String.split_on_char '\n' content in
@@ -324,9 +350,13 @@ let format_lines_window ~content ~offset ~limit =
       "No lines in requested range. File has %d lines. Try a smaller offset."
       total
   else
+    let truncated_any = ref false in
     let rendered =
       selected
-      |> List.map (fun (n, line) -> Printf.sprintf "%d: %s" n line)
+      |> List.map (fun (n, line) ->
+             let line, truncated = truncate_line_for_paging line in
+             if truncated then truncated_any := true;
+             Printf.sprintf "%d: %s" n line)
       |> String.concat "\n"
     in
     let last_line = fst (List.hd (List.rev selected)) in
@@ -337,7 +367,14 @@ let format_lines_window ~content ~offset ~limit =
           offset last_line total (last_line + 1)
       else Printf.sprintf "\n\n(End of file - total %d lines)" total
     in
-    rendered ^ suffix
+    let trunc_suffix =
+      if !truncated_any then
+        Printf.sprintf
+          "\n\n(Note: long lines are truncated to %d chars in paged mode.)"
+          file_read_max_line_chars
+      else ""
+    in
+    rendered ^ suffix ^ trunc_suffix
 
 let shell_exec ~workspace ~workspace_only ~allowed_commands ~extra_allowed_paths
     =
@@ -492,45 +529,57 @@ let file_read ~workspace ~workspace_only ~extra_allowed_paths =
       (fun args ->
         let open Yojson.Safe.Util in
         let path = try args |> member "path" |> to_string with _ -> "" in
-        let has_offset = args |> member "offset" <> `Null in
-        let has_limit = args |> member "limit" <> `Null in
-        let offset =
-          if has_offset then
-            try args |> member "offset" |> to_int with _ -> 1
-          else 1
-        in
-        let limit =
-          if has_limit then
-            try args |> member "limit" |> to_int with _ -> file_read_default_limit
-          else file_read_default_limit
-        in
-        let offset, limit = sanitize_window ~offset ~limit in
+        let offset_input = parse_optional_int_field args "offset" in
+        let limit_input = parse_optional_int_field args "limit" in
         if path = "" then Lwt.return "Error: path is required"
-        else if
-          not
-            (is_path_allowed ~workspace ~workspace_only ~extra_allowed_paths
-               path)
-        then Lwt.return "Error: path is outside workspace"
         else
-          Lwt.catch
-            (fun () ->
-              let open Lwt.Syntax in
-              let path = resolve_path ~workspace path in
-              let* content =
-                Lwt_io.with_file ~mode:Lwt_io.Input path Lwt_io.read
-              in
-              if has_offset || has_limit then
-                Lwt.return (format_lines_window ~content ~offset ~limit)
-              else if String.length content > file_read_max_full_chars then
-                Lwt.return
-                  (Printf.sprintf
-                     "File too large for full read (%d chars, limit %d chars). \
-                      Use file_read with offset/limit to read in parts (for \
-                      example: offset=1, limit=200), or use shell_exec with \
-                      grep to search first."
-                     (String.length content) file_read_max_full_chars)
-              else Lwt.return content)
-            (fun exn -> Lwt.return ("Error: " ^ Printexc.to_string exn)));
+          match offset_input, limit_input with
+          | Error msg, _ | _, Error msg -> Lwt.return msg
+          | Ok offset_opt, Ok limit_opt ->
+              let has_offset = offset_opt <> None in
+              let has_limit = limit_opt <> None in
+              let offset = Option.value offset_opt ~default:1 in
+              let limit = Option.value limit_opt ~default:file_read_default_limit in
+              (match validate_file_read_window ~offset ~limit with
+              | Error msg -> Lwt.return msg
+              | Ok () ->
+                  if
+                    not
+                      (is_path_allowed ~workspace ~workspace_only
+                         ~extra_allowed_paths path)
+                  then Lwt.return "Error: path is outside workspace"
+                  else
+                    Lwt.catch
+                      (fun () ->
+                        let open Lwt.Syntax in
+                        let path = resolve_path ~workspace path in
+                        let canonical_path = canonicalize_for_read path in
+                        (match canonical_path with
+                        | Error msg -> Lwt.return msg
+                        | Ok canonical_path ->
+                            if
+                              not
+                                (is_path_allowed ~workspace ~workspace_only
+                                   ~extra_allowed_paths canonical_path)
+                            then Lwt.return "Error: path is outside workspace"
+                            else
+                              let* content =
+                                Lwt_io.with_file ~mode:Lwt_io.Input path
+                                  Lwt_io.read
+                              in
+                              if has_offset || has_limit then
+                                Lwt.return (format_lines_window ~content ~offset ~limit)
+                              else if String.length content > file_read_max_full_chars then
+                                Lwt.return
+                                  (Printf.sprintf
+                                     "File too large for full read (%d chars, limit %d chars). \
+                                      Use file_read with offset/limit to read in parts (for \
+                                      example: offset=1, limit=200), or use shell_exec with \
+                                      grep to search first."
+                                     (String.length content) file_read_max_full_chars)
+                              else Lwt.return content))
+                      (fun exn -> Lwt.return ("Error: " ^ Printexc.to_string exn)))
+        );
     risk_level = Low;
   }
 

@@ -345,8 +345,118 @@ let test_file_read_paged_window_with_line_numbers () =
                ]))
       in
       Alcotest.(check bool) "includes line 2" true (contains out "2: two");
-      Alcotest.(check bool) "includes line 3" true (contains out "3: three");
-      Alcotest.(check bool) "omits line 1" false (contains out "1: one"))
+       Alcotest.(check bool) "includes line 3" true (contains out "3: three");
+       Alcotest.(check bool) "omits line 1" false (contains out "1: one"))
+
+let test_file_read_paged_truncates_pathological_long_line () =
+  with_temp_workspace (fun workspace ->
+      let path = "huge_line.txt" in
+      let oc = open_out path in
+      output_string oc (String.make 80000 'a');
+      close_out oc;
+      let tool =
+        Tools_builtin.file_read ~workspace ~workspace_only:true
+          ~extra_allowed_paths:[]
+      in
+      let out =
+        Lwt_main.run
+          (tool.invoke
+             (`Assoc
+               [
+                 ("path", `String path);
+                 ("offset", `Int 1);
+                 ("limit", `Int 1);
+               ]))
+      in
+      Alcotest.(check bool) "long line is truncated" true
+        (contains out "(truncated");
+      Alcotest.(check bool) "truncation note included" true
+        (contains out "long lines are truncated");
+      Alcotest.(check bool) "paged output stays bounded" true
+        (String.length out < 10000))
+
+let test_file_read_rejects_invalid_offset_limit () =
+  with_temp_workspace (fun workspace ->
+      let path = "window.txt" in
+      let oc = open_out path in
+      output_string oc "one\ntwo\nthree";
+      close_out oc;
+      let tool =
+        Tools_builtin.file_read ~workspace ~workspace_only:true
+          ~extra_allowed_paths:[]
+      in
+      let offset_err =
+        Lwt_main.run
+          (tool.invoke
+             (`Assoc
+               [
+                 ("path", `String path);
+                 ("offset", `Int 0);
+                 ("limit", `Int 1);
+               ]))
+      in
+      Alcotest.(check bool) "offset validation error" true
+        (contains offset_err "offset must be >= 1");
+      let limit_low_err =
+        Lwt_main.run
+          (tool.invoke
+             (`Assoc
+               [
+                 ("path", `String path);
+                 ("offset", `Int 1);
+                 ("limit", `Int 0);
+               ]))
+      in
+      Alcotest.(check bool) "limit lower bound validation error" true
+        (contains limit_low_err "limit must be >= 1");
+      let limit_high_err =
+        Lwt_main.run
+          (tool.invoke
+             (`Assoc
+               [
+                 ("path", `String path);
+                 ("offset", `Int 1);
+                 ("limit", `Int 2001);
+               ]))
+      in
+      Alcotest.(check bool) "limit upper bound validation error" true
+        (contains limit_high_err "limit must be <= 2000"))
+
+let test_file_read_rejects_symlink_escape () =
+  let base = Filename.get_temp_dir_name () in
+  let workspace =
+    Filename.concat base
+      (Printf.sprintf "clawq_symlink_ws_%d_%d" (Unix.getpid ()) (Random.bits ()))
+  in
+  let outside_dir =
+    Filename.concat base
+      (Printf.sprintf "clawq_symlink_out_%d_%d" (Unix.getpid ())
+         (Random.bits ()))
+  in
+  Unix.mkdir workspace 0o755;
+  Unix.mkdir outside_dir 0o755;
+  let outside_file = Filename.concat outside_dir "secret.txt" in
+  let oc = open_out outside_file in
+  output_string oc "secret";
+  close_out oc;
+  let link_path = Filename.concat workspace "escape.txt" in
+  Unix.symlink outside_file link_path;
+  Fun.protect
+    (fun () ->
+      let tool =
+        Tools_builtin.file_read ~workspace ~workspace_only:true
+          ~extra_allowed_paths:[]
+      in
+      let out =
+        Lwt_main.run (tool.invoke (`Assoc [ ("path", `String "escape.txt") ]))
+      in
+      Alcotest.(check bool) "symlink escape blocked" true
+        (contains out "outside workspace"))
+    ~finally:(fun () ->
+      (try Unix.unlink link_path with _ -> ());
+      (try Unix.unlink outside_file with _ -> ());
+      (try Unix.rmdir outside_dir with _ -> ());
+      try Unix.rmdir workspace with _ -> ())
 
 let test_file_append_creates_and_appends () =
   with_temp_workspace (fun workspace ->
@@ -452,6 +562,12 @@ let suite =
       test_file_read_large_file_requires_paged_read;
     Alcotest.test_case "file_read paged window" `Quick
       test_file_read_paged_window_with_line_numbers;
+    Alcotest.test_case "file_read paged truncates long line" `Quick
+      test_file_read_paged_truncates_pathological_long_line;
+    Alcotest.test_case "file_read rejects invalid offset/limit" `Quick
+      test_file_read_rejects_invalid_offset_limit;
+    Alcotest.test_case "file_read rejects symlink escape" `Quick
+      test_file_read_rejects_symlink_escape;
     Alcotest.test_case "file_append creates and appends" `Quick
       test_file_append_creates_and_appends;
     Alcotest.test_case "file_edit replace_all" `Quick
