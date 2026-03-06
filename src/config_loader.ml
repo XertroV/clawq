@@ -1193,6 +1193,30 @@ let parse_config ?(resolve_secrets = true) json =
     agent_bindings;
     heartbeat;
     notify;
+    web_search =
+      (try
+         let ws = json |> member "web_search" in
+         let provider =
+           try ws |> member "provider" |> to_string with _ -> "brave"
+         in
+         let api_key = try ws |> member "api_key" |> to_string with _ -> "" in
+         let num_results =
+           try ws |> member "num_results" |> to_int with _ -> 5
+         in
+         let base_url =
+           try Some (ws |> member "base_url" |> to_string) with _ -> None
+         in
+         if provider <> "" then
+           Some
+             ({
+                search_provider = provider;
+                search_api_key = api_key;
+                num_results;
+                search_base_url = base_url;
+              }
+               : Runtime_config.web_search_config)
+         else None
+       with _ -> None);
   }
 
 let rec merge_json (original : Yojson.Safe.t) (complete : Yojson.Safe.t) :

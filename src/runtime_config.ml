@@ -314,6 +314,14 @@ type heartbeat_config = {
 
 type notify_config = { notify_channel : string; notify_target : string }
 
+type web_search_config = {
+  search_provider : string;  (** "brave" or "ddg" (DuckDuckGo) *)
+  search_api_key : string;
+  num_results : int;
+  search_base_url : string option;
+      (** Override API endpoint (e.g. for SearXNG) *)
+}
+
 type t = {
   workspace : string;
   default_temperature : float;
@@ -336,6 +344,7 @@ type t = {
   agent_bindings : Agent_router.binding list;
   heartbeat : heartbeat_config;
   notify : notify_config option;
+  web_search : web_search_config option;
 }
 
 let default_workspace_files =
@@ -488,6 +497,7 @@ let default =
         heartbeat_quiet_end = 8;
       };
     notify = None;
+    web_search = None;
   }
 
 let is_key_set key =
@@ -1188,6 +1198,23 @@ let to_json (cfg : t) : Yojson.Safe.t =
                   ("notify_target", `String nc.notify_target);
                 ] );
           ]
+    | None -> fields
+  in
+  let fields =
+    match cfg.web_search with
+    | Some ws ->
+        let ws_fields =
+          [
+            ("provider", `String ws.search_provider);
+            ("api_key", `String ws.search_api_key);
+            ("num_results", `Int ws.num_results);
+          ]
+          @
+          match ws.search_base_url with
+          | Some u -> [ ("base_url", `String u) ]
+          | None -> []
+        in
+        fields @ [ ("web_search", `Assoc ws_fields) ]
     | None -> fields
   in
   `Assoc fields

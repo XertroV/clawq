@@ -53,5 +53,12 @@ ideas:
       status: done
       tags: []
       title: Add support for using codex pro subscription. Check if nullclaw supports that. otherwise check ~/src/pag-server/ref-projects, particularly check out openclaw and see if it has code for it. If all else fails, start some research agnets to search the web how to do this.
-    - file: I007-add-more-tools-research-src-nu.todo
+    - complexity: medium
+      depends_on: []
+      estimate_hours: 10
+      file: I007-add-more-tools-research-src-nu.todo
       id: I007
+      priority: medium
+      status: done
+      tags: []
+      title: Add more tools -- research ~/src/nullclaw and use subagents to search for and/or brainstorm necessary tool ideas for coding and devops

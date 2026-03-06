@@ -1245,7 +1245,1120 @@ let memory_list ~db =
     deferred = false;
   }
 
-let register_all ~(config : Runtime_config.t) ~sandbox ?(db = None) registry =
+(* ───── Filesystem navigation tools ───── *)
+
+(* Glob pattern matching helpers *)
+let glob_match_segment pat s =
+  let pl = String.length pat and sl = String.length s in
+  let rec go pi si =
+    if pi = pl then si = sl
+    else
+      match pat.[pi] with
+      | '*' ->
+          let rec try_star j =
+            if j > sl then false
+            else if go (pi + 1) j then true
+            else try_star (j + 1)
+          in
+          try_star si
+      | '?' -> si < sl && go (pi + 1) (si + 1)
+      | c -> si < sl && c = s.[si] && go (pi + 1) (si + 1)
+  in
+  go 0 0
+
+let rec glob_match_segs pats parts =
+  match (pats, parts) with
+  | [], [] -> true
+  | [ "**" ], _ -> true
+  | [], _ -> false
+  | "**" :: rest_pats, parts -> (
+      glob_match_segs rest_pats parts
+      ||
+      match parts with
+      | [] -> false
+      | _ :: rest_parts -> glob_match_segs ("**" :: rest_pats) rest_parts)
+  | _, [] -> false
+  | pat :: rest_pats, part :: rest_parts ->
+      glob_match_segment pat part && glob_match_segs rest_pats rest_parts
+
+let glob_matches_path ~pattern path =
+  let split s = String.split_on_char '/' s |> List.filter (fun x -> x <> "") in
+  glob_match_segs (split pattern) (split path)
+
+let glob ~workspace ~workspace_only ~extra_allowed_paths =
+  {
+    Tool.name = "glob";
+    description =
+      "Find files matching a glob pattern (supports * and ** wildcards)";
+    parameters_schema =
+      `Assoc
+        [
+          ("type", `String "object");
+          ( "properties",
+            `Assoc
+              [
+                ( "pattern",
+                  `Assoc
+                    [
+                      ("type", `String "string");
+                      ( "description",
+                        `String
+                          "Glob pattern, e.g. \"**/*.ml\" or \"src/*.json\"" );
+                    ] );
+                ( "root",
+                  `Assoc
+                    [
+                      ("type", `String "string");
+                      ( "description",
+                        `String
+                          "Root directory to search from (defaults to \
+                           workspace)" );
+                    ] );
+                ( "max_results",
+                  `Assoc
+                    [
+                      ("type", `String "integer");
+                      ( "description",
+                        `String "Max results to return (default 200)" );
+                    ] );
+              ] );
+          ("required", `List [ `String "pattern" ]);
+        ];
+    invoke =
+      (fun args ->
+        let open Yojson.Safe.Util in
+        let pattern =
+          try args |> member "pattern" |> to_string with _ -> ""
+        in
+        let root_arg = try args |> member "root" |> to_string with _ -> "" in
+        let max_results =
+          try args |> member "max_results" |> to_int with _ -> 200
+        in
+        if pattern = "" then Lwt.return "Error: pattern is required"
+        else
+          let root =
+            if root_arg = "" then workspace
+            else resolve_path ~workspace root_arg
+          in
+          if
+            workspace_only
+            && not
+                 (is_path_within_allowed_roots ~workspace ~extra_allowed_paths
+                    root)
+          then
+            Lwt.return
+              "Error: root path is outside the workspace in workspace_only mode"
+          else
+            let results = ref [] in
+            let count = ref 0 in
+            let rec walk dir =
+              if !count >= max_results then ()
+              else
+                match Sys.readdir dir with
+                | entries ->
+                    Array.iter
+                      (fun entry ->
+                        if !count < max_results then begin
+                          let full = Filename.concat dir entry in
+                          let rel =
+                            let rlen = String.length root in
+                            let flen = String.length full in
+                            if
+                              flen > rlen + 1
+                              && String.sub full 0 rlen = root
+                              && full.[rlen] = '/'
+                            then String.sub full (rlen + 1) (flen - rlen - 1)
+                            else full
+                          in
+                          if glob_matches_path ~pattern rel then begin
+                            results := full :: !results;
+                            incr count
+                          end;
+                          try if Sys.is_directory full then walk full
+                          with Sys_error _ -> ()
+                        end)
+                      entries
+                | exception Sys_error _ -> ()
+            in
+            walk root;
+            let sorted = List.sort String.compare (List.rev !results) in
+            if sorted = [] then Lwt.return "No files matched"
+            else
+              Lwt.return
+                (String.concat "\n" sorted
+                ^ Printf.sprintf "\n\n(%d files matched)" (List.length sorted)));
+    risk_level = Low;
+    deferred = false;
+  }
+
+let list_dir ~workspace ~workspace_only ~extra_allowed_paths =
+  {
+    Tool.name = "list_dir";
+    description = "List the contents of a directory";
+    parameters_schema =
+      `Assoc
+        [
+          ("type", `String "object");
+          ( "properties",
+            `Assoc
+              [
+                ( "path",
+                  `Assoc
+                    [
+                      ("type", `String "string");
+                      ( "description",
+                        `String "Directory path (defaults to workspace)" );
+                    ] );
+                ( "show_hidden",
+                  `Assoc
+                    [
+                      ("type", `String "boolean");
+                      ( "description",
+                        `String "Show hidden files (default false)" );
+                    ] );
+              ] );
+          ("required", `List []);
+        ];
+    invoke =
+      (fun args ->
+        let open Yojson.Safe.Util in
+        let path_arg = try args |> member "path" |> to_string with _ -> "" in
+        let show_hidden =
+          try args |> member "show_hidden" |> to_bool with _ -> false
+        in
+        let path =
+          if path_arg = "" then workspace else resolve_path ~workspace path_arg
+        in
+        if
+          workspace_only
+          && not
+               (is_path_within_allowed_roots ~workspace ~extra_allowed_paths
+                  path)
+        then
+          Lwt.return
+            "Error: path is outside the workspace in workspace_only mode"
+        else
+          match Sys.readdir path with
+          | entries ->
+              let entries = Array.to_list entries in
+              let entries =
+                if show_hidden then entries
+                else List.filter (fun e -> e = "" || e.[0] <> '.') entries
+              in
+              let entries = List.sort String.compare entries in
+              let lines =
+                List.map
+                  (fun entry ->
+                    let full = Filename.concat path entry in
+                    let kind =
+                      try if Sys.is_directory full then "dir " else "file"
+                      with Sys_error _ -> "?   "
+                    in
+                    Printf.sprintf "%s  %s" kind entry)
+                  entries
+              in
+              Lwt.return
+                (if lines = [] then "(empty directory)"
+                 else
+                   String.concat "\n" lines
+                   ^ Printf.sprintf "\n\n(%d entries)" (List.length lines))
+          | exception Sys_error msg ->
+              Lwt.return (Printf.sprintf "Error: %s" msg));
+    risk_level = Low;
+    deferred = false;
+  }
+
+let contains_substr ~haystack ~needle ~case_sensitive =
+  let h =
+    if case_sensitive then haystack else String.lowercase_ascii haystack
+  in
+  let n = if case_sensitive then needle else String.lowercase_ascii needle in
+  let hl = String.length h and nl = String.length n in
+  if nl = 0 then true
+  else if nl > hl then false
+  else begin
+    let found = ref false in
+    let i = ref 0 in
+    while (not !found) && !i + nl <= hl do
+      if String.sub h !i nl = n then found := true;
+      incr i
+    done;
+    !found
+  end
+
+let grep ~workspace ~workspace_only ~extra_allowed_paths =
+  {
+    Tool.name = "grep";
+    description =
+      "Search for a pattern in files and return matching lines with file and \
+       line number";
+    parameters_schema =
+      `Assoc
+        [
+          ("type", `String "object");
+          ( "properties",
+            `Assoc
+              [
+                ( "pattern",
+                  `Assoc
+                    [
+                      ("type", `String "string");
+                      ("description", `String "Text pattern to search for");
+                    ] );
+                ( "path",
+                  `Assoc
+                    [
+                      ("type", `String "string");
+                      ( "description",
+                        `String
+                          "File or directory to search (defaults to workspace)"
+                      );
+                    ] );
+                ( "file_glob",
+                  `Assoc
+                    [
+                      ("type", `String "string");
+                      ( "description",
+                        `String
+                          "Glob filter for filenames, e.g. \"*.ml\" (optional)"
+                      );
+                    ] );
+                ( "case_sensitive",
+                  `Assoc
+                    [
+                      ("type", `String "boolean");
+                      ( "description",
+                        `String "Case-sensitive search (default true)" );
+                    ] );
+                ( "max_results",
+                  `Assoc
+                    [
+                      ("type", `String "integer");
+                      ("description", `String "Max matching lines (default 50)");
+                    ] );
+              ] );
+          ("required", `List [ `String "pattern" ]);
+        ];
+    invoke =
+      (fun args ->
+        let open Yojson.Safe.Util in
+        let pattern =
+          try args |> member "pattern" |> to_string with _ -> ""
+        in
+        let path_arg = try args |> member "path" |> to_string with _ -> "" in
+        let file_glob =
+          try args |> member "file_glob" |> to_string with _ -> ""
+        in
+        let case_sensitive =
+          try args |> member "case_sensitive" |> to_bool with _ -> true
+        in
+        let max_results =
+          try args |> member "max_results" |> to_int with _ -> 50
+        in
+        if pattern = "" then Lwt.return "Error: pattern is required"
+        else
+          let root =
+            if path_arg = "" then workspace
+            else resolve_path ~workspace path_arg
+          in
+          if
+            workspace_only
+            && not
+                 (is_path_within_allowed_roots ~workspace ~extra_allowed_paths
+                    root)
+          then
+            Lwt.return
+              "Error: path is outside the workspace in workspace_only mode"
+          else
+            let matches = ref [] in
+            let match_count = ref 0 in
+            let search_file file_path =
+              if !match_count >= max_results then ()
+              else
+                try
+                  let ic = open_in file_path in
+                  let lnum = ref 0 in
+                  (try
+                     while !match_count < max_results do
+                       let line = input_line ic in
+                       incr lnum;
+                       if
+                         contains_substr ~haystack:line ~needle:pattern
+                           ~case_sensitive
+                       then begin
+                         matches :=
+                           Printf.sprintf "%s:%d: %s" file_path !lnum line
+                           :: !matches;
+                         incr match_count
+                       end
+                     done
+                   with End_of_file -> ());
+                  close_in ic
+                with Sys_error _ -> ()
+            in
+            let rec walk dir =
+              if !match_count >= max_results then ()
+              else
+                match Sys.readdir dir with
+                | entries ->
+                    Array.iter
+                      (fun entry ->
+                        if !match_count < max_results then begin
+                          let full = Filename.concat dir entry in
+                          try
+                            if Sys.is_directory full then walk full
+                            else if
+                              file_glob = ""
+                              || glob_match_segment file_glob entry
+                            then search_file full
+                          with Sys_error _ -> ()
+                        end)
+                      entries
+                | exception Sys_error _ -> ()
+            in
+            (try if Sys.is_directory root then walk root else search_file root
+             with Sys_error _ -> ());
+            let sorted = List.rev !matches in
+            if sorted = [] then
+              Lwt.return (Printf.sprintf "No matches found for '%s'" pattern)
+            else
+              Lwt.return
+                (String.concat "\n" sorted
+                ^ Printf.sprintf "\n\n(%d matches)" (List.length sorted)));
+    risk_level = Low;
+    deferred = false;
+  }
+
+(* ───── HTTP tools ───── *)
+
+let http_request ~workspace_only =
+  {
+    Tool.name = "http_request";
+    description =
+      (if workspace_only then
+         "Make an HTTP request (workspace policy: external URLs restricted to \
+          localhost)"
+       else "Make an HTTP request with configurable method, headers, and body");
+    parameters_schema =
+      `Assoc
+        [
+          ("type", `String "object");
+          ( "properties",
+            `Assoc
+              [
+                ( "url",
+                  `Assoc
+                    [
+                      ("type", `String "string");
+                      ("description", `String "Request URL");
+                    ] );
+                ( "method",
+                  `Assoc
+                    [
+                      ("type", `String "string");
+                      ( "enum",
+                        `List
+                          [
+                            `String "GET";
+                            `String "POST";
+                            `String "PUT";
+                            `String "PATCH";
+                            `String "DELETE";
+                          ] );
+                      ("description", `String "HTTP method (default: GET)");
+                    ] );
+                ( "headers",
+                  `Assoc
+                    [
+                      ("type", `String "object");
+                      ( "description",
+                        `String "Request headers as key-value pairs" );
+                      ( "additionalProperties",
+                        `Assoc [ ("type", `String "string") ] );
+                    ] );
+                ( "body",
+                  `Assoc
+                    [
+                      ("type", `String "string");
+                      ( "description",
+                        `String "Request body (for POST/PUT/PATCH)" );
+                    ] );
+              ] );
+          ("required", `List [ `String "url" ]);
+        ];
+    invoke =
+      (fun args ->
+        let open Yojson.Safe.Util in
+        let url = try args |> member "url" |> to_string with _ -> "" in
+        let meth =
+          try String.uppercase_ascii (args |> member "method" |> to_string)
+          with _ -> "GET"
+        in
+        let headers =
+          try
+            args |> member "headers" |> to_assoc
+            |> List.filter_map (fun (k, v) ->
+                try Some (k, to_string v) with _ -> None)
+          with _ -> []
+        in
+        let body = try args |> member "body" |> to_string with _ -> "" in
+        if url = "" then Lwt.return "Error: url is required"
+        else if workspace_only && not (is_localhost_url url) then
+          Lwt.return "Error: workspace policy restricts HTTP to localhost only"
+        else
+          Lwt.catch
+            (fun () ->
+              let open Lwt.Syntax in
+              let* status, resp_body =
+                match meth with
+                | "POST" -> Http_client.post_json ~uri:url ~headers ~body
+                | "PUT" -> Http_client.put_json ~uri:url ~headers ~body
+                | "PATCH" -> Http_client.patch_json ~uri:url ~headers ~body
+                | "DELETE" -> Http_client.delete ~uri:url ~headers ~body
+                | "GET" | _ -> Http_client.get ~uri:url ~headers
+              in
+              let truncated =
+                if String.length resp_body > 20000 then
+                  String.sub resp_body 0 20000 ^ "\n... (truncated)"
+                else resp_body
+              in
+              Lwt.return (Printf.sprintf "HTTP %d\n%s" status truncated))
+            (fun exn -> Lwt.return ("Error: " ^ Printexc.to_string exn)));
+    risk_level = Medium;
+    deferred = false;
+  }
+
+let strip_html_to_text html =
+  let buf = Buffer.create (String.length html) in
+  let len = String.length html in
+  let i = ref 0 in
+  (* Skip until pattern (case-insensitive prefix match) *)
+  let skip_to_close_tag tag =
+    let close = "</" ^ tag ^ ">" in
+    let cl = String.length close in
+    let found = ref false in
+    while (not !found) && !i + cl <= len do
+      let sub = String.sub html !i cl |> String.lowercase_ascii in
+      if sub = close then begin
+        found := true;
+        i := !i + cl
+      end
+      else incr i
+    done
+  in
+  while !i < len do
+    if html.[!i] = '<' then begin
+      let remaining =
+        let n = min 8 (len - !i) in
+        String.sub html !i n |> String.lowercase_ascii
+      in
+      let is_prefix p =
+        String.length remaining >= String.length p
+        && String.sub remaining 0 (String.length p) = p
+      in
+      if is_prefix "<script" then begin
+        while !i < len && html.[!i] <> '>' do
+          incr i
+        done;
+        if !i < len then incr i;
+        skip_to_close_tag "script"
+      end
+      else if is_prefix "<style" then begin
+        while !i < len && html.[!i] <> '>' do
+          incr i
+        done;
+        if !i < len then incr i;
+        skip_to_close_tag "style"
+      end
+      else begin
+        while !i < len && html.[!i] <> '>' do
+          incr i
+        done;
+        if !i < len then begin
+          Buffer.add_char buf '\n';
+          incr i
+        end
+      end
+    end
+    else begin
+      Buffer.add_char buf html.[!i];
+      incr i
+    end
+  done;
+  let s = Buffer.contents buf in
+  (* Decode common HTML entities without regex *)
+  let replace_substr src find rep =
+    let fl = String.length find in
+    let sl = String.length src in
+    if fl = 0 then src
+    else begin
+      let b = Buffer.create sl in
+      let j = ref 0 in
+      while !j <= sl - fl do
+        if String.sub src !j fl = find then begin
+          Buffer.add_string b rep;
+          j := !j + fl
+        end
+        else begin
+          Buffer.add_char b src.[!j];
+          incr j
+        end
+      done;
+      while !j < sl do
+        Buffer.add_char b src.[!j];
+        incr j
+      done;
+      Buffer.contents b
+    end
+  in
+  let s = replace_substr s "&amp;" "&" in
+  let s = replace_substr s "&lt;" "<" in
+  let s = replace_substr s "&gt;" ">" in
+  let s = replace_substr s "&quot;" "\"" in
+  let s = replace_substr s "&apos;" "'" in
+  let s = replace_substr s "&nbsp;" " " in
+  (* Collapse runs of whitespace to single newlines *)
+  let out = Buffer.create (String.length s) in
+  let prev_nl = ref true in
+  String.iter
+    (fun c ->
+      if c = '\n' || c = '\r' || c = '\t' then begin
+        if not !prev_nl then Buffer.add_char out '\n';
+        prev_nl := true
+      end
+      else if c = ' ' then begin
+        if not !prev_nl then Buffer.add_char out ' '
+      end
+      else begin
+        Buffer.add_char out c;
+        prev_nl := false
+      end)
+    s;
+  String.trim (Buffer.contents out)
+
+let web_fetch ~workspace_only =
+  {
+    Tool.name = "web_fetch";
+    description =
+      (if workspace_only then
+         "Fetch a URL and return the page content as readable text (workspace \
+          policy: localhost only)"
+       else
+         "Fetch a URL and return the page content as readable text with HTML \
+          stripped");
+    parameters_schema =
+      `Assoc
+        [
+          ("type", `String "object");
+          ( "properties",
+            `Assoc
+              [
+                ( "url",
+                  `Assoc
+                    [
+                      ("type", `String "string");
+                      ("description", `String "URL to fetch");
+                    ] );
+              ] );
+          ("required", `List [ `String "url" ]);
+        ];
+    invoke =
+      (fun args ->
+        let open Yojson.Safe.Util in
+        let url = try args |> member "url" |> to_string with _ -> "" in
+        if url = "" then Lwt.return "Error: url is required"
+        else if workspace_only && not (is_localhost_url url) then
+          Lwt.return "Error: workspace policy restricts HTTP to localhost only"
+        else
+          Lwt.catch
+            (fun () ->
+              let open Lwt.Syntax in
+              let* status, body = Http_client.get ~uri:url ~headers:[] in
+              if status >= 400 then
+                Lwt.return (Printf.sprintf "Error: HTTP %d from %s" status url)
+              else
+                let text = strip_html_to_text body in
+                let truncated =
+                  if String.length text > 20000 then
+                    String.sub text 0 20000 ^ "\n... (truncated)"
+                  else text
+                in
+                Lwt.return truncated)
+            (fun exn -> Lwt.return ("Error: " ^ Printexc.to_string exn)));
+    risk_level = Medium;
+    deferred = false;
+  }
+
+let web_search ~(config : Runtime_config.t) =
+  let ws_cfg = config.web_search in
+  {
+    Tool.name = "web_search";
+    description =
+      "Search the web and return a list of results with titles, URLs, and \
+       snippets";
+    parameters_schema =
+      `Assoc
+        [
+          ("type", `String "object");
+          ( "properties",
+            `Assoc
+              [
+                ( "query",
+                  `Assoc
+                    [
+                      ("type", `String "string");
+                      ("description", `String "Search query");
+                    ] );
+                ( "limit",
+                  `Assoc
+                    [
+                      ("type", `String "integer");
+                      ("description", `String "Number of results (default 5)");
+                    ] );
+              ] );
+          ("required", `List [ `String "query" ]);
+        ];
+    invoke =
+      (fun args ->
+        let open Yojson.Safe.Util in
+        let query = try args |> member "query" |> to_string with _ -> "" in
+        let limit =
+          try args |> member "limit" |> to_int
+          with _ -> (
+            match ws_cfg with Some ws -> ws.num_results | None -> 5)
+        in
+        if query = "" then Lwt.return "Error: query is required"
+        else
+          match ws_cfg with
+          | None ->
+              Lwt.return
+                "Error: web_search not configured. Add a \"web_search\" \
+                 section to ~/.clawq/config.json with provider and api_key."
+          | Some ws ->
+              let provider = ws.search_provider in
+              let api_key = ws.search_api_key in
+              Lwt.catch
+                (fun () ->
+                  let open Lwt.Syntax in
+                  let encoded_query =
+                    (* Basic URL encoding for the query *)
+                    let buf = Buffer.create (String.length query) in
+                    String.iter
+                      (fun c ->
+                        match c with
+                        | 'A' .. 'Z'
+                        | 'a' .. 'z'
+                        | '0' .. '9'
+                        | '-' | '_' | '.' | '~' ->
+                            Buffer.add_char buf c
+                        | ' ' -> Buffer.add_char buf '+'
+                        | c ->
+                            Buffer.add_string buf
+                              (Printf.sprintf "%%%02X" (Char.code c)))
+                      query;
+                    Buffer.contents buf
+                  in
+                  match provider with
+                  | "brave" ->
+                      let base =
+                        match ws.search_base_url with
+                        | Some u -> u
+                        | None ->
+                            "https://api.search.brave.com/res/v1/web/search"
+                      in
+                      let uri =
+                        Printf.sprintf "%s?q=%s&count=%d" base encoded_query
+                          limit
+                      in
+                      let* status, body =
+                        Http_client.get ~uri
+                          ~headers:
+                            [
+                              ("X-Subscription-Token", api_key);
+                              ("Accept", "application/json");
+                            ]
+                      in
+                      if status >= 400 then
+                        Lwt.return
+                          (Printf.sprintf "Error: Brave API returned HTTP %d"
+                             status)
+                      else
+                        let json =
+                          try Yojson.Safe.from_string body
+                          with _ ->
+                            `Assoc [ ("web", `Assoc [ ("results", `List []) ]) ]
+                        in
+                        let results =
+                          try
+                            json |> member "web" |> member "results" |> to_list
+                          with _ -> []
+                        in
+                        let lines =
+                          List.mapi
+                            (fun i r ->
+                              let title =
+                                try r |> member "title" |> to_string
+                                with _ -> "(no title)"
+                              in
+                              let url =
+                                try r |> member "url" |> to_string
+                                with _ -> ""
+                              in
+                              let snippet =
+                                try r |> member "description" |> to_string
+                                with _ -> ""
+                              in
+                              Printf.sprintf "%d. %s\n   %s\n   %s" (i + 1)
+                                title url snippet)
+                            results
+                        in
+                        Lwt.return
+                          (if lines = [] then "No results found"
+                           else String.concat "\n\n" lines)
+                  | "ddg" | _ ->
+                      (* DuckDuckGo instant answer API — free, no key needed *)
+                      let base =
+                        match ws.search_base_url with
+                        | Some u -> u
+                        | None -> "https://api.duckduckgo.com"
+                      in
+                      let uri =
+                        Printf.sprintf
+                          "%s/?q=%s&format=json&no_redirect=1&no_html=1" base
+                          encoded_query
+                      in
+                      let* status, body =
+                        Http_client.get ~uri
+                          ~headers:[ ("Accept", "application/json") ]
+                      in
+                      if status >= 400 then
+                        Lwt.return
+                          (Printf.sprintf "Error: DDG API returned HTTP %d"
+                             status)
+                      else
+                        let json =
+                          try Yojson.Safe.from_string body with _ -> `Assoc []
+                        in
+                        let abstract =
+                          try json |> member "AbstractText" |> to_string
+                          with _ -> ""
+                        in
+                        let abstract_url =
+                          try json |> member "AbstractURL" |> to_string
+                          with _ -> ""
+                        in
+                        let related =
+                          try json |> member "RelatedTopics" |> to_list
+                          with _ -> []
+                        in
+                        let lines = ref [] in
+                        List.iteri
+                          (fun i topic ->
+                            if i < limit then
+                              try
+                                let text =
+                                  topic |> member "Text" |> to_string
+                                in
+                                let url =
+                                  try topic |> member "FirstURL" |> to_string
+                                  with _ -> ""
+                                in
+                                lines :=
+                                  Printf.sprintf "%d. %s\n   %s" (i + 1) text
+                                    url
+                                  :: !lines
+                              with _ -> ())
+                          related;
+                        let lines = List.rev !lines in
+                        let lines =
+                          if abstract <> "" then
+                            Printf.sprintf "Answer: %s\n%s" abstract
+                              abstract_url
+                            :: lines
+                          else lines
+                        in
+                        Lwt.return
+                          (if lines = [] then
+                             "No results found (DDG instant API has limited \
+                              coverage; consider using provider: brave)"
+                           else String.concat "\n\n" lines))
+                (fun exn -> Lwt.return ("Error: " ^ Printexc.to_string exn)));
+    risk_level = Low;
+    deferred = false;
+  }
+
+(* ───── Git operations tool ───── *)
+
+let sanitize_git_arg arg =
+  let arg_low = String.lowercase_ascii arg in
+  let dangerous_prefixes =
+    [ "--exec="; "--upload-pack="; "--receive-pack="; "--pager="; "--editor=" ]
+  in
+  let ok_prefixes =
+    not
+      (List.exists
+         (fun p ->
+           String.length arg >= String.length p
+           && String.sub arg_low 0 (String.length p) = p)
+         dangerous_prefixes)
+  in
+  ok_prefixes
+  && String.lowercase_ascii arg <> "--no-verify"
+  && (not (contains_substr ~haystack:arg ~needle:"$(" ~case_sensitive:true))
+  && (not (contains_substr ~haystack:arg ~needle:"`" ~case_sensitive:true))
+  && (not (String.contains arg '|'))
+  && (not (String.contains arg ';'))
+  && (not (String.contains arg '>'))
+  && not
+       (arg = "-c" || arg = "-C"
+       || String.length arg > 2
+          && arg.[0] = '-'
+          && (arg.[1] = 'c' || arg.[1] = 'C')
+          && arg.[2] = '=')
+
+let git_operations ~workspace =
+  {
+    Tool.name = "git_operations";
+    description =
+      "Perform structured Git operations: status, diff, log, branch, add, \
+       commit, checkout, stash, show";
+    parameters_schema =
+      `Assoc
+        [
+          ("type", `String "object");
+          ( "properties",
+            `Assoc
+              [
+                ( "operation",
+                  `Assoc
+                    [
+                      ("type", `String "string");
+                      ( "enum",
+                        `List
+                          [
+                            `String "status";
+                            `String "diff";
+                            `String "log";
+                            `String "branch";
+                            `String "add";
+                            `String "commit";
+                            `String "checkout";
+                            `String "stash";
+                            `String "show";
+                          ] );
+                      ("description", `String "Git operation to perform");
+                    ] );
+                ( "paths",
+                  `Assoc
+                    [
+                      ( "oneOf",
+                        `List
+                          [
+                            `Assoc [ ("type", `String "string") ];
+                            `Assoc
+                              [
+                                ("type", `String "array");
+                                ("items", `Assoc [ ("type", `String "string") ]);
+                              ];
+                          ] );
+                      ( "description",
+                        `String
+                          "File paths (for add/diff/show; string or array)" );
+                    ] );
+                ( "message",
+                  `Assoc
+                    [
+                      ("type", `String "string");
+                      ("description", `String "Commit message (for commit)");
+                    ] );
+                ( "branch",
+                  `Assoc
+                    [
+                      ("type", `String "string");
+                      ( "description",
+                        `String "Branch name (for checkout/branch)" );
+                    ] );
+                ( "cached",
+                  `Assoc
+                    [
+                      ("type", `String "boolean");
+                      ("description", `String "Show staged changes (for diff)");
+                    ] );
+                ( "limit",
+                  `Assoc
+                    [
+                      ("type", `String "integer");
+                      ("description", `String "Log entry count (default 10)");
+                    ] );
+              ] );
+          ("required", `List [ `String "operation" ]);
+        ];
+    invoke =
+      (fun args ->
+        let open Yojson.Safe.Util in
+        let operation =
+          try args |> member "operation" |> to_string with _ -> ""
+        in
+        let message =
+          try args |> member "message" |> to_string with _ -> ""
+        in
+        let branch = try args |> member "branch" |> to_string with _ -> "" in
+        let cached = try args |> member "cached" |> to_bool with _ -> false in
+        let limit = try args |> member "limit" |> to_int with _ -> 10 in
+        let paths =
+          try
+            match args |> member "paths" with
+            | `String s -> [ s ]
+            | `List items ->
+                List.filter_map
+                  (fun v -> try Some (to_string v) with _ -> None)
+                  items
+            | _ -> []
+          with _ -> []
+        in
+        if operation = "" then Lwt.return "Error: operation is required"
+        else
+          let build_argv () =
+            match operation with
+            | "status" -> Ok [ "git"; "status"; "--short" ]
+            | "diff" ->
+                let argv = [ "git"; "diff" ] in
+                let argv = if cached then argv @ [ "--cached" ] else argv in
+                let argv = if paths <> [] then argv @ paths else argv in
+                Ok argv
+            | "log" ->
+                Ok [ "git"; "log"; "--oneline"; Printf.sprintf "-n%d" limit ]
+            | "branch" ->
+                if branch <> "" then Ok [ "git"; "branch"; branch ]
+                else Ok [ "git"; "branch"; "-a" ]
+            | "add" ->
+                if paths = [] then Error "Error: paths required for add"
+                else Ok ("git" :: "add" :: paths)
+            | "commit" ->
+                if message = "" then Error "Error: message required for commit"
+                else Ok [ "git"; "commit"; "-m"; message ]
+            | "checkout" ->
+                if branch = "" && paths = [] then
+                  Error "Error: branch or paths required for checkout"
+                else if branch <> "" then Ok [ "git"; "checkout"; branch ]
+                else Ok ("git" :: "checkout" :: "--" :: paths)
+            | "stash" -> Ok [ "git"; "stash" ]
+            | "show" ->
+                let argv = [ "git"; "show"; "--stat" ] in
+                let argv =
+                  if paths <> [] then argv @ [ "--" ] @ paths else argv
+                in
+                Ok argv
+            | op -> Error (Printf.sprintf "Error: unknown operation '%s'" op)
+          in
+          match build_argv () with
+          | Error msg -> Lwt.return msg
+          | Ok argv ->
+              (* Sanitize user-supplied inputs: paths and branch name.
+                 The commit message is intentionally excluded — it is passed
+                 as an execve argument, not interpreted by a shell, so shell
+                 metacharacters in a commit message are safe. *)
+              let user_inputs =
+                paths @ if branch <> "" then [ branch ] else []
+              in
+              let safe = List.for_all sanitize_git_arg user_inputs in
+              if not safe then
+                Lwt.return "Error: git arguments contain disallowed patterns"
+              else
+                let open Lwt.Syntax in
+                let env =
+                  [|
+                    ("HOME=" ^ try Sys.getenv "HOME" with Not_found -> "/tmp");
+                    ("PATH="
+                    ^ try Sys.getenv "PATH" with Not_found -> "/usr/bin:/bin");
+                    "GIT_TERMINAL_PROMPT=0";
+                  |]
+                in
+                let cmd = ("", Array.of_list argv) in
+                let proc =
+                  Lwt_process.open_process_full ~cwd:workspace ~env cmd
+                in
+                let timeout = Lwt_unix.sleep 30.0 in
+                let* result =
+                  Lwt.pick
+                    [
+                      (let* stdout = Lwt_io.read proc#stdout in
+                       let* stderr = Lwt_io.read proc#stderr in
+                       let* status = proc#close in
+                       let exit_code =
+                         match status with
+                         | Unix.WEXITED n -> n
+                         | Unix.WSIGNALED n -> 128 + n
+                         | Unix.WSTOPPED n -> 128 + n
+                       in
+                       let output =
+                         (if stdout <> "" then stdout else "")
+                         ^ if stderr <> "" then stderr else ""
+                       in
+                       Lwt.return
+                         (if exit_code = 0 then
+                            if output = "" then "(no output)" else output
+                          else
+                            Printf.sprintf "exit_code: %d\n%s" exit_code output));
+                      (let* () = timeout in
+                       proc#kill Sys.sigkill;
+                       Lwt.return "Error: git timed out after 30 seconds");
+                    ]
+                in
+                Lwt.return result);
+    risk_level = Medium;
+    deferred = false;
+  }
+
+(* ───── Messaging tool ───── *)
+
+let send_message ~(send_fn : (text:string -> unit Lwt.t) option) =
+  {
+    Tool.name = "send_message";
+    description =
+      "Send a message via the configured notification channel (Telegram, \
+       Discord, etc.)";
+    parameters_schema =
+      `Assoc
+        [
+          ("type", `String "object");
+          ( "properties",
+            `Assoc
+              [
+                ( "text",
+                  `Assoc
+                    [
+                      ("type", `String "string");
+                      ("description", `String "Message text to send");
+                    ] );
+              ] );
+          ("required", `List [ `String "text" ]);
+        ];
+    invoke =
+      (fun args ->
+        let open Yojson.Safe.Util in
+        let text = try args |> member "text" |> to_string with _ -> "" in
+        if text = "" then Lwt.return "Error: text is required"
+        else
+          match send_fn with
+          | None ->
+              Lwt.return
+                "Error: no notification channel configured. Set notify.channel \
+                 and notify.target in ~/.clawq/config.json."
+          | Some f ->
+              Lwt.catch
+                (fun () ->
+                  let open Lwt.Syntax in
+                  let* () = f ~text in
+                  Lwt.return "Message sent")
+                (fun exn ->
+                  Lwt.return ("Error sending message: " ^ Printexc.to_string exn)));
+    risk_level = Low;
+    deferred = false;
+  }
+
+let register_all ~(config : Runtime_config.t) ~sandbox ?(db = None)
+    ?(send_fn = None) registry =
   let workspace_only = config.security.workspace_only in
   let workspace = Runtime_config.effective_workspace config in
   let extra_allowed_paths = config.security.extra_allowed_paths in
@@ -1263,6 +2376,20 @@ let register_all ~(config : Runtime_config.t) ~sandbox ?(db = None) registry =
   Tool_registry.register registry
     (file_edit_lines ~workspace ~workspace_only ~extra_allowed_paths);
   Tool_registry.register registry (http_get ~workspace_only);
+  Tool_registry.register registry
+    (glob ~workspace ~workspace_only ~extra_allowed_paths);
+  Tool_registry.register registry
+    (list_dir ~workspace ~workspace_only ~extra_allowed_paths);
+  Tool_registry.register registry
+    (grep ~workspace ~workspace_only ~extra_allowed_paths);
+  Tool_registry.register registry (http_request ~workspace_only);
+  Tool_registry.register registry (web_fetch ~workspace_only);
+  Tool_registry.register registry (git_operations ~workspace);
+  if config.web_search <> None then
+    Tool_registry.register registry (web_search ~config);
+  (match send_fn with
+  | Some _ -> Tool_registry.register registry (send_message ~send_fn)
+  | None -> ());
   if config.stt <> None then
     Tool_registry.register registry (transcribe ~config);
   match db with

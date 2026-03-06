@@ -102,3 +102,29 @@ let get ~uri ~headers =
   let status = Cohttp.Response.status response |> Cohttp.Code.code_of_status in
   let* body_str = Cohttp_lwt.Body.to_string body in
   Lwt.return (status, body_str)
+
+let patch_json ~uri ~headers ~body =
+  let open Lwt.Syntax in
+  let uri = Uri.of_string uri in
+  let headers =
+    Cohttp.Header.of_list (("Content-Type", "application/json") :: headers)
+  in
+  let body = Cohttp_lwt.Body.of_string body in
+  let* response, body = Cohttp_lwt_unix.Client.patch ~headers ~body uri in
+  let status = Cohttp.Response.status response |> Cohttp.Code.code_of_status in
+  let* body_str = Cohttp_lwt.Body.to_string body in
+  Lwt.return (status, body_str)
+
+let delete ~uri ~headers ~body =
+  let open Lwt.Syntax in
+  let uri = Uri.of_string uri in
+  let headers =
+    Cohttp.Header.of_list (("Content-Type", "application/json") :: headers)
+  in
+  let body =
+    if body = "" then None else Some (Cohttp_lwt.Body.of_string body)
+  in
+  let* response, resp_body = Cohttp_lwt_unix.Client.delete ~headers ?body uri in
+  let status = Cohttp.Response.status response |> Cohttp.Code.code_of_status in
+  let* body_str = Cohttp_lwt.Body.to_string resp_body in
+  Lwt.return (status, body_str)

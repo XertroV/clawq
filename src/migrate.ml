@@ -186,6 +186,7 @@ let convert (json : Yojson.Safe.t) =
       agent_bindings = [];
       heartbeat = default.heartbeat;
       notify = None;
+      web_search = None;
     }
   in
   (config, List.rev !warnings)
