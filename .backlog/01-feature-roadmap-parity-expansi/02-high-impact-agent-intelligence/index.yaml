@@ -41,4 +41,10 @@ estimate_hours: 80
 id: P1.M2
 locked: false
 name: 'High Impact: Agent Intelligence & Security'
+stats:
+    blocked: 0
+    done: 10
+    in_progress: 0
+    pending: 4
+    total_tasks: 14
 status: done

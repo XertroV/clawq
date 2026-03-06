@@ -4,6 +4,12 @@ estimate_hours: 24
 id: P2.M2.E4
 locked: false
 name: Email Channel
+stats:
+    blocked: 0
+    done: 6
+    in_progress: 0
+    pending: 0
+    total: 6
 status: done
 tasks:
     - complexity: high

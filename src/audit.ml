@@ -49,7 +49,18 @@ let init_schema db =
     | _ -> () (* column already exists *)
   in
   add_col "signature";
-  add_col "prev_hash"
+  add_col "prev_hash";
+  let meta_sql =
+    "CREATE TABLE IF NOT EXISTS audit_meta (\n\
+    \  key TEXT PRIMARY KEY,\n\
+    \  value TEXT\n\
+     )"
+  in
+  match Sqlite3.exec db meta_sql with
+  | Sqlite3.Rc.OK -> ()
+  | rc ->
+      failwith
+        (Printf.sprintf "Audit meta schema error: %s" (Sqlite3.Rc.to_string rc))
 
 let event_fields event =
   match event with
@@ -126,6 +137,60 @@ let get_signing_key () =
   | Some "" -> Error "CLAWQ_MASTER_KEY environment variable is empty"
   | Some passphrase -> Ok (derive_signing_key passphrase)
 
+let chain_anchor_key = "chain_anchor_signature"
+
+let get_chain_anchor ~db =
+  let stmt =
+    Sqlite3.prepare db "SELECT value FROM audit_meta WHERE key = ? LIMIT 1"
+  in
+  ignore (Sqlite3.bind stmt 1 (Sqlite3.Data.TEXT chain_anchor_key));
+  let result =
+    if Sqlite3.step stmt = Sqlite3.Rc.ROW then
+      match Sqlite3.column stmt 0 with
+      | Sqlite3.Data.TEXT s when s <> "" -> Some s
+      | _ -> None
+    else None
+  in
+  ignore (Sqlite3.finalize stmt);
+  result
+
+let set_chain_anchor ~db anchor =
+  let stmt =
+    Sqlite3.prepare db
+      "INSERT INTO audit_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO \
+       UPDATE SET value = excluded.value"
+  in
+  ignore (Sqlite3.bind stmt 1 (Sqlite3.Data.TEXT chain_anchor_key));
+  (match anchor with
+  | Some sig_str -> ignore (Sqlite3.bind stmt 2 (Sqlite3.Data.TEXT sig_str))
+  | None -> ignore (Sqlite3.bind stmt 2 Sqlite3.Data.NULL));
+  ignore (Sqlite3.step stmt);
+  ignore (Sqlite3.finalize stmt)
+
+let compute_retained_anchor ~db ~max_age_days ~max_entries =
+  let retained_ids_sql =
+    Printf.sprintf
+      "SELECT id FROM audit_log WHERE timestamp >= datetime('now', '-%d days') \
+       ORDER BY id DESC LIMIT %d"
+      max_age_days max_entries
+  in
+  let sql =
+    Printf.sprintf
+      "SELECT signature FROM audit_log WHERE signature IS NOT NULL AND id NOT \
+       IN (%s) ORDER BY id DESC LIMIT 1"
+      retained_ids_sql
+  in
+  let stmt = Sqlite3.prepare db sql in
+  let result =
+    if Sqlite3.step stmt = Sqlite3.Rc.ROW then
+      match Sqlite3.column stmt 0 with
+      | Sqlite3.Data.TEXT s -> Some s
+      | _ -> None
+    else None
+  in
+  ignore (Sqlite3.finalize stmt);
+  result
+
 let get_last_signature ~db =
   let sql =
     "SELECT signature FROM audit_log WHERE signature IS NOT NULL ORDER BY id \
@@ -137,7 +202,7 @@ let get_last_signature ~db =
       match Sqlite3.column stmt 0 with
       | Sqlite3.Data.TEXT s -> Some s
       | _ -> None
-    else None
+    else get_chain_anchor ~db
   in
   ignore (Sqlite3.finalize stmt);
   result
@@ -204,7 +269,7 @@ let verify_chain ~db ~key =
      audit_log ORDER BY id ASC"
   in
   let stmt = Sqlite3.prepare db sql in
-  let last_sig = ref None in
+  let last_sig = ref (get_chain_anchor ~db) in
   let result = ref (Ok ()) in
   while Sqlite3.step stmt = Sqlite3.Rc.ROW && !result = Ok () do
     let id =
@@ -259,6 +324,10 @@ let verify_chain ~db ~key =
 
 (* Retention: purge old entries *)
 let purge_old ~db ~max_age_days ~max_entries =
+  let existing_anchor = get_chain_anchor ~db in
+  let retained_anchor =
+    compute_retained_anchor ~db ~max_age_days ~max_entries
+  in
   let deleted = ref 0 in
   (* Delete by age *)
   let sql_age =
@@ -279,7 +348,25 @@ let purge_old ~db ~max_age_days ~max_entries =
   (match Sqlite3.exec db sql_count with
   | Sqlite3.Rc.OK -> deleted := !deleted + Sqlite3.changes db
   | _ -> ());
+  (if !deleted > 0 then
+     let next_anchor =
+       match retained_anchor with
+       | Some _ -> retained_anchor
+       | None -> existing_anchor
+     in
+     set_chain_anchor ~db next_anchor);
   !deleted
+
+let export_anchor ~db ~path =
+  let json =
+    `Assoc
+      [
+        ("format", `String "clawq-audit-anchor-v1");
+        ( "chain_anchor_signature",
+          match get_chain_anchor ~db with Some s -> `String s | None -> `Null );
+      ]
+  in
+  Yojson.Safe.to_file (path ^ ".anchor.json") json
 
 (* Export all rows as JSONL *)
 let export_json ~db ~path =
@@ -329,6 +416,7 @@ let export_json ~db ~path =
   done;
   ignore (Sqlite3.finalize stmt);
   close_out oc;
+  export_anchor ~db ~path;
   !count
 
 (* Retention tick: export if configured, then purge *)

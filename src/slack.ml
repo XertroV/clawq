@@ -130,7 +130,7 @@ let handle_event ~(config : Runtime_config.slack_config)
               in
               Lwt.return "ok"
           | Reset ->
-              Session.reset session_manager ~key;
+              let* () = Session.reset session_manager ~key in
               let* () =
                 send_message ~bot_token:config.bot_token ~channel_id
                   ~text:Slash_commands.reset_message

@@ -4,6 +4,12 @@ estimate_hours: 8
 id: P2.M6.E1
 locked: false
 name: Test Infrastructure
+stats:
+    blocked: 0
+    done: 3
+    in_progress: 0
+    pending: 0
+    total: 3
 status: pending
 tasks:
     - complexity: low

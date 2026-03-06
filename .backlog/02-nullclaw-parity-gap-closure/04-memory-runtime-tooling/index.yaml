@@ -23,4 +23,10 @@ estimate_hours: 60
 id: P2.M4
 locked: false
 name: Memory, Runtime & Tooling
+stats:
+    blocked: 0
+    done: 12
+    in_progress: 0
+    pending: 0
+    total_tasks: 12
 status: pending

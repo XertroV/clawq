@@ -4,6 +4,12 @@ estimate_hours: 50
 id: P1.M2.E1
 locked: false
 name: Agent Intelligence
+stats:
+    blocked: 0
+    done: 2
+    in_progress: 0
+    pending: 0
+    total: 2
 status: done
 tasks:
     - complexity: medium

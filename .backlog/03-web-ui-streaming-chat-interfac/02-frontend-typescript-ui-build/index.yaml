@@ -33,4 +33,10 @@ estimate_hours: 16
 id: P3.M2
 locked: false
 name: 'Frontend: TypeScript UI Build'
+stats:
+    blocked: 0
+    done: 0
+    in_progress: 0
+    pending: 14
+    total_tasks: 14
 status: pending

@@ -4,6 +4,12 @@ estimate_hours: 80
 id: P1.M3.E1
 locked: false
 name: Protocol Integrations
+stats:
+    blocked: 0
+    done: 3
+    in_progress: 0
+    pending: 0
+    total: 3
 status: done
 tasks:
     - complexity: high

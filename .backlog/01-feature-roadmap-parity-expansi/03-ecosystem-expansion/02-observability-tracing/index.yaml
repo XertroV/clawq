@@ -4,6 +4,12 @@ estimate_hours: 20
 id: P1.M3.E2
 locked: false
 name: 'Observability: Tracing'
+stats:
+    blocked: 0
+    done: 1
+    in_progress: 0
+    pending: 0
+    total: 1
 status: done
 tasks:
     - complexity: medium

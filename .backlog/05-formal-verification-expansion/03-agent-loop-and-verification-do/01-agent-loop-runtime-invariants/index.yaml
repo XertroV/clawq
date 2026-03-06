@@ -1,0 +1,40 @@
+complexity: medium
+depends_on: []
+estimate_hours: 12
+id: P5.M3.E1
+locked: false
+name: Agent Loop Runtime Invariants
+stats:
+    blocked: 0
+    done: 0
+    in_progress: 0
+    pending: 3
+    total: 3
+status: pending
+tasks:
+    - complexity: medium
+      depends_on: []
+      estimate_hours: 4
+      file: T001-refine-agentloop-model-to-matc.todo
+      id: T001
+      priority: medium
+      status: pending
+      title: Refine AgentLoop model to match runtime turn structure
+    - complexity: high
+      depends_on:
+        - P5.M3.E1.T001
+      estimate_hours: 5
+      file: T002-prove-bounded-iteration-and-hi.todo
+      id: T002
+      priority: medium
+      status: pending
+      title: Prove bounded iteration and history invariants
+    - complexity: medium
+      depends_on:
+        - P5.M3.E1.T002
+      estimate_hours: 3
+      file: T003-cross-check-agent-loop-invaria.todo
+      id: T003
+      priority: medium
+      status: pending
+      title: Cross-check agent-loop invariants against runtime behavior

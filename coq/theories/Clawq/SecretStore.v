@@ -16,7 +16,13 @@ Local Open Scope nat_scope.
    - resolve_secret_completeness: all cases handled correctly
 
    No extraction (relies on C primitives via Mirage_crypto).
-   ================================================================ *)
+
+   Important modeling note:
+   - The OCaml `decrypt_secret` returns plaintext unchanged for non-encrypted
+     values, with explicit error strings for decode/decrypt failures.
+   - This file models both a crypto-core decoder (`decrypt_secret_core`) and
+     the API-level passthrough wrapper (`decrypt_secret`).
+    ================================================================ *)
 
 (* ----------------------------------------------------------------
    Abstract crypto primitives (trust Mirage_crypto).
@@ -121,9 +127,9 @@ Definition encrypt_secret (k : key) (plaintext : bytes) : string :=
   let combined := nonce_ciphertext_concat n ct in
   encrypted_prefix ++ base64_encode combined.
 
-(* Decrypt a $ENC: prefixed secret.
+(* Decrypt only the encrypted branch.
    Model: strip prefix, base64 decode, split nonce+ct, decrypt. *)
-Definition decrypt_secret (k : key) (value : string) : option bytes :=
+Definition decrypt_secret_core (k : key) (value : string) : option bytes :=
   if is_encrypted value then
     match strip_prefix encrypted_prefix value with
     | None => None
@@ -138,6 +144,12 @@ Definition decrypt_secret (k : key) (value : string) : option bytes :=
         end
     end
   else None.
+
+(* API-level decrypt_secret behavior: encrypted values are decrypted,
+   plaintext values are returned unchanged. We model the OCaml `Ok` shape as
+   `Some` to stay close to the existing option-based crypto model. *)
+Definition decrypt_secret (k : key) (value : string) : option bytes :=
+  if is_encrypted value then decrypt_secret_core k value else Some value.
 
 (* Resolve a secret value:
    - $ENC:... -> decrypt if encrypt_secrets enabled, else passthrough
@@ -187,7 +199,18 @@ Proof.
   admit.
 Admitted.
 
-(* Theorem 2: is_encrypted correctly identifies the prefix. *)
+(* Theorem 2: plaintext inputs pass through unchanged at the API level. *)
+Theorem decrypt_secret_plaintext_passthrough : forall k value,
+  is_encrypted value = false ->
+  decrypt_secret k value = Some value.
+Proof.
+  intros k value Hplain.
+  unfold decrypt_secret.
+  rewrite Hplain.
+  reflexivity.
+Qed.
+
+(* Theorem 3: is_encrypted correctly identifies the prefix. *)
 Theorem is_encrypted_correct : forall value,
   is_encrypted value = true ->
   has_prefix encrypted_prefix value = true /\ 5 < string_length value.
@@ -202,7 +225,7 @@ Proof.
     admit.
 Admitted.
 
-(* Theorem 3: is_encrypted rejects non-prefixed strings. *)
+(* Theorem 4: is_encrypted rejects non-prefixed strings. *)
 Theorem is_encrypted_rejects_nonprefixed : forall value,
   string_length value <= 5 \/ has_prefix encrypted_prefix value = false ->
   is_encrypted value = false.
@@ -214,7 +237,7 @@ Proof.
     admit.
 Admitted.
 
-(* Theorem 4: resolve_secret handles plaintext passthrough. *)
+(* Theorem 5: resolve_secret handles plaintext passthrough. *)
 Theorem resolve_secret_plaintext_passthrough : forall encrypt_secrets lookup_env value,
   string_length value <= 1 \/ has_prefix "$" value = false ->
   resolve_secret encrypt_secrets lookup_env value = value.
@@ -226,7 +249,7 @@ Proof.
     admit.
 Admitted.
 
-(* Theorem 5: resolve_secret handles $ENV_VAR indirection. *)
+(* Theorem 6: resolve_secret handles $ENV_VAR indirection. *)
 Theorem resolve_secret_env_var : forall encrypt_secrets lookup_env var_name value,
   1 <= string_length var_name ->
   is_encrypted ("$" ++ var_name) = false ->
@@ -262,7 +285,7 @@ Definition encrypt_provider_key (k : key) (api_key : api_key) : string :=
     encrypted_prefix ++ "encrypted_data"  (* simplified for proof *)
   else api_key.
 
-(* Theorem 6: should_encrypt rejects already-encrypted values *)
+(* Theorem 7: should_encrypt rejects already-encrypted values *)
 Theorem should_encrypt_rejects_encrypted : forall api_key,
   is_encrypted api_key = true ->
   should_encrypt api_key = false.
@@ -273,7 +296,7 @@ Proof.
   reflexivity.
 Qed.
 
-(* Theorem 7: should_encrypt rejects env var references *)
+(* Theorem 8: should_encrypt rejects env var references *)
 Theorem should_encrypt_rejects_env_var : forall var_name,
   1 <= string_length var_name ->
   should_encrypt ("$" ++ var_name) = false.
@@ -300,6 +323,7 @@ Qed.
 (* ================================================================
    Summary of what was proved:
    - encrypt_decrypt_identity: decrypt(encrypt(m)) = Some m (admitted due to base64 axiom)
+   - decrypt_secret_plaintext_passthrough: non-encrypted values return unchanged
    - is_encrypted_correct: prefix detection is precise
    - is_encrypted_rejects_nonprefixed: no false positives
    - resolve_secret_plaintext_passthrough: non-secret values unchanged

@@ -10,6 +10,7 @@ import MechanicalCounter from '../../components/MechanicalCounter.astro';
 import ProgressRing from '../../components/ProgressRing.astro';
 import TheoremBox from '../../components/TheoremBox.astro';
 import CornerBrackets from '../../components/CornerBrackets.astro';
+import Callout from '../../components/Callout.astro';
 
 {/* ===== PAGE HEADER ===== */}
 
@@ -24,6 +25,10 @@ import CornerBrackets from '../../components/CornerBrackets.astro';
 <p style="font-size: var(--fs-xs); color: var(--text-tertiary); font-family: var(--font-label); margin-bottom: 3rem;">
   Last extraction: 2026-03-06 &middot; Coq 8.19 &middot; 69 theorems
 </p>
+
+<div style="margin-bottom: 2rem; padding: 1rem 1.1rem; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px;">
+  <strong>Planning note.</strong> The current proof-expansion plan lives in <a href="/formal-verification-roadmap-2026-03-07/">Formal Verification Roadmap - 2026-03-07</a>.
+</div>
 
 {/* ===== VERIFICATION SEAL ===== */}
 
@@ -922,6 +927,16 @@ is_allowed cmd allowlist = true implies is_allowed cmd (allowlist ++ extra) = tr
 ## Verification Roadmap
 
 The remaining six phases (F7--F12) are ordered by security return on investment. Phases that yield extracted OCaml code -- replacing hand-written implementations with machine-checked versions -- are prioritized over spec-only proofs.
+
+<Callout type="note" title="FAQ: Should Every Formalization Be Extracted?">
+  No. We aim to extract the right pure kernels, not every formalization by default.
+
+  Extract when the Coq artifact is a small pure computation, matches shipped runtime behavior closely, and is actually worth making the runtime's single source of truth.
+
+  Keep a theory spec-only when it mostly models trusted boundaries or effects -- like crypto, databases, locking, OS policy, or higher-level control flow -- or when the proof model still diverges from the OCaml implementation.
+
+  Today the best extraction candidates are things like `Cli`, `Config`, `PathSafety`, `QuoteParsing`, selective `ShellSafety`, and eventually some `AuditChain` or `RateLimiter` helpers. Modules like `SecretStore`, `SessionIsolation`, `AgentLoop`, and most of `AuditRetention` are higher-value as proofs first, extraction later.
+</Callout>
 
 ### Priority Matrix
 

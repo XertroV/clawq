@@ -4,6 +4,12 @@ estimate_hours: 28
 id: P2.M4.E1
 locked: false
 name: Memory Export/Import & Core Category
+stats:
+    blocked: 0
+    done: 7
+    in_progress: 0
+    pending: 0
+    total: 7
 status: done
 tasks:
     - complexity: medium

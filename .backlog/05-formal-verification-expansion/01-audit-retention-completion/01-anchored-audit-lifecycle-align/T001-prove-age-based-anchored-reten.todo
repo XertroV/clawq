@@ -1,0 +1,17 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 4
+id: P5.M1.E1.T001
+priority: high
+status: pending
+tags:
+    - formal-verification
+    - coq
+    - audit
+title: Prove age-based anchored retention or narrow assumptions
+---
+Acceptance criteria:
+- `coq/theories/Clawq/AuditRetention.v` either proves the age-based anchored retention result or explicitly narrows the theorem assumptions.
+- Any false or admitted theorem on the age-purge path is removed, replaced, or justified as a trusted boundary.
+- Related docs/tests are updated if the theorem outcome changes runtime expectations.

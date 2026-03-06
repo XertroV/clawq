@@ -4,6 +4,12 @@ estimate_hours: 12
 id: P2.M6.E3
 locked: false
 name: Contract & Integration Tests
+stats:
+    blocked: 0
+    done: 3
+    in_progress: 0
+    pending: 0
+    total: 3
 status: done
 tasks:
     - complexity: medium

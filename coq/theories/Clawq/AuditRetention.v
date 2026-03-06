@@ -114,38 +114,9 @@ Proof.
         lia.
 Qed.
 
-(* P5: purge_by_count preserves validity — key theorem *)
-Theorem purge_by_count_preserves_validity : forall key prev_sig n entries,
-  verify_chain key prev_sig entries = true ->
-  verify_chain key prev_sig (purge_by_count n entries) = true.
-Proof.
-  intros key prev_sig n entries Hvalid.
-  destruct (purge_by_count_suffix n entries) as [prefix Heq].
-  rewrite Heq in Hvalid.
-  revert prev_sig Hvalid.
-  induction prefix as [| h prefix' IH]; intros prev_sig Hvalid.
-  - simpl in *. exact Hvalid.
-  - simpl in Hvalid.
-    apply Bool.andb_true_iff in Hvalid.
-    destruct Hvalid as [_ Hvalid_rest].
-    apply IH.
-    (* Need last_sig to match, but purge replaces prev_sig with prev_sig! *)
-    (* Actually: the theorem as stated is false because purge_by_count 
-       keeps entries starting from prev_sig, but entries after prefix 
-       expect prev_sig = Some (last_sig of prefix) *)
-    (* We need to adjust: purge the whole list, chain validity is about
-       the chain structure, not the starting prev_sig *)
-    (* Let me reconsider: if entries = prefix ++ suffix, then
-       verify_chain key prev_sig (prefix ++ suffix) means
-       suffix must start with last_sig prev_sig prefix.
-       But purge_by_count returns suffix, which should start with same prev_sig? *)
-    (* No: suffix starts at its position in the chain.
-       If we extract suffix and verify it with prev_sig, that's wrong. *)
-    (* We need to verify suffix with the correct prev_sig (from prefix).
-       But the theorem says verify with original prev_sig - that's only true
-       when prefix is empty! *)
-     (* Let me fix the theorem: verify the suffix with correct prev_sig *)
-Abort.
+(* Naive statement (false): verifying the retained suffix with the original
+   prev_sig. The correct formulation threads the anchor induced by the dropped
+   prefix through last_sig. See purge_by_count_preserves_validity below. *)
 
 (* Helper: verify_chain is monotone - a suffix of a valid chain is valid (with correct prev_sig) *)
 Lemma verify_chain_suffix_valid : forall key prev_sig h rest,
@@ -177,8 +148,25 @@ Proof.
     apply IH. exact Hvalid_rest.
 Qed.
 
-(* Main theorem: purge preserves validity with correct prev_sig *)
-Theorem purge_by_count_valid_suffix : forall key n entries,
+(* Main theorem: purge preserves validity with the anchor induced by the
+   removed prefix. *)
+Theorem purge_by_count_preserves_validity : forall key prev_sig n entries,
+  verify_chain key prev_sig entries = true ->
+  exists prefix,
+    entries = prefix ++ purge_by_count n entries /\
+    verify_chain key (last_sig prev_sig prefix) (purge_by_count n entries) = true.
+Proof.
+  intros key prev_sig n entries Hvalid.
+  destruct (purge_by_count_suffix n entries) as [prefix Heq].
+  exists prefix.
+  split.
+  - exact Heq.
+  - rewrite Heq in Hvalid.
+    apply suffix_preserves_validity. exact Hvalid.
+Qed.
+
+(* Convenience specialization for genesis-anchored chains. *)
+Corollary purge_by_count_valid_suffix : forall key n entries,
   verify_chain key None entries = true ->
   forall prefix, entries = prefix ++ purge_by_count n entries ->
   verify_chain key (last_sig None prefix) (purge_by_count n entries) = true.
@@ -188,16 +176,18 @@ Proof.
   apply suffix_preserves_validity. exact Hvalid.
 Qed.
 
-(* Convenience: purge preserves validity *)
-Lemma purge_by_count_valid : forall key n entries,
+(* Convenience existential form for the common genesis case. *)
+Corollary purge_by_count_valid : forall key n entries,
   verify_chain key None entries = true ->
-  (* The purged chain is valid when verified with appropriate prev_sig *)
-  forall prefix, entries = prefix ++ purge_by_count n entries ->
-  verify_chain key (last_sig None prefix) (purge_by_count n entries) = true.
+  exists prefix,
+    entries = prefix ++ purge_by_count n entries /\
+    verify_chain key (last_sig None prefix) (purge_by_count n entries) = true.
 Proof.
-  intros key n entries Hvalid prefix Heq.
-  rewrite Heq in Hvalid.
-  apply suffix_preserves_validity. exact Hvalid.
+  intros key n entries Hvalid.
+  destruct (purge_by_count_preserves_validity key None n entries Hvalid)
+    as [prefix [Heq Hsuffix]].
+  exists prefix.
+  split; assumption.
 Qed.
 
 (* ----------------------------------------------------------------

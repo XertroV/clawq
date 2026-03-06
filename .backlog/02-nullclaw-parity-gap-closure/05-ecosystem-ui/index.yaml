@@ -23,4 +23,10 @@ estimate_hours: 60
 id: P2.M5
 locked: false
 name: Ecosystem & UI
+stats:
+    blocked: 0
+    done: 11
+    in_progress: 0
+    pending: 0
+    total_tasks: 11
 status: pending

@@ -1,0 +1,321 @@
+---
+title: "Formal Verification Roadmap - 2026-03-07"
+description: "A prioritized roadmap dated 2026-03-07 for expanding Clawq's formal verification coverage."
+section: "formal-properties"
+---
+
+<p class="section-label" style="margin-bottom: 0.5rem;">II. Formal Properties</p>
+
+# Formal Verification Roadmap - 2026-03-07
+
+<p style="font-family: var(--font-body); font-style: italic; color: var(--text-secondary); font-size: var(--fs-md); margin-bottom: 1rem;">
+  A concrete plan for moving from a strong verified kernel toward broader, implementation-aligned verification of Clawq's real security boundaries.
+</p>
+
+<p style="font-size: var(--fs-xs); color: var(--text-tertiary); font-family: var(--font-label); margin-bottom: 2.5rem;">
+  Plan date: 2026-03-07 · Status: draft roadmap / unlinked page · Tags: formal-verification, roadmap, coq, security, planning
+</p>
+
+<div style="margin-bottom: 2rem; padding: 1rem 1.1rem; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px;">
+  <strong>Related pages.</strong> Read the audit in <a href="/formal-verification-audit-2026-03-07/">Formal Verification Audit - 2026-03-07</a>.
+</div>
+
+## Planning Goals
+
+- maximize real security value before theorem count
+- prioritize proofs that either certify shipped runtime behavior or expose design mismatches early
+- reduce `Admitted` and model drift in the most security-sensitive theories first
+- keep proof work incremental, testable, and aligned with the OCaml runtime rather than drifting into isolated spec-only islands
+
+## Roadmap Principles
+
+### Favor implementation-aligned proofs
+
+The next wave of proof work should focus less on adding easy local lemmas and more on proving properties that matter to the running system. In practice, that means preferring modules where one of these is true:
+
+- the Coq function is already extracted and used at runtime
+- the theory directly constrains a runtime security boundary
+- the theory exposes a known design hazard that the runtime must resolve
+
+### Close model gaps before stacking new theorems
+
+Several current proof areas are blocked less by proof difficulty than by model mismatch. When the Coq API does not match the OCaml API, proving more theorems usually creates more documentation debt rather than more assurance.
+
+### Treat admissions as planning anchors
+
+Not every `Axiom` is bad. Crypto primitives and OS availability checks may remain trusted boundaries. But `Admitted` statements inside core logic should be treated as roadmap items with explicit owners and exit criteria.
+
+## Priority Bands
+
+| Priority | Theme | Why it matters now |
+|---|---|---|
+| P0 | Audit retention correctness | Highest leverage; likely runtime-impacting; theory already exposes a false naive theorem |
+| P1 | Session isolation and concurrency | Core multi-user safety boundary; current proof story is too weak |
+| P2 | Secret-store model alignment | Security-sensitive and currently mismatched with implementation |
+| P3 | Channel auth alignment | Important security surface with incomplete and weakly wired proofs |
+| P4 | Agent loop invariants | High-value behavioral guarantees once the model is closer to runtime reality |
+| P5 | Broader runtime/config refinement | Valuable after the highest-risk surfaces are stabilized |
+
+## Planned Work Checklist
+
+- [x] finish the anchored-suffix theorem story for audit retention
+- [x] review `src/audit.ml` for explicit anchor or checkpoint support
+- [ ] replace vacuous session-isolation claims with non-vacuous invariants
+- [ ] align `SecretStore.v` with the real `src/secret_store.ml` API
+- [ ] remove core admissions from `ChannelAuth.v` or replace the model
+- [ ] refine `AgentLoop.v` toward the real turn structure in `src/agent.ml`
+- [ ] revisit the public verification status page after high-risk proof areas improve
+
+## Phase 1: Audit Retention Correctness
+
+### Objective
+
+Replace the currently false naive retention theorem with the right anchored-suffix theorem, then use that result to evaluate whether runtime audit verification and export need to change.
+
+Current status note: runtime support for retained-chain anchors now exists in `src/audit.ml`; the remaining work is to keep the proof story, export story, and operator-facing verification model aligned with that behavior.
+
+Current gap note: export now writes an anchor sidecar, but there is not yet a matching import or restore flow that consumes that anchor explicitly.
+
+### Why this phase is first
+
+- `coq/theories/Clawq/AuditRetention.v` already shows where the incorrect theorem fails
+- `src/audit.ml` appears structurally exposed to the same issue
+- this is a security and data-integrity property, not just an internal refactor
+
+### Deliverables
+
+- [x] clean anchored-suffix theorem for retained audit chains
+- [x] count-based retention theorem with explicit inherited anchor
+- [ ] age-based retention theorem or explicit impossibility/assumption note
+- [ ] runtime recommendation for `src/audit.ml`
+- [ ] anchor-aware import or restore story for exported retained chains
+
+### Implementation Checklist
+
+- [x] inspect whether runtime verification should accept an explicit starting anchor
+- [x] inspect whether retention/export should preserve the dropped-prefix terminal signature
+- [ ] document whether mixed signed/unsigned histories are intentionally supported
+
+### Concrete theorem targets
+
+- `suffix_preserves_validity` strengthened and positioned as the canonical base theorem
+- `purge_by_count_valid_suffix` rewritten into a more ergonomic theorem shape
+- new theorem: retained suffix verifies with `(last_sig None dropped_prefix)`
+- optional new theorem: exported anchor plus retained entries implies future verifiability from the retained checkpoint
+
+### Implementation alignment tasks
+
+- inspect whether runtime verification should accept an explicit starting anchor
+- inspect whether retention/export should preserve the dropped-prefix terminal signature
+- document whether mixed signed/unsigned histories are intentionally supported
+
+### Exit criteria
+
+- no false theorem remains in the main retention narrative
+- the retained-chain verification story is precise and documented
+- a runtime follow-up recommendation exists, even if code changes are deferred
+
+## Phase 2: Session Isolation and Concurrency
+
+### Objective
+
+Replace the current weak isolation story with non-vacuous, implementation-relevant invariants for session creation, mutation, and persistence.
+
+Current status note: the runtime now synchronizes `reset` with the same per-session lock path used by active turns, reducing the highest-value live same-key race before the Coq model has been strengthened.
+
+### Current blockers
+
+- `states_disjoint` is too weak to carry real meaning
+- the atomicity axiom papers over the interesting part of the problem
+- the runtime session manager creates entries before turn-level locking begins
+
+### Deliverables
+
+- [ ] stronger session state model for same-key and different-key behavior
+- [ ] non-vacuous non-interference theorems
+- [ ] explicit assumptions around mutex/atomicity boundaries
+
+### Implementation Checklist
+
+- [ ] inspect `src/session.ml` for same-key double-creation windows
+- [ ] inspect DB persistence ordering assumptions after a turn
+- [ ] decide whether the right fix is a stronger model, a runtime refactor, or both
+
+### Concrete theorem targets
+
+- distinct keys preserve each other's stored histories under `store_message`
+- `get_or_create` is idempotent at the abstract state level
+- same-key turn serialization or a documented race theorem if serialization is not modeled
+- persistence-order preservation theorem for restored and appended messages
+
+### Runtime review tasks
+
+- inspect `src/session.ml` for same-key double-creation windows
+- inspect DB persistence ordering assumptions after a turn
+- decide whether the right fix is a stronger model, a runtime refactor, or both
+
+### Exit criteria
+
+- vacuous disjointness is removed
+- the theorem set states meaningful isolation properties
+- same-key behavior is either certified or explicitly narrowed by assumptions
+
+## Phase 3: Secret-Store Alignment
+
+### Objective
+
+Bring the Coq model into close agreement with `src/secret_store.ml`, then prove the important API-level properties on top of that aligned model.
+
+### Why this is a separate phase
+
+The main issue here is not theorem scarcity. It is model mismatch. Proving additional theorems before fixing that mismatch would not significantly improve trust.
+
+### Deliverables
+
+- [ ] update Coq API shape to match plaintext passthrough behavior
+- [ ] clarify trusted boundaries for crypto, base64, and randomness
+- [ ] shrink to a more honest theorem set over the aligned model
+
+### Implementation Checklist
+
+- [ ] verify exact behavior when decryption fails
+- [ ] verify exact behavior when `CLAWQ_MASTER_KEY` is missing
+- [ ] decide whether warnings and fallback behavior need to be modeled or left observational
+
+### Concrete theorem targets
+
+- encrypted round-trip under the trusted crypto axioms
+- plaintext passthrough correctness for `decrypt_secret`
+- `resolve_secret` case split correctness for plaintext, `$ENV`, and `$ENC:` values
+- structure preservation for config secret rewriting
+- no double-encryption of already encrypted provider keys
+
+### Runtime review tasks
+
+- verify exact behavior when decryption fails
+- verify exact behavior when `CLAWQ_MASTER_KEY` is missing
+- decide whether warnings and fallback behavior need to be modeled or left observational
+
+### Exit criteria
+
+- the Coq and OCaml APIs agree on the key cases
+- theorem statements describe shipped behavior instead of an approximate design
+
+## Phase 4: Channel Authorization Alignment
+
+### Objective
+
+Move from generic allowlist lemmas to proofs that match the actual authorization and freshness logic used by runtime channel integrations.
+
+### Deliverables
+
+- [ ] common allowlist theorem set reusable across channels
+- [ ] timestamp freshness theorems that match real replay windows
+- [ ] Telegram-specific TOTP pairing invariants
+
+### Concrete theorem targets
+
+- wildcard-or-membership equivalence for the real allowlist pattern
+- monotonicity under allowlist extension
+- replay-window soundness and completeness for timestamp checks
+- TOTP pairing validity until expiry and denial after expiry
+- combined theorem: unauthorized sender cannot pass the modeled pre-turn authorization gate
+
+### Suggested scope order
+
+1. shared allowlist core
+2. Slack freshness/signature shape
+3. Telegram pairing state and expiry
+4. Discord-specific allow rules
+
+### Exit criteria
+
+- `ChannelAuth.v` is either completed and wired conceptually to runtime, or replaced by better-targeted theories
+- the largest admitted proofs in the channel area are removed or narrowed to trusted boundaries
+
+## Phase 5: Agent Loop Invariants
+
+### Objective
+
+Model the real loop in `src/agent.ml` more faithfully so that theorem work starts buying guarantees about history growth, tool-call structure, and termination bounds that matter in practice.
+
+### Deliverables
+
+- [ ] refined loop model closer to the real turn structure
+- [ ] bounded-iteration theorems for tool use
+- [ ] history well-formedness invariants
+
+### Concrete theorem targets
+
+- tool-iteration cap is respected
+- assistant tool-call messages are followed by corresponding tool results in the modeled history
+- trimming preserves message order for retained history
+- compaction and trimming do not produce malformed history states
+- interrupt behavior cannot bypass the global turn bound in the model
+
+### Exit criteria
+
+- the model is no longer a thin dummy loop
+- at least one theorem clearly constrains the real runtime turn structure
+
+## Phase 6: Secondary Expansions
+
+These are worthwhile after the higher-risk surfaces are improved.
+
+### Landlock policy
+
+- finish admitted lemmas in `coq/theories/Clawq/LandlockPolicy.v`
+- add concrete least-privilege and flag-bound results
+- keep OS/availability as trusted boundaries where appropriate
+
+### Rate limiter
+
+- add temporal properties such as denial persistence before sufficient refill
+- prove recovery conditions after elapsed time
+- relate the model more directly to runtime limiter semantics if needed
+
+### Config and CLI
+
+- expand proof coverage only if the Coq models are upgraded to match the real runtime surface
+- otherwise avoid over-investing in low-leverage theorem count growth
+
+### Tool perimeter refinement
+
+- prove better agreement properties between the Coq and OCaml shell/path helpers
+- prove monotonicity for extra allowed roots
+- prove no hidden path-escape within the modeled pure path domain
+
+## Admission Reduction Plan
+
+Not all assumptions should be treated equally.
+
+### Good candidates to keep as trusted boundaries
+
+- abstract cryptographic primitive correctness
+- OS-level availability facts such as Landlock support
+- library-level behavior that is intentionally out of scope for pure Coq modeling
+
+### High-priority admissions to remove
+
+- logical core in `AuditRetention.v`
+- allowlist / freshness results in `ChannelAuth.v`
+- model-side properties in `SecretStore.v` that no longer need to be admitted once the API is aligned
+- weak structural claims in `SessionIsolation.v`
+
+## Suggested Work Sequence
+
+1. fix the retention theorem story in `AuditRetention.v`
+2. write down the runtime implications for `src/audit.ml`
+3. strengthen `SessionIsolation.v` into a non-vacuous model
+4. align `SecretStore.v` to the real API before proving more there
+5. repair or replace `ChannelAuth.v` to match actual channel checks
+6. refine `AgentLoop.v` after the higher-risk security surfaces are in better shape
+
+## Definition of Success
+
+This roadmap succeeds if the repository ends up with fewer but stronger claims: more theorems that certify behavior users actually depend on, fewer proofs over placeholder models, fewer silent mismatches between Coq and OCaml, and a public verification story that accurately describes what is truly machine-checked.
+
+## Related Pages
+
+- [Formal Verification Audit - 2026-03-07](/formal-verification-audit-2026-03-07/)
+- [Verification Status](/formal-verification/)

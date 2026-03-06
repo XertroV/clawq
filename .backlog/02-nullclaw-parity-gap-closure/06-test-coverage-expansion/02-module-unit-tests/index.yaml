@@ -4,6 +4,12 @@ estimate_hours: 36
 id: P2.M6.E2
 locked: false
 name: Module Unit Tests
+stats:
+    blocked: 0
+    done: 10
+    in_progress: 0
+    pending: 0
+    total: 10
 status: done
 tasks:
     - complexity: medium

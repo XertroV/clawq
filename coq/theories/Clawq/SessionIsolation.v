@@ -195,15 +195,20 @@ Proof.
     + symmetry. exact Hneq.
 Qed.
 
-(** * Concurrency Assumption (Axiom) *)
+(** * Concurrency Skeleton *)
 
-(** In practice, Lwt_mutex ensures atomicity of operations.
-    We model this as an axiom since we can't prove it in Coq. *)
-Axiom session_operations_atomic : 
+(** This theorem is only a minimal logical skeleton: it does not prove any
+    runtime mutex behavior, but it removes the vacuous axiom previously used
+    for independent-key reasoning. Real lock behavior is still modeled at the
+    implementation layer in `src/session.ml`. *)
+Theorem session_operations_atomic :
   forall k1 k2 (op : nat -> Prop),
     k1 <> k2 ->
-    (* Operations on distinct keys don't interleave *)
     op k1 -> op k2 -> op k1 /\ op k2.
+Proof.
+  intros k1 k2 op _ Hop1 Hop2.
+  split; assumption.
+Qed.
 
 (** * Session Table Invariants *)
 
@@ -240,15 +245,43 @@ Qed.
 
 (** * Key-Disjoint State Property *)
 
-(** If two keys are distinct, they have distinct states (if both exist) *)
+(** Isolation is about key-local effects, not inequality of history values.
+    Two distinct sessions may legitimately contain equal histories. *)
 Definition states_disjoint (k1 k2 : session_key) (sessions : t agent_state) : Prop :=
-  k1 <> k2 ->
-  forall state1 state2,
-    find k1 sessions = Some state1 ->
-    find k2 sessions = Some state2 ->
-    state1 <> state2 \/ True. (* Either different states or trivially true *)
+  k1 <> k2 /\
+  (forall msg,
+     find k1 (store_message k2 msg sessions) = find k1 sessions /\
+     find k2 (store_message k1 msg sessions) = find k2 sessions).
 
-(** Creating a new session doesn't affect the disjoint property - admitted for simplicity *)
+Lemma states_disjoint_holds :
+  forall k1 k2 sessions,
+    k1 <> k2 ->
+    states_disjoint k1 k2 sessions.
+Proof.
+  intros k1 k2 sessions Hneq.
+  split.
+  - exact Hneq.
+  - intros msg.
+    split.
+    + unfold store_message.
+      destruct (find k2 sessions) as [state2|] eqn:Hfind2.
+      * rewrite SessionMapFacts.add_neq_o.
+        -- reflexivity.
+        -- symmetry. exact Hneq.
+      * rewrite SessionMapFacts.add_neq_o.
+        -- reflexivity.
+        -- symmetry. exact Hneq.
+    + unfold store_message.
+      destruct (find k1 sessions) as [state1|] eqn:Hfind1.
+      * rewrite SessionMapFacts.add_neq_o.
+        -- reflexivity.
+        -- exact Hneq.
+      * rewrite SessionMapFacts.add_neq_o.
+        -- reflexivity.
+        -- exact Hneq.
+Qed.
+
+(** Creating a new session at a third key preserves pairwise isolation. *)
 Lemma create_preserves_disjoint :
   forall k1 k2 k_new sessions,
     states_disjoint k1 k2 sessions ->
@@ -256,9 +289,11 @@ Lemma create_preserves_disjoint :
     k_new <> k2 ->
     states_disjoint k1 k2 (snd (get_or_create k_new sessions)).
 Proof.
-  intros k1 k2 k_new sessions Hdisj Hneq1 Hneq2 Hneq12 state1 state2 Hfind1 Hfind2.
-  admit.
-Admitted.
+  intros k1 k2 k_new sessions Hdisj Hneq1 Hneq2.
+  destruct Hdisj as [Hneq12 _].
+  apply states_disjoint_holds.
+  exact Hneq12.
+Qed.
 
 (** * Summary: Key Isolation Properties *)
 

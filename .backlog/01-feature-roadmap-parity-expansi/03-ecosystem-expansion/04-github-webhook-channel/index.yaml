@@ -5,6 +5,12 @@ estimate_hours: 14
 id: P1.M3.E4
 locked: false
 name: GitHub Webhook Channel
+stats:
+    blocked: 0
+    done: 8
+    in_progress: 0
+    pending: 0
+    total: 8
 status: done
 tasks:
     - complexity: low

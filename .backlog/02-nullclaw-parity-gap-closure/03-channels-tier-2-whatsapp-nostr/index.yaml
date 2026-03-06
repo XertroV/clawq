@@ -77,4 +77,10 @@ estimate_hours: 120
 id: P2.M3
 locked: false
 name: 'Channels Tier 2: WhatsApp, Nostr & Remaining'
+stats:
+    blocked: 0
+    done: 21
+    in_progress: 0
+    pending: 0
+    total_tasks: 21
 status: pending

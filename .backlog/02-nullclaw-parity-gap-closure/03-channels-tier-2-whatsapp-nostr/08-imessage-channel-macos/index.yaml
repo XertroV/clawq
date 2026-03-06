@@ -4,6 +4,12 @@ estimate_hours: 8
 id: P2.M3.E8
 locked: false
 name: iMessage Channel (macOS)
+stats:
+    blocked: 0
+    done: 2
+    in_progress: 0
+    pending: 0
+    total: 2
 status: done
 tasks:
     - complexity: medium

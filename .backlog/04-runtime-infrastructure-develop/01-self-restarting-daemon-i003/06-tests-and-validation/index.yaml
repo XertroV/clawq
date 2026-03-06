@@ -4,6 +4,12 @@ estimate_hours: 3
 id: P4.M1.E6
 locked: false
 name: Tests and Validation
+stats:
+    blocked: 0
+    done: 0
+    in_progress: 0
+    pending: 4
+    total: 4
 status: pending
 tasks:
     - complexity: medium

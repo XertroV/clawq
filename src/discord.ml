@@ -239,7 +239,7 @@ let handle_message ~(discord_config : Runtime_config.discord_config)
           send_message ~bot_token:discord_config.bot_token
             ~channel_id:msg.channel_id ~text
       | Reset ->
-          Session.reset session_mgr ~key;
+          let* () = Session.reset session_mgr ~key in
           send_message ~bot_token:discord_config.bot_token
             ~channel_id:msg.channel_id ~text:Slash_commands.reset_message
       | NotACommand -> (

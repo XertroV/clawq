@@ -1,0 +1,17 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 3
+id: P5.M2.E2.T001
+priority: high
+status: pending
+tags:
+    - formal-verification
+    - coq
+    - secrets
+title: Discharge remaining easy SecretStore admits
+---
+Acceptance criteria:
+- Easy remaining admits in `coq/theories/Clawq/SecretStore.v` are proved or intentionally removed.
+- Theorem names and comments reflect the shipped API semantics.
+- The theory compiles cleanly.

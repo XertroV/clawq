@@ -4,6 +4,12 @@ estimate_hours: 12
 id: P2.M1.E3
 locked: false
 name: 'Sandbox Hardening: Firejail & Bubblewrap'
+stats:
+    blocked: 0
+    done: 5
+    in_progress: 0
+    pending: 0
+    total: 5
 status: done
 tasks:
     - complexity: medium

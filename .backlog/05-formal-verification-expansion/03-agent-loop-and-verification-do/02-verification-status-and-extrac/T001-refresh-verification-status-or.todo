@@ -1,0 +1,17 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 3
+id: P5.M3.E2.T001
+priority: medium
+status: pending
+tags:
+    - docs
+    - formal-verification
+    - extraction
+title: Refresh verification status ordering and extraction guidance
+---
+Acceptance criteria:
+- `docs/src/content/docs/formal-verification.mdx` phase ordering and extraction guidance match the newer roadmap and audit.
+- Phase descriptions no longer overstate extraction targets or priority order.
+- The docs build passes.

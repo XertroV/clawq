@@ -4,6 +4,12 @@ estimate_hours: 4
 id: P1.M2.E4
 locked: false
 name: Prompt Context & Channel Awareness
+stats:
+    blocked: 0
+    done: 6
+    in_progress: 0
+    pending: 4
+    total: 10
 status: done
 tasks:
     - complexity: low

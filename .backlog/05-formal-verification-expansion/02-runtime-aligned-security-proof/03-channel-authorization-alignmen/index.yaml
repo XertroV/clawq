@@ -1,0 +1,40 @@
+complexity: high
+depends_on: []
+estimate_hours: 16
+id: P5.M2.E3
+locked: false
+name: Channel Authorization Alignment
+stats:
+    blocked: 0
+    done: 0
+    in_progress: 0
+    pending: 3
+    total: 3
+status: pending
+tasks:
+    - complexity: medium
+      depends_on: []
+      estimate_hours: 3
+      file: T001-map-runtime-auth-flows-to-the.todo
+      id: T001
+      priority: high
+      status: pending
+      title: Map runtime auth flows to the ChannelAuth model
+    - complexity: high
+      depends_on:
+        - P5.M2.E3.T001
+      estimate_hours: 6
+      file: T002-prove-shared-allowlist-and-fre.todo
+      id: T002
+      priority: high
+      status: pending
+      title: Prove shared allowlist and freshness properties
+    - complexity: high
+      depends_on:
+        - P5.M2.E3.T001
+      estimate_hours: 7
+      file: T003-model-or-replace-telegram-pair.todo
+      id: T003
+      priority: medium
+      status: pending
+      title: Model or replace Telegram pairing invariants

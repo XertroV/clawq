@@ -4,6 +4,12 @@ estimate_hours: 5
 id: P4.M1.E3
 locked: false
 name: Graceful Restart Engine
+stats:
+    blocked: 0
+    done: 0
+    in_progress: 0
+    pending: 3
+    total: 3
 status: pending
 tasks:
     - complexity: medium

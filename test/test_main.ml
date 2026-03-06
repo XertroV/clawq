@@ -7,6 +7,7 @@ let () =
        ("scheduler", Test_scheduler.suite);
        ("migrate", Test_migrate.suite);
        ("audit", Test_audit.suite);
+       ("session", Test_session.suite);
        ("skills", Test_skills.suite);
        ("memory_search", Test_memory_search.suite);
        ("streaming", Test_streaming.suite);

@@ -42,4 +42,10 @@ estimate_hours: 120
 id: P1.M3
 locked: false
 name: Ecosystem Expansion
+stats:
+    blocked: 0
+    done: 14
+    in_progress: 0
+    pending: 0
+    total_tasks: 14
 status: done

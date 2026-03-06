@@ -1,0 +1,17 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 3
+id: P5.M2.E3.T001
+priority: high
+status: pending
+tags:
+    - formal-verification
+    - auth
+    - runtime
+title: Map runtime auth flows to the ChannelAuth model
+---
+Acceptance criteria:
+- Slack, Discord, and Telegram authorization checks are mapped against the current theorem/model surface.
+- Major mismatches are recorded with a keep/replace decision.
+- The task output makes the next proof step unambiguous.

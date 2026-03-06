@@ -4,6 +4,12 @@ estimate_hours: 28
 id: P2.M5.E1
 locked: false
 name: Embedded Chat UI
+stats:
+    blocked: 0
+    done: 6
+    in_progress: 0
+    pending: 0
+    total: 6
 status: pending
 tasks:
     - complexity: high

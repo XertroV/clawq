@@ -4,6 +4,12 @@ estimate_hours: 2
 id: P4.M1.E4
 locked: false
 name: Discord RESUME Persistence
+stats:
+    blocked: 0
+    done: 0
+    in_progress: 0
+    pending: 1
+    total: 1
 status: pending
 tasks:
     - complexity: medium

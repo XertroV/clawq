@@ -1,0 +1,41 @@
+complexity: high
+depends_on: []
+epics:
+    - complexity: high
+      depends_on: []
+      description: Replace remaining weak session-isolation assumptions with non-vacuous invariants and runtime-reviewed concurrency behavior.
+      estimate_hours: 14
+      id: E1
+      locked: false
+      name: Session Isolation Hardening
+      path: 01-session-isolation-hardening
+      status: pending
+    - complexity: medium
+      depends_on: []
+      description: Finish aligning SecretStore proofs to the real runtime API and discharge the remaining important admits and behavioral gaps.
+      estimate_hours: 12
+      id: E2
+      locked: false
+      name: Secret Store Alignment Completion
+      path: 02-secret-store-alignment-complet
+      status: pending
+    - complexity: high
+      depends_on: []
+      description: Align ChannelAuth proofs with the actual Slack, Discord, and Telegram authorization logic or replace mismatched abstractions.
+      estimate_hours: 16
+      id: E3
+      locked: false
+      name: Channel Authorization Alignment
+      path: 03-channel-authorization-alignmen
+      status: pending
+estimate_hours: 42
+id: P5.M2
+locked: false
+name: Runtime-Aligned Security Proofs
+stats:
+    blocked: 0
+    done: 0
+    in_progress: 0
+    pending: 9
+    total_tasks: 9
+status: pending

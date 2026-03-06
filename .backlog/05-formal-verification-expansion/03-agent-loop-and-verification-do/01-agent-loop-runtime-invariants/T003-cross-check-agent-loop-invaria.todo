@@ -1,0 +1,18 @@
+---
+complexity: medium
+depends_on:
+    - P5.M3.E1.T002
+estimate_hours: 3
+id: P5.M3.E1.T003
+priority: medium
+status: pending
+tags:
+    - formal-verification
+    - agent
+    - test
+title: Cross-check agent-loop invariants against runtime behavior
+---
+Acceptance criteria:
+- Relevant runtime tests or traces are identified for the modeled loop assumptions.
+- Tests are added or extended where a theorem touches shipped behavior.
+- Residual proof/runtime gaps are documented.

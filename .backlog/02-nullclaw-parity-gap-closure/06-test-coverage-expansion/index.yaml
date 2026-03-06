@@ -32,4 +32,10 @@ estimate_hours: 60
 id: P2.M6
 locked: false
 name: Test Coverage Expansion
+stats:
+    blocked: 0
+    done: 16
+    in_progress: 0
+    pending: 0
+    total_tasks: 16
 status: pending

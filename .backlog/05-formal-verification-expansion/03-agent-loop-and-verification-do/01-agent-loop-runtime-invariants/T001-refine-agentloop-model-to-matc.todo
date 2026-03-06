@@ -1,0 +1,17 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 4
+id: P5.M3.E1.T001
+priority: medium
+status: pending
+tags:
+    - formal-verification
+    - coq
+    - agent
+title: Refine AgentLoop model to match runtime turn structure
+---
+Acceptance criteria:
+- `coq/theories/Clawq/AgentLoop.v` models the main turn loop, tool-call cycle, and history mutation points in a way recognizably tied to `src/agent.ml`.
+- Intentional abstractions are documented.
+- The theory compiles cleanly.

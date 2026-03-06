@@ -1,0 +1,23 @@
+complexity: high
+depends_on: []
+epics:
+    - complexity: high
+      depends_on: []
+      description: Close the remaining gap between anchored audit-retention proofs and shipped runtime behavior, especially around age-based purge, import/restore, and mixed-history handling.
+      estimate_hours: 22
+      id: E1
+      locked: false
+      name: Anchored Audit Lifecycle Alignment
+      path: 01-anchored-audit-lifecycle-align
+      status: pending
+estimate_hours: 22
+id: P5.M1
+locked: false
+name: Audit Retention Completion
+stats:
+    blocked: 0
+    done: 0
+    in_progress: 0
+    pending: 3
+    total_tasks: 3
+status: pending

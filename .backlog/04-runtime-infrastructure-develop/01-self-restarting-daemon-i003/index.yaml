@@ -50,4 +50,10 @@ estimate_hours: 14
 id: P4.M1
 locked: false
 name: Self-Restarting Daemon (I003)
+stats:
+    blocked: 0
+    done: 0
+    in_progress: 0
+    pending: 15
+    total_tasks: 15
 status: pending

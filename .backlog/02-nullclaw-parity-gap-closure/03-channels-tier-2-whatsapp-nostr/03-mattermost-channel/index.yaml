@@ -4,6 +4,12 @@ estimate_hours: 10
 id: P2.M3.E3
 locked: false
 name: Mattermost Channel
+stats:
+    blocked: 0
+    done: 2
+    in_progress: 0
+    pending: 0
+    total: 2
 status: done
 tasks:
     - complexity: medium

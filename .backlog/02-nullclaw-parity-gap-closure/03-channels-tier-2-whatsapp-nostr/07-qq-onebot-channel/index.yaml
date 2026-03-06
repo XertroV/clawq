@@ -4,6 +4,12 @@ estimate_hours: 12
 id: P2.M3.E7
 locked: false
 name: QQ/OneBot Channel
+stats:
+    blocked: 0
+    done: 2
+    in_progress: 0
+    pending: 0
+    total: 2
 status: pending
 tasks:
     - complexity: medium

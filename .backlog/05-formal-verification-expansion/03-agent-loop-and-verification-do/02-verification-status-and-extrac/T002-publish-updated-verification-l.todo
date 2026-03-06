@@ -1,0 +1,17 @@
+---
+complexity: medium
+depends_on:
+    - P5.M3.E2.T001
+estimate_hours: 3
+id: P5.M3.E2.T002
+priority: medium
+status: pending
+tags:
+    - docs
+    - formal-verification
+title: Publish updated verification ledger after follow-through
+---
+Acceptance criteria:
+- Public theorem counts, status labels, and data-backed summaries match the repository state.
+- Roadmap/audit/status cross-links remain coherent.
+- The docs build passes.

@@ -1,0 +1,36 @@
+complexity: medium
+depends_on:
+    - P5.M1.E1
+    - P5.M2.E1
+    - P5.M2.E2
+    - P5.M2.E3
+    - P5.M3.E1
+estimate_hours: 8
+id: P5.M3.E2
+locked: false
+name: Verification Status and Extraction Docs
+stats:
+    blocked: 0
+    done: 0
+    in_progress: 0
+    pending: 2
+    total: 2
+status: pending
+tasks:
+    - complexity: medium
+      depends_on: []
+      estimate_hours: 3
+      file: T001-refresh-verification-status-or.todo
+      id: T001
+      priority: medium
+      status: pending
+      title: Refresh verification status ordering and extraction guidance
+    - complexity: medium
+      depends_on:
+        - P5.M3.E2.T001
+      estimate_hours: 3
+      file: T002-publish-updated-verification-l.todo
+      id: T002
+      priority: medium
+      status: pending
+      title: Publish updated verification ledger after follow-through

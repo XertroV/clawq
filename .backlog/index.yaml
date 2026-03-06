@@ -1,4 +1,13 @@
+critical_path:
+    - P5.M2.E3.T001
+    - P5.M2.E3.T003
+    - P5.M3.E1.T001
+    - P5.M3.E1.T002
+    - P5.M3.E1.T003
+    - P5.M3.E2.T001
+    - P5.M3.E2.T002
 description: A formally verified fully autonomous AI assistant.
+next_available: P5.M2.E3.T001
 phases:
     - depends_on: []
       description: 'Features identified via nullclaw comparison and doc review. Organized by effort tier: quick wins, high impact, ecosystem expansion, and formalization.'
@@ -40,5 +49,21 @@ phases:
       priority: medium
       status: pending
       weeks: 2
+    - depends_on: []
+      description: 'Complete the remaining high-value formal verification work identified in the 2026-03-07 audit and roadmap: anchored audit retention follow-through, runtime-aligned security proofs, agent-loop invariants, and verification-status documentation alignment.'
+      estimate_hours: 84
+      id: P5
+      locked: false
+      name: Formal Verification Expansion
+      path: 05-formal-verification-expansion
+      priority: high
+      status: pending
+      weeks: 8
 project: Clawq
+stats:
+    blocked: 0
+    done: 149
+    in_progress: 4
+    pending: 72
+    total_tasks: 225
 timeline_weeks: 0

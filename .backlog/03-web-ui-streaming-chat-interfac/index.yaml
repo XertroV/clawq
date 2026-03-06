@@ -34,5 +34,11 @@ milestones:
       path: 03-integration-polish-tests
       status: pending
 name: 'Web UI: Streaming Chat Interface'
+stats:
+    blocked: 0
+    done: 0
+    in_progress: 0
+    pending: 28
+    total_tasks: 28
 status: pending
 weeks: 3

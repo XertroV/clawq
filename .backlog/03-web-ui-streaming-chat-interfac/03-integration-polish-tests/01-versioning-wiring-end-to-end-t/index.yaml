@@ -4,6 +4,12 @@ estimate_hours: 6
 id: P3.M3.E1
 locked: false
 name: Versioning, Wiring & End-to-End Tests
+stats:
+    blocked: 0
+    done: 0
+    in_progress: 0
+    pending: 5
+    total: 5
 status: pending
 tasks:
     - complexity: low

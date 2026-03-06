@@ -116,10 +116,10 @@ let test_export_jsonl () =
   Audit.log ~db (DaemonEvent { action = "test"; details = "export1" });
   Audit.log ~db (DaemonEvent { action = "test"; details = "export2" });
   let tmpdir = Filename.temp_dir "clawq_test" "" in
-  let path = Filename.concat tmpdir "export.jsonl" in
-  let count = Audit.export_json ~db ~path in
+  let export_path = Filename.concat tmpdir "export.jsonl" in
+  let count = Audit.export_json ~db ~path:export_path in
   Alcotest.(check int) "exported 2 entries" 2 count;
-  let ic = open_in path in
+  let ic = open_in export_path in
   let lines = ref [] in
   (try
      while true do
@@ -135,8 +135,45 @@ let test_export_jsonl () =
       let _json = Yojson.Safe.from_string line in
       ())
     lines;
+  let anchor_json = Yojson.Safe.from_file (export_path ^ ".anchor.json") in
+  let open Yojson.Safe.Util in
+  Alcotest.(check string)
+    "anchor sidecar format" "clawq-audit-anchor-v1"
+    (anchor_json |> member "format" |> to_string);
+  Alcotest.(check bool)
+    "unsigned export has null anchor" true
+    (match anchor_json |> member "chain_anchor_signature" with
+    | `Null -> true
+    | _ -> false);
   (* Cleanup *)
-  Sys.remove path;
+  Sys.remove (export_path ^ ".anchor.json");
+  Sys.remove export_path;
+  try Sys.rmdir tmpdir with _ -> ()
+
+let test_key = "test-signing-key-for-audit-tests"
+
+let test_export_jsonl_preserves_anchor_after_purge () =
+  let db = Memory.init ~db_path:":memory:" () in
+  Audit.init_schema db;
+  let key = Audit.derive_signing_key test_key in
+  Audit.log_signed ~db ~key (DaemonEvent { action = "e1"; details = "first" });
+  Audit.log_signed ~db ~key (DaemonEvent { action = "e2"; details = "second" });
+  Audit.log_signed ~db ~key (DaemonEvent { action = "e3"; details = "third" });
+  ignore (Audit.purge_old ~db ~max_age_days:9999 ~max_entries:2);
+  let tmpdir = Filename.temp_dir "clawq_test" "" in
+  let export_path = Filename.concat tmpdir "export_after_purge.jsonl" in
+  let count = Audit.export_json ~db ~path:export_path in
+  Alcotest.(check int) "2 retained entries exported" 2 count;
+  let anchor_json = Yojson.Safe.from_file (export_path ^ ".anchor.json") in
+  let open Yojson.Safe.Util in
+  let anchor_sig =
+    anchor_json |> member "chain_anchor_signature" |> to_string
+  in
+  Alcotest.(check bool)
+    "purged export keeps anchor signature" true
+    (String.length anchor_sig > 0);
+  Sys.remove (export_path ^ ".anchor.json");
+  Sys.remove export_path;
   try Sys.rmdir tmpdir with _ -> ()
 
 let test_retention_tick () =
@@ -172,8 +209,6 @@ let test_retention_tick () =
   Alcotest.(check int) "1 entry remains" 1 (List.length after)
 
 (* --- Signing tests --- *)
-
-let test_key = "test-signing-key-for-audit-tests"
 
 let test_signed_valid_chain () =
   let db = Memory.init ~db_path:":memory:" () in
@@ -228,6 +263,23 @@ let test_signed_deleted_entry () =
            true
          with Not_found -> false)
 
+let test_signed_purge_preserves_anchored_verification () =
+  let db = Memory.init ~db_path:":memory:" () in
+  Audit.init_schema db;
+  let key = Audit.derive_signing_key test_key in
+  Audit.log_signed ~db ~key (DaemonEvent { action = "e1"; details = "first" });
+  Audit.log_signed ~db ~key (DaemonEvent { action = "e2"; details = "second" });
+  Audit.log_signed ~db ~key (DaemonEvent { action = "e3"; details = "third" });
+  let deleted = Audit.purge_old ~db ~max_age_days:9999 ~max_entries:2 in
+  Alcotest.(check int) "one entry purged" 1 deleted;
+  match Audit.verify_chain ~db ~key with
+  | Ok () -> ()
+  | Error (id, reason) ->
+      Alcotest.fail
+        (Printf.sprintf
+           "Expected anchored verification after purge, failed at id=%d: %s" id
+           reason)
+
 let test_signed_genesis () =
   let db = Memory.init ~db_path:":memory:" () in
   Audit.init_schema db;
@@ -271,10 +323,14 @@ let suite =
     Alcotest.test_case "purge by age" `Quick test_purge_by_age;
     Alcotest.test_case "purge by count" `Quick test_purge_by_count;
     Alcotest.test_case "export jsonl" `Quick test_export_jsonl;
+    Alcotest.test_case "export jsonl preserves anchor after purge" `Quick
+      test_export_jsonl_preserves_anchor_after_purge;
     Alcotest.test_case "retention tick" `Quick test_retention_tick;
     Alcotest.test_case "signed valid chain" `Quick test_signed_valid_chain;
     Alcotest.test_case "signed tampered entry" `Quick test_signed_tampered_entry;
     Alcotest.test_case "signed deleted entry" `Quick test_signed_deleted_entry;
+    Alcotest.test_case "signed purge preserves anchored verification" `Quick
+      test_signed_purge_preserves_anchored_verification;
     Alcotest.test_case "signed genesis" `Quick test_signed_genesis;
     Alcotest.test_case "unsigned entries" `Quick test_unsigned_entries;
   ]

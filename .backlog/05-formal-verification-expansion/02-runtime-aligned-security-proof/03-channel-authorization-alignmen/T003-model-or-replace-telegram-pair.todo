@@ -1,0 +1,18 @@
+---
+complexity: high
+depends_on:
+    - P5.M2.E3.T001
+estimate_hours: 7
+id: P5.M2.E3.T003
+priority: medium
+status: pending
+tags:
+    - formal-verification
+    - telegram
+    - auth
+title: Model or replace Telegram pairing invariants
+---
+Acceptance criteria:
+- Telegram pairing validity-until-expiry and denial-after-expiry are either proved or replaced with a narrower accurate model.
+- Trusted boundaries are documented.
+- Tests cover pairing acceptance and rejection edges if runtime behavior changes.

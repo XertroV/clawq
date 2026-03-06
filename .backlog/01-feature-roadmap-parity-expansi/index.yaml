@@ -41,5 +41,11 @@ milestones:
       path: 04-formalization
       status: pending
 name: 'Feature Roadmap: Parity & Expansion'
+stats:
+    blocked: 0
+    done: 30
+    in_progress: 1
+    pending: 4
+    total_tasks: 35
 status: pending
 weeks: 12

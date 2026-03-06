@@ -1,0 +1,17 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 3
+id: P5.M2.E1.T001
+priority: high
+status: pending
+tags:
+    - formal-verification
+    - session
+    - runtime
+title: Review same-key session creation and persistence ordering
+---
+Acceptance criteria:
+- `src/session.ml` creation, lock ordering, reset, and persistence paths are reviewed for same-key and cross-key hazards.
+- Concrete assumptions and open race questions are captured in the task notes, code, or follow-up docs.
+- Any discovered fix candidates are turned into explicit follow-up tasks or folded into this epic.

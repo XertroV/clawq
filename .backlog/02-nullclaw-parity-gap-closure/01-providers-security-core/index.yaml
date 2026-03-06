@@ -32,4 +32,10 @@ estimate_hours: 80
 id: P2.M1
 locked: false
 name: Providers & Security Core
+stats:
+    blocked: 0
+    done: 19
+    in_progress: 0
+    pending: 0
+    total_tasks: 19
 status: done

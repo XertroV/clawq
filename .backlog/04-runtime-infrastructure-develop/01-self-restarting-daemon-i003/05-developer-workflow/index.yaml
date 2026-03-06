@@ -4,6 +4,12 @@ estimate_hours: 3
 id: P4.M1.E5
 locked: false
 name: Developer Workflow
+stats:
+    blocked: 0
+    done: 0
+    in_progress: 0
+    pending: 3
+    total: 3
 status: pending
 tasks:
     - complexity: low

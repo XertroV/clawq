@@ -820,8 +820,13 @@ let cmd_audit args =
         match Audit.get_signing_key () with
         | Error msg -> Printf.sprintf "Error: %s" msg
         | Ok key -> (
+            let anchor = Audit.get_chain_anchor ~db in
             match Audit.verify_chain ~db ~key with
-            | Ok () -> "Audit chain verification: OK"
+            | Ok () -> (
+                match anchor with
+                | Some _ ->
+                    "Audit chain verification: OK (using retained-chain anchor)"
+                | None -> "Audit chain verification: OK")
             | Error (id, reason) ->
                 Printf.sprintf "Audit chain verification FAILED at entry %d: %s"
                   id reason))
@@ -829,10 +834,13 @@ let cmd_audit args =
         let path = cfg.security.audit_retention.export_path in
         let export_file = Filename.concat path "audit_export.jsonl" in
         let count = Audit.export_json ~db ~path:export_file in
-        Printf.sprintf "Exported %d audit entries to %s" count export_file
+        Printf.sprintf "Exported %d audit entries to %s (anchor sidecar: %s)"
+          count export_file
+          (export_file ^ ".anchor.json")
     | [ "export"; path ] ->
         let count = Audit.export_json ~db ~path in
-        Printf.sprintf "Exported %d audit entries to %s" count path
+        Printf.sprintf "Exported %d audit entries to %s (anchor sidecar: %s)"
+          count path (path ^ ".anchor.json")
     | [ "purge" ] ->
         let ret = cfg.security.audit_retention in
         let deleted =

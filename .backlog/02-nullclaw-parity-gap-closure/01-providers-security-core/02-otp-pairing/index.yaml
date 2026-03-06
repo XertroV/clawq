@@ -4,6 +4,12 @@ estimate_hours: 16
 id: P2.M1.E2
 locked: false
 name: OTP Pairing
+stats:
+    blocked: 0
+    done: 6
+    in_progress: 0
+    pending: 0
+    total: 6
 status: done
 tasks:
     - complexity: medium

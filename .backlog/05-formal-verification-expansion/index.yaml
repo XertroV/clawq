@@ -1,0 +1,44 @@
+complexity: medium
+depends_on: []
+estimate_hours: 84
+id: P5
+locked: false
+milestones:
+    - complexity: high
+      depends_on: []
+      description: Finish the anchored audit-retention story across theorem statements, runtime behavior, import/restore handling, mixed-history semantics, and operator-facing verification guarantees.
+      estimate_hours: 22
+      id: M1
+      locked: false
+      name: Audit Retention Completion
+      path: 01-audit-retention-completion
+      status: pending
+    - complexity: high
+      depends_on: []
+      description: Complete the remaining high-value security proof work by aligning Coq models and runtime behavior for sessions, secret handling, and channel authorization.
+      estimate_hours: 42
+      id: M2
+      locked: false
+      name: Runtime-Aligned Security Proofs
+      path: 02-runtime-aligned-security-proof
+      status: pending
+    - complexity: medium
+      depends_on:
+        - P5.M1
+        - P5.M2
+      description: Refine the agent-loop model and then refresh the public verification status/docs so published claims match the improved proof story.
+      estimate_hours: 20
+      id: M3
+      locked: false
+      name: Agent Loop and Verification Docs
+      path: 03-agent-loop-and-verification-do
+      status: pending
+name: Formal Verification Expansion
+stats:
+    blocked: 0
+    done: 0
+    in_progress: 0
+    pending: 17
+    total_tasks: 17
+status: pending
+weeks: 8

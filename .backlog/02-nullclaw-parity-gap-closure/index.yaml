@@ -59,5 +59,11 @@ milestones:
       path: 06-test-coverage-expansion
       status: pending
 name: 'Nullclaw Parity: Gap Closure'
+stats:
+    blocked: 0
+    done: 100
+    in_progress: 0
+    pending: 0
+    total_tasks: 100
 status: pending
 weeks: 16

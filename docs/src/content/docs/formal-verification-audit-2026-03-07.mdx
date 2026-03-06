@@ -1,0 +1,247 @@
+---
+title: "Formal Verification Audit - 2026-03-07"
+description: "Audit dated 2026-03-07 of the current Coq theorem set, proof gaps, and the highest-value next targets."
+section: "formal-properties"
+---
+
+<p class="section-label" style="margin-bottom: 0.5rem;">II. Formal Properties</p>
+
+# Formal Verification Audit - 2026-03-07
+
+<p style="font-family: var(--font-body); font-style: italic; color: var(--text-secondary); font-size: var(--fs-md); margin-bottom: 1rem;">
+  A targeted review of the current Coq theories, the properties they actually cover, and the highest-value proof work still open.
+</p>
+
+<p style="font-size: var(--fs-xs); color: var(--text-tertiary); font-family: var(--font-label); margin-bottom: 2.5rem;">
+  Audit date: 2026-03-07 · Status: exploratory / unlinked page · Tags: formal-verification, coq, audit, proof-planning, security
+</p>
+
+<div style="margin-bottom: 2rem; padding: 1rem 1.1rem; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px;">
+  <strong>Related pages.</strong> See the execution plan in <a href="/formal-verification-roadmap-2026-03-07/">Formal Verification Roadmap - 2026-03-07</a>.
+</div>
+
+## Executive View
+
+- The strongest current proofs are the pure, extracted safety kernels: `PathSafety`, `QuoteParsing`, and `ShellSafety`.
+- Several higher-level security theories exist, but many of the most important statements are still admitted, axiom-backed, or only loosely aligned with the OCaml implementation.
+- The biggest immediate verification opportunity is audit-log retention, because the current theory already exposes a false naive theorem and the runtime appears to share the same structural issue.
+- The second major opportunity is session isolation under real concurrency, where the current spec is too weak to certify the implementation.
+
+## What Looks Strong Today
+
+### Extracted, implementation-adjacent proofs
+
+The most valuable current verification work is in the modules that are both:
+
+1. pure enough to prove cleanly, and
+2. actually wired into runtime checks.
+
+That is currently true for:
+
+- `coq/theories/Clawq/PathSafety.v`
+- `coq/theories/Clawq/QuoteParsing.v`
+- `coq/theories/Clawq/ShellSafety.v`
+- extraction wiring in `coq/theories/Clawq/Extract.v`
+- runtime use in `src/tools_builtin.ml`
+
+These theories give the repo a real machine-checked core for path normalization, shell tokenization safety, and basic allowlist monotonicity.
+
+### Useful but lower-value proof areas
+
+- `coq/theories/Clawq/ConfigProofs.v` is tidy and complete for the small model in `coq/theories/Clawq/Config.v`.
+- `coq/theories/Clawq/CliProofs.v` is mostly complete for the fallback CLI model in `coq/theories/Clawq/Cli.v`.
+
+These are fine as local consistency proofs, but they currently certify much less than the real runtime actually does.
+
+## Where Current Theorems Skip Important Bits
+
+### 1. Audit retention is the highest-value unresolved correctness problem
+
+`coq/theories/Clawq/AuditRetention.v` already discovers that the naive theorem
+
+```text
+verify_chain key prev_sig entries = true
+-> verify_chain key prev_sig (purged entries) = true
+```
+
+is false for suffix retention. That is exactly the right thing to notice.
+
+The runtime in `src/audit.ml` originally had the same shape:
+
+- verification starts from genesis in `verify_chain`
+- retention deletes old rows by age and count in `purge_old`
+
+That theory gap pointed directly at a real runtime design constraint. The runtime now preserves a retained-chain anchor across purge/export, but the remaining work is to tighten the formal story around that anchored behavior rather than the false genesis-based one. One notable remaining gap is restore/import: exports now carry an anchor sidecar, but there is not yet a matching import path that consumes it.
+
+### 2. Session isolation proofs are materially too weak
+
+`coq/theories/Clawq/SessionIsolation.v` has useful local lemmas, but two pieces sharply limit its value:
+
+- it assumes atomicity with `session_operations_atomic`
+- `states_disjoint` is effectively vacuous because it concludes `state1 <> state2 \/ True`
+
+On the implementation side, `src/session.ml` creates session entries before the per-session mutex is used for turn execution, so same-key creation/concurrency deserves a much more precise model.
+
+### 3. Secret-store proofs do not match the shipped API closely enough
+
+`coq/theories/Clawq/SecretStore.v` captures the intended shape of the feature, but it diverges from `src/secret_store.ml` in important ways:
+
+- the Coq `decrypt_secret` returns `None` on plaintext
+- the OCaml `decrypt_secret` returns plaintext unchanged when the value is not encrypted
+- `resolve_secret` is intentionally simplified in Coq and does not model the real decryption path closely enough
+
+This means the current proofs are more like design notes than implementation-level verification.
+
+### 4. Channel-auth proofs are not yet buying much runtime assurance
+
+`coq/theories/Clawq/ChannelAuth.v` has good intent, but many of the core theorems are still admitted, and the extracted function is not the one most channels actually use.
+
+The real authorization checks live separately in:
+
+- `src/slack.ml`
+- `src/discord.ml`
+- `src/telegram.ml`
+
+So this proof area is promising, but not yet carrying its weight.
+
+### 5. CLI and config proofs certify only the smaller fallback models
+
+- `coq/theories/Clawq/Cli.v` models the mini fallback dispatcher, not the real command bridge.
+- `coq/theories/Clawq/Config.v` models a compact config record, while the runtime config surface is much wider.
+
+Those proofs are still correct, but they are not yet targeted at the most valuable behavior.
+
+## Important Properties Missing Today
+
+### Audit and integrity
+
+- retained signed audit suffixes remain verifiable with the correct anchor
+- purge/export/restore does not silently destroy chain verifiability
+- mixed signed and unsigned histories behave predictably under verification
+
+### Sessions and concurrency
+
+- same-session operations are serialized or otherwise linearizable
+- distinct sessions cannot mutate each other's persisted history
+- session restoration plus cleanup preserves message order and boundedness
+
+### Secret handling
+
+- encrypted values round-trip through the real API shape
+- plaintext passthrough behavior matches implementation
+- config secret rewriting preserves non-secret fields exactly
+- environment-variable indirection cannot be mistaken for encrypted data
+
+### Channel security
+
+- allowlist correctness for the actual per-channel rules
+- replay-window correctness for real timestamp checks
+- TOTP pairing soundness and expiry for Telegram session pairing
+- combined authorization property: unauthorized sender cannot trigger a turn
+
+### Agent loop
+
+- tool iteration cap is enforced by the real loop
+- history trimming and compaction preserve ordering invariants
+- tool call / tool result structure stays well-formed across iterations
+- interrupts cannot leave history in a malformed intermediate state
+
+### Tool perimeter
+
+- Coq and OCaml path checks agree on their shared pure domain
+- extra allowed roots extend access monotonically without escaping the intended boundary
+- shell tokenizer equivalence between Coq and OCaml helper implementations
+
+## Prioritized Proof Roadmap
+
+### Priority 1: Audit retention
+
+Why first:
+
+- it is security-relevant
+- it affects data retention correctness
+- the theory already exposes a false formulation, so there is a clear next step
+
+Best next theorems:
+
+- suffix validity under the correct inherited `prev_sig`
+- retained-chain validity with an explicit exported anchor
+- purge policy preserves verifiability modulo re-anchoring
+
+### Priority 2: Session isolation and concurrency
+
+Why second:
+
+- this is core runtime behavior
+- the current theory is weaker than the implementation needs
+- any race here contaminates multi-user safety claims
+
+Best next theorems:
+
+- same-key turn serialization
+- other-key non-interference for state and persistence
+- get-or-create uniqueness / no duplicate live session state for one key
+
+### Priority 3: Secret-store alignment
+
+Why third:
+
+- it is security-sensitive
+- the proof model currently diverges from reality
+- closing the model gap unlocks much more meaningful theorems later
+
+Best next steps:
+
+- first revise the Coq model to match `src/secret_store.ml`
+- then prove round-trip, passthrough, env-var, and config-rewrite properties
+
+### Priority 4: Channel-auth alignment
+
+Best next theorems:
+
+- shared wildcard/member allowlist correctness for the actual channel code shape
+- freshness/replay properties for timestamp checks
+- Telegram TOTP session validity and expiry properties
+
+### Priority 5: Agent-loop invariants
+
+Best next theorems:
+
+- bounded iteration on the real control flow shape
+- history structure invariants across tool-call loops
+- trim/compact idempotence and ordering preservation for the real algorithm
+
+## Module-by-Module Assessment
+
+| Module | Assessment | Notes |
+|---|---|---|
+| `PathSafety.v` | Strong | Pure, useful, extracted, close to runtime use |
+| `QuoteParsing.v` | Strong | Best current end-to-end proof story for shell token safety |
+| `ShellSafety.v` | Good but narrow | Useful monotonicity, but broader tool perimeter still unproved |
+| `ConfigProofs.v` | Locally solid | Small model, limited runtime coverage |
+| `CliProofs.v` | Locally solid | Mostly about fallback behavior |
+| `AuditChain.v` | Good structural base | Valuable, but retention story is where the real work starts |
+| `RateLimiter.v` | Good spec kernel | Could use stronger temporal properties |
+| `SecretStore.v` | Important but misaligned | Needs model cleanup before it becomes high-trust |
+| `ChannelAuth.v` | Important but unfinished | Multiple admitted proofs, not well wired to runtime |
+| `AuditRetention.v` | Highest leverage | Contains the most actionable open problem |
+| `SessionIsolation.v` | Useful start, too weak | Atomicity axiom + vacuous disjointness limit confidence |
+| `AgentLoop.v` | Too abstract today | Needs to move closer to `src/agent.ml` |
+| `LandlockPolicy.v` | Promising spec | Core lemmas still admitted |
+
+## Recommended Near-Term Plan
+
+1. Finish `AuditRetention.v` around the correct anchored-suffix theorem, then check whether `src/audit.ml` needs an anchor-aware verification/export design.
+2. Strengthen `SessionIsolation.v` so it states non-vacuous isolation properties and models same-key behavior more honestly.
+3. Refactor `SecretStore.v` to match the real OCaml API, then prove the basic invariants again against the aligned model.
+4. Either wire `ChannelAuth.v` into real channel checks or replace it with proofs tailored to the actual per-channel authorization logic.
+5. Revisit the public verification status page after those changes; several currently listed phases are better described as planned or partial rather than fully verified.
+
+## Bottom Line
+
+The codebase already has a real verified core, especially around path and shell safety, but the highest-value next work is no longer about adding more small local lemmas. The biggest gains now come from tightening the connection between proof models and the runtime's real security boundaries: audit retention, session concurrency, secret handling, and channel authentication.
+
+## Related Pages
+
+- [Formal Verification Roadmap - 2026-03-07](/formal-verification-roadmap-2026-03-07/)
+- [Verification Status](/formal-verification/)

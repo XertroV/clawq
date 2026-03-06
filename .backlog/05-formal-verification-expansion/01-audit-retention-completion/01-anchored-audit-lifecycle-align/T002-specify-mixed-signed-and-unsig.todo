@@ -1,0 +1,17 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 3
+id: P5.M1.E1.T002
+priority: medium
+status: pending
+tags:
+    - formal-verification
+    - audit
+    - docs
+title: Specify mixed signed and unsigned retained-chain behavior
+---
+Acceptance criteria:
+- The intended verification semantics for mixed signed/unsigned histories are written down in code or docs.
+- Runtime tests cover the chosen behavior at retained-chain boundaries.
+- Operator-facing verification messaging remains accurate for the supported cases.

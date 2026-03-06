@@ -1,0 +1,18 @@
+---
+complexity: high
+depends_on:
+    - P5.M1.E1.T001
+estimate_hours: 6
+id: P5.M1.E1.T003
+priority: high
+status: pending
+tags:
+    - formal-verification
+    - audit
+    - runtime
+title: Add anchor-aware audit import and restore flow
+---
+Acceptance criteria:
+- Import or restore consumes the retained-chain anchor sidecar or an equivalent explicit anchor input.
+- Export -> restore -> verify succeeds for retained signed chains in tests.
+- Command/help/docs text explains how retained-chain verification works after restore.

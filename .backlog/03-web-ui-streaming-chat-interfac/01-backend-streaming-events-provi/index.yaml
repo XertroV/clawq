@@ -32,4 +32,10 @@ estimate_hours: 16
 id: P3.M1
 locked: false
 name: 'Backend: Streaming Events & Provider Thinking'
+stats:
+    blocked: 0
+    done: 0
+    in_progress: 0
+    pending: 9
+    total_tasks: 9
 status: pending

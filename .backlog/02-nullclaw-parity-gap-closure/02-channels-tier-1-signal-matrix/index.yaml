@@ -41,4 +41,10 @@ estimate_hours: 100
 id: P2.M2
 locked: false
 name: 'Channels Tier 1: Signal, Matrix, IRC, Email'
+stats:
+    blocked: 0
+    done: 21
+    in_progress: 0
+    pending: 0
+    total_tasks: 21
 status: done

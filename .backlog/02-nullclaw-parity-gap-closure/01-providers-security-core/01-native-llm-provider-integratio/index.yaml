@@ -4,6 +4,12 @@ estimate_hours: 32
 id: P2.M1.E1
 locked: false
 name: Native LLM Provider Integrations
+stats:
+    blocked: 0
+    done: 8
+    in_progress: 0
+    pending: 0
+    total: 8
 status: done
 tasks:
     - complexity: medium

@@ -4,6 +4,12 @@ estimate_hours: 4
 id: P3.M2.E1
 locked: false
 name: Build Toolchain + Asset Pipeline
+stats:
+    blocked: 0
+    done: 0
+    in_progress: 0
+    pending: 3
+    total: 3
 status: pending
 tasks:
     - complexity: low

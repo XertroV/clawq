@@ -23,4 +23,10 @@ estimate_hours: 35
 id: P1.M1
 locked: false
 name: 'Quick Wins: LLM & Observability'
+stats:
+    blocked: 0
+    done: 5
+    in_progress: 0
+    pending: 0
+    total_tasks: 5
 status: done

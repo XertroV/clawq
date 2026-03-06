@@ -1,14 +1,21 @@
 type t = {
   mutable config : Runtime_config.t;
   sessions : (string, Agent.t * Lwt_mutex.t * string option ref) Hashtbl.t;
+  sessions_lock : Lwt_mutex.t;
   tool_registry : Tool_registry.t option;
   db : Sqlite3.db option;
 }
 
 let create ~config ?tool_registry ?db () =
-  { config; sessions = Hashtbl.create 16; tool_registry; db }
+  {
+    config;
+    sessions = Hashtbl.create 16;
+    sessions_lock = Lwt_mutex.create ();
+    tool_registry;
+    db;
+  }
 
-let get_or_create mgr ~key =
+let get_or_create_locked mgr ~key =
   match Hashtbl.find_opt mgr.sessions key with
   | Some triple -> triple
   | None ->
@@ -39,6 +46,27 @@ let get_or_create mgr ~key =
       Hashtbl.replace mgr.sessions key triple;
       triple
 
+let with_session_lock mgr ~key f =
+  let open Lwt.Syntax in
+  let* agent, mutex, interrupt =
+    Lwt_mutex.with_lock mgr.sessions_lock (fun () ->
+        let agent, mutex, interrupt = get_or_create_locked mgr ~key in
+        let* () = Lwt_mutex.lock mutex in
+        Lwt.return (agent, mutex, interrupt))
+  in
+  Lwt.finalize
+    (fun () -> f agent interrupt)
+    (fun () ->
+      Lwt_mutex.unlock mutex;
+      Lwt.return_unit)
+
+let set_interrupt_if_present mgr ~key message =
+  Lwt_mutex.with_lock mgr.sessions_lock (fun () ->
+      (match Hashtbl.find_opt mgr.sessions key with
+      | Some (_, _, interrupt) -> interrupt := Some message
+      | None -> ());
+      Lwt.return_unit)
+
 let format_context_block ?channel_name ?channel_type ?sender_id ?sender_name ()
     =
   let cn = match channel_name with Some n -> n | None -> "cli" in
@@ -68,15 +96,12 @@ let turn mgr ~key ~message ?(attachments = []) ?channel_name ?channel_type
   if String.length message > 0 && message.[0] = '!' then begin
     let raw = String.sub message 1 (String.length message - 1) in
     let direct_msg = if String.trim raw = "" then "[interrupted]" else raw in
-    (match Hashtbl.find_opt mgr.sessions key with
-    | Some (_, _, interrupt) -> interrupt := Some direct_msg
-    | None -> ());
+    let* () = set_interrupt_if_present mgr ~key direct_msg in
     Lwt.return direct_msg
   end
   else begin
-    let agent, mutex, interrupt = get_or_create mgr ~key in
-    let interrupt_check () = !interrupt in
-    Lwt_mutex.with_lock mutex (fun () ->
+    with_session_lock mgr ~key (fun agent interrupt ->
+        let interrupt_check () = !interrupt in
         interrupt := None;
         (match mgr.db with
         | Some db when mgr.config.security.audit_enabled ->
@@ -140,17 +165,14 @@ let turn_stream mgr ~key ~message ?(attachments = []) ?channel_name
   if String.length message > 0 && message.[0] = '!' then begin
     let raw = String.sub message 1 (String.length message - 1) in
     let direct_msg = if String.trim raw = "" then "[interrupted]" else raw in
-    (match Hashtbl.find_opt mgr.sessions key with
-    | Some (_, _, interrupt) -> interrupt := Some direct_msg
-    | None -> ());
+    let* () = set_interrupt_if_present mgr ~key direct_msg in
     let* () = on_chunk (Provider.Delta direct_msg) in
     let* () = on_chunk Provider.Done in
     Lwt.return direct_msg
   end
   else begin
-    let agent, mutex, interrupt = get_or_create mgr ~key in
-    let interrupt_check () = !interrupt in
-    Lwt_mutex.with_lock mutex (fun () ->
+    with_session_lock mgr ~key (fun agent interrupt ->
+        let interrupt_check () = !interrupt in
         interrupt := None;
         (match mgr.db with
         | Some db when mgr.config.security.audit_enabled ->
@@ -200,7 +222,25 @@ let turn_stream mgr ~key ~message ?(attachments = []) ?channel_name
   end
 
 let reset mgr ~key =
-  (match mgr.db with
-  | Some db -> Memory.clear_session ~db ~session_key:key
-  | None -> ());
-  Hashtbl.remove mgr.sessions key
+  let open Lwt.Syntax in
+  let* held_mutex =
+    Lwt_mutex.with_lock mgr.sessions_lock (fun () ->
+        match Hashtbl.find_opt mgr.sessions key with
+        | Some (_, mutex, _) ->
+            let* () = Lwt_mutex.lock mutex in
+            (match mgr.db with
+            | Some db -> Memory.clear_session ~db ~session_key:key
+            | None -> ());
+            Hashtbl.remove mgr.sessions key;
+            Lwt.return (Some mutex)
+        | None ->
+            (match mgr.db with
+            | Some db -> Memory.clear_session ~db ~session_key:key
+            | None -> ());
+            Lwt.return None)
+  in
+  match held_mutex with
+  | Some mutex ->
+      Lwt_mutex.unlock mutex;
+      Lwt.return_unit
+  | None -> Lwt.return_unit

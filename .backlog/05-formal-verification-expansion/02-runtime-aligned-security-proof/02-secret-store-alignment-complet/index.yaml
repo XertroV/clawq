@@ -1,0 +1,40 @@
+complexity: medium
+depends_on: []
+estimate_hours: 12
+id: P5.M2.E2
+locked: false
+name: Secret Store Alignment Completion
+stats:
+    blocked: 0
+    done: 0
+    in_progress: 0
+    pending: 3
+    total: 3
+status: pending
+tasks:
+    - complexity: medium
+      depends_on: []
+      estimate_hours: 3
+      file: T001-discharge-remaining-easy-secre.todo
+      id: T001
+      priority: high
+      status: pending
+      title: Discharge remaining easy SecretStore admits
+    - complexity: medium
+      depends_on:
+        - P5.M2.E2.T001
+      estimate_hours: 4
+      file: T002-model-decrypt-failure-and-miss.todo
+      id: T002
+      priority: high
+      status: pending
+      title: Model decrypt failure and missing-master-key behavior exactly
+    - complexity: high
+      depends_on:
+        - P5.M2.E2.T002
+      estimate_hours: 5
+      file: T003-prove-resolve-secret-and-confi.todo
+      id: T003
+      priority: medium
+      status: pending
+      title: Prove resolve_secret and config rewrite preservation

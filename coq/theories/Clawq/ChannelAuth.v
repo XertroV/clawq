@@ -53,13 +53,13 @@ Proof.
         apply String.eqb_eq in Ewildcard. subst h.
         right. reflexivity.
       * (* h <> "*" - must be id = h *)
-        admit.
+        left. exact H.
     + (* h :: t' :: rest case - at least 2 elements, not wildcard pattern *)
       simpl in H.
       destruct (String.eqb h "*") eqn:Ewildcard.
-      * admit.
-      * admit.
-Admitted.
+      * left. exact H.
+      * left. exact H.
+Qed.
 
 (* Theorem 2: Backward direction - if in list or wildcard, then allowed *)
 Theorem is_allowed_backward : forall id allowlist,
@@ -72,13 +72,16 @@ Proof.
     + simpl in Hmem. discriminate.
     + destruct t as [| t' rest].
       * (* [h] case *)
-        admit.
+        unfold is_allowed. simpl.
+        destruct (String.eqb h "*") eqn:Ewildcard.
+        -- reflexivity.
+        -- exact Hmem.
       * (* h :: t' :: rest case *)
-        admit.
+        unfold is_allowed. simpl. exact Hmem.
   - (* Wildcard case *)
     subst allowlist.
     simpl. reflexivity.
-Admitted.
+Qed.
 
 (* Theorem 3: Bidirectional correctness *)
 Theorem is_allowed_correct : forall id allowlist,
@@ -108,8 +111,10 @@ Proof.
   intros id h Hneq.
   unfold is_allowed.
   simpl.
-  admit.
-Admitted.
+  destruct (String.eqb h "*") eqn:Ewildcard.
+  - apply String.eqb_eq in Ewildcard. contradiction.
+  - reflexivity.
+Qed.
 
 (* Theorem 6: Monotonicity - adding IDs never revokes existing permissions *)
 Theorem is_allowed_monotone : forall id xs ys,
@@ -123,10 +128,23 @@ Proof.
   - (* h :: t case *)
     destruct t as [| t' rest].
     + (* [h] case - single element list *)
-      admit.
+      destruct (String.eqb h "*") eqn:Ewildcard.
+      * simpl. reflexivity.
+      * simpl in H. simpl. rewrite H. reflexivity.
     + (* h :: t' :: rest case - 2+ elements *)
-      admit.
-Admitted.
+      simpl in H.
+      simpl.
+      apply Bool.orb_true_iff in H.
+      apply Bool.orb_true_iff.
+      destruct H as [H | H].
+      * left. exact H.
+      * right. apply existsb_exists in H.
+        apply existsb_exists.
+        destruct H as [x [Hin Heq]].
+        exists x. split.
+        -- apply in_or_app. left. exact Hin.
+        -- exact Heq.
+Qed.
 
 (* ================================================================
    Replay prevention - timestamp window checking.
@@ -166,8 +184,9 @@ Theorem timestamp_ok_valid : forall request_ts current_ts,
 Proof.
   intros request_ts current_ts Hge Hwindow.
   unfold timestamp_ok.
-  admit.
-Admitted.
+  rewrite Nat.ltb_ge by exact Hge.
+  apply Nat.leb_le. exact Hwindow.
+Qed.
 
 (* Theorem 9: Future timestamp rejected *)
 Theorem timestamp_ok_future_rejected : forall request_ts current_ts,
@@ -176,8 +195,9 @@ Theorem timestamp_ok_future_rejected : forall request_ts current_ts,
 Proof.
   intros request_ts current_ts H.
   unfold timestamp_ok.
-  admit.
-Admitted.
+  rewrite Nat.ltb_lt by exact H.
+  reflexivity.
+Qed.
 
 (* Theorem 10: Expired timestamp rejected *)
 Theorem timestamp_ok_expired_rejected : forall request_ts current_ts,
@@ -187,8 +207,11 @@ Theorem timestamp_ok_expired_rejected : forall request_ts current_ts,
 Proof.
   intros request_ts current_ts Hge Hexpired.
   unfold timestamp_ok.
-  admit.
-Admitted.
+  rewrite Nat.ltb_ge by exact Hge.
+  apply Nat.leb_gt in Hexpired.
+  rewrite Hexpired.
+  reflexivity.
+Qed.
 
 (* ================================================================
    Summary of what was proved:

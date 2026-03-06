@@ -1,0 +1,39 @@
+complexity: medium
+depends_on:
+    - P5.M1
+    - P5.M2
+epics:
+    - complexity: medium
+      depends_on: []
+      description: Refine AgentLoop.v so theorem work constrains the real runtime turn structure in src/agent.ml.
+      estimate_hours: 12
+      id: E1
+      locked: false
+      name: Agent Loop Runtime Invariants
+      path: 01-agent-loop-runtime-invariants
+      status: pending
+    - complexity: medium
+      depends_on:
+        - P5.M1.E1
+        - P5.M2.E1
+        - P5.M2.E2
+        - P5.M2.E3
+        - P5.M3.E1
+      description: Refresh public verification-status and extraction-guidance docs after the higher-priority proof and runtime-alignment work lands.
+      estimate_hours: 8
+      id: E2
+      locked: false
+      name: Verification Status and Extraction Docs
+      path: 02-verification-status-and-extrac
+      status: pending
+estimate_hours: 20
+id: P5.M3
+locked: false
+name: Agent Loop and Verification Docs
+stats:
+    blocked: 0
+    done: 0
+    in_progress: 0
+    pending: 5
+    total_tasks: 5
+status: pending

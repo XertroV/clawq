@@ -75,6 +75,44 @@ let test_decrypt_secret_passthrough () =
   | Ok result -> Alcotest.(check string) "passthrough" "not-encrypted" result
   | Error msg -> Alcotest.fail (Printf.sprintf "passthrough failed: %s" msg)
 
+let with_env name value_opt f =
+  let old = Sys.getenv_opt name in
+  Fun.protect
+    (fun () ->
+      Unix.putenv name (match value_opt with Some value -> value | None -> "");
+      f ())
+    ~finally:(fun () ->
+      Unix.putenv name (match old with Some value -> value | None -> ""))
+
+let test_resolve_secret_plaintext_passthrough () =
+  Alcotest.(check string)
+    "plaintext passthrough" "plain-value"
+    (Secret_store.resolve_secret ~encrypt_secrets:true "plain-value")
+
+let test_resolve_secret_env_var () =
+  with_env "CLAWQ_TEST_SECRET_ENV" (Some "resolved-value") (fun () ->
+      Alcotest.(check string)
+        "env var resolved" "resolved-value"
+        (Secret_store.resolve_secret ~encrypt_secrets:true
+           "$CLAWQ_TEST_SECRET_ENV"))
+
+let test_resolve_secret_encrypted_passthrough_without_master_key () =
+  let key = Secret_store.derive_key ~passphrase:"test" in
+  let encrypted = Secret_store.encrypt_secret ~key "my-api-key" in
+  with_env "CLAWQ_MASTER_KEY" None (fun () ->
+      Alcotest.(check string)
+        "encrypted value preserved when master key missing" encrypted
+        (Secret_store.resolve_secret ~encrypt_secrets:true encrypted))
+
+let test_resolve_secret_encrypted_decrypts_with_master_key () =
+  let passphrase = "master-secret-for-resolve" in
+  let key = Secret_store.derive_key ~passphrase in
+  let encrypted = Secret_store.encrypt_secret ~key "resolved-secret" in
+  with_env "CLAWQ_MASTER_KEY" (Some passphrase) (fun () ->
+      Alcotest.(check string)
+        "encrypted value decrypts" "resolved-secret"
+        (Secret_store.resolve_secret ~encrypt_secrets:true encrypted))
+
 let test_encrypt_config_secrets () =
   let key = Secret_store.derive_key ~passphrase:"test" in
   let json =
@@ -133,6 +171,14 @@ let suite =
     Alcotest.test_case "decrypt_secret prefix" `Quick test_decrypt_secret_prefix;
     Alcotest.test_case "decrypt_secret passthrough" `Quick
       test_decrypt_secret_passthrough;
+    Alcotest.test_case "resolve_secret plaintext passthrough" `Quick
+      test_resolve_secret_plaintext_passthrough;
+    Alcotest.test_case "resolve_secret env var" `Quick
+      test_resolve_secret_env_var;
+    Alcotest.test_case "resolve_secret encrypted passthrough without master key"
+      `Quick test_resolve_secret_encrypted_passthrough_without_master_key;
+    Alcotest.test_case "resolve_secret encrypted decrypts with master key"
+      `Quick test_resolve_secret_encrypted_decrypts_with_master_key;
     Alcotest.test_case "encrypt config secrets" `Quick
       test_encrypt_config_secrets;
     Alcotest.test_case "empty plaintext" `Quick test_empty_plaintext;

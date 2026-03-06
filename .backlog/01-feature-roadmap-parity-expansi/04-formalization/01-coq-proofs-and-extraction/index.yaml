@@ -4,6 +4,12 @@ estimate_hours: 40
 id: P1.M4.E1
 locked: false
 name: Coq Proofs and Extraction
+stats:
+    blocked: 0
+    done: 1
+    in_progress: 1
+    pending: 0
+    total: 2
 status: pending
 tasks:
     - complexity: high

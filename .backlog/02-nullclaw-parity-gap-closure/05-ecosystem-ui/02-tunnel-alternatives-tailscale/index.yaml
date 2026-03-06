@@ -4,6 +4,12 @@ estimate_hours: 20
 id: P2.M5.E2
 locked: false
 name: 'Tunnel Alternatives: Tailscale & ngrok'
+stats:
+    blocked: 0
+    done: 5
+    in_progress: 0
+    pending: 0
+    total: 5
 status: pending
 tasks:
     - complexity: medium

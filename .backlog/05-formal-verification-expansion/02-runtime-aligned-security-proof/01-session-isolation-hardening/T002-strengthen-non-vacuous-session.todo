@@ -1,0 +1,18 @@
+---
+complexity: high
+depends_on:
+    - P5.M2.E1.T001
+estimate_hours: 6
+id: P5.M2.E1.T002
+priority: high
+status: pending
+tags:
+    - formal-verification
+    - coq
+    - session
+title: Strengthen non-vacuous session isolation theorems
+---
+Acceptance criteria:
+- `coq/theories/Clawq/SessionIsolation.v` proves non-vacuous key-local non-interference or idempotence properties.
+- Atomicity assumptions are made explicit and narrow.
+- No vacuous disjointness claim remains in the main theorem story.

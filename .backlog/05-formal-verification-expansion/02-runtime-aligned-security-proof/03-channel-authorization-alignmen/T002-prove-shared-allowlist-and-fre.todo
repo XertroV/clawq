@@ -1,0 +1,18 @@
+---
+complexity: high
+depends_on:
+    - P5.M2.E3.T001
+estimate_hours: 6
+id: P5.M2.E3.T002
+priority: high
+status: pending
+tags:
+    - formal-verification
+    - auth
+    - coq
+title: Prove shared allowlist and freshness properties
+---
+Acceptance criteria:
+- Shared allowlist equivalence or monotonicity theorems match the runtime code shape.
+- Timestamp freshness theorems match the actual replay-window semantics.
+- Corresponding admits are removed.

@@ -380,7 +380,7 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
         match Slash_commands.handle user_text with
         | Reply text -> send_message ~bot_token ~chat_id:update.chat_id ~text
         | Reset ->
-            Session.reset session_mgr ~key;
+            let* () = Session.reset session_mgr ~key in
             send_message ~bot_token ~chat_id:update.chat_id
               ~text:Slash_commands.reset_message
         | NotACommand -> (

@@ -1,0 +1,18 @@
+---
+complexity: medium
+depends_on:
+    - P5.M2.E2.T001
+estimate_hours: 4
+id: P5.M2.E2.T002
+priority: high
+status: pending
+tags:
+    - formal-verification
+    - secrets
+    - runtime
+title: Model decrypt failure and missing-master-key behavior exactly
+---
+Acceptance criteria:
+- The Coq model distinguishes plaintext, `$ENV`, encrypted, missing-key, and decrypt-failure paths as shipped.
+- Runtime tests cover missing key and decrypt-failure behavior.
+- Trusted boundaries are called out explicitly.
