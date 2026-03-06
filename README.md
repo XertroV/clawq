@@ -1,8 +1,14 @@
-# clawq
+# Clawq — The Formal AI Assistant
 
-![Formal Verification](docs/badges/formal-verification.svg)
+<p align="center">
+  <img src="docs/clawq-cover.jpg" alt="Clawq, The Formal AI Assistant — Mastering Polite Automation and Protocol" width="400" />
+</p>
 
-Coq-first AI assistant runtime with an OCaml extraction pipeline. Multi-channel support (CLI, Telegram, Discord, Slack), HTTP gateway, cron scheduling, audit logging, and MCP server.
+<p align="center">
+  <img src="docs/badges/formal-verification.svg" alt="Formal Verification" />
+</p>
+
+A *formally* verified personal AI assistant runtime — Coq-proven core properties extracted to OCaml, with impeccable manners and machine-checked correctness. Multi-channel support (CLI, Telegram, Discord, Slack), HTTP gateway, cron scheduling, audit logging, and MCP server.
 
 ## Quick Start
 
@@ -179,4 +185,3 @@ make verify-report
 
 ## Notes
 - The generated extraction file path is `src/extracted/clawq_core.ml`.
-- `nullclaw/` is included as reference source and should not be modified during porting.
