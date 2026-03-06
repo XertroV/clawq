@@ -2,6 +2,8 @@ type provider_config = {
   api_key : string;
   base_url : string option;
   default_model : string option;
+  project_id : string option;
+  location : string option;
 }
 
 type agent_defaults = {
@@ -55,12 +57,119 @@ type github_repo_config = {
 
 type github_config = { auth : github_auth; repos : github_repo_config list }
 
+type mattermost_config = {
+  url : string;
+  access_token : string;
+  team_id : string;
+  channel_ids : string list;
+  allow_users : string list;
+}
+
+type dingtalk_config = {
+  app_key : string;
+  app_secret : string;
+  agent_id : string;
+  allow_from : string list;
+  webhook_url : string option;
+}
+
+type imessage_config = { poll_interval_s : float; allow_from : string list }
+
+type signal_config = {
+  base_url : string;
+  account : string;
+  api_mode : string;
+  allow_from : string list;
+  max_chunk_bytes : int;
+}
+
+type matrix_config = {
+  homeserver_url : string;
+  access_token : string;
+  user_id : string;
+  allow_rooms : string list;
+  allow_users : string list;
+}
+
+type irc_config = {
+  host : string;
+  port : int;
+  tls : bool;
+  nick : string;
+  password : string option;
+  sasl : bool;
+  channels : string list;
+  allow_from : string list;
+}
+
+type email_config = {
+  imap_host : string;
+  imap_port : int;
+  smtp_host : string;
+  smtp_port : int;
+  username : string;
+  password : string;
+  from_address : string;
+  allow_from : string list;
+  poll_interval_s : float;
+}
+
+type whatsapp_config = {
+  phone_number_id : string;
+  access_token : string;
+  verify_token : string;
+  allow_from : string list;
+}
+
+type nostr_config = {
+  relays : string list;
+  private_key : string;
+  pubkey : string;
+  nak_path : string;
+  allow_from : string list;
+}
+
+type lark_config = {
+  app_id : string;
+  app_secret : string;
+  verification_token : string;
+  endpoint : string;
+  mode : string;
+  allow_users : string list;
+}
+
+type line_config = {
+  channel_access_token : string;
+  channel_secret : string;
+  allow_from : string list;
+}
+
+type onebot_config = {
+  ws_url : string;
+  http_url : string;
+  access_token : string option;
+  allow_from : string list;
+  allow_groups : string list;
+}
+
 type channel_config = {
   cli : bool;
   telegram : telegram_config option;
   discord : discord_config option;
   slack : slack_config option;
   github : github_config option;
+  mattermost : mattermost_config option;
+  dingtalk : dingtalk_config option;
+  imessage : imessage_config option;
+  signal : signal_config option;
+  matrix : matrix_config option;
+  irc : irc_config option;
+  email : email_config option;
+  whatsapp : whatsapp_config option;
+  nostr : nostr_config option;
+  lark : lark_config option;
+  line : line_config option;
+  onebot : onebot_config option;
 }
 
 type prompt_config = {
@@ -253,6 +362,18 @@ let default =
         discord = None;
         slack = None;
         github = None;
+        mattermost = None;
+        dingtalk = None;
+        imessage = None;
+        signal = None;
+        matrix = None;
+        irc = None;
+        email = None;
+        whatsapp = None;
+        nostr = None;
+        lark = None;
+        line = None;
+        onebot = None;
       };
     gateway =
       {
@@ -601,43 +722,240 @@ let to_json (cfg : t) : Yojson.Safe.t =
                           ("socket_mode", `Bool s.socket_mode);
                         ] );
                   ])
-            @
-            match cfg.channels.github with
-            | None -> []
-            | Some g ->
-                let auth_json =
-                  match g.auth with
-                  | GithubPat token ->
+            @ (match cfg.channels.github with
+              | None -> []
+              | Some g ->
+                  let auth_json =
+                    match g.auth with
+                    | GithubPat token ->
+                        `Assoc
+                          [ ("type", `String "pat"); ("token", `String token) ]
+                  in
+                  let repos_json =
+                    `List
+                      (List.map
+                         (fun (r : github_repo_config) ->
+                           `Assoc
+                             ([
+                                ("name", `String r.name);
+                                ("webhook_secret", `String r.webhook_secret);
+                                ("webhook_path", `String r.webhook_path);
+                                ( "allow_users",
+                                  `List
+                                    (List.map
+                                       (fun u -> `String u)
+                                       r.allow_users) );
+                                ( "react_to",
+                                  `List
+                                    (List.map (fun e -> `String e) r.react_to)
+                                );
+                                ("include_pr_files", `Bool r.include_pr_files);
+                              ]
+                             @
+                             match r.agent_name with
+                             | Some n -> [ ("agent_name", `String n) ]
+                             | None -> []))
+                         g.repos)
+                  in
+                  [
+                    ( "github",
+                      `Assoc [ ("auth", auth_json); ("repos", repos_json) ] );
+                  ])
+            @ (match cfg.channels.dingtalk with
+              | None -> []
+              | Some dt ->
+                  [
+                    ( "dingtalk",
                       `Assoc
-                        [ ("type", `String "pat"); ("token", `String token) ]
-                in
-                let repos_json =
-                  `List
-                    (List.map
-                       (fun (r : github_repo_config) ->
-                         `Assoc
-                           ([
-                              ("name", `String r.name);
-                              ("webhook_secret", `String r.webhook_secret);
-                              ("webhook_path", `String r.webhook_path);
-                              ( "allow_users",
-                                `List
-                                  (List.map (fun u -> `String u) r.allow_users)
-                              );
-                              ( "react_to",
-                                `List (List.map (fun e -> `String e) r.react_to)
-                              );
-                              ("include_pr_files", `Bool r.include_pr_files);
-                            ]
-                           @
-                           match r.agent_name with
-                           | Some n -> [ ("agent_name", `String n) ]
-                           | None -> []))
-                       g.repos)
-                in
+                        ([
+                           ("app_key", `String dt.app_key);
+                           ("app_secret", `String dt.app_secret);
+                           ("agent_id", `String dt.agent_id);
+                           ( "allow_from",
+                             `List (List.map (fun s -> `String s) dt.allow_from)
+                           );
+                         ]
+                        @
+                        match dt.webhook_url with
+                        | Some url -> [ ("webhook_url", `String url) ]
+                        | None -> []) );
+                  ])
+            @ (match cfg.channels.imessage with
+              | None -> []
+              | Some im ->
+                  [
+                    ( "imessage",
+                      `Assoc
+                        [
+                          ("poll_interval_s", `Float im.poll_interval_s);
+                          ( "allow_from",
+                            `List (List.map (fun s -> `String s) im.allow_from)
+                          );
+                        ] );
+                  ])
+            @ (match cfg.channels.signal with
+              | None -> []
+              | Some sg ->
+                  [
+                    ( "signal",
+                      `Assoc
+                        [
+                          ("base_url", `String sg.base_url);
+                          ("account", `String sg.account);
+                          ("api_mode", `String sg.api_mode);
+                          ( "allow_from",
+                            `List (List.map (fun s -> `String s) sg.allow_from)
+                          );
+                          ("max_chunk_bytes", `Int sg.max_chunk_bytes);
+                        ] );
+                  ])
+            @ (match cfg.channels.matrix with
+              | None -> []
+              | Some mx ->
+                  [
+                    ( "matrix",
+                      `Assoc
+                        [
+                          ("homeserver_url", `String mx.homeserver_url);
+                          ("access_token", `String mx.access_token);
+                          ("user_id", `String mx.user_id);
+                          ( "allow_rooms",
+                            `List (List.map (fun s -> `String s) mx.allow_rooms)
+                          );
+                          ( "allow_users",
+                            `List (List.map (fun s -> `String s) mx.allow_users)
+                          );
+                        ] );
+                  ])
+            @ (match cfg.channels.irc with
+              | None -> []
+              | Some ir ->
+                  [
+                    ( "irc",
+                      `Assoc
+                        ([
+                           ("host", `String ir.host);
+                           ("port", `Int ir.port);
+                           ("tls", `Bool ir.tls);
+                           ("nick", `String ir.nick);
+                           ("sasl", `Bool ir.sasl);
+                           ( "channels",
+                             `List (List.map (fun s -> `String s) ir.channels)
+                           );
+                           ( "allow_from",
+                             `List (List.map (fun s -> `String s) ir.allow_from)
+                           );
+                         ]
+                        @
+                        match ir.password with
+                        | Some pw -> [ ("password", `String pw) ]
+                        | None -> []) );
+                  ])
+            @ (match cfg.channels.email with
+              | None -> []
+              | Some em ->
+                  [
+                    ( "email",
+                      `Assoc
+                        [
+                          ("imap_host", `String em.imap_host);
+                          ("imap_port", `Int em.imap_port);
+                          ("smtp_host", `String em.smtp_host);
+                          ("smtp_port", `Int em.smtp_port);
+                          ("username", `String em.username);
+                          ("password", `String em.password);
+                          ("from_address", `String em.from_address);
+                          ( "allow_from",
+                            `List (List.map (fun s -> `String s) em.allow_from)
+                          );
+                          ("poll_interval_s", `Float em.poll_interval_s);
+                        ] );
+                  ])
+            @ (match cfg.channels.whatsapp with
+              | None -> []
+              | Some wa ->
+                  [
+                    ( "whatsapp",
+                      `Assoc
+                        [
+                          ("phone_number_id", `String wa.phone_number_id);
+                          ("access_token", `String wa.access_token);
+                          ("verify_token", `String wa.verify_token);
+                          ( "allow_from",
+                            `List (List.map (fun s -> `String s) wa.allow_from)
+                          );
+                        ] );
+                  ])
+            @ (match cfg.channels.nostr with
+              | None -> []
+              | Some ns ->
+                  [
+                    ( "nostr",
+                      `Assoc
+                        [
+                          ( "relays",
+                            `List (List.map (fun s -> `String s) ns.relays) );
+                          ("private_key", `String ns.private_key);
+                          ("pubkey", `String ns.pubkey);
+                          ("nak_path", `String ns.nak_path);
+                          ( "allow_from",
+                            `List (List.map (fun s -> `String s) ns.allow_from)
+                          );
+                        ] );
+                  ])
+            @ (match cfg.channels.lark with
+              | None -> []
+              | Some lk ->
+                  [
+                    ( "lark",
+                      `Assoc
+                        [
+                          ("app_id", `String lk.app_id);
+                          ("app_secret", `String lk.app_secret);
+                          ("verification_token", `String lk.verification_token);
+                          ("endpoint", `String lk.endpoint);
+                          ("mode", `String lk.mode);
+                          ( "allow_users",
+                            `List (List.map (fun s -> `String s) lk.allow_users)
+                          );
+                        ] );
+                  ])
+            @ (match cfg.channels.line with
+              | None -> []
+              | Some ln ->
+                  [
+                    ( "line",
+                      `Assoc
+                        [
+                          ( "channel_access_token",
+                            `String ln.channel_access_token );
+                          ("channel_secret", `String ln.channel_secret);
+                          ( "allow_from",
+                            `List (List.map (fun s -> `String s) ln.allow_from)
+                          );
+                        ] );
+                  ])
+            @
+            match cfg.channels.onebot with
+            | None -> []
+            | Some ob ->
                 [
-                  ( "github",
-                    `Assoc [ ("auth", auth_json); ("repos", repos_json) ] );
+                  ( "onebot",
+                    `Assoc
+                      ([
+                         ("ws_url", `String ob.ws_url);
+                         ("http_url", `String ob.http_url);
+                         ( "allow_from",
+                           `List (List.map (fun s -> `String s) ob.allow_from)
+                         );
+                         ( "allow_groups",
+                           `List (List.map (fun s -> `String s) ob.allow_groups)
+                         );
+                       ]
+                      @
+                      match ob.access_token with
+                      | Some tok -> [ ("access_token", `String tok) ]
+                      | None -> []) );
                 ]) );
         ("gateway", `Assoc gateway_fields);
         ( "runtime",

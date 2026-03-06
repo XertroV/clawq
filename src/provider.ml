@@ -67,6 +67,76 @@ let message_to_json m =
 
 let messages_to_json messages = `List (List.map message_to_json messages)
 
+type stream_event =
+  | Delta of string
+  | ToolCallDelta of {
+      index : int;
+      id : string option;
+      function_name : string option;
+      arguments : string option;
+    }
+  | Done
+
+(* Provider kind detection and native dispatch *)
+
+type provider_kind =
+  | OpenAICompat
+  | Anthropic
+  | Ollama
+  | Gemini
+  | Vertex
+  | Cohere
+
+let string_contains s sub =
+  let ls = String.length s and lsub = String.length sub in
+  if lsub = 0 then true
+  else if ls < lsub then false
+  else
+    let rec go i =
+      if i > ls - lsub then false
+      else if String.sub s i lsub = sub then true
+      else go (i + 1)
+    in
+    go 0
+
+let detect_kind (p : Runtime_config.provider_config) =
+  let key = p.api_key in
+  let url = String.lowercase_ascii (Option.value ~default:"" p.base_url) in
+  if String.length key >= 7 && String.sub key 0 7 = "sk-ant-" then Anthropic
+  else if String.length key >= 6 && String.sub key 0 6 = "AIzaSy" then Gemini
+  else if string_contains url "localhost:11434" || string_contains url "ollama"
+  then Ollama
+  else if string_contains url "aiplatform.googleapis.com" then Vertex
+  else OpenAICompat
+
+type complete_fn =
+  config:Runtime_config.t ->
+  provider:Runtime_config.provider_config ->
+  model:string ->
+  messages:message list ->
+  ?tools:Yojson.Safe.t ->
+  unit ->
+  completion_response Lwt.t
+
+type stream_fn =
+  config:Runtime_config.t ->
+  provider:Runtime_config.provider_config ->
+  model:string ->
+  messages:message list ->
+  ?tools:Yojson.Safe.t ->
+  on_chunk:(stream_event -> unit Lwt.t) ->
+  unit ->
+  completion_response Lwt.t
+
+let native_complete : (provider_kind * complete_fn) list ref = ref []
+let native_stream : (provider_kind * stream_fn) list ref = ref []
+
+let register_native_complete kind fn =
+  native_complete := (kind, fn) :: !native_complete
+
+let register_native_stream kind fn =
+  native_stream := (kind, fn) :: !native_stream
+
 let default_base_url_for name =
   match name with
   | "zai_coding" -> "https://api.z.ai/api/coding/paas/v4"
@@ -166,6 +236,8 @@ let select_provider ~(config : Runtime_config.t) =
                             Runtime_config.api_key = "";
                             base_url = None;
                             default_model = None;
+                            project_id = None;
+                            location = None;
                           } )))))
   in
   let provider_name, provider = chosen in
@@ -181,115 +253,119 @@ let select_provider ~(config : Runtime_config.t) =
 let complete ~(config : Runtime_config.t) ~messages ?tools () =
   let open Lwt.Syntax in
   let provider_name, provider, model = select_provider ~config in
-  let base_url =
-    match provider.base_url with
-    | Some url -> url
-    | None -> default_base_url_for provider_name
-  in
-  let uri = base_url ^ "/chat/completions" in
-  let body_fields =
-    [
-      ("model", `String model);
-      ("messages", messages_to_json messages);
-      ("temperature", `Float (max 1e-8 config.default_temperature));
-    ]
-  in
-  let body_fields =
-    match tools with
-    | Some t when t <> `List [] -> body_fields @ [ ("tools", t) ]
-    | _ -> body_fields
-  in
-  let body = `Assoc body_fields |> Yojson.Safe.to_string in
-  let headers = [ ("Authorization", "Bearer " ^ provider.api_key) ] in
-  Logs.info (fun m ->
-      m "LLM request to %s provider=%s model=%s msgs=%d" uri provider_name model
-        (List.length messages));
-  let* status, response_body = Http_client.post_json ~uri ~headers ~body in
-  if status < 200 || status >= 300 then begin
-    if status = 400 then
-      try
-        let err_json = Yojson.Safe.from_string response_body in
-        let open Yojson.Safe.Util in
-        let failed_gen =
+  let kind = detect_kind provider in
+  (* Dispatch to native handler if registered *)
+  match List.assoc_opt kind !native_complete with
+  | Some fn ->
+      Logs.info (fun m ->
+          m "LLM native dispatch provider=%s model=%s msgs=%d" provider_name
+            model (List.length messages));
+      fn ~config ~provider ~model ~messages ?tools ()
+  | None -> (
+      let base_url =
+        match provider.base_url with
+        | Some url -> url
+        | None -> default_base_url_for provider_name
+      in
+      let uri = base_url ^ "/chat/completions" in
+      let body_fields =
+        [
+          ("model", `String model);
+          ("messages", messages_to_json messages);
+          ("temperature", `Float (max 1e-8 config.default_temperature));
+        ]
+      in
+      let body_fields =
+        match tools with
+        | Some t when t <> `List [] -> body_fields @ [ ("tools", t) ]
+        | _ -> body_fields
+      in
+      let body = `Assoc body_fields |> Yojson.Safe.to_string in
+      let headers = [ ("Authorization", "Bearer " ^ provider.api_key) ] in
+      Logs.info (fun m ->
+          m "LLM request to %s provider=%s model=%s msgs=%d" uri provider_name
+            model (List.length messages));
+      let* status, response_body = Http_client.post_json ~uri ~headers ~body in
+      if status < 200 || status >= 300 then begin
+        if status = 400 then
           try
-            err_json |> member "error" |> member "failed_generation"
-            |> to_string
-          with _ -> ""
-        in
-        if failed_gen <> "" then
-          Lwt.return (Text { content = failed_gen; model; usage = None })
+            let err_json = Yojson.Safe.from_string response_body in
+            let open Yojson.Safe.Util in
+            let failed_gen =
+              try
+                err_json |> member "error" |> member "failed_generation"
+                |> to_string
+              with _ -> ""
+            in
+            if failed_gen <> "" then
+              Lwt.return (Text { content = failed_gen; model; usage = None })
+            else
+              Lwt.fail_with
+                (Printf.sprintf "LLM API error (HTTP %d): %s" status
+                   response_body)
+          with _ ->
+            Lwt.fail_with
+              (Printf.sprintf "LLM API error (HTTP %d): %s" status response_body)
         else
           Lwt.fail_with
             (Printf.sprintf "LLM API error (HTTP %d): %s" status response_body)
-      with _ ->
-        Lwt.fail_with
-          (Printf.sprintf "LLM API error (HTTP %d): %s" status response_body)
-    else
-      Lwt.fail_with
-        (Printf.sprintf "LLM API error (HTTP %d): %s" status response_body)
-  end
-  else
-    let json =
-      try Ok (Yojson.Safe.from_string response_body)
-      with exn -> Error (Printexc.to_string exn)
-    in
-    match json with
-    | Error msg -> Lwt.fail_with ("Failed to parse LLM response JSON: " ^ msg)
-    | Ok json ->
-        let open Yojson.Safe.Util in
-        let choice =
-          try json |> member "choices" |> index 0 |> member "message"
-          with _ -> `Null
+      end
+      else
+        let json =
+          try Ok (Yojson.Safe.from_string response_body)
+          with exn -> Error (Printexc.to_string exn)
         in
-        let tool_calls_json =
-          try choice |> member "tool_calls" |> to_list with _ -> []
-        in
-        let resp_model =
-          try json |> member "model" |> to_string with _ -> model
-        in
-        let usage =
-          try
-            let u = json |> member "usage" in
-            let pt = u |> member "prompt_tokens" |> to_int in
-            let ct = u |> member "completion_tokens" |> to_int in
-            Some (pt, ct)
-          with _ -> None
-        in
-        if tool_calls_json <> [] then
-          let calls =
-            List.mapi
-              (fun i tc ->
-                try
-                  let id = tc |> member "id" |> to_string in
-                  let fn = tc |> member "function" in
-                  let function_name = fn |> member "name" |> to_string in
-                  let arguments = fn |> member "arguments" |> to_string in
-                  Some { id; function_name; arguments }
-                with _ ->
-                  Logs.warn (fun m ->
-                      m "LLM response dropped malformed tool_call at index=%d" i);
-                  None)
-              tool_calls_json
-            |> List.filter_map (fun x -> x)
-          in
-          Lwt.return (ToolCalls { calls; model = resp_model; usage })
-        else
-          let content =
-            try choice |> member "content" |> to_string with _ -> ""
-          in
-          if content = "" then
-            Lwt.fail_with "Failed to extract content from LLM response"
-          else Lwt.return (Text { content; model = resp_model; usage })
-
-type stream_event =
-  | Delta of string
-  | ToolCallDelta of {
-      index : int;
-      id : string option;
-      function_name : string option;
-      arguments : string option;
-    }
-  | Done
+        match json with
+        | Error msg ->
+            Lwt.fail_with ("Failed to parse LLM response JSON: " ^ msg)
+        | Ok json ->
+            let open Yojson.Safe.Util in
+            let choice =
+              try json |> member "choices" |> index 0 |> member "message"
+              with _ -> `Null
+            in
+            let tool_calls_json =
+              try choice |> member "tool_calls" |> to_list with _ -> []
+            in
+            let resp_model =
+              try json |> member "model" |> to_string with _ -> model
+            in
+            let usage =
+              try
+                let u = json |> member "usage" in
+                let pt = u |> member "prompt_tokens" |> to_int in
+                let ct = u |> member "completion_tokens" |> to_int in
+                Some (pt, ct)
+              with _ -> None
+            in
+            if tool_calls_json <> [] then
+              let calls =
+                List.mapi
+                  (fun i tc ->
+                    try
+                      let id = tc |> member "id" |> to_string in
+                      let fn = tc |> member "function" in
+                      let function_name = fn |> member "name" |> to_string in
+                      let arguments = fn |> member "arguments" |> to_string in
+                      Some { id; function_name; arguments }
+                    with _ ->
+                      Logs.warn (fun m ->
+                          m
+                            "LLM response dropped malformed tool_call at \
+                             index=%d"
+                            i);
+                      None)
+                  tool_calls_json
+                |> List.filter_map (fun x -> x)
+              in
+              Lwt.return (ToolCalls { calls; model = resp_model; usage })
+            else
+              let content =
+                try choice |> member "content" |> to_string with _ -> ""
+              in
+              if content = "" then
+                Lwt.fail_with "Failed to extract content from LLM response"
+              else Lwt.return (Text { content; model = resp_model; usage }))
 
 let parse_sse_line line =
   let prefix = "data: " in
@@ -442,36 +518,45 @@ let process_sse_stream stream ~on_chunk =
 let complete_stream ~(config : Runtime_config.t) ~messages ?tools ~on_chunk () =
   let open Lwt.Syntax in
   let provider_name, provider, model = select_provider ~config in
-  let base_url =
-    match provider.base_url with
-    | Some url -> url
-    | None -> default_base_url_for provider_name
-  in
-  let uri = base_url ^ "/chat/completions" in
-  let body_fields =
-    [
-      ("model", `String model);
-      ("messages", messages_to_json messages);
-      ("temperature", `Float (max 1e-8 config.default_temperature));
-      ("stream", `Bool true);
-    ]
-  in
-  let body_fields =
-    match tools with
-    | Some t when t <> `List [] -> body_fields @ [ ("tools", t) ]
-    | _ -> body_fields
-  in
-  let body = `Assoc body_fields |> Yojson.Safe.to_string in
-  let headers = [ ("Authorization", "Bearer " ^ provider.api_key) ] in
-  Logs.info (fun m ->
-      m "LLM stream request to %s provider=%s model=%s msgs=%d" uri
-        provider_name model (List.length messages));
-  let* status, stream = Http_client.post_stream ~uri ~headers ~body in
-  if status < 200 || status >= 300 then begin
-    (* collect error body from stream *)
-    let* chunks = Lwt_stream.to_list stream in
-    let response_body = String.concat "" chunks in
-    Lwt.fail_with
-      (Printf.sprintf "LLM API error (HTTP %d): %s" status response_body)
-  end
-  else process_sse_stream stream ~on_chunk
+  let kind = detect_kind provider in
+  (* Dispatch to native stream handler if registered *)
+  match List.assoc_opt kind !native_stream with
+  | Some fn ->
+      Logs.info (fun m ->
+          m "LLM native stream dispatch provider=%s model=%s msgs=%d"
+            provider_name model (List.length messages));
+      fn ~config ~provider ~model ~messages ?tools ~on_chunk ()
+  | None ->
+      let base_url =
+        match provider.base_url with
+        | Some url -> url
+        | None -> default_base_url_for provider_name
+      in
+      let uri = base_url ^ "/chat/completions" in
+      let body_fields =
+        [
+          ("model", `String model);
+          ("messages", messages_to_json messages);
+          ("temperature", `Float (max 1e-8 config.default_temperature));
+          ("stream", `Bool true);
+        ]
+      in
+      let body_fields =
+        match tools with
+        | Some t when t <> `List [] -> body_fields @ [ ("tools", t) ]
+        | _ -> body_fields
+      in
+      let body = `Assoc body_fields |> Yojson.Safe.to_string in
+      let headers = [ ("Authorization", "Bearer " ^ provider.api_key) ] in
+      Logs.info (fun m ->
+          m "LLM stream request to %s provider=%s model=%s msgs=%d" uri
+            provider_name model (List.length messages));
+      let* status, stream = Http_client.post_stream ~uri ~headers ~body in
+      if status < 200 || status >= 300 then begin
+        (* collect error body from stream *)
+        let* chunks = Lwt_stream.to_list stream in
+        let response_body = String.concat "" chunks in
+        Lwt.fail_with
+          (Printf.sprintf "LLM API error (HTTP %d): %s" status response_body)
+      end
+      else process_sse_stream stream ~on_chunk

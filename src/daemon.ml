@@ -292,7 +292,8 @@ let run ~(config : Runtime_config.t) =
           ~auth_token:config.gateway.auth_token ~session_manager
           ?slack_config:config.channels.slack
           ?github_config:config.channels.github ~github_api_limiter ~ip_limiter
-          ~session_limiter ?web_channel:web_channel_handler ())
+          ~session_limiter ~slack_event_limiter ?web_channel:web_channel_handler
+          ())
       (fun exn ->
         Logs.err (fun m ->
             m "Gateway server error: %s" (Printexc.to_string exn));
@@ -383,10 +384,24 @@ let run ~(config : Runtime_config.t) =
   | _ -> ());
   Lwt.async (fun () ->
       Lwt.catch
+        (fun () -> Mattermost.start ~config ~session_manager)
+        (fun exn ->
+          Logs.err (fun m ->
+              m "Mattermost channel error: %s" (Printexc.to_string exn));
+          Lwt.return_unit));
+  Lwt.async (fun () ->
+      Lwt.catch
         (fun () -> tunnel_supervisor)
         (fun exn ->
           Logs.err (fun m ->
               m "Tunnel supervisor error: %s" (Printexc.to_string exn));
+          Lwt.return_unit));
+  Lwt.async (fun () ->
+      Lwt.catch
+        (fun () -> Imessage.start ~config ~session_manager)
+        (fun exn ->
+          Logs.err (fun m ->
+              m "iMessage channel error: %s" (Printexc.to_string exn));
           Lwt.return_unit));
   (match db with
   | Some db ->

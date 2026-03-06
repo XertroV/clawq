@@ -1,0 +1,115 @@
+let api_base = "https://graph.facebook.com/v17.0"
+
+(* LRU-500 dedup set: tracks recently processed message IDs *)
+let dedup_set : (string, unit) Hashtbl.t = Hashtbl.create 512
+let dedup_queue : string Queue.t = Queue.create ()
+let dedup_max = 500
+
+let dedup_seen id =
+  if Hashtbl.mem dedup_set id then true
+  else begin
+    if Queue.length dedup_queue >= dedup_max then begin
+      let oldest = Queue.pop dedup_queue in
+      Hashtbl.remove dedup_set oldest
+    end;
+    Queue.push id dedup_queue;
+    Hashtbl.add dedup_set id ();
+    false
+  end
+
+let is_allowed ~(config : Runtime_config.whatsapp_config) ~from =
+  match config.allow_from with [ "*" ] -> true | ids -> List.mem from ids
+
+let send_message ~(config : Runtime_config.whatsapp_config) ~to_ ~text =
+  let open Lwt.Syntax in
+  let uri = Printf.sprintf "%s/%s/messages" api_base config.phone_number_id in
+  let headers = [ ("Authorization", "Bearer " ^ config.access_token) ] in
+  let body =
+    `Assoc
+      [
+        ("messaging_product", `String "whatsapp");
+        ("to", `String to_);
+        ("type", `String "text");
+        ("text", `Assoc [ ("body", `String text) ]);
+      ]
+    |> Yojson.Safe.to_string
+  in
+  let* _status, _body = Http_client.post_json ~uri ~headers ~body in
+  Lwt.return_unit
+
+(* Parse inbound webhook JSON, return list of (from, text) pairs *)
+let parse_inbound_messages body_str =
+  try
+    let json = Yojson.Safe.from_string body_str in
+    let open Yojson.Safe.Util in
+    let entry = json |> member "entry" |> to_list in
+    List.concat_map
+      (fun e ->
+        let changes = e |> member "changes" |> to_list in
+        List.concat_map
+          (fun ch ->
+            let value = ch |> member "value" in
+            let messages =
+              try value |> member "messages" |> to_list with _ -> []
+            in
+            List.filter_map
+              (fun msg ->
+                try
+                  let id = msg |> member "id" |> to_string in
+                  if dedup_seen id then None
+                  else
+                    let from = msg |> member "from" |> to_string in
+                    let text =
+                      try msg |> member "text" |> member "body" |> to_string
+                      with _ -> ""
+                    in
+                    if text = "" then None else Some (id, from, text)
+                with _ -> None)
+              messages)
+          changes)
+      entry
+  with _ -> []
+
+let handle_inbound ~(config : Runtime_config.whatsapp_config)
+    ~(session_mgr : Session.t) body_str =
+  let open Lwt.Syntax in
+  let messages = parse_inbound_messages body_str in
+  Lwt_list.iter_s
+    (fun (_id, from, text) ->
+      if not (is_allowed ~config ~from) then begin
+        Logs.warn (fun m ->
+            m "WhatsApp: ignoring message from unauthorized number=%s" from);
+        Lwt.return_unit
+      end
+      else
+        let key = "whatsapp:" ^ from in
+        let* result =
+          Lwt.catch
+            (fun () ->
+              let* response =
+                Session.turn session_mgr ~key ~message:text
+                  ~channel_name:"whatsapp" ~channel_type:"dm" ()
+              in
+              Lwt.return (Ok response))
+            (fun exn -> Lwt.return (Error (Printexc.to_string exn)))
+        in
+        match result with
+        | Ok response -> send_message ~config ~to_:from ~text:response
+        | Error err ->
+            Logs.err (fun m ->
+                m "WhatsApp: agent error for from=%s: %s" from err);
+            Lwt.return_unit)
+    messages
+
+(* Verify GET token handshake *)
+let handle_verify ~(config : Runtime_config.whatsapp_config) uri =
+  let query = Uri.query uri in
+  let get_param name =
+    match List.assoc_opt name query with Some (v :: _) -> v | _ -> ""
+  in
+  let mode = get_param "hub.mode" in
+  let token = get_param "hub.verify_token" in
+  let challenge = get_param "hub.challenge" in
+  if mode = "subscribe" && Eqaf.equal token config.verify_token then
+    Some challenge
+  else None

@@ -5,6 +5,7 @@ let test_system_prompt_from_config () =
   let config =
     {
       default_config with
+      prompt = { default_config.prompt with dynamic_enabled = false };
       agent_defaults =
         {
           default_config.agent_defaults with

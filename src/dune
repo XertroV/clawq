@@ -29,7 +29,10 @@
   totp
   cost_tracker
   agent_router
-  command_bridge_min)
+  command_bridge_min
+  sandbox
+  pairing
+  chat_ui_assets)
  (foreign_stubs
   (language c)
   (names landlock_stubs))
@@ -64,6 +67,9 @@
   runtime_native
   runtime_docker
   tunnel_cloudflare
+  tunnel_tailscale
+  tunnel_ngrok
+  tunnel_custom
   command_bridge
   slack
   discord
@@ -77,7 +83,25 @@
   mcp_client
   telemetry
   web_channel
-  tts)
+  tts
+  imessage
+  lark
+  dingtalk
+  mattermost
+  signal
+  matrix
+  irc
+  email_channel
+  whatsapp
+  nostr
+  line_channel
+  onebot
+  provider_anthropic
+  provider_cohere
+  provider_gemini
+  provider_ollama
+  provider_vertex
+  provider_init)
  (wrapped false)
  (libraries
   clawq_runtime_core
@@ -105,6 +129,12 @@
   ca-certs
   bigstringaf
   faraday))
+
+(library
+ (name clawq_wasm)
+ (modules main_wasm)
+ (wrapped false)
+ (libraries))
 
 (executable
  (name main)

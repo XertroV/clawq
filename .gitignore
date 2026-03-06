@@ -18,3 +18,7 @@ _opam
 **/*.tmp.*
 main.stripped.test
 .backlog/.context.yaml
+**/*.out
+**/*.o
+**/*.cmx
+**/*.cmi

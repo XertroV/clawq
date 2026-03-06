@@ -17,12 +17,16 @@ let test_find_provider_for_model () =
           Runtime_config.api_key = "sk-abc";
           base_url = Some "https://api.anthropic.com/v1";
           default_model = None;
+          project_id = None;
+          location = None;
         } );
       ( "openai",
         {
           Runtime_config.api_key = "sk-xyz";
           base_url = None;
           default_model = None;
+          project_id = None;
+          location = None;
         } );
     ]
   in
@@ -49,8 +53,13 @@ let test_find_provider_no_key () =
   let providers =
     [
       ( "anthropic",
-        { Runtime_config.api_key = ""; base_url = None; default_model = None }
-      );
+        {
+          Runtime_config.api_key = "";
+          base_url = None;
+          default_model = None;
+          project_id = None;
+          location = None;
+        } );
     ]
   in
   let result =
@@ -67,6 +76,8 @@ let test_find_provider_date_suffix () =
           Runtime_config.api_key = "sk-abc";
           base_url = None;
           default_model = None;
+          project_id = None;
+          location = None;
         } );
     ]
   in
@@ -106,6 +117,133 @@ let test_context_window_unknown () =
     "unknown model" None
     (Runtime_config.context_window_for_model "some-custom-model")
 
+let make_provider ?(base_url = None) api_key =
+  {
+    Runtime_config.api_key;
+    base_url;
+    default_model = None;
+    project_id = None;
+    location = None;
+  }
+
+let test_detect_kind_anthropic () =
+  let cfg = make_provider "sk-ant-abc123" in
+  Alcotest.(check bool)
+    "anthropic key detected" true
+    (Provider.detect_kind cfg = Provider.Anthropic)
+
+let test_detect_kind_gemini () =
+  let cfg = make_provider "AIzaSyABC123" in
+  Alcotest.(check bool)
+    "gemini key detected" true
+    (Provider.detect_kind cfg = Provider.Gemini)
+
+let test_detect_kind_ollama_localhost () =
+  let cfg = make_provider ~base_url:(Some "http://localhost:11434") "" in
+  Alcotest.(check bool)
+    "ollama localhost detected" true
+    (Provider.detect_kind cfg = Provider.Ollama)
+
+let test_detect_kind_ollama_url () =
+  let cfg =
+    make_provider ~base_url:(Some "http://my-ollama-server.local/v1") "anykey"
+  in
+  Alcotest.(check bool)
+    "ollama url detected" true
+    (Provider.detect_kind cfg = Provider.Ollama)
+
+let test_detect_kind_vertex () =
+  let cfg =
+    make_provider
+      ~base_url:(Some "https://us-central1-aiplatform.googleapis.com/v1")
+      "anykey"
+  in
+  Alcotest.(check bool)
+    "vertex url detected" true
+    (Provider.detect_kind cfg = Provider.Vertex)
+
+let test_detect_kind_openai_compat_default () =
+  let cfg = make_provider "sk-openai-abc" in
+  Alcotest.(check bool)
+    "openai compat default" true
+    (Provider.detect_kind cfg = Provider.OpenAICompat)
+
+let test_detect_kind_openai_compat_openrouter () =
+  let cfg =
+    make_provider ~base_url:(Some "https://openrouter.ai/api/v1") "sk-or-abc"
+  in
+  Alcotest.(check bool)
+    "openrouter is openai compat" true
+    (Provider.detect_kind cfg = Provider.OpenAICompat)
+
+let test_detect_kind_anthropic_short_key () =
+  (* key shorter than 7 chars should NOT match sk-ant- prefix *)
+  let cfg = make_provider "sk-ant" in
+  Alcotest.(check bool)
+    "short sk-ant key not anthropic" true
+    (Provider.detect_kind cfg <> Provider.Anthropic)
+
+let test_detect_kind_gemini_short_key () =
+  (* key shorter than 6 chars should NOT match AIzaSy prefix *)
+  let cfg = make_provider "AIzaS" in
+  Alcotest.(check bool)
+    "short AIzaS key not gemini" true
+    (Provider.detect_kind cfg <> Provider.Gemini)
+
+let test_normalize_empty () =
+  Alcotest.(check string) "empty string" "" (Provider.normalize_model_name "")
+
+let test_normalize_already_lower () =
+  Alcotest.(check string)
+    "already lowercase" "gpt-4o"
+    (Provider.normalize_model_name "gpt-4o")
+
+let test_normalize_mixed_case_date () =
+  (* uppercase with date suffix: strip date, then lowercase *)
+  Alcotest.(check string)
+    "uppercase with date suffix" "claude-opus-4-6"
+    (Provider.normalize_model_name "Claude-Opus-4-6-20250301")
+
+let test_context_window_claude3 () =
+  Alcotest.(check (option int))
+    "claude-3.5-sonnet" (Some 200000)
+    (Runtime_config.context_window_for_model "claude-3.5-sonnet")
+
+let test_context_window_deepseek () =
+  Alcotest.(check (option int))
+    "deepseek-r1" (Some 128000)
+    (Runtime_config.context_window_for_model "deepseek-r1")
+
+let test_find_provider_first_wins () =
+  let providers =
+    [
+      ( "anthropic",
+        {
+          Runtime_config.api_key = "sk-abc";
+          base_url = None;
+          default_model = None;
+          project_id = None;
+          location = None;
+        } );
+      ( "anthropic2",
+        {
+          Runtime_config.api_key = "sk-xyz";
+          base_url = None;
+          default_model = None;
+          project_id = None;
+          location = None;
+        } );
+    ]
+  in
+  let result =
+    Provider.find_provider_for_model ~providers
+      ~model_name:"anthropic/claude-opus-4-6"
+  in
+  match result with
+  | Some (name, _) ->
+      Alcotest.(check string) "first provider wins" "anthropic" name
+  | None -> Alcotest.fail "expected first provider match"
+
 let suite =
   [
     Alcotest.test_case "strip date suffix + normalize" `Quick
@@ -123,4 +261,30 @@ let suite =
       test_context_window_with_date;
     Alcotest.test_case "context window unknown" `Quick
       test_context_window_unknown;
+    Alcotest.test_case "detect kind anthropic" `Quick test_detect_kind_anthropic;
+    Alcotest.test_case "detect kind gemini" `Quick test_detect_kind_gemini;
+    Alcotest.test_case "detect kind ollama localhost" `Quick
+      test_detect_kind_ollama_localhost;
+    Alcotest.test_case "detect kind ollama url" `Quick
+      test_detect_kind_ollama_url;
+    Alcotest.test_case "detect kind vertex" `Quick test_detect_kind_vertex;
+    Alcotest.test_case "detect kind openai compat default" `Quick
+      test_detect_kind_openai_compat_default;
+    Alcotest.test_case "detect kind openrouter openai compat" `Quick
+      test_detect_kind_openai_compat_openrouter;
+    Alcotest.test_case "detect kind short sk-ant not anthropic" `Quick
+      test_detect_kind_anthropic_short_key;
+    Alcotest.test_case "detect kind short AIzaS not gemini" `Quick
+      test_detect_kind_gemini_short_key;
+    Alcotest.test_case "normalize empty string" `Quick test_normalize_empty;
+    Alcotest.test_case "normalize already lowercase" `Quick
+      test_normalize_already_lower;
+    Alcotest.test_case "normalize mixed case with date" `Quick
+      test_normalize_mixed_case_date;
+    Alcotest.test_case "context window claude3 sonnet" `Quick
+      test_context_window_claude3;
+    Alcotest.test_case "context window deepseek" `Quick
+      test_context_window_deepseek;
+    Alcotest.test_case "find provider first wins" `Quick
+      test_find_provider_first_wins;
   ]

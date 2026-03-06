@@ -36,8 +36,14 @@ let parse_config ?(resolve_secrets = true) json =
           let default_model =
             try Some (v |> member "default_model" |> to_string) with _ -> None
           in
+          let project_id =
+            try Some (v |> member "project_id" |> to_string) with _ -> None
+          in
+          let location =
+            try Some (v |> member "location" |> to_string) with _ -> None
+          in
           ( name,
-            ({ api_key; base_url; default_model }
+            ({ api_key; base_url; default_model; project_id; location }
               : Runtime_config.provider_config) ))
     with _ -> []
   in
@@ -303,7 +309,341 @@ let parse_config ?(resolve_secrets = true) json =
           Some ({ auth; repos } : Runtime_config.github_config)
         with _ -> None
       in
-      ({ cli; telegram; discord; slack; github }
+      let mattermost =
+        try
+          let mm = ch |> member "mattermost" in
+          let url = try mm |> member "url" |> to_string with _ -> "" in
+          let access_token =
+            try mm |> member "access_token" |> to_string |> resolve_secret
+            with _ -> ""
+          in
+          let team_id =
+            try mm |> member "team_id" |> to_string with _ -> ""
+          in
+          let channel_ids =
+            try mm |> member "channel_ids" |> to_list |> List.map to_string
+            with _ -> []
+          in
+          let allow_users =
+            try mm |> member "allow_users" |> to_list |> List.map to_string
+            with _ -> [ "*" ]
+          in
+          Some
+            ({ url; access_token; team_id; channel_ids; allow_users }
+              : Runtime_config.mattermost_config)
+        with _ -> None
+      in
+      let dingtalk =
+        try
+          let dt = ch |> member "dingtalk" in
+          let app_key =
+            try dt |> member "app_key" |> to_string |> resolve_secret
+            with _ -> ""
+          in
+          let app_secret =
+            try dt |> member "app_secret" |> to_string |> resolve_secret
+            with _ -> ""
+          in
+          let agent_id =
+            try dt |> member "agent_id" |> to_string with _ -> ""
+          in
+          let allow_from =
+            try dt |> member "allow_from" |> to_list |> List.map to_string
+            with _ -> [ "*" ]
+          in
+          let webhook_url =
+            try Some (dt |> member "webhook_url" |> to_string) with _ -> None
+          in
+          Some
+            ({ app_key; app_secret; agent_id; allow_from; webhook_url }
+              : Runtime_config.dingtalk_config)
+        with _ -> None
+      in
+      let imessage =
+        try
+          let im = ch |> member "imessage" in
+          let poll_interval_s =
+            try im |> member "poll_interval_s" |> to_float with _ -> 5.0
+          in
+          let allow_from =
+            try im |> member "allow_from" |> to_list |> List.map to_string
+            with _ -> [ "*" ]
+          in
+          Some
+            ({ poll_interval_s; allow_from } : Runtime_config.imessage_config)
+        with _ -> None
+      in
+      let signal =
+        try
+          let sg = ch |> member "signal" in
+          let base_url =
+            try sg |> member "base_url" |> to_string with _ -> ""
+          in
+          let account =
+            try sg |> member "account" |> to_string with _ -> ""
+          in
+          let api_mode =
+            try sg |> member "api_mode" |> to_string with _ -> "jsonrpc"
+          in
+          let allow_from =
+            try sg |> member "allow_from" |> to_list |> List.map to_string
+            with _ -> []
+          in
+          let max_chunk_bytes =
+            try sg |> member "max_chunk_bytes" |> to_int with _ -> 1000
+          in
+          Some
+            ({ base_url; account; api_mode; allow_from; max_chunk_bytes }
+              : Runtime_config.signal_config)
+        with _ -> None
+      in
+      let matrix =
+        try
+          let mx = ch |> member "matrix" in
+          let homeserver_url =
+            try mx |> member "homeserver_url" |> to_string with _ -> ""
+          in
+          let access_token =
+            try mx |> member "access_token" |> to_string |> resolve_secret
+            with _ -> ""
+          in
+          let user_id =
+            try mx |> member "user_id" |> to_string with _ -> ""
+          in
+          let allow_rooms =
+            try mx |> member "allow_rooms" |> to_list |> List.map to_string
+            with _ -> []
+          in
+          let allow_users =
+            try mx |> member "allow_users" |> to_list |> List.map to_string
+            with _ -> []
+          in
+          Some
+            ({ homeserver_url; access_token; user_id; allow_rooms; allow_users }
+              : Runtime_config.matrix_config)
+        with _ -> None
+      in
+      let irc =
+        try
+          let ir = ch |> member "irc" in
+          let host = try ir |> member "host" |> to_string with _ -> "" in
+          let port = try ir |> member "port" |> to_int with _ -> 6697 in
+          let tls = try ir |> member "tls" |> to_bool with _ -> true in
+          let nick = try ir |> member "nick" |> to_string with _ -> "clawq" in
+          let password =
+            try Some (ir |> member "password" |> to_string |> resolve_secret)
+            with _ -> None
+          in
+          let sasl = try ir |> member "sasl" |> to_bool with _ -> false in
+          let channels =
+            try ir |> member "channels" |> to_list |> List.map to_string
+            with _ -> []
+          in
+          let allow_from =
+            try ir |> member "allow_from" |> to_list |> List.map to_string
+            with _ -> []
+          in
+          Some
+            ({ host; port; tls; nick; password; sasl; channels; allow_from }
+              : Runtime_config.irc_config)
+        with _ -> None
+      in
+      let email =
+        try
+          let em = ch |> member "email" in
+          let imap_host =
+            try em |> member "imap_host" |> to_string with _ -> ""
+          in
+          let imap_port =
+            try em |> member "imap_port" |> to_int with _ -> 993
+          in
+          let smtp_host =
+            try em |> member "smtp_host" |> to_string with _ -> ""
+          in
+          let smtp_port =
+            try em |> member "smtp_port" |> to_int with _ -> 587
+          in
+          let username =
+            try em |> member "username" |> to_string with _ -> ""
+          in
+          let password =
+            try em |> member "password" |> to_string |> resolve_secret
+            with _ -> ""
+          in
+          let from_address =
+            try em |> member "from_address" |> to_string with _ -> ""
+          in
+          let allow_from =
+            try em |> member "allow_from" |> to_list |> List.map to_string
+            with _ -> []
+          in
+          let poll_interval_s =
+            try em |> member "poll_interval_s" |> to_float with _ -> 30.0
+          in
+          Some
+            ({
+               imap_host;
+               imap_port;
+               smtp_host;
+               smtp_port;
+               username;
+               password;
+               from_address;
+               allow_from;
+               poll_interval_s;
+             }
+              : Runtime_config.email_config)
+        with _ -> None
+      in
+      let whatsapp =
+        try
+          let wa = ch |> member "whatsapp" in
+          let phone_number_id =
+            try wa |> member "phone_number_id" |> to_string with _ -> ""
+          in
+          let access_token =
+            try wa |> member "access_token" |> to_string |> resolve_secret
+            with _ -> ""
+          in
+          let verify_token =
+            try wa |> member "verify_token" |> to_string |> resolve_secret
+            with _ -> ""
+          in
+          let allow_from =
+            try wa |> member "allow_from" |> to_list |> List.map to_string
+            with _ -> [ "*" ]
+          in
+          Some
+            ({ phone_number_id; access_token; verify_token; allow_from }
+              : Runtime_config.whatsapp_config)
+        with _ -> None
+      in
+      let nostr =
+        try
+          let ns = ch |> member "nostr" in
+          let relays =
+            try ns |> member "relays" |> to_list |> List.map to_string
+            with _ -> []
+          in
+          let private_key =
+            try ns |> member "private_key" |> to_string |> resolve_secret
+            with _ -> ""
+          in
+          let pubkey = try ns |> member "pubkey" |> to_string with _ -> "" in
+          let nak_path =
+            try ns |> member "nak_path" |> to_string with _ -> "nak"
+          in
+          let allow_from =
+            try ns |> member "allow_from" |> to_list |> List.map to_string
+            with _ -> [ "*" ]
+          in
+          Some
+            ({ relays; private_key; pubkey; nak_path; allow_from }
+              : Runtime_config.nostr_config)
+        with _ -> None
+      in
+      let lark =
+        try
+          let lk = ch |> member "lark" in
+          let app_id =
+            try lk |> member "app_id" |> to_string |> resolve_secret
+            with _ -> ""
+          in
+          let app_secret =
+            try lk |> member "app_secret" |> to_string |> resolve_secret
+            with _ -> ""
+          in
+          let verification_token =
+            try lk |> member "verification_token" |> to_string |> resolve_secret
+            with _ -> ""
+          in
+          let endpoint =
+            try lk |> member "endpoint" |> to_string
+            with _ -> "https://open.feishu.cn"
+          in
+          let mode =
+            try lk |> member "mode" |> to_string with _ -> "webhook"
+          in
+          let allow_users =
+            try lk |> member "allow_users" |> to_list |> List.map to_string
+            with _ -> [ "*" ]
+          in
+          Some
+            ({
+               app_id;
+               app_secret;
+               verification_token;
+               endpoint;
+               mode;
+               allow_users;
+             }
+              : Runtime_config.lark_config)
+        with _ -> None
+      in
+      let line =
+        try
+          let ln = ch |> member "line" in
+          let channel_access_token =
+            try
+              ln |> member "channel_access_token" |> to_string |> resolve_secret
+            with _ -> ""
+          in
+          let channel_secret =
+            try ln |> member "channel_secret" |> to_string |> resolve_secret
+            with _ -> ""
+          in
+          let allow_from =
+            try ln |> member "allow_from" |> to_list |> List.map to_string
+            with _ -> [ "*" ]
+          in
+          Some
+            ({ channel_access_token; channel_secret; allow_from }
+              : Runtime_config.line_config)
+        with _ -> None
+      in
+      let onebot =
+        try
+          let ob = ch |> member "onebot" in
+          let ws_url = try ob |> member "ws_url" |> to_string with _ -> "" in
+          let http_url =
+            try ob |> member "http_url" |> to_string with _ -> ""
+          in
+          let access_token =
+            try Some (ob |> member "access_token" |> to_string |> resolve_secret)
+            with _ -> None
+          in
+          let allow_from =
+            try ob |> member "allow_from" |> to_list |> List.map to_string
+            with _ -> [ "*" ]
+          in
+          let allow_groups =
+            try ob |> member "allow_groups" |> to_list |> List.map to_string
+            with _ -> [ "*" ]
+          in
+          Some
+            ({ ws_url; http_url; access_token; allow_from; allow_groups }
+              : Runtime_config.onebot_config)
+        with _ -> None
+      in
+      ({
+         cli;
+         telegram;
+         discord;
+         slack;
+         github;
+         mattermost;
+         dingtalk;
+         imessage;
+         signal;
+         matrix;
+         irc;
+         email;
+         whatsapp;
+         nostr;
+         lark;
+         line;
+         onebot;
+       }
         : Runtime_config.channel_config)
     with _ -> default.channels
   in

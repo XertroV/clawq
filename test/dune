@@ -4,7 +4,10 @@
   clawq_extracted
   clawq_runtime_core
   clawq_runtime_integrations
+  clawq_wasm
   alcotest
+  sqlite3
+  yojson
   str
   unix
   cohttp

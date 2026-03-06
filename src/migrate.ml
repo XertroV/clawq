@@ -37,7 +37,13 @@ let convert (json : Yojson.Safe.t) =
           in
           Some
             ( name,
-              ({ api_key; base_url; default_model = None }
+              ({
+                 api_key;
+                 base_url;
+                 default_model = None;
+                 project_id = None;
+                 location = None;
+               }
                 : Runtime_config.provider_config) ))
         models
     with _ -> []
@@ -79,7 +85,25 @@ let convert (json : Yojson.Safe.t) =
          ignore (ch |> member "irc");
          warn "IRC channel not supported, skipping"
        with _ -> ());
-      ({ cli; telegram; discord = None; slack = None; github = None }
+      ({
+         cli;
+         telegram;
+         discord = None;
+         slack = None;
+         github = None;
+         mattermost = None;
+         dingtalk = None;
+         imessage = None;
+         signal = None;
+         matrix = None;
+         irc = None;
+         email = None;
+         whatsapp = None;
+         nostr = None;
+         lark = None;
+         line = None;
+         onebot = None;
+       }
         : Runtime_config.channel_config)
     with _ -> default.channels
   in

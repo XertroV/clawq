@@ -31,5 +31,28 @@ let () =
        ("totp", Test_totp.suite);
        ("cost_tracker", Test_cost_tracker.suite);
        ("agent_router", Test_agent_router.suite);
+       ("signal", Test_signal.suite);
+       ("matrix", Test_matrix.suite);
+       ("irc", Test_irc.suite);
+       ("email", Test_email.suite);
+       ("whatsapp", Test_whatsapp.suite);
+       ("nostr", Test_nostr.suite);
+       ("mattermost", Test_mattermost.suite);
+       ("lark", Test_lark.suite);
+       ("line", Test_line.suite);
+       ("dingtalk", Test_dingtalk.suite);
+       ("onebot", Test_onebot.suite);
+       ("imessage", Test_imessage.suite);
+       ("sandbox", Test_sandbox.suite);
+       ("provider_anthropic", Test_provider_anthropic.suite);
+       ("wasm", Test_wasm.suite);
+       ("tunnels", Test_tunnels.suite);
+       ("pairing", Test_pairing.suite);
+       ("memory", Test_memory.suite);
+       ("chat_ui", Test_chat_ui.suite);
+       ("channel_formats", Test_channel_formats.suite);
+       ("commands", Test_commands.suite);
+       ("contracts", Test_contracts.suite);
+       ("tools", Test_tools.suite);
      ]
     @ Test_github.suites)

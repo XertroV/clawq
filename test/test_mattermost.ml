@@ -1,0 +1,103 @@
+(* Tests for Mattermost channel module *)
+
+let mk_mm_cfg ?(allow_users = [ "*" ]) ?(channel_ids = []) () :
+    Runtime_config.mattermost_config =
+  {
+    url = "https://mattermost.example.com";
+    access_token = "tok";
+    team_id = "team1";
+    channel_ids;
+    allow_users;
+  }
+
+(* --- is_allowed tests --- *)
+
+let test_is_allowed_wildcard () =
+  let config = mk_mm_cfg () in
+  Alcotest.(check bool)
+    "wildcard" true
+    (Mattermost.is_allowed ~config ~user_id:"any")
+
+let test_is_allowed_match () =
+  let config = mk_mm_cfg ~allow_users:[ "user1"; "user2" ] () in
+  Alcotest.(check bool)
+    "match" true
+    (Mattermost.is_allowed ~config ~user_id:"user1")
+
+let test_is_allowed_no_match () =
+  let config = mk_mm_cfg ~allow_users:[ "user1" ] () in
+  Alcotest.(check bool)
+    "no match" false
+    (Mattermost.is_allowed ~config ~user_id:"user9")
+
+(* --- is_allowed_channel tests --- *)
+
+let test_channel_allowed_empty () =
+  let config = mk_mm_cfg () in
+  Alcotest.(check bool)
+    "empty allows all" true
+    (Mattermost.is_allowed_channel ~config ~channel_id:"any")
+
+let test_channel_allowed_match () =
+  let config = mk_mm_cfg ~channel_ids:[ "ch1"; "ch2" ] () in
+  Alcotest.(check bool)
+    "match" true
+    (Mattermost.is_allowed_channel ~config ~channel_id:"ch1")
+
+let test_channel_allowed_no_match () =
+  let config = mk_mm_cfg ~channel_ids:[ "ch1" ] () in
+  Alcotest.(check bool)
+    "no match" false
+    (Mattermost.is_allowed_channel ~config ~channel_id:"ch9")
+
+(* --- parse_posted_event tests --- *)
+
+let test_parse_posted_valid () =
+  let post_json =
+    Yojson.Safe.to_string
+      (`Assoc
+         [
+           ("channel_id", `String "ch1");
+           ("user_id", `String "u1");
+           ("message", `String "hello");
+         ])
+  in
+  let data = `Assoc [ ("post", `String post_json) ] in
+  match Mattermost.parse_posted_event data with
+  | Some (ch, uid, msg) ->
+      Alcotest.(check string) "channel" "ch1" ch;
+      Alcotest.(check string) "user" "u1" uid;
+      Alcotest.(check string) "message" "hello" msg
+  | None -> Alcotest.fail "expected Some"
+
+let test_parse_posted_invalid () =
+  let data = `Assoc [ ("post", `String "not json") ] in
+  match Mattermost.parse_posted_event data with
+  | None -> ()
+  | Some _ -> Alcotest.fail "expected None"
+
+let test_parse_posted_missing_post () =
+  match Mattermost.parse_posted_event (`Assoc []) with
+  | None -> ()
+  | Some _ -> Alcotest.fail "expected None"
+
+let test_parse_posted_null () =
+  match Mattermost.parse_posted_event `Null with
+  | None -> ()
+  | Some _ -> Alcotest.fail "expected None"
+
+let suite =
+  [
+    Alcotest.test_case "is_allowed wildcard" `Quick test_is_allowed_wildcard;
+    Alcotest.test_case "is_allowed match" `Quick test_is_allowed_match;
+    Alcotest.test_case "is_allowed no match" `Quick test_is_allowed_no_match;
+    Alcotest.test_case "channel allowed empty" `Quick test_channel_allowed_empty;
+    Alcotest.test_case "channel allowed match" `Quick test_channel_allowed_match;
+    Alcotest.test_case "channel allowed no match" `Quick
+      test_channel_allowed_no_match;
+    Alcotest.test_case "parse posted valid" `Quick test_parse_posted_valid;
+    Alcotest.test_case "parse posted invalid" `Quick test_parse_posted_invalid;
+    Alcotest.test_case "parse posted missing" `Quick
+      test_parse_posted_missing_post;
+    Alcotest.test_case "parse posted null" `Quick test_parse_posted_null;
+  ]

@@ -112,6 +112,8 @@ let test_provider_config_default_model () =
               api_key = "sk-test";
               base_url = Some "http://localhost";
               default_model = Some "custom-model";
+              project_id = None;
+              location = None;
             } );
         ];
       default_provider = Some "test";
@@ -137,12 +139,16 @@ let test_select_provider_prefers_colon_model_provider () =
               api_key = "sk-groq";
               base_url = Some "https://api.groq.com/openai/v1";
               default_model = Some "llama-3.3-70b-versatile";
+              project_id = None;
+              location = None;
             } );
           ( "zai_coding",
             {
               api_key = "sk-zai";
               base_url = Some "https://api.z.ai/api/coding/paas/v4";
               default_model = Some "glm-5";
+              project_id = None;
+              location = None;
             } );
         ];
       default_provider = Some "groq";
@@ -169,6 +175,8 @@ let test_select_provider_keeps_raw_model_when_target_provider_missing () =
               api_key = "sk-groq";
               base_url = Some "https://api.groq.com/openai/v1";
               default_model = None;
+              project_id = None;
+              location = None;
             } );
         ];
       default_provider = Some "groq";
