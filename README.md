@@ -10,6 +10,30 @@
 
 A *formally* verified personal AI assistant runtime — Coq-proven core properties extracted to OCaml, with impeccable manners and machine-checked correctness. Multi-channel support (CLI, Telegram, Discord, Slack), HTTP gateway, cron scheduling, audit logging, and MCP server.
 
+## Quick Help
+
+```bash
+# First-time setup — interactive wizard
+clawq onboard
+
+# Or configure piece by piece
+clawq config set providers.0.api_key "sk-..."
+clawq config set channels.telegram.bot_token "123:ABC..."
+clawq config show                  # review config (secrets redacted)
+
+# Start the daemon
+clawq agent
+
+# Common operations
+clawq status                       # runtime status
+clawq doctor                       # config health check
+clawq models                       # list configured providers
+clawq channel                      # list active channels
+clawq config show security         # inspect a specific config section
+```
+
+See [docs/QUICKSTART.md](docs/QUICKSTART.md) for a full walkthrough.
+
 ## Quick Start
 
 ### Prerequisites
@@ -36,13 +60,15 @@ The fastest way to get a running clawq instance is via Telegram:
 
 1. Create a bot with [@BotFather](https://t.me/BotFather) and get your bot token.
 2. Get an API key from an OpenAI-compatible LLM provider (OpenAI, Anthropic via proxy, etc.).
-3. Generate a starter config:
+3. Run the interactive setup wizard:
 
 ```bash
 ./clawq onboard
 ```
 
-4. Edit `~/.clawq/config.json` with your tokens:
+This launches a full interactive TUI wizard (when run in a terminal) to configure your provider, model, security, channels, gateway, and memory settings. Pipe input or redirect to a non-TTY and it falls back to generating a starter template instead.
+
+4. Edit `~/.clawq/config.json` with your tokens if needed, or use `clawq config set`:
 
 ```json
 {
@@ -78,13 +104,14 @@ clawq audit            View and manage the security audit log
 clawq auth             Show API key status or encrypt plaintext secrets in config
 clawq capabilities     List all active runtime capabilities
 clawq channel          List configured channels
+clawq config           Manage configuration (wizard, get/set/show)
 clawq cron             Manage cron jobs for scheduled agent messages
 clawq doctor           Check configuration for common issues
 clawq mcp              Start the MCP server (Model Context Protocol)
 clawq memory           Show memory backend configuration
 clawq migrate          Run database migrations
 clawq models           List configured LLM providers and their default models
-clawq onboard          Create a starter config file at ~/.clawq/config.json
+clawq onboard          Interactive setup wizard (or template when not in a TTY)
 clawq phase2           Show Phase 2 feature status
 clawq reset-agent      Wipe all session history, cron jobs, and workspace files
 clawq runtime          Manage native and Docker runtimes
@@ -94,6 +121,19 @@ clawq status           Show runtime configuration and daemon status
 clawq transcribe       Transcribe an audio file using the configured STT provider
 clawq tunnel           Manage a public tunnel to the local gateway
 clawq workspace        Print the current workspace directory
+```
+
+### Config subcommands
+
+```
+clawq config wizard              Full interactive TUI wizard (provider, model, security,
+                                 channels, gateway, memory)
+clawq config set KEY VALUE       Set a config value by dot-path
+                                   e.g. clawq config set security.tools_enabled true
+clawq config get KEY             Read a config value by dot-path
+                                   e.g. clawq config get providers.0.model
+clawq config show [SECTION]      Display current config with secrets redacted
+                                   e.g. clawq config show channels
 ```
 
 Run `clawq COMMAND --help` for per-command usage.

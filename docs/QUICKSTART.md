@@ -31,68 +31,59 @@ Sign up at one of these providers and grab an API key:
 
 ## 4. Configure clawq
 
-Run the onboard command to generate a config template:
+### Option A — Interactive wizard (recommended)
+
+Run the onboard command to launch the interactive TUI wizard:
 
 ```bash
-dune exec clawq -- onboard
+clawq onboard
 ```
 
-This creates `~/.clawq/config.json`. Edit it with your keys:
+The wizard walks you through every section: provider, model, security, channels, gateway, and memory. At the end it writes `~/.clawq/config.json`. You can re-run any time.
+
+### Option B — Config set commands
+
+Set individual values by dot-path:
+
+```bash
+clawq config set providers.0.api_key "sk-or-v1-YOUR_KEY_HERE"
+clawq config set providers.0.base_url "https://openrouter.ai/api/v1"
+clawq config set providers.0.model "openai/gpt-4o"
+clawq config set channels.telegram.bot_token "7123456789:AAF1k_YOUR_TOKEN_HERE"
+clawq config set channels.telegram.allow_from '["*"]'
+```
+
+Review the result with secrets redacted:
+
+```bash
+clawq config show
+clawq config show channels    # show one section
+clawq config get providers.0.model   # read a single value
+```
+
+### Option C — Manual edit
 
 ```bash
 $EDITOR ~/.clawq/config.json
 ```
 
-Fill in these fields:
+Minimal working config:
 
 ```json
 {
-  "workspace": "~/.clawq/workspace",
-  "default_temperature": 0.7,
-  "providers": {
-    "openrouter": {
+  "providers": [
+    {
+      "name": "openrouter",
       "api_key": "sk-or-v1-YOUR_KEY_HERE",
-      "base_url": "https://openrouter.ai/api/v1"
+      "base_url": "https://openrouter.ai/api/v1",
+      "model": "openai/gpt-4o"
     }
-  },
-  "agent_defaults": {
-    "primary_model": "openai/gpt-4o",
-    "model_priority": [
-      { "provider": "openrouter", "model": "openai/gpt-4o" },
-      { "provider": "groq", "model": "openai/gpt-oss-120b" }
-    ],
-    "max_tool_iterations": 10
-  },
-  "prompt": {
-    "dynamic_enabled": true,
-    "workspace_files": ["AGENTS.md", "EGO.md", "SOUL.md", "TOOLS.md", "USER.md"],
-    "max_workspace_file_chars": 3500,
-    "max_workspace_total_chars": 12000
-  },
+  ],
   "channels": {
-    "cli": true,
     "telegram": {
-      "accounts": {
-        "main": {
-          "bot_token": "7123456789:AAF1k_YOUR_TOKEN_HERE",
-          "allow_from": ["*"]
-        }
-      }
-    }
-  },
-  "gateway": {
-    "host": "127.0.0.1",
-    "port": 3000
-  },
-  "tunnel": {
-    "enabled": false,
-    "provider": "cloudflare",
-    "cloudflare": {
-      "api_token": "$CLOUDFLARE_API_TOKEN",
-      "account_id": "",
-      "tunnel_id": "",
-      "tunnel_name": "clawq",
-      "hostname": ""
+      "enabled": true,
+      "bot_token": "7123456789:AAF1k_YOUR_TOKEN_HERE",
+      "allow_from": ["*"]
     }
   }
 }
@@ -100,21 +91,16 @@ Fill in these fields:
 
 ### Configuration notes
 
-- **allow_from**: `["*"]` allows all Telegram users. To restrict access, list specific chat IDs (as strings): `["123456789", "987654321"]`. Find your chat ID by messaging [@userinfobot](https://t.me/userinfobot).
-- **workspace**: Default daemon workspace root. `clawq agent` uses this directory instead of current shell directory.
-- **model_priority**: Ordered preference list; entries can be plain model strings or objects like `{ "provider": "groq", "model": "openai/gpt-oss-120b" }`.
-- **primary_model**: Backward-compatible alias for the first entry in `model_priority`.
-- **prompt.dynamic_enabled**: Enables dynamic prompt construction using runtime/tool/workspace context and workspace docs.
-- **base_url**: Change this if using OpenAI directly (`https://api.openai.com/v1`) or a self-hosted endpoint.
-- **tunnel.cloudflare**: Predeclared for future tunnel support; keep disabled unless you are wiring Cloudflare in your own build.
-- **tunnel.cloudflare.ingress_service**: Automatically derived from `gateway.host` and `gateway.port`.
+- **allow_from**: `["*"]` allows all Telegram users. To restrict access, list specific chat IDs: `["123456789", "987654321"]`. Find yours by messaging [@userinfobot](https://t.me/userinfobot).
+- **base_url**: Use `https://api.openai.com/v1` for OpenAI directly, or any OpenAI-compatible endpoint.
+- **model**: Default model for this provider. Can be overridden per-request.
 
 ## 5. Validate
 
 Check your config is valid:
 
 ```bash
-dune exec clawq -- doctor
+clawq doctor
 ```
 
 You should see `doctor: all checks passed`. If there are warnings, fix the noted issues.
@@ -122,19 +108,19 @@ You should see `doctor: all checks passed`. If there are warnings, fix the noted
 Initialize workspace prompt files (`EGO.md`, `AGENTS.md`, etc.):
 
 ```bash
-dune exec clawq -- workspace init
+clawq workspace init
 ```
 
 Check the full status:
 
 ```bash
-dune exec clawq -- status
+clawq status
 ```
 
 ## 6. Start the Daemon
 
 ```bash
-dune exec clawq -- agent
+clawq agent
 ```
 
 You should see:
@@ -150,7 +136,7 @@ The daemon runs in the foreground. Use `Ctrl+C` to stop it.
 To run in the background:
 
 ```bash
-dune exec clawq -- agent &
+clawq agent &
 ```
 
 ## 7. Chat with Your Bot
@@ -280,7 +266,7 @@ Configure timeout, retry, and fallback behavior for LLM calls:
 
 **Bot doesn't respond:**
 - Check the daemon is running and showing `Starting Telegram polling`
-- Verify your bot token with `dune exec clawq -- doctor`
+- Verify your bot token with `clawq doctor`
 - Check that `allow_from` includes your chat ID (or is `["*"]`)
 - Look at daemon logs for error messages
 
@@ -293,14 +279,21 @@ Configure timeout, retry, and fallback behavior for LLM calls:
 - Check the `base_url` matches your provider
 
 **Permission denied / config not found:**
-- Run `dune exec clawq -- onboard` to create the config directory
+- Run `clawq onboard` to create the config directory
 - Check `~/.clawq/config.json` exists and is readable
 
 ## Other Useful Commands
 
 ```bash
-dune exec clawq -- models        # List configured providers
-dune exec clawq -- channel       # Show channel configuration
-dune exec clawq -- auth          # Show API key status (redacted)
-dune exec clawq -- capabilities  # List available features
+clawq models                       # list configured providers
+clawq channel                      # show channel configuration
+clawq auth                         # show API key status (secrets redacted)
+clawq capabilities                 # list available features
+
+# Config management
+clawq config wizard                # re-run the interactive setup wizard
+clawq config show                  # display full config (secrets redacted)
+clawq config show security         # display one section
+clawq config get providers.0.model # read a single value
+clawq config set KEY VALUE         # set a value by dot-path
 ```
