@@ -25,4 +25,5 @@
    kdf
    digestif
    base64
-   (alcotest :with-test)))
+   (alcotest :with-test)
+   (bisect_ppx (and :with-test (>= 2.7.0)))))

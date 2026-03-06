@@ -4,7 +4,7 @@ depends_on: []
 estimate_hours: 3
 id: P2.M4.E2.T002
 priority: medium
-status: pending
+status: done
 tags: []
 title: Add wasm_of_ocaml build target to src/dune and build-wasm/run-wasm targets to Makefile
 ---

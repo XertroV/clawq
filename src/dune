@@ -43,6 +43,8 @@
   (language c)
   (names landlock_stubs))
  (wrapped false)
+ (instrumentation
+  (backend bisect_ppx))
  (libraries
   yojson
   sqlite3
@@ -135,13 +137,21 @@
   gluten-lwt-unix
   ca-certs
   bigstringaf
-  faraday))
+  faraday)
+ (instrumentation
+  (backend bisect_ppx)))
 
 (library
  (name clawq_wasm)
  (modules main_wasm)
  (wrapped false)
  (libraries))
+
+(executable
+ (name main_wasm_exe)
+ (modules main_wasm_exe)
+ (modes byte)
+ (libraries clawq_wasm))
 
 (executable
  (name main)

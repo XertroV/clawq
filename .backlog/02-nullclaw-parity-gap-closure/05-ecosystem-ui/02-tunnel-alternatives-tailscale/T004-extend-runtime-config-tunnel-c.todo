@@ -4,7 +4,7 @@ depends_on: []
 estimate_hours: 3
 id: P2.M5.E2.T004
 priority: medium
-status: pending
+status: done
 tags: []
 title: Extend runtime_config tunnel_config with backend field + per-backend sub-configs; update cmd_tunnel dispatch
 ---

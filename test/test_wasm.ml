@@ -3,15 +3,18 @@
 (* --- dispatch tests --- *)
 
 let test_dispatch_help () =
-  let result = Main_wasm.dispatch [ "help" ] in
+  let code, result = Main_wasm.dispatch [ "help" ] in
+  Alcotest.(check int) "help exits 0" 0 code;
   Alcotest.(check bool) "help non-empty" true (String.length result > 0)
 
 let test_dispatch_empty () =
-  let result = Main_wasm.dispatch [] in
+  let code, result = Main_wasm.dispatch [] in
+  Alcotest.(check int) "empty exits 0" 0 code;
   Alcotest.(check bool) "empty shows help" true (String.length result > 0)
 
 let test_dispatch_version () =
-  let result = Main_wasm.dispatch [ "version" ] in
+  let code, result = Main_wasm.dispatch [ "version" ] in
+  Alcotest.(check int) "version exits 0" 0 code;
   Alcotest.(check bool) "version non-empty" true (String.length result > 0);
   let contains s sub =
     try
@@ -22,11 +25,13 @@ let test_dispatch_version () =
   Alcotest.(check bool) "contains wasm" true (contains result "wasm")
 
 let test_dispatch_status () =
-  let result = Main_wasm.dispatch [ "status" ] in
+  let code, result = Main_wasm.dispatch [ "status" ] in
+  Alcotest.(check int) "status exits 0" 0 code;
   Alcotest.(check bool) "status non-empty" true (String.length result > 0)
 
 let test_dispatch_unknown () =
-  let result = Main_wasm.dispatch [ "nonexistent_command" ] in
+  let code, result = Main_wasm.dispatch [ "nonexistent_command" ] in
+  Alcotest.(check int) "unknown exits 1" 1 code;
   Alcotest.(check bool) "unknown returns message" true (String.length result > 0);
   let contains s sub =
     try
@@ -39,15 +44,18 @@ let test_dispatch_unknown () =
     (contains result "Unknown" || contains result "unknown")
 
 let test_dispatch_dash_h () =
-  let result = Main_wasm.dispatch [ "-h" ] in
+  let code, result = Main_wasm.dispatch [ "-h" ] in
+  Alcotest.(check int) "-h exits 0" 0 code;
   Alcotest.(check bool) "help flag" true (String.length result > 0)
 
 let test_dispatch_dash_v () =
-  let result = Main_wasm.dispatch [ "-v" ] in
+  let code, result = Main_wasm.dispatch [ "-v" ] in
+  Alcotest.(check int) "-v exits 0" 0 code;
   Alcotest.(check bool) "version flag" true (String.length result > 0)
 
 let test_dispatch_dash_version () =
-  let result = Main_wasm.dispatch [ "--version" ] in
+  let code, result = Main_wasm.dispatch [ "--version" ] in
+  Alcotest.(check int) "--version exits 0" 0 code;
   Alcotest.(check bool) "long version" true (String.length result > 0)
 
 (* --- cmd_help tests --- *)

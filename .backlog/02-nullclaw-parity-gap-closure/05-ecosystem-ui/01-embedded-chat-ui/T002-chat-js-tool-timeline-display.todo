@@ -4,7 +4,7 @@ depends_on: []
 estimate_hours: 4
 id: P2.M5.E1.T002
 priority: high
-status: pending
+status: done
 tags: []
 title: 'chat.js: tool timeline display (tool_start/tool_result events in SSE stream), collapsible per-turn panel'
 ---

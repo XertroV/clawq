@@ -4,7 +4,7 @@ depends_on: []
 estimate_hours: 2
 id: P2.M4.E2.T003
 priority: medium
-status: pending
+status: done
 tags: []
 title: Add wasm_of_ocaml as optional dependency in clawq.opam; document in QUICKSTART.md
 ---

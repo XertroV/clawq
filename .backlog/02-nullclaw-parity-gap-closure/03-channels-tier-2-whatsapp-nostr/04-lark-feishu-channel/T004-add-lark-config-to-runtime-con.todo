@@ -4,7 +4,7 @@ depends_on: []
 estimate_hours: 2
 id: P2.M3.E4.T004
 priority: medium
-status: pending
+status: done
 tags: []
 title: Add lark_config to runtime_config (dual endpoint lark/feishu); parse; wire into daemon
 ---

@@ -24,3 +24,5 @@ main.stripped.test
 **/*.cmi
 reviews/
 *.bak
+_coverage/
+*.coverage

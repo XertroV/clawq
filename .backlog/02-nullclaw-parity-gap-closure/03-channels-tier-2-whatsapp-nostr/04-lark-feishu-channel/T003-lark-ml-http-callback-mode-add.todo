@@ -4,7 +4,7 @@ depends_on: []
 estimate_hours: 3
 id: P2.M3.E4.T003
 priority: low
-status: pending
+status: done
 tags: []
 title: 'lark.ml: HTTP callback mode (add route to http_server.ml, verify X-Lark-Signature)'
 ---

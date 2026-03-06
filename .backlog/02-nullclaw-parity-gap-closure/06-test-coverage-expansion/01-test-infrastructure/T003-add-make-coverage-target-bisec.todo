@@ -4,7 +4,7 @@ depends_on: []
 estimate_hours: 1
 id: P2.M6.E1.T003
 priority: low
-status: pending
+status: done
 tags: []
 title: Add 'make coverage' target (BISECT_ENABLE=yes dune runtest && bisect-ppx-report html)
 ---

@@ -102,8 +102,8 @@ let lookup_github_repo path (gc : Runtime_config.github_config) =
 
 let handler ~session_manager ~require_pairing ~auth_token ?slack_config
     ?github_config ?github_api_limiter ?ip_limiter ?session_limiter
-    ?slack_event_limiter ?web_channel ?whatsapp_config ?line_config ?pairing
-    _conn req body =
+    ?slack_event_limiter ?web_channel ?whatsapp_config ?line_config ?lark_config
+    ?pairing _conn req body =
   let open Lwt.Syntax in
   let uri = Cohttp.Request.uri req in
   let path = Uri.path uri in
@@ -266,6 +266,15 @@ let handler ~session_manager ~require_pairing ~auth_token ?slack_config
                             ~on_chunk:(fun chunk ->
                               let data =
                                 match chunk with
+                                | Provider.Delta s
+                                  when String.length s > 0 && s.[0] = '{' -> (
+                                    try
+                                      let _ = Yojson.Safe.from_string s in
+                                      s
+                                    with _ ->
+                                      Printf.sprintf
+                                        {|{"type":"delta","content":%s}|}
+                                        (Yojson.Safe.to_string (`String s)))
                                 | Provider.Delta s ->
                                     Printf.sprintf
                                       {|{"type":"delta","content":%s}|}
@@ -538,6 +547,49 @@ let handler ~session_manager ~require_pairing ~auth_token ?slack_config
             Cohttp_lwt_unix.Server.respond_string ~status:`OK
               ~headers:json_headers ~body ()
           end)
+  | `POST, "/lark/webhook" -> (
+      match lark_config with
+      | None ->
+          let* _ = Cohttp_lwt.Body.drain_body body in
+          Cohttp_lwt_unix.Server.respond_string ~status:`Not_found
+            ~headers:json_headers ~body:{|{"error":"not configured"}|} ()
+      | Some lc -> (
+          let* body_str = Cohttp_lwt.Body.to_string body in
+          let headers = Cohttp.Request.headers req in
+          let sig_ok =
+            if lc.Runtime_config.verification_token = "" then true
+            else
+              let timestamp =
+                Cohttp.Header.get headers "x-lark-request-timestamp"
+                |> Option.value ~default:""
+              in
+              let nonce =
+                Cohttp.Header.get headers "x-lark-request-nonce"
+                |> Option.value ~default:""
+              in
+              let signature =
+                Cohttp.Header.get headers "x-lark-signature"
+                |> Option.value ~default:""
+              in
+              Lark.verify_lark_signature
+                ~verification_token:lc.verification_token ~timestamp ~nonce
+                ~body:body_str ~signature
+          in
+          if not sig_ok then
+            Cohttp_lwt_unix.Server.respond_string ~status:`Unauthorized
+              ~headers:json_headers ~body:{|{"error":"invalid signature"}|} ()
+          else
+            let* result =
+              Lark.handle_webhook_body ~config:lc ~session_mgr:session_manager
+                body_str
+            in
+            match result with
+            | `Challenge resp ->
+                Cohttp_lwt_unix.Server.respond_string ~status:`OK
+                  ~headers:json_headers ~body:resp ()
+            | `Ok _ ->
+                Cohttp_lwt_unix.Server.respond_string ~status:`OK
+                  ~headers:json_headers ~body:{|{"code":0}|} ()))
   | _ ->
       let* _ = Cohttp_lwt.Body.drain_body body in
       Cohttp_lwt_unix.Server.respond_string ~status:`Not_found
@@ -546,12 +598,13 @@ let handler ~session_manager ~require_pairing ~auth_token ?slack_config
 let start ~port ~host ~require_pairing ~auth_token ~session_manager
     ?slack_config ?github_config ?github_api_limiter ?ip_limiter
     ?session_limiter ?slack_event_limiter ?web_channel ?whatsapp_config
-    ?line_config ?pairing () =
+    ?line_config ?lark_config ?pairing () =
   let open Lwt.Syntax in
   let callback =
     handler ~session_manager ~require_pairing ~auth_token ?slack_config
       ?github_config ?github_api_limiter ?ip_limiter ?session_limiter
-      ?slack_event_limiter ?web_channel ?whatsapp_config ?line_config ?pairing
+      ?slack_event_limiter ?web_channel ?whatsapp_config ?line_config
+      ?lark_config ?pairing
   in
   let* ctx = Conduit_lwt_unix.init ~src:host () in
   let ctx = Cohttp_lwt_unix.Net.init ~ctx () in

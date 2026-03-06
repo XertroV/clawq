@@ -170,8 +170,15 @@ let start ~(config : Runtime_config.t) ~(session_manager : Session.t) =
                           let ack =
                             `Assoc
                               [
-                                ("messageId", `String msg_id);
-                                ("status", `String "SUCCESS");
+                                ("code", `Int 0);
+                                ( "headers",
+                                  `Assoc
+                                    [
+                                      ("contentType", `String "application/json");
+                                      ("messageId", `String msg_id);
+                                    ] );
+                                ("message", `String "SUCCESS");
+                                ("data", `String "{}");
                               ]
                             |> Yojson.Safe.to_string
                           in
@@ -219,7 +226,7 @@ let start ~(config : Runtime_config.t) ~(session_manager : Session.t) =
                                         Session.turn session_manager ~key
                                           ~message:content
                                           ~channel_name:"dingtalk" ~channel_type
-                                          ()
+                                          ~sender_id ()
                                       in
                                       Lwt.return (Ok response))
                                     (fun exn ->

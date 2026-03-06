@@ -101,12 +101,22 @@ let is_allowed ~(config : Runtime_config.lark_config) ~user_id =
 (* Verify Lark webhook signature: HMAC-SHA256 of timestamp + nonce + body *)
 let verify_lark_signature ~verification_token ~timestamp ~nonce ~body ~signature
     =
-  let payload = timestamp ^ nonce ^ body in
-  let computed =
-    Digestif.SHA256.hmac_string ~key:verification_token payload
-    |> Digestif.SHA256.to_hex
+  (* Reject stale timestamps (>300s) to prevent replay attacks *)
+  let ts_ok =
+    match float_of_string_opt timestamp with
+    | Some ts ->
+        let age = abs_float (Unix.gettimeofday () -. ts) in
+        age < 300.0
+    | None -> false
   in
-  Eqaf.equal computed signature
+  if not ts_ok then false
+  else
+    let payload = timestamp ^ nonce ^ body in
+    let computed =
+      Digestif.SHA256.hmac_string ~key:verification_token payload
+      |> Digestif.SHA256.to_hex
+    in
+    Eqaf.equal computed signature
 
 let send_message ~(config : Runtime_config.lark_config) ~chat_id ~text =
   let open Lwt.Syntax in
@@ -234,13 +244,65 @@ let start ~(config : Runtime_config.t) ~(session_manager : Session.t) =
         Lwt.return_unit
       end
       else begin
-        (* WebSocket mode - for now log a notice; full WSS gateway
-           requires Lark-specific connection endpoint discovery *)
+        (* WebSocket mode *)
         Logs.info (fun m ->
-            m
-              "Lark channel: websocket mode configured (endpoint=%s); webhook \
-               mode is recommended"
+            m "Lark channel: starting websocket mode (endpoint=%s)"
               lark_config.endpoint);
-        ignore session_manager;
-        Lwt.return_unit
+        let rec connect_loop () =
+          let open Lwt.Syntax in
+          let* token_opt = get_tenant_access_token ~config:lark_config in
+          match token_opt with
+          | None ->
+              Logs.err (fun m ->
+                  m "Lark WS: cannot get access token, retry in 30s");
+              let* () = Lwt_unix.sleep 30.0 in
+              connect_loop ()
+          | Some _token ->
+              let ws_host =
+                if lark_config.endpoint = "lark" then "open.larksuite.com"
+                else "open.feishu.cn"
+              in
+              let ws_path = "/event/ws?app_id=" ^ lark_config.app_id in
+              let uri = Printf.sprintf "wss://%s%s" ws_host ws_path in
+              let* () =
+                Lwt.catch
+                  (fun () ->
+                    let* ws = Ws_client.connect_wss ~uri () in
+                    Ws_client.on_message ws (fun msg ->
+                        let open Lwt.Syntax in
+                        try
+                          let json = Yojson.Safe.from_string msg in
+                          let open Yojson.Safe.Util in
+                          let log_id =
+                            try
+                              json |> member "header" |> member "logId"
+                              |> to_string
+                            with _ -> ""
+                          in
+                          let ack =
+                            Yojson.Safe.to_string
+                              (`Assoc
+                                 [ ("code", `Int 0); ("logId", `String log_id) ])
+                          in
+                          let* () = Ws_client.send_text ws ack in
+                          let* _ =
+                            handle_webhook_body ~config:lark_config
+                              ~session_mgr:session_manager msg
+                          in
+                          Lwt.return_unit
+                        with exn ->
+                          Logs.warn (fun m ->
+                              m "Lark WS message error: %s"
+                                (Printexc.to_string exn));
+                          Lwt.return_unit);
+                    Ws_client.closed ws)
+                  (fun exn ->
+                    Logs.warn (fun m ->
+                        m "Lark WS: disconnected: %s, reconnecting in 5s"
+                          (Printexc.to_string exn));
+                    Lwt_unix.sleep 5.0)
+              in
+              connect_loop ()
+        in
+        connect_loop ()
       end

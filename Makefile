@@ -1,7 +1,7 @@
 SHELL := opam exec --switch=clawq-5.1 -- /usr/bin/env bash
 .SHELLFLAGS := -c
 
-.PHONY: bootstrap build build-minimal build-opt build-opt-all build-opt-speed build-opt-size build-opt-minimal build-opt-stripped build-opt-stripped-all build-opt-speed-stripped build-opt-size-stripped extract extract-check run phase2 test fmt fmt-check clean release docker-build docker-run verify-report
+.PHONY: bootstrap build build-minimal build-wasm build-opt build-opt-all build-opt-speed build-opt-size build-opt-minimal build-opt-stripped build-opt-stripped-all build-opt-speed-stripped build-opt-size-stripped extract extract-check run phase2 test fmt fmt-check clean release docker-build docker-run verify-report coverage coverage-summary embed-ui
 
 OPT ?= speed
 DIST_DIR := dist
@@ -102,8 +102,24 @@ extract-check:
 			cp /tmp/clawq_core.ml.bak src/extracted/clawq_core.ml; \
 			cp /tmp/clawq_core.mli.bak src/extracted/clawq_core.mli; exit 1)
 
+build-wasm:
+	dune build src/main_wasm_exe.bc
+	@echo "WASM bytecode built: _build/default/src/main_wasm_exe.bc"
+	@echo "Run with: ocamlrun _build/default/src/main_wasm_exe.bc help"
+
 test:
 	dune runtest
+
+coverage:
+	@rm -f *.coverage
+	BISECT_ENABLE=yes dune runtest || true
+	bisect-ppx-report html -o _coverage
+	@echo "Coverage report: _coverage/index.html"
+
+coverage-summary:
+	@rm -f *.coverage
+	BISECT_ENABLE=yes dune runtest || true
+	bisect-ppx-report summary
 
 fmt:
 	dune fmt
@@ -122,6 +138,9 @@ docker-run:
 
 verify-report:
 	@./scripts/formal_verification_report.sh
+
+embed-ui:
+	./scripts/embed_ui.sh
 
 clean:
 	dune clean

@@ -163,7 +163,14 @@ let start ~(config : Runtime_config.t) ~(session_manager : Session.t) =
           let result =
             Lwt.catch
               (fun () ->
-                let* ws = Ws_client.connect_wss ~uri:ob_config.ws_url () in
+                let is_tls =
+                  let scheme = Uri.scheme (Uri.of_string ob_config.ws_url) in
+                  scheme = Some "wss" || scheme = Some "https"
+                in
+                let* ws =
+                  if is_tls then Ws_client.connect_wss ~uri:ob_config.ws_url ()
+                  else Ws_client.connect_ws ~uri:ob_config.ws_url ()
+                in
                 backoff := 1.0;
                 (* Send auth if token provided *)
                 let* () =

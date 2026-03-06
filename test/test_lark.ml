@@ -53,7 +53,7 @@ let test_api_base_default () =
 
 let test_verify_sig_valid () =
   let vtok = "test-verification-token" in
-  let timestamp = "1234567890" in
+  let timestamp = Printf.sprintf "%.0f" (Unix.gettimeofday ()) in
   let nonce = "nonce123" in
   let body = "{\"test\":true}" in
   let payload = timestamp ^ nonce ^ body in
@@ -70,6 +70,20 @@ let test_verify_sig_invalid () =
     "invalid sig" false
     (Lark.verify_lark_signature ~verification_token:"tok" ~timestamp:"ts"
        ~nonce:"n" ~body:"b" ~signature:"wrong")
+
+let test_verify_sig_replay () =
+  let vtok = "test-token" in
+  let timestamp = "1000000000" in
+  let nonce = "n" in
+  let body = "b" in
+  let payload = timestamp ^ nonce ^ body in
+  let signature =
+    Digestif.SHA256.hmac_string ~key:vtok payload |> Digestif.SHA256.to_hex
+  in
+  Alcotest.(check bool)
+    "stale timestamp rejected" false
+    (Lark.verify_lark_signature ~verification_token:vtok ~timestamp ~nonce ~body
+       ~signature)
 
 (* --- parse_message_event tests --- *)
 
@@ -110,6 +124,7 @@ let suite =
     Alcotest.test_case "api_base default" `Quick test_api_base_default;
     Alcotest.test_case "verify sig valid" `Quick test_verify_sig_valid;
     Alcotest.test_case "verify sig invalid" `Quick test_verify_sig_invalid;
+    Alcotest.test_case "verify sig replay" `Quick test_verify_sig_replay;
     Alcotest.test_case "parse message valid" `Quick test_parse_message_valid;
     Alcotest.test_case "parse message empty text" `Quick
       test_parse_message_empty_text;

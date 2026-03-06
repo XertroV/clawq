@@ -4,7 +4,7 @@ depends_on: []
 estimate_hours: 2
 id: P2.M4.E2.T005
 priority: low
-status: pending
+status: done
 tags: []
 title: Write onboard template files for WASM mode (IDENTITY.md, USER.md, MEMORY.md, HEARTBEAT.md)
 ---

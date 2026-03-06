@@ -4,7 +4,7 @@ depends_on: []
 estimate_hours: 1
 id: P2.M5.E2.T005
 priority: low
-status: pending
+status: done
 tags: []
 title: Add doctor checks for tailscale/ngrok binaries when respective backend configured
 ---

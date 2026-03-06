@@ -99,14 +99,16 @@ let string_contains s sub =
     in
     go 0
 
-let detect_kind (p : Runtime_config.provider_config) =
+let detect_kind ?(name = "") (p : Runtime_config.provider_config) =
   let key = p.api_key in
   let url = String.lowercase_ascii (Option.value ~default:"" p.base_url) in
+  let lname = String.lowercase_ascii name in
   if String.length key >= 7 && String.sub key 0 7 = "sk-ant-" then Anthropic
   else if String.length key >= 6 && String.sub key 0 6 = "AIzaSy" then Gemini
   else if string_contains url "localhost:11434" || string_contains url "ollama"
   then Ollama
   else if string_contains url "aiplatform.googleapis.com" then Vertex
+  else if string_contains url "cohere.com" || lname = "cohere" then Cohere
   else OpenAICompat
 
 type complete_fn =
@@ -144,6 +146,7 @@ let default_base_url_for name =
   | "mistral" -> "https://api.mistral.ai/v1"
   | "xai" | "x_ai" -> "https://api.x.ai/v1"
   | "deepseek" -> "https://api.deepseek.com/v1"
+  | "cohere" -> "https://api.cohere.com"
   | _ -> "https://openrouter.ai/api/v1"
 
 let strip_date_suffix s =
@@ -257,7 +260,7 @@ let select_provider ~(config : Runtime_config.t) =
 let complete ~(config : Runtime_config.t) ~messages ?tools () =
   let open Lwt.Syntax in
   let provider_name, provider, model = select_provider ~config in
-  let kind = detect_kind provider in
+  let kind = detect_kind ~name:provider_name provider in
   (* Dispatch to native handler if registered *)
   match List.assoc_opt kind !native_complete with
   | Some fn ->
@@ -522,7 +525,7 @@ let process_sse_stream stream ~on_chunk =
 let complete_stream ~(config : Runtime_config.t) ~messages ?tools ~on_chunk () =
   let open Lwt.Syntax in
   let provider_name, provider, model = select_provider ~config in
-  let kind = detect_kind provider in
+  let kind = detect_kind ~name:provider_name provider in
   (* Dispatch to native stream handler if registered *)
   match List.assoc_opt kind !native_stream with
   | Some fn ->

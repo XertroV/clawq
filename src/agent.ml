@@ -222,6 +222,107 @@ let risk_level_to_string = function
 (* Execute all tool calls in parallel, then append results to history in the
    original call order. Parallel execution reduces latency when the LLM issues
    multiple independent tool calls in a single turn. *)
+let execute_tool_calls_stream agent ~db ~audit_enabled ~session_key ~on_chunk
+    calls =
+  let open Lwt.Syntax in
+  let* results =
+    Lwt_list.map_p
+      (fun (tc : Provider.tool_call) ->
+        Logs.info (fun m ->
+            m "Tool call: %s (id=%s) args=%s" tc.function_name tc.id
+              tc.arguments);
+        (match (db, audit_enabled, session_key) with
+        | Some db, true, Some sk ->
+            let risk =
+              match agent.tool_registry with
+              | Some reg -> (
+                  match Tool_registry.find reg tc.function_name with
+                  | Some t -> risk_level_to_string t.risk_level
+                  | None -> "unknown")
+              | None -> "unknown"
+            in
+            Audit.log ~db
+              (ToolInvocation
+                 {
+                   session_key = sk;
+                   tool_name = tc.function_name;
+                   risk_level = risk;
+                   args_preview = tc.arguments;
+                 })
+        | _ -> ());
+        let tool_start_json =
+          Yojson.Safe.to_string
+            (`Assoc
+               [
+                 ("type", `String "tool_start");
+                 ("name", `String tc.function_name);
+                 ("id", `String tc.id);
+                 ("args", `String tc.arguments);
+               ])
+        in
+        let* () = on_chunk (Provider.Delta tool_start_json) in
+        let* result =
+          match agent.tool_registry with
+          | None -> Lwt.return "Error: no tool registry available"
+          | Some registry -> (
+              match Tool_registry.find registry tc.function_name with
+              | None ->
+                  Lwt.return
+                    (Printf.sprintf "Error: unknown tool '%s'" tc.function_name)
+              | Some tool ->
+                  Lwt.catch
+                    (fun () ->
+                      let args =
+                        try Yojson.Safe.from_string tc.arguments
+                        with _ -> `Assoc []
+                      in
+                      tool.invoke args)
+                    (fun exn ->
+                      Lwt.return
+                        ("Error invoking tool: " ^ Printexc.to_string exn)))
+        in
+        let success =
+          not (String.length result >= 6 && String.sub result 0 6 = "Error:")
+        in
+        (match (db, audit_enabled, session_key) with
+        | Some db, true, Some sk ->
+            Audit.log ~db
+              (ToolResult
+                 { session_key = sk; tool_name = tc.function_name; success })
+        | _ -> ());
+        let preview =
+          if String.length result > 200 then String.sub result 0 200 ^ "..."
+          else result
+        in
+        Logs.info (fun m -> m "Tool result: %s -> %s" tc.function_name preview);
+        let tool_result_json =
+          Yojson.Safe.to_string
+            (`Assoc
+               [
+                 ("type", `String "tool_result");
+                 ("name", `String tc.function_name);
+                 ("id", `String tc.id);
+                 ("success", `Bool success);
+                 ("result", `String preview);
+               ])
+        in
+        let* () = on_chunk (Provider.Delta tool_result_json) in
+        Lwt.return (tc, result))
+      calls
+  in
+  List.iter
+    (fun ((tc : Provider.tool_call), result) ->
+      let result_for_history =
+        truncate_for_history result ~max_chars:max_tool_result_chars
+      in
+      let tool_msg =
+        Provider.make_tool_result ~tool_call_id:tc.id ~name:tc.function_name
+          ~content:result_for_history
+      in
+      agent.history <- tool_msg :: agent.history)
+    results;
+  Lwt.return_unit
+
 let execute_tool_calls agent ~db ~audit_enabled ~session_key calls =
   let open Lwt.Syntax in
   let* results =
@@ -644,7 +745,8 @@ let turn_stream agent ~user_message ?db ?session_key ?interrupt_check ~on_chunk
             in
             agent.history <- assistant_msg :: agent.history;
             let* () =
-              execute_tool_calls agent ~db ~audit_enabled ~session_key calls
+              execute_tool_calls_stream agent ~db ~audit_enabled ~session_key
+                ~on_chunk calls
             in
             match interrupt_check with
             | Some check -> (

@@ -4,7 +4,7 @@ depends_on: []
 estimate_hours: 3
 id: P2.M5.E1.T006
 priority: high
-status: pending
+status: done
 tags: []
 title: 'agent.ml turn_stream: emit tool_start and tool_result JSON events inline in SSE stream'
 ---

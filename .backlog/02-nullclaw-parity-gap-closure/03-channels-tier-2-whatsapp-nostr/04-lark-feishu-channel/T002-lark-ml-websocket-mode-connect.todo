@@ -4,7 +4,7 @@ depends_on: []
 estimate_hours: 4
 id: P2.M3.E4.T002
 priority: medium
-status: pending
+status: done
 tags: []
 title: 'lark.ml: WebSocket mode (connect to Lark event gateway WSS, ack events)'
 ---

@@ -195,6 +195,20 @@ let test_detect_kind_gemini_short_key () =
     "short AIzaS key not gemini" true
     (Provider.detect_kind cfg <> Provider.Gemini)
 
+let test_detect_kind_cohere_url () =
+  let cfg =
+    make_provider ~base_url:(Some "https://api.cohere.com/v2") "anykey"
+  in
+  Alcotest.(check bool)
+    "cohere url detected" true
+    (Provider.detect_kind cfg = Provider.Cohere)
+
+let test_detect_kind_cohere_by_name () =
+  let cfg = make_provider "some-cohere-key" in
+  Alcotest.(check bool)
+    "cohere by name" true
+    (Provider.detect_kind ~name:"cohere" cfg = Provider.Cohere)
+
 let test_normalize_empty () =
   Alcotest.(check string) "empty string" "" (Provider.normalize_model_name "")
 
@@ -283,6 +297,10 @@ let suite =
       test_detect_kind_anthropic_short_key;
     Alcotest.test_case "detect kind short AIzaS not gemini" `Quick
       test_detect_kind_gemini_short_key;
+    Alcotest.test_case "detect kind cohere url" `Quick
+      test_detect_kind_cohere_url;
+    Alcotest.test_case "detect kind cohere by name" `Quick
+      test_detect_kind_cohere_by_name;
     Alcotest.test_case "normalize empty string" `Quick test_normalize_empty;
     Alcotest.test_case "normalize already lowercase" `Quick
       test_normalize_already_lower;

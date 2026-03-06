@@ -4,7 +4,7 @@ depends_on: []
 estimate_hours: 4
 id: P2.M3.E6.T001
 priority: low
-status: pending
+status: done
 tags: []
 title: 'Implement dingtalk.ml: Stream Mode WSS connect, HMAC-SHA256 auth header, event parse, ack format'
 ---

@@ -12,4 +12,6 @@
   unix
   cohttp
   lwt
-  lwt.unix))
+  lwt.unix)
+ (instrumentation
+  (backend bisect_ppx)))

@@ -172,6 +172,23 @@ let cmd_doctor () =
                 reference environment variables."
                name))
       cfg.providers;
+  (if cfg.tunnel.enabled then
+     let binary =
+       match cfg.tunnel.provider with
+       | "cloudflare" | "cf" -> Some "cloudflared"
+       | "tailscale" -> Some "tailscale"
+       | "ngrok" -> Some "ngrok"
+       | _ -> None
+     in
+     match binary with
+     | None -> ()
+     | Some bin ->
+         if Sys.command (Printf.sprintf "which %s >/dev/null 2>&1" bin) <> 0
+         then
+           add
+             (Printf.sprintf
+                "WARNING: tunnel provider '%s' requires '%s' in PATH"
+                cfg.tunnel.provider bin));
   let result =
     match List.rev !issues with
     | [] -> "doctor: all checks passed"
@@ -890,6 +907,8 @@ let cmd_runtime args =
        health|docker start|docker stop|docker health>"
 
 let cmd_tunnel args =
+  let cfg = get_config () in
+  let provider_name = cfg.tunnel.provider in
   let tunnel_state_path () =
     let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
     Filename.concat (Filename.concat home ".clawq") "tunnel_state.json"
@@ -902,7 +921,7 @@ let cmd_tunnel args =
     let json =
       `Assoc
         [
-          ("provider", `String Tunnel_cloudflare.name);
+          ("provider", `String provider_name);
           ("pid", `Int pid);
           ("port", `Int port);
           ("url", `String url);
@@ -940,31 +959,72 @@ let cmd_tunnel args =
     let path = tunnel_state_path () in
     if Sys.file_exists path then try Sys.remove path with _ -> ()
   in
-  let cfg = get_config () in
-  if cfg.tunnel.provider <> Tunnel_cloudflare.name then
-    Printf.sprintf
-      "Tunnel provider '%s' is not supported in this build (supported: %s)"
-      cfg.tunnel.provider Tunnel_cloudflare.name
-  else if not cfg.tunnel.enabled then
+  if not cfg.tunnel.enabled then
     "Tunnel is disabled in config (set tunnel.enabled=true to use)"
   else
+    let process_needle =
+      match provider_name with
+      | "cloudflare" | "cf" -> "cloudflared"
+      | "tailscale" -> "tailscale"
+      | "ngrok" -> "ngrok"
+      | _ -> provider_name
+    in
     let tunnel_pid_matches ~pid ~start_ticks =
       if not (pid_is_alive pid) then false
-      else if not (proc_cmdline_contains ~needle:"cloudflared" pid) then false
+      else if not (proc_cmdline_contains ~needle:process_needle pid) then false
       else
         match (start_ticks, proc_start_ticks pid) with
         | Some expected, Some actual -> expected = actual
         | _ -> true
     in
+    (* Generic tunnel operations using first-class module-like dispatch *)
+    let tunnel_start () =
+      match provider_name with
+      | p when p = Tunnel_cloudflare.name || p = "cf" ->
+          let t =
+            Tunnel_cloudflare.create ~port:cfg.gateway.port ~config:cfg.tunnel
+          in
+          Lwt_main.run (Tunnel_cloudflare.start t);
+          (Tunnel_cloudflare.get_pid t, Tunnel_cloudflare.get_url t)
+      | p when p = Tunnel_tailscale.name ->
+          let t =
+            Tunnel_tailscale.create ~port:cfg.gateway.port ~config:cfg.tunnel
+          in
+          Lwt_main.run (Tunnel_tailscale.start t);
+          (Tunnel_tailscale.get_pid t, Tunnel_tailscale.get_url t)
+      | p when p = Tunnel_ngrok.name ->
+          let t =
+            Tunnel_ngrok.create ~port:cfg.gateway.port ~config:cfg.tunnel
+          in
+          Lwt_main.run (Tunnel_ngrok.start t);
+          (Tunnel_ngrok.get_pid t, Tunnel_ngrok.get_url t)
+      | p when p = Tunnel_custom.name ->
+          let custom_command =
+            try Sys.getenv "CLAWQ_TUNNEL_COMMAND" with Not_found -> ""
+          in
+          if custom_command = "" then begin
+            Printf.eprintf
+              "Custom tunnel requires CLAWQ_TUNNEL_COMMAND env var\n";
+            (None, None)
+          end
+          else
+            let t =
+              Tunnel_custom.create ~port:cfg.gateway.port ~config:cfg.tunnel
+                ~custom_command
+                ~url_regex:
+                  (try Sys.getenv "CLAWQ_TUNNEL_URL_REGEX"
+                   with Not_found -> "https://[a-zA-Z0-9._/-]+")
+            in
+            Lwt_main.run (Tunnel_custom.start t);
+            (Tunnel_custom.get_pid t, Tunnel_custom.get_url t)
+      | _ ->
+          Printf.eprintf "Unknown tunnel provider: %s\n" provider_name;
+          (None, None)
+    in
     match args with
     | [ "start" ] -> (
-        let tunnel =
-          Tunnel_cloudflare.create ~port:cfg.gateway.port ~config:cfg.tunnel
-        in
-        Lwt_main.run (Tunnel_cloudflare.start tunnel);
-        match
-          (Tunnel_cloudflare.get_pid tunnel, Tunnel_cloudflare.get_url tunnel)
-        with
+        let pid_url = tunnel_start () in
+        match pid_url with
         | Some pid, Some url -> (
             match save_tunnel_state ~pid ~port:cfg.gateway.port ~url with
             | Ok () -> Printf.sprintf "Tunnel started: %s (pid %d)" url pid
@@ -1012,18 +1072,18 @@ let cmd_tunnel args =
               "Tunnel provider: %s\n\
               \  Status: stopped\n\
               \  To start: clawq tunnel start"
-              Tunnel_cloudflare.name
+              provider_name
         | Some (pid, url, start_ticks) ->
             let running = tunnel_pid_matches ~pid ~start_ticks in
             if running then
               Printf.sprintf
                 "Tunnel provider: %s\n  Status: running (pid %d)\n  URL: %s"
-                Tunnel_cloudflare.name pid url
+                provider_name pid url
             else begin
               remove_tunnel_state ();
               Printf.sprintf
                 "Tunnel provider: %s\n  Status: stopped (stale state cleaned)"
-                Tunnel_cloudflare.name
+                provider_name
             end)
     | _ -> "Usage: clawq tunnel <start|status|stop>"
 

@@ -4,7 +4,7 @@ depends_on: []
 estimate_hours: 2
 id: P2.M5.E1.T004
 priority: high
-status: pending
+status: done
 tags: []
 title: 'scripts/embed_ui.sh: generate chat_ui_assets.ml from static files; add embed-ui Makefile target'
 ---

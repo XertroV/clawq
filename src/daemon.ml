@@ -370,7 +370,12 @@ let run ~(config : Runtime_config.t) =
           ?github_config:config.channels.github ~github_api_limiter ~ip_limiter
           ~session_limiter ~slack_event_limiter ?web_channel:web_channel_handler
           ?whatsapp_config:config.channels.whatsapp
-          ?line_config:config.channels.line ?pairing ())
+          ?line_config:config.channels.line
+          ?lark_config:
+            (match config.channels.lark with
+            | Some lc when lc.mode = "webhook" -> Some lc
+            | _ -> None)
+          ?pairing ())
       (fun exn ->
         Logs.err (fun m ->
             m "Gateway server error: %s" (Printexc.to_string exn));

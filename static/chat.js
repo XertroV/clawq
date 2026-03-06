@@ -54,13 +54,19 @@
     currentToolPanels = {};
   }
 
+  function escapeHtml(s) {
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
   function addToolPanel(id, name) {
     const panel = document.createElement('div');
     panel.className = 'tool-panel';
     panel.dataset.toolId = id;
     panel.innerHTML = `
       <div class="tool-panel-header">
-        <span class="tool-name">${name}</span>
+        <span class="tool-name">${escapeHtml(name)}</span>
         <span class="tool-status running">running...</span>
       </div>
       <div class="tool-panel-body"></div>
@@ -211,8 +217,9 @@
       }
       if (data.token) {
         setToken(data.token);
+        const retry = pendingRetry;
         hidePairModal();
-        if (pendingRetry) pendingRetry();
+        if (retry) retry();
       } else {
         pairError.textContent = 'No token received.';
       }

@@ -16,9 +16,9 @@ let read_memory ~workspace =
   if Sys.file_exists path then
     try
       let ic = open_in path in
-      let s = really_input_string ic (in_channel_length ic) in
-      close_in ic;
-      s
+      Fun.protect
+        ~finally:(fun () -> close_in_noerr ic)
+        (fun () -> really_input_string ic (in_channel_length ic))
     with _ -> ""
   else ""
 
@@ -48,9 +48,9 @@ let read_identity ~workspace =
   if Sys.file_exists path then
     try
       let ic = open_in path in
-      let s = really_input_string ic (in_channel_length ic) in
-      close_in ic;
-      s
+      Fun.protect
+        ~finally:(fun () -> close_in_noerr ic)
+        (fun () -> really_input_string ic (in_channel_length ic))
     with _ -> "(identity file unreadable)"
   else "(no IDENTITY.md found)"
 
@@ -65,6 +65,7 @@ let cmd_help () =
     \  memory list List memory entries\n\
     \  memory read Read full MEMORY.md\n\
     \  memory add <text>  Add a memory entry\n\
+    \  onboard     Create workspace template files\n\
     \  agent       Agent mode (stub - configure API key)\n\n\
      Environment:\n\
     \  CLAWQ_WORKSPACE  Workspace directory (default: current dir)\n\
@@ -125,20 +126,59 @@ let cmd_agent _args =
      API key is configured but network access is unavailable in WASM sandbox.\n\
      For full agent mode, use the native clawq binary."
 
+let cmd_onboard () =
+  let workspace = get_workspace () in
+  let files =
+    [
+      ( "IDENTITY.md",
+        "# Identity\n\n\
+         Name: Clawq\n\
+         Role: AI assistant\n\
+         Personality: Helpful, concise, and honest.\n" );
+      ("USER.md", "# User Preferences\n\n<!-- Add your preferences here -->\n");
+      ("MEMORY.md", "# Memory\n\n<!-- Durable notes and key facts -->\n");
+      ( "HEARTBEAT.md",
+        "# Heartbeat\n\n\
+         - [ ] Review recent interactions\n\
+         - [ ] Update memory with new facts\n\
+         - [ ] Check for pending tasks\n" );
+    ]
+  in
+  let results =
+    List.map
+      (fun (name, content) ->
+        let path = Filename.concat workspace name in
+        if Sys.file_exists path then name ^ ": already exists (skipped)"
+        else
+          try
+            let oc = open_out path in
+            output_string oc content;
+            close_out oc;
+            name ^ ": created"
+          with _ -> name ^ ": error creating file")
+      files
+  in
+  "Onboard complete:\n"
+  ^ String.concat "\n" (List.map (fun r -> "  " ^ r) results)
+
 let dispatch args =
   match args with
-  | [] | [ "help" ] | [ "--help" ] | [ "-h" ] -> cmd_help ()
-  | [ "version" ] | [ "--version" ] | [ "-v" ] -> cmd_version ()
-  | [ "status" ] -> cmd_status ()
-  | [ "identity" ] -> cmd_identity ()
-  | "memory" :: rest -> cmd_memory rest
-  | "agent" :: rest -> cmd_agent rest
+  | [] | [ "help" ] | [ "--help" ] | [ "-h" ] -> (0, cmd_help ())
+  | [ "version" ] | [ "--version" ] | [ "-v" ] -> (0, cmd_version ())
+  | [ "status" ] -> (0, cmd_status ())
+  | [ "identity" ] -> (0, cmd_identity ())
+  | "memory" :: rest -> (0, cmd_memory rest)
+  | [ "onboard" ] -> (0, cmd_onboard ())
+  | "agent" :: rest -> (0, cmd_agent rest)
   | cmd :: _ ->
-      Printf.sprintf "Unknown command: %s\nRun 'clawq-wasm help' for usage." cmd
+      ( 1,
+        Printf.sprintf "Unknown command: %s\nRun 'clawq-wasm help' for usage."
+          cmd )
 
 let run () =
   let args = match Array.to_list Sys.argv with _ :: rest -> rest | [] -> [] in
-  let result = dispatch args in
+  let code, result = dispatch args in
   print_string result;
   if String.length result > 0 && result.[String.length result - 1] <> '\n' then
-    print_char '\n'
+    print_char '\n';
+  if code <> 0 then exit code
