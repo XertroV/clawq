@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B027
+priority: high
+status: pending
+tags: []
+title: Find out how gpt-5.4 tool search works and implement it in clawq
+---
+
+Find out how gpt-5.4 tool search works and implement it in clawq
