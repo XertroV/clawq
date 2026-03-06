@@ -50,16 +50,31 @@ list_domains() {
   echo "$domains"
 }
 
-# Generate SVG badge
+# Approximate Verdana 11px text width (avg ~6.8px/char, good enough for badges)
+measure_text() {
+  echo $(( ${#1} * 68 ))  # returns width in 10x units
+}
+
+# Generate SVG badge (shields.io-compatible format)
 generate_badge() {
   local count="$1"
   local label="Coq proofs"
   local value="${count} verified"
-  local label_width=72
-  local value_width=72
-  local total_width=$((label_width + value_width))
-  local label_x=$((label_width / 2))
-  local value_x=$((label_width + value_width / 2))
+
+  # Measure text widths in 10x coordinate space
+  local label_text_w
+  label_text_w=$(measure_text "$label")
+  local value_text_w
+  value_text_w=$(measure_text "$value")
+
+  # Segment widths = text width + 10px padding (5px each side), in real pixels
+  local label_width=$(( (label_text_w + 100) / 10 ))
+  local value_width=$(( (value_text_w + 100) / 10 ))
+  local total_width=$(( label_width + value_width ))
+
+  # Text center positions in 10x coordinate space
+  local label_x=$(( label_width * 10 / 2 ))
+  local value_x=$(( (label_width + value_width / 2) * 10 ))
 
   mkdir -p "$(dirname "$BADGE_OUT")"
 
@@ -78,11 +93,11 @@ generate_badge() {
     <rect x="${label_width}" width="${value_width}" height="20" fill="#4c1"/>
     <rect width="${total_width}" height="20" fill="url(#s)"/>
   </g>
-  <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" text-rendering="geometricPrecision" font-size="11">
-    <text aria-hidden="true" x="${label_x}0" y="150" fill="#010101" fill-opacity=".3" transform="scale(.1)">${label}</text>
-    <text x="${label_x}0" y="140" transform="scale(.1)" fill="#fff">${label}</text>
-    <text aria-hidden="true" x="${value_x}0" y="150" fill="#010101" fill-opacity=".3" transform="scale(.1)">${value}</text>
-    <text x="${value_x}0" y="140" transform="scale(.1)" fill="#fff">${value}</text>
+  <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" text-rendering="geometricPrecision" font-size="110">
+    <text aria-hidden="true" x="${label_x}" y="150" fill="#010101" fill-opacity=".3" transform="scale(.1)" textLength="${label_text_w}">${label}</text>
+    <text x="${label_x}" y="140" transform="scale(.1)" fill="#fff" textLength="${label_text_w}">${label}</text>
+    <text aria-hidden="true" x="${value_x}" y="150" fill="#010101" fill-opacity=".3" transform="scale(.1)" textLength="${value_text_w}">${value}</text>
+    <text x="${value_x}" y="140" transform="scale(.1)" fill="#fff" textLength="${value_text_w}">${value}</text>
   </g>
 </svg>
 SVGEOF
