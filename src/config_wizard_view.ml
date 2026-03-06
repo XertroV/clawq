@@ -91,6 +91,7 @@ let render_step_indicator step =
       (ProviderBaseUrl, "endpoint");
       (ModelSelect, "model");
       (SecurityTools, "tools");
+      (ToolSearchConfig, "search");
       (SecurityWorkspace, "access");
       (Review, "review");
     ]
@@ -203,6 +204,10 @@ let render_review (m : model) =
   add
     (Printf.sprintf "  %s%s tools%s: %s" fg_teal bullet reset
        (if m.tools_enabled then fg_green ^ "enabled" ^ reset
+        else fg_red ^ "disabled" ^ reset));
+  add
+    (Printf.sprintf "  %s%s tool_search%s: %s" fg_teal bullet reset
+       (if m.tool_search_enabled then fg_green ^ "enabled" ^ reset
         else fg_red ^ "disabled" ^ reset));
   add
     (Printf.sprintf "  %s%s workspace_only%s: %s" fg_teal bullet reset

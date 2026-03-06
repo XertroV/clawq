@@ -80,7 +80,13 @@ let build_config_json (m : model) : Yojson.Safe.t =
         ("tools_enabled", `Bool m.tools_enabled);
       ]
   in
-  let agent_defaults = `Assoc [ ("primary_model", `String m.primary_model) ] in
+  let agent_defaults =
+    `Assoc
+      [
+        ("primary_model", `String m.primary_model);
+        ("tool_search_enabled", `Bool m.tool_search_enabled);
+      ]
+  in
   let default_provider =
     match m.providers with
     | p :: _ -> [ ("default_provider", `String p.name) ]
@@ -232,6 +238,7 @@ let model_from_config mode (config : Runtime_config.t) =
     providers;
     primary_model = config.agent_defaults.primary_model;
     tools_enabled = config.security.tools_enabled;
+    tool_search_enabled = config.agent_defaults.tool_search_enabled;
     workspace_only = config.security.workspace_only;
     channel_sel;
     telegram_token;

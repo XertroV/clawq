@@ -16,6 +16,7 @@ let check_step =
         | ProviderTestResult -> "ProviderTestResult"
         | ModelSelect -> "ModelSelect"
         | SecurityTools -> "SecurityTools"
+        | ToolSearchConfig -> "ToolSearchConfig"
         | SecurityWorkspace -> "SecurityWorkspace"
         | ChannelMenu -> "ChannelMenu"
         | ChannelTelegram -> "ChannelTelegram"
@@ -98,6 +99,9 @@ let test_full_onboard_flow () =
   Alcotest.check check_step "security tools" SecurityTools m.step;
   (* Accept tools enabled *)
   let m, _ = update KeyEnter m in
+  Alcotest.check check_step "tool search config" ToolSearchConfig m.step;
+  (* Accept tool search default *)
+  let m, _ = update KeyEnter m in
   Alcotest.check check_step "security workspace" SecurityWorkspace m.step;
   (* Accept workspace_only *)
   let m, _ = update KeyEnter m in
@@ -175,6 +179,7 @@ let test_full_wizard_has_channel_menu () =
   let m, _ = update KeyEnter m in
   let m, _ = update KeyEnter m in
   let m, _ = update KeyEnter m in
+  let m, _ = update KeyEnter m in
   Alcotest.check check_step "channel menu" ChannelMenu m.step
 
 let test_openai_codex_skips_api_key_prompt () =
@@ -214,6 +219,7 @@ let test_prepopulated_model_preserves_workspace_only () =
   let m, _ = update KeyEnter m in
   let m, _ = update KeyEnter m in
   let m, _ = update (KeyChar 'n') m in
+  let m, _ = update KeyEnter m in
   let m, _ = update KeyEnter m in
   let m, _ = update KeyEnter m in
   let m, _ = update KeyEnter m in
@@ -305,6 +311,7 @@ let test_prepopulated_channel_token_prefills () =
   let m, _ = update KeyEnter m in
   let m, _ = update KeyEnter m in
   let m, _ = update (KeyChar 'n') m in
+  let m, _ = update KeyEnter m in
   let m, _ = update KeyEnter m in
   let m, _ = update KeyEnter m in
   let m, _ = update KeyEnter m in

@@ -11,6 +11,7 @@ type step =
   | ProviderTestResult
   | ModelSelect
   | SecurityTools
+  | ToolSearchConfig
   | SecurityWorkspace
   | ChannelMenu
   | ChannelTelegram
@@ -72,6 +73,7 @@ type model = {
   current_provider : provider_draft;
   primary_model : string;
   tools_enabled : bool;
+  tool_search_enabled : bool;
   workspace_only : bool;
   extra_paths : string list;
   channel_sel : channel_selections;
@@ -108,6 +110,7 @@ let initial_model mode =
     current_provider = empty_provider;
     primary_model = "openai/gpt-4o";
     tools_enabled = true;
+    tool_search_enabled = false;
     workspace_only = true;
     extra_paths = [];
     channel_sel = default_channel_sel;

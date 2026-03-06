@@ -219,6 +219,13 @@ let transition_from_model_select m (si : select_input) =
 
 let transition_from_security_tools m (ci : confirm_input) =
   let m = { m with tools_enabled = ci.value } in
+  goto ToolSearchConfig
+    (make_confirm ~value:m.tool_search_enabled
+       "Enable tool search? (deferred tool discovery for large tool sets)")
+    m
+
+let transition_from_tool_search_config m (ci : confirm_input) =
+  let m = { m with tool_search_enabled = ci.value } in
   goto SecurityWorkspace
     (make_confirm ~value:m.workspace_only
        "Restrict agent to workspace directory only?")
@@ -327,6 +334,10 @@ let go_back m =
             make_select_at "Default model" model_presets selected
         | SecurityTools ->
             make_confirm ~value:m.tools_enabled "Enable tool use?"
+        | ToolSearchConfig ->
+            make_confirm ~value:m.tool_search_enabled
+              "Enable tool search? (deferred tool discovery for large tool \
+               sets)"
         | SecurityWorkspace ->
             make_confirm ~value:m.workspace_only
               "Restrict agent to workspace directory only?"
@@ -420,6 +431,13 @@ let update msg (m : model) : model * action =
           match (msg, m.widget) with
           | KeyEnter, ConfirmInput ci ->
               (transition_from_security_tools m ci, Noop)
+          | _, ConfirmInput ci ->
+              ({ m with widget = ConfirmInput (confirm_update msg ci) }, Noop)
+          | _ -> (m, Noop))
+      | ToolSearchConfig -> (
+          match (msg, m.widget) with
+          | KeyEnter, ConfirmInput ci ->
+              (transition_from_tool_search_config m ci, Noop)
           | _, ConfirmInput ci ->
               ({ m with widget = ConfirmInput (confirm_update msg ci) }, Noop)
           | _ -> (m, Noop))
