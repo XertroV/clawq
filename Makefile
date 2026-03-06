@@ -1,7 +1,7 @@
 SHELL := opam exec --switch=clawq-5.1 -- /usr/bin/env bash
 .SHELLFLAGS := -c
 
-.PHONY: bootstrap build build-minimal build-wasm build-opt build-opt-all build-opt-speed build-opt-size build-opt-minimal build-opt-stripped build-opt-stripped-all build-opt-speed-stripped build-opt-size-stripped extract extract-check coq-verify coq-check run phase2 test fmt fmt-check clean release docker-build docker-run verify-report coverage coverage-summary embed-ui update-fv
+.PHONY: bootstrap build build-minimal build-wasm build-opt build-opt-all build-opt-speed build-opt-size build-opt-minimal build-opt-stripped build-opt-stripped-all build-opt-speed-stripped build-opt-size-stripped extract extract-check coq-verify coq-check run phase2 test fmt fmt-check clean release docker-build docker-run verify-report coverage coverage-summary coverage-switch-setup embed-ui update-fv
 
 OPT ?= speed
 DIST_DIR := dist
@@ -118,12 +118,22 @@ build-wasm:
 test:
 	dune runtest
 
+COVERAGE_SWITCH := clawq-coverage
+
+coverage-switch-setup: SHELL := /bin/bash
+coverage-switch-setup:
+	opam switch create $(COVERAGE_SWITCH) 5.1.0 --no-switch || true
+	opam install --switch=$(COVERAGE_SWITCH) . --deps-only --with-test -y
+	opam install --switch=$(COVERAGE_SWITCH) bisect_ppx -y
+
+coverage: SHELL := opam exec --switch=$(COVERAGE_SWITCH) -- /usr/bin/env bash
 coverage:
 	@rm -f *.coverage
 	BISECT_ENABLE=yes dune runtest || true
 	bisect-ppx-report html -o _coverage
 	@echo "Coverage report: _coverage/index.html"
 
+coverage-summary: SHELL := opam exec --switch=$(COVERAGE_SWITCH) -- /usr/bin/env bash
 coverage-summary:
 	@rm -f *.coverage
 	BISECT_ENABLE=yes dune runtest || true

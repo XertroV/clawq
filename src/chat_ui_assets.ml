@@ -505,3 +505,4 @@ let chat_js =
   setStatus('active');
 })();
 |}
+
