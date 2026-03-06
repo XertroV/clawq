@@ -1,7 +1,7 @@
 SHELL := opam exec --switch=clawq-5.1 -- /usr/bin/env bash
 .SHELLFLAGS := -c
 
-.PHONY: bootstrap build build-minimal build-wasm build-opt build-opt-all build-opt-speed build-opt-size build-opt-minimal build-opt-stripped build-opt-stripped-all build-opt-speed-stripped build-opt-size-stripped extract extract-check coq-verify coq-check run phase2 test fmt fmt-check clean release docker-build docker-run verify-report coverage coverage-summary coverage-switch-setup embed-ui update-fv
+.PHONY: bootstrap build build-minimal build-wasm build-opt build-opt-all build-opt-speed build-opt-size build-opt-minimal build-opt-stripped build-opt-stripped-all build-opt-speed-stripped build-opt-size-stripped extract extract-check coq-verify coq-check run phase2 test fmt fmt-check clean release docker-build docker-run verify-report coverage coverage-summary coverage-switch-setup embed-ui update-fv fv-all
 
 OPT ?= speed
 DIST_DIR := dist
@@ -162,6 +162,9 @@ embed-ui:
 
 update-fv:
 	bash scripts/update_fv_data.sh
+
+fv-all: coq-check update-fv verify-report
+	@echo "=== fv-all complete ==="
 
 clean:
 	dune clean

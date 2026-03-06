@@ -1,10 +1,15 @@
 ---
+claimed_at: "2026-03-06T20:23:00Z"
+claimed_by: cli-user
+completed_at: "2026-03-06T20:23:56Z"
 complexity: medium
 depends_on: []
+duration_minutes: 0.9451249243333333
 estimate_hours: 1
 id: B033
 priority: high
-status: pending
+started_at: "2026-03-06T20:23:00Z"
+status: done
 tags: []
 title: the verification status docs page does not auto udpate when I run `make update-fv`
 ---
