@@ -1,10 +1,15 @@
 ---
+claimed_at: "2026-03-06T16:06:17Z"
+claimed_by: cli-user
+completed_at: "2026-03-06T16:08:09Z"
 complexity: medium
 depends_on: []
+duration_minutes: 1.8770742968833334
 estimate_hours: 1
 id: B026
 priority: high
-status: pending
+started_at: "2026-03-06T16:06:17Z"
+status: done
 tags: []
 title: We need a simple command (preferably a make target) that ensures there is no drift between coq specs and the corresponding ocaml code. This command should ensure all coq proofs still match and work for our codebase. Any error with the proofs should be detected by this command.
 ---

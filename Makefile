@@ -1,7 +1,7 @@
 SHELL := opam exec --switch=clawq-5.1 -- /usr/bin/env bash
 .SHELLFLAGS := -c
 
-.PHONY: bootstrap build build-minimal build-wasm build-opt build-opt-all build-opt-speed build-opt-size build-opt-minimal build-opt-stripped build-opt-stripped-all build-opt-speed-stripped build-opt-size-stripped extract extract-check run phase2 test fmt fmt-check clean release docker-build docker-run verify-report coverage coverage-summary embed-ui update-fv
+.PHONY: bootstrap build build-minimal build-wasm build-opt build-opt-all build-opt-speed build-opt-size build-opt-minimal build-opt-stripped build-opt-stripped-all build-opt-speed-stripped build-opt-size-stripped extract extract-check coq-verify coq-check run phase2 test fmt fmt-check clean release docker-build docker-run verify-report coverage coverage-summary embed-ui update-fv
 
 OPT ?= speed
 DIST_DIR := dist
@@ -101,6 +101,14 @@ extract-check:
 		|| (echo "ERROR: Extracted code has drifted. Run 'make extract' and commit."; \
 			cp /tmp/clawq_core.ml.bak src/extracted/clawq_core.ml; \
 			cp /tmp/clawq_core.mli.bak src/extracted/clawq_core.mli; exit 1)
+
+coq-verify:
+	@echo "Verifying all Coq theories and proofs..."
+	@./scripts/coq_verify.sh
+	@echo "All Coq proofs verified successfully."
+
+coq-check: coq-verify extract-check
+	@echo "Coq verification and extraction drift check passed."
 
 build-wasm:
 	dune build src/main_wasm_exe.bc

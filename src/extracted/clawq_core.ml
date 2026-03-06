@@ -472,48 +472,7 @@ let is_allowed cmd allowlist =
 
 let is_allowed0 id allowlist = match allowlist with
 | [] -> existsb ((=) id) allowlist
-| s :: l ->
-  ((* If this appears, you're using String internals. Please don't *)
- (fun f0 f1 s ->
-    let l = String.length s in
-    if l = 0 then f0 () else f1 (String.get s 0) (String.sub s 1 (l-1)))
-
-     (fun _ -> existsb ((=) id) allowlist)
-     (fun a s0 ->
-     (* If this appears, you're using Ascii internals. Please don't *)
- (fun f c ->
-  let n = Char.code c in
-  let h i = (n land (1 lsl i)) <> 0 in
-  f (h 0) (h 1) (h 2) (h 3) (h 4) (h 5) (h 6) (h 7))
-       (fun b b0 b1 b2 b3 b4 b5 b6 ->
-       if b
-       then existsb ((=) id) allowlist
-       else if b0
-            then if b1
-                 then existsb ((=) id) allowlist
-                 else if b2
-                      then if b3
-                           then existsb ((=) id) allowlist
-                           else if b4
-                                then if b5
-                                     then existsb ((=) id) allowlist
-                                     else if b6
-                                          then existsb ((=) id) allowlist
-                                          else ((* If this appears, you're using String internals. Please don't *)
- (fun f0 f1 s ->
-    let l = String.length s in
-    if l = 0 then f0 () else f1 (String.get s 0) (String.sub s 1 (l-1)))
-
-                                                  (fun _ ->
-                                                  match l with
-                                                  | [] -> true
-                                                  | _ :: _ ->
-                                                    existsb ((=) id) allowlist)
-                                                  (fun _ _ ->
-                                                  existsb ((=) id) allowlist)
-                                                  s0)
-                                else existsb ((=) id) allowlist
-                      else existsb ((=) id) allowlist
-            else existsb ((=) id) allowlist)
-       a)
-     s)
+| w :: l ->
+  (match l with
+   | [] -> if (=) w "*" then true else existsb ((=) id) (w :: [])
+   | _ :: _ -> existsb ((=) id) allowlist)

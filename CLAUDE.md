@@ -41,6 +41,8 @@ Agent instructions for this repository. Keep changes minimal, verifiable, and al
 
 - Coq extraction refresh: `make extract`
 - Coq extraction drift check: `make extract-check`
+- Verify Coq proofs only: `make coq-verify`
+- Full Coq check (proofs + drift): `make coq-check`
 
 ## Running a Single Test (Important)
 

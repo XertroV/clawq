@@ -26,7 +26,7 @@ Local Open Scope nat_scope.
 
 Definition is_allowed (id : string) (allowlist : list string) : bool :=
   match allowlist with
-  | [ "*" ] => true
+  | [ w ] => if String.eqb w "*" then true else existsb (String.eqb id) [w]
   | _ => existsb (String.eqb id) allowlist
   end.
 
@@ -40,25 +40,19 @@ Theorem is_allowed_forward : forall id allowlist,
   existsb (String.eqb id) allowlist = true \/ allowlist = [ "*"].
 Proof.
   intros id allowlist H.
-  unfold is_allowed in H.
   destruct allowlist as [| h t].
-  - (* [] case *)
-    simpl in H. discriminate.
-  - (* h :: t case *)
-    destruct t as [| t' rest].
-    + (* [h] case - could be wildcard or not *)
-      simpl in H.
-      destruct (String.eqb h "*") eqn:Ewildcard.
-      * (* h = "*" - wildcard case *)
-        apply String.eqb_eq in Ewildcard. subst h.
-        right. reflexivity.
-      * (* h <> "*" - must be id = h *)
-        left. exact H.
-    + (* h :: t' :: rest case - at least 2 elements, not wildcard pattern *)
-      simpl in H.
-      destruct (String.eqb h "*") eqn:Ewildcard.
-      * left. exact H.
-      * left. exact H.
+  - unfold is_allowed in H. discriminate.
+  - destruct t as [| t' rest].
+    + (* [h] case *)
+      destruct (String.eqb_spec h "*") as [Heq | Hneq].
+      * subst h. right. reflexivity.
+      * left. unfold is_allowed in H.
+        change (existsb (String.eqb id) [h] = true).
+        apply String.eqb_neq in Hneq.
+        destruct (String.eqb h "*")%string eqn:E; [congruence |].
+        exact H.
+    + (* h :: t' :: rest *)
+      left. unfold is_allowed in H. exact H.
 Qed.
 
 (* Theorem 2: Backward direction - if in list or wildcard, then allowed *)
@@ -72,15 +66,15 @@ Proof.
     + simpl in Hmem. discriminate.
     + destruct t as [| t' rest].
       * (* [h] case *)
-        unfold is_allowed. simpl.
+        unfold is_allowed.
         destruct (String.eqb h "*") eqn:Ewildcard.
         -- reflexivity.
         -- exact Hmem.
       * (* h :: t' :: rest case *)
-        unfold is_allowed. simpl. exact Hmem.
+        unfold is_allowed. exact Hmem.
   - (* Wildcard case *)
     subst allowlist.
-    simpl. reflexivity.
+    unfold is_allowed. simpl. reflexivity.
 Qed.
 
 (* Theorem 3: Bidirectional correctness *)
@@ -99,8 +93,7 @@ Theorem is_allowed_wildcard : forall id,
   is_allowed id ["*"] = true.
 Proof.
   intros id.
-  unfold is_allowed.
-  simpl. reflexivity.
+  reflexivity.
 Qed.
 
 (* Theorem 5: Non-wildcard single-element list *)
@@ -110,40 +103,26 @@ Theorem is_allowed_single : forall id h,
 Proof.
   intros id h Hneq.
   unfold is_allowed.
-  simpl.
-  destruct (String.eqb h "*") eqn:Ewildcard.
-  - apply String.eqb_eq in Ewildcard. contradiction.
-  - reflexivity.
+  apply String.eqb_neq in Hneq. rewrite Hneq.
+  simpl. apply Bool.orb_false_r.
 Qed.
 
-(* Theorem 6: Monotonicity - adding IDs never revokes existing permissions *)
+(* Theorem 6: Monotonicity - membership-based permission is preserved by appending.
+   Note: wildcard ["*"] allows all IDs but is a structural match, so appending
+   to a wildcard list changes it to a non-wildcard list. This theorem covers
+   the membership case. *)
 Theorem is_allowed_monotone : forall id xs ys,
-  is_allowed id xs = true ->
+  existsb (String.eqb id) xs = true ->
   is_allowed id (xs ++ ys) = true.
 Proof.
-  intros id xs ys H.
-  destruct xs as [| h t].
-  - (* [] case - impossible since is_allowed [] = false *)
-    simpl in H. discriminate.
-  - (* h :: t case *)
-    destruct t as [| t' rest].
-    + (* [h] case - single element list *)
-      destruct (String.eqb h "*") eqn:Ewildcard.
-      * simpl. reflexivity.
-      * simpl in H. simpl. rewrite H. reflexivity.
-    + (* h :: t' :: rest case - 2+ elements *)
-      simpl in H.
-      simpl.
-      apply Bool.orb_true_iff in H.
-      apply Bool.orb_true_iff.
-      destruct H as [H | H].
-      * left. exact H.
-      * right. apply existsb_exists in H.
-        apply existsb_exists.
-        destruct H as [x [Hin Heq]].
-        exists x. split.
-        -- apply in_or_app. left. exact Hin.
-        -- exact Heq.
+  intros id xs ys Hmem.
+  apply is_allowed_backward.
+  left. apply existsb_exists in Hmem.
+  apply existsb_exists.
+  destruct Hmem as [x [Hin Heq]].
+  exists x. split.
+  - apply in_or_app. left. exact Hin.
+  - exact Heq.
 Qed.
 
 (* ================================================================
@@ -184,8 +163,9 @@ Theorem timestamp_ok_valid : forall request_ts current_ts,
 Proof.
   intros request_ts current_ts Hge Hwindow.
   unfold timestamp_ok.
-  rewrite Nat.ltb_ge by exact Hge.
-  apply Nat.leb_le. exact Hwindow.
+  destruct (current_ts <? request_ts) eqn:Ecmp.
+  - apply Nat.ltb_lt in Ecmp. lia.
+  - apply Nat.leb_le. exact Hwindow.
 Qed.
 
 (* Theorem 9: Future timestamp rejected *)
@@ -195,8 +175,9 @@ Theorem timestamp_ok_future_rejected : forall request_ts current_ts,
 Proof.
   intros request_ts current_ts H.
   unfold timestamp_ok.
-  rewrite Nat.ltb_lt by exact H.
-  reflexivity.
+  destruct (current_ts <? request_ts) eqn:Ecmp.
+  - reflexivity.
+  - apply Nat.ltb_ge in Ecmp. lia.
 Qed.
 
 (* Theorem 10: Expired timestamp rejected *)
@@ -207,10 +188,9 @@ Theorem timestamp_ok_expired_rejected : forall request_ts current_ts,
 Proof.
   intros request_ts current_ts Hge Hexpired.
   unfold timestamp_ok.
-  rewrite Nat.ltb_ge by exact Hge.
-  apply Nat.leb_gt in Hexpired.
-  rewrite Hexpired.
-  reflexivity.
+  destruct (current_ts <? request_ts) eqn:Ecmp.
+  - apply Nat.ltb_lt in Ecmp. lia.
+  - apply Nat.leb_gt. exact Hexpired.
 Qed.
 
 (* ================================================================

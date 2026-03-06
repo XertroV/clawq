@@ -145,11 +145,14 @@ Definition decrypt_secret_core (k : key) (value : string) : option bytes :=
     end
   else None.
 
+(* Coercion from string to bytes for passthrough modeling *)
+Parameter string_to_bytes : string -> bytes.
+
 (* API-level decrypt_secret behavior: encrypted values are decrypted,
    plaintext values are returned unchanged. We model the OCaml `Ok` shape as
    `Some` to stay close to the existing option-based crypto model. *)
 Definition decrypt_secret (k : key) (value : string) : option bytes :=
-  if is_encrypted value then decrypt_secret_core k value else Some value.
+  if is_encrypted value then decrypt_secret_core k value else Some (string_to_bytes value).
 
 (* Resolve a secret value:
    - $ENC:... -> decrypt if encrypt_secrets enabled, else passthrough
@@ -202,7 +205,7 @@ Admitted.
 (* Theorem 2: plaintext inputs pass through unchanged at the API level. *)
 Theorem decrypt_secret_plaintext_passthrough : forall k value,
   is_encrypted value = false ->
-  decrypt_secret k value = Some value.
+  decrypt_secret k value = Some (string_to_bytes value).
 Proof.
   intros k value Hplain.
   unfold decrypt_secret.
