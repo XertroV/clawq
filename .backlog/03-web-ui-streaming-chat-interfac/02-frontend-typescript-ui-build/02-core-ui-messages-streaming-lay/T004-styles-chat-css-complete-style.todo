@@ -1,0 +1,12 @@
+---
+complexity: low
+depends_on:
+    - P3.M2.E1.T001
+estimate_hours: 2
+id: P3.M2.E2.T004
+priority: medium
+status: pending
+tags: []
+title: 'styles/chat.css: complete stylesheet (layout, bubbles, tool cards, thinking panel, slash popover, ANSI, version banner)'
+---
+Dark theme. CSS custom properties for theme values. Turn layout (flex column, user right-aligned, assistant left). Thinking block (dashed border, collapsible). Tool panel card. Slash popover. ANSI span colors. Version banner. Scrollbar. Responsive.

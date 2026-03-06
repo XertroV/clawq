@@ -1,0 +1,57 @@
+complexity: medium
+depends_on: []
+estimate_hours: 6
+id: P3.M3.E1
+locked: false
+name: Versioning, Wiring & End-to-End Tests
+status: pending
+tasks:
+    - complexity: low
+      depends_on:
+        - P3.M1.E3.T002
+        - P3.M2.E1.T002
+      estimate_hours: 2
+      file: T001-wire-ui-server-init-in-daemon.todo
+      id: T001
+      priority: medium
+      status: pending
+      title: Wire Ui_server.init in daemon.ml startup; smoke test full round-trip
+    - complexity: medium
+      depends_on:
+        - P3.M1.E1.T002
+        - P3.M1.E2.T002
+        - P3.M3.E1.T001
+      estimate_hours: 3
+      file: T002-ocaml-tests-ui-server-versioni.todo
+      id: T002
+      priority: medium
+      status: pending
+      title: 'OCaml tests: Ui_server versioning logic, ThinkingDelta parsing, ToolStart/ToolResult event emission'
+    - complexity: low
+      depends_on:
+        - P3.M3.E1.T001
+      estimate_hours: 1
+      file: T003-update-docs-claude-md-quick-fi.todo
+      id: T003
+      priority: medium
+      status: pending
+      title: 'Update docs: CLAUDE.md quick file map, add ''make ui'' to build section'
+    - complexity: low
+      depends_on:
+        - P3.M3.E1.T001
+        - P3.M3.E1.T002
+      estimate_hours: 0
+      file: T004-mark-i002-idea-as-done-link-to.todo
+      id: T004
+      priority: medium
+      status: pending
+      title: Mark I002 idea as done, link to P3 tasks
+    - complexity: low
+      depends_on:
+        - P3.M1.E1.T001
+      estimate_hours: 1
+      file: T005-update-test-fixtures-stream-ev.todo
+      id: T005
+      priority: medium
+      status: pending
+      title: 'Update test fixtures: stream_event exhaustive match across all provider test suites'

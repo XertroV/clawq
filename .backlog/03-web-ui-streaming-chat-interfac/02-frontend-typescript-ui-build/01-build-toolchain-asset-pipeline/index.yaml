@@ -1,0 +1,34 @@
+complexity: medium
+depends_on: []
+estimate_hours: 4
+id: P3.M2.E1
+locked: false
+name: Build Toolchain + Asset Pipeline
+status: pending
+tasks:
+    - complexity: low
+      depends_on: []
+      estimate_hours: 1
+      file: T001-ui-typescript-source-tree-bun.todo
+      id: T001
+      priority: medium
+      status: pending
+      title: 'ui/: TypeScript source tree, Bun package.json, build config'
+    - complexity: medium
+      depends_on:
+        - P3.M2.E1.T001
+      estimate_hours: 2
+      file: T002-scripts-gen-chat-ui-assets-sh.todo
+      id: T002
+      priority: medium
+      status: pending
+      title: 'scripts/gen_chat_ui_assets.sh: regenerate chat_ui_assets.ml from ui/dist/'
+    - complexity: low
+      depends_on:
+        - P3.M2.E1.T002
+      estimate_hours: 1
+      file: T003-makefile-add-make-ui-make-ui-d.todo
+      id: T003
+      priority: medium
+      status: pending
+      title: 'Makefile: add ''make ui'', ''make ui-dev'', ''make ui-check'' targets'

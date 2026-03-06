@@ -1,0 +1,22 @@
+---
+complexity: medium
+depends_on:
+    - P3.M1.E1.T001
+estimate_hours: 3
+id: P3.M1.E1.T002
+priority: medium
+status: pending
+tags: []
+title: 'Anthropic provider: parse thinking content blocks in SSE stream'
+---
+In provider_anthropic.ml complete_streaming: detect content_block_start with type=thinking, emit ThinkingDelta on content_block_delta with type=thinking_delta.
+
+ALSO required (not in separate task — do here):
+- Add `thinking_budget_tokens: int option` to runtime_config.ml provider_config (default None)
+- Update config_loader.ml provider_config JSON parser (line ~46, the provider_config constructor) to parse "thinking_budget_tokens" key
+- Include `"thinking": {"type":"enabled","budget_tokens":N}` in Anthropic request body when Some n; omit otherwise
+
+Acceptance criteria:
+- Config with thinking_budget_tokens set sends correct Anthropic API request body
+- ThinkingDelta events appear in SSE stream when provider is Anthropic + thinking enabled
+- `make test` passes (add at least one unit test for the SSE parser path)

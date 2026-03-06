@@ -1,0 +1,13 @@
+---
+complexity: medium
+depends_on:
+    - P3.M2.E2.T002
+    - P3.M2.E3.T001
+estimate_hours: 2
+id: P3.M2.E3.T002
+priority: medium
+status: pending
+tags: []
+title: 'tool-panel.ts: tool call card with real-time streaming output'
+---
+ToolPanel class per ToolStart event. Card: header (tool name + status badge), expandable body (args + output). ToolOutputDelta appends to output via ansi.ts. ToolResult finalizes status (done/error). Collapsible on click. Multiple tools per turn stacked.

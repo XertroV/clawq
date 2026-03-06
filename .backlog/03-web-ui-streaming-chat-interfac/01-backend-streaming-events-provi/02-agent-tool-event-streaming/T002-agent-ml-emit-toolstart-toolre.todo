@@ -1,0 +1,32 @@
+---
+complexity: medium
+depends_on:
+    - P3.M1.E2.T001
+estimate_hours: 2
+id: P3.M1.E2.T002
+priority: medium
+status: pending
+tags: []
+title: 'agent.ml: emit ToolStart/ToolResult events in turn_stream via on_chunk'
+---
+Modify execute_tool_calls to accept ~on_chunk param. Emit ToolStart before each tool execution, ToolResult after.
+
+IMPORTANT: execute_tool_calls uses Lwt_list.map_p (parallel execution). Tool events from concurrent tool calls WILL interleave in the SSE stream. This is correct behavior — the client must match events by `id` field (already in the protocol spec).
+
+Steps:
+1. Add `~on_chunk:(Provider.stream_event -> unit Lwt.t)` to execute_tool_calls signature
+2. Before each tool: `on_chunk (ToolStart {id; name; arguments})`
+3. After each tool: `on_chunk (ToolResult {id; name; result; is_error})`
+4. Thread on_chunk through turn_stream loop → execute_tool_calls call sites
+5. Update session.ml turn_stream signature to include on_chunk (already present but verify threading)
+6. Update http_server.ml call sites (turn_stream_stream invocations)
+
+Call sites to update:
+- agent.ml: both ToolCalls branches in turn_stream loop
+- session.ml: turn_stream wrapper
+- http_server.ml: the /chat/stream handler
+
+Acceptance criteria:
+- Two simultaneous tool calls produce interleaved ToolStart/ToolResult events (verifiable in logs)
+- `make test` passes
+- No regressions in existing tool execution behavior

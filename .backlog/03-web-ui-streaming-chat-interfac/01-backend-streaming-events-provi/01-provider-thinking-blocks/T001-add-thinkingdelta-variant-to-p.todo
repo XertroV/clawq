@@ -1,0 +1,28 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 2
+id: P3.M1.E1.T001
+priority: medium
+status: pending
+tags: []
+title: Add ThinkingDelta variant to Provider.stream_event; thread through complete_stream dispatch
+---
+See .plan/2026-03-06-chatui-streamweave/thinking-providers.md.
+
+Add ThinkingDelta of string (and ToolStart/ToolOutputDelta/ToolResult — coordinate with P3.M1.E2.T001, can be one commit) to provider.ml stream_event type.
+
+CRITICAL: Update match exhaustion at ALL sites:
+- src/provider.ml (complete_stream dispatch)
+- src/provider_anthropic.ml
+- src/provider_gemini.ml
+- src/provider_vertex.ml
+- src/provider_cohere.ml
+- src/provider_ollama.ml
+- src/http_server.ml (SSE forwarding, covered by P3.M1.E3.T003)
+- src/agent.ml (on_chunk callback sites, covered by P3.M1.E2.T002)
+
+Acceptance criteria:
+- `make build` passes with zero new compiler warnings
+- No match-warning suppressions added
+- All provider modules compile cleanly

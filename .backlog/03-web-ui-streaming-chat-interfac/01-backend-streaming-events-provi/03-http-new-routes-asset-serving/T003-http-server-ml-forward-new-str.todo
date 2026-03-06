@@ -1,0 +1,13 @@
+---
+complexity: low
+depends_on:
+    - P3.M1.E1.T001
+    - P3.M1.E2.T001
+estimate_hours: 2
+id: P3.M1.E3.T003
+priority: medium
+status: pending
+tags: []
+title: 'http_server.ml: forward new stream events (ThinkingDelta, ToolStart, ToolOutputDelta, ToolResult) as SSE'
+---
+In the /chat/stream SSE handler, add cases for new stream_event variants. Format as JSON per backend-events.md protocol. Ensure ANSI chunks are JSON-encoded correctly (string escaping).

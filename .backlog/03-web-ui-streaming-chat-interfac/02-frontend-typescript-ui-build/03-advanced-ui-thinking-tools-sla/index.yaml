@@ -1,0 +1,70 @@
+complexity: medium
+depends_on: []
+estimate_hours: 8
+id: P3.M2.E3
+locked: false
+name: 'Advanced UI: Thinking, Tools, Slash, ANSI'
+status: pending
+tasks:
+    - complexity: medium
+      depends_on:
+        - P3.M2.E2.T002
+      estimate_hours: 2
+      file: T001-thinking-ts-collapsible-thinki.todo
+      id: T001
+      priority: medium
+      status: pending
+      title: 'thinking.ts: collapsible thinking block panel with streaming state'
+    - complexity: medium
+      depends_on:
+        - P3.M2.E2.T002
+        - P3.M2.E3.T001
+      estimate_hours: 2
+      file: T002-tool-panel-ts-tool-call-card-w.todo
+      id: T002
+      priority: medium
+      status: pending
+      title: 'tool-panel.ts: tool call card with real-time streaming output'
+    - complexity: medium
+      depends_on: []
+      estimate_hours: 2
+      file: T003-ansi-ts-minimal-ansi-escape-co.todo
+      id: T003
+      priority: medium
+      status: pending
+      title: 'ansi.ts: minimal ANSI escape code to HTML converter'
+    - complexity: medium
+      depends_on:
+        - P3.M2.E2.T003
+      estimate_hours: 3
+      file: T004-slash-ts-slash-command-autocom.todo
+      id: T004
+      priority: medium
+      status: pending
+      title: 'slash.ts: slash command autocomplete popover'
+    - complexity: low
+      depends_on: []
+      estimate_hours: 1
+      file: T005-version-ts-client-side-version.todo
+      id: T005
+      priority: medium
+      status: pending
+      title: 'version.ts: client-side version check + reload banner'
+    - complexity: low
+      depends_on:
+        - P3.M2.E2.T002
+      estimate_hours: 2
+      file: T006-markdown-rendering-apply-marke.todo
+      id: T006
+      priority: medium
+      status: pending
+      title: 'Markdown rendering: apply Marked.js + highlight.js after stream done'
+    - complexity: low
+      depends_on:
+        - P3.M2.E3.T006
+      estimate_hours: 1
+      file: T007-mermaid-diagram-rendering-dete.todo
+      id: T007
+      priority: medium
+      status: pending
+      title: 'Mermaid diagram rendering: detect mermaid fenced blocks, render via mermaid.js CDN'

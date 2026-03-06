@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on:
+    - P3.M2.E2.T002
+estimate_hours: 2
+id: P3.M2.E3.T001
+priority: medium
+status: pending
+tags: []
+title: 'thinking.ts: collapsible thinking block panel with streaming state'
+---
+ThinkingPanel class. States: streaming (pulsing icon, body visible), done+collapsed (default after first Delta), done+expanded. Toggle on click. Appends ThinkingDelta content. Auto-collapses when first Delta arrives. Italic muted styling.

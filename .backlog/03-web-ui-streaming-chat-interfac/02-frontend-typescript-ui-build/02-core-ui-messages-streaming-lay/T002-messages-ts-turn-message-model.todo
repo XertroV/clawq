@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on:
+    - P3.M2.E2.T001
+estimate_hours: 3
+id: P3.M2.E2.T002
+priority: medium
+status: pending
+tags: []
+title: 'messages.ts: Turn/message model and DOM rendering (user + assistant bubbles)'
+---
+Turn interface {id, role, text, thinking, isStreaming, tools[]}. DOM: .turn.user and .turn.assistant divs. Group styling. Message text div updated by Delta events. Auto-scroll on new content. Placeholder bubble while streaming.

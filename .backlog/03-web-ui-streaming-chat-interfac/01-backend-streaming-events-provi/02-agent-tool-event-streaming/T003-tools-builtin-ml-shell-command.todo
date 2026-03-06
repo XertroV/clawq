@@ -1,0 +1,12 @@
+---
+complexity: high
+depends_on:
+    - P3.M1.E2.T002
+estimate_hours: 3
+id: P3.M1.E2.T003
+priority: medium
+status: pending
+tags: []
+title: 'tools_builtin.ml: shell command stdout streaming with ANSI preserved'
+---
+Add optional on_output_chunk callback to shell execution path. Use Lwt_process.open_process_full or Lwt_io for line streaming. Accumulate full output for ToolResult. Emit ToolOutputDelta per chunk. Preserve ANSI escape codes (don't strip them).

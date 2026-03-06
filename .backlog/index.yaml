@@ -20,5 +20,15 @@ phases:
       priority: high
       status: pending
       weeks: 16
+    - depends_on: []
+      description: ""
+      estimate_hours: 40
+      id: P3
+      locked: false
+      name: 'Web UI: Streaming Chat Interface'
+      path: 03-web-ui-streaming-chat-interfac
+      priority: high
+      status: pending
+      weeks: 3
 project: Clawq
 timeline_weeks: 0

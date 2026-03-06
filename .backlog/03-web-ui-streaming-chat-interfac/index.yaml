@@ -1,0 +1,38 @@
+complexity: medium
+depends_on: []
+estimate_hours: 40
+id: P3
+locked: false
+milestones:
+    - complexity: medium
+      depends_on: []
+      description: ""
+      estimate_hours: 16
+      id: M1
+      locked: false
+      name: 'Backend: Streaming Events & Provider Thinking'
+      path: 01-backend-streaming-events-provi
+      status: pending
+    - complexity: medium
+      depends_on:
+        - P3.M1
+      description: ""
+      estimate_hours: 16
+      id: M2
+      locked: false
+      name: 'Frontend: TypeScript UI Build'
+      path: 02-frontend-typescript-ui-build
+      status: pending
+    - complexity: medium
+      depends_on:
+        - P3.M2
+      description: ""
+      estimate_hours: 8
+      id: M3
+      locked: false
+      name: Integration, Polish & Tests
+      path: 03-integration-polish-tests
+      status: pending
+name: 'Web UI: Streaming Chat Interface'
+status: pending
+weeks: 3

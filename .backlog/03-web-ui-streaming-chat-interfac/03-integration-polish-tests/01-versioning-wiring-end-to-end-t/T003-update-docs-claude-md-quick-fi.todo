@@ -1,0 +1,12 @@
+---
+complexity: low
+depends_on:
+    - P3.M3.E1.T001
+estimate_hours: 1
+id: P3.M3.E1.T003
+priority: medium
+status: pending
+tags: []
+title: 'Update docs: CLAUDE.md quick file map, add ''make ui'' to build section'
+---
+Add ui/ and scripts/ to quick file map. Add 'make ui' and 'make ui-dev' to build commands section. Note dev mode workflow.

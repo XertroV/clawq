@@ -1,0 +1,36 @@
+complexity: medium
+depends_on:
+    - P3.M1
+epics:
+    - complexity: medium
+      depends_on: []
+      description: ""
+      estimate_hours: 4
+      id: E1
+      locked: false
+      name: Build Toolchain + Asset Pipeline
+      path: 01-build-toolchain-asset-pipeline
+      status: pending
+    - complexity: medium
+      depends_on: []
+      description: ""
+      estimate_hours: 8
+      id: E2
+      locked: false
+      name: 'Core UI: Messages, Streaming, Layout'
+      path: 02-core-ui-messages-streaming-lay
+      status: pending
+    - complexity: medium
+      depends_on: []
+      description: ""
+      estimate_hours: 8
+      id: E3
+      locked: false
+      name: 'Advanced UI: Thinking, Tools, Slash, ANSI'
+      path: 03-advanced-ui-thinking-tools-sla
+      status: pending
+estimate_hours: 16
+id: P3.M2
+locked: false
+name: 'Frontend: TypeScript UI Build'
+status: pending

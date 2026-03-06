@@ -1,0 +1,14 @@
+---
+complexity: medium
+depends_on:
+    - P3.M1.E1.T002
+    - P3.M1.E2.T002
+    - P3.M3.E1.T001
+estimate_hours: 3
+id: P3.M3.E1.T002
+priority: medium
+status: pending
+tags: []
+title: 'OCaml tests: Ui_server versioning logic, ThinkingDelta parsing, ToolStart/ToolResult event emission'
+---
+test/test_ui_server.ml: version match/mismatch/dev-mode logic. test/test_provider_thinking.ml: anthropic thinking block SSE parse, oai reasoning_content, oai tag-based state machine. test_agent additions: verify ToolStart/ToolResult on_chunk calls during tool execution.

@@ -1,0 +1,13 @@
+---
+complexity: low
+depends_on:
+    - P3.M3.E1.T001
+    - P3.M3.E1.T002
+estimate_hours: 0
+id: P3.M3.E1.T004
+priority: medium
+status: pending
+tags: []
+title: Mark I002 idea as done, link to P3 tasks
+---
+Update I002 idea file Created Work Items section with all P3.M*.E*.T* IDs. Run bl done I002.

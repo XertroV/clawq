@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on:
+    - P3.M2.E2.T003
+estimate_hours: 3
+id: P3.M2.E3.T004
+priority: medium
+status: pending
+tags: []
+title: 'slash.ts: slash command autocomplete popover'
+---
+Fetch GET /commands on first / keystroke (cache result). Detect / at input start. Show popover above input. Filter by prefix match. Keyboard: arrows to navigate, Enter/Tab to complete, Esc to close. Click to select. Insert /<name> + space into input. Dismiss on blur.

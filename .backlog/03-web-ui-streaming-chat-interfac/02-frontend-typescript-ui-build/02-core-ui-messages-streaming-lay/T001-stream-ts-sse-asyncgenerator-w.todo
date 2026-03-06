@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on:
+    - P3.M2.E1.T001
+estimate_hours: 2
+id: P3.M2.E2.T001
+priority: medium
+status: pending
+tags: []
+title: 'stream.ts: SSE AsyncGenerator with abort signal and error recovery'
+---
+async function* readSSE(resp, signal): yields typed ServerEvent objects. Handles all event types from backend-events.md. JSON.parse each data line. [DONE] sentinel detection. Abort on signal.

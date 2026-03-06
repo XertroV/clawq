@@ -1,0 +1,43 @@
+---
+complexity: low
+depends_on:
+    - P3.M2.E3.T006
+estimate_hours: 1
+id: P3.M2.E3.T007
+priority: medium
+status: pending
+tags: []
+title: 'Mermaid diagram rendering: detect mermaid fenced blocks, render via mermaid.js CDN'
+---
+CRITICAL: Configure marked.js to NOT html-escape mermaid blocks (it does by default).
+Use a custom marked renderer override:
+  const renderer = new marked.Renderer();
+  renderer.code = (code, lang) => {
+    if (lang === 'mermaid') return `<pre class="mermaid-source">${code}</pre>`;
+    return defaultCodeRenderer(code, lang);
+  };
+  marked.use({ renderer });
+Then T007 looks for <pre class="mermaid-source"> (not <code class="language-mermaid">).
+Test this interaction FIRST before implementing any rendering logic.
+
+IMPORTANT: mermaid.js is ~2.5MB minified. Load lazily:
+- Do NOT add a blocking <script> tag for mermaid.js in index.html by default
+- After 'done' event: check if any <code class="language-mermaid"> blocks exist in rendered HTML
+- If none: skip mermaid entirely (no download)
+- If any: dynamically import mermaid.js from jsDelivr CDN (SRI-pinned) using dynamic import() or createElement('script')
+- After load: mermaid.initialize({ startOnLoad: false, theme: 'dark' })
+- For each mermaid block: call mermaid.render(uniqueId, diagramSource) → inject SVG into DOM
+- Wrap SVG in .mermaid-diagram div with overflow-x: auto (wide diagrams)
+- Error handling: if render() throws, show raw fenced block with "⚠ Mermaid parse error" note
+
+Implementation notes:
+- Unique ID for each diagram: 'mermaid-' + turn_id + '-' + index
+- mermaid.render() is async in mermaid v10+; use await
+- DOMPurify the rendered SVG before injection (mermaid output is safe but belt+suspenders)
+- Pin mermaid.js version (e.g., 10.x); document SRI hash update procedure in comments
+
+Acceptance criteria:
+- Message with no mermaid block: mermaid.js is never downloaded
+- Message with ```mermaid block: diagram renders as SVG inline
+- Invalid mermaid syntax: graceful fallback to raw code block with error note
+- Dark theme applied to diagram

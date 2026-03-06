@@ -1,13 +1,15 @@
 ---
+claimed_at: "2026-03-06T05:33:09Z"
+claimed_by: cli-user
+completed_at: null
 complexity: medium
 depends_on: []
 estimate_hours: 10
 id: I002
 priority: medium
-status: pending
-tags:
-    - idea
-    - planning
+started_at: "2026-03-06T05:33:09Z"
+status: in_progress
+tags: []
 title: 'Web UI chat interface. Heavily research requirements and existing web UI features based on nullclaw and other projects (see ~/src/pag-server/ref-projects/*). Should support all normal expected things: show tool calls, show thinking, stream messages from LLM (including thinking), support slash commands with autocomplete menu and suggestions, etc.'
 ---
 
@@ -28,8 +30,54 @@ Web UI chat interface. Heavily research requirements and existing web UI feature
 
 ## Created Work Items
 
-- Add created task IDs
-- Add created bug IDs (if any)
+Plan: `.plan/2026-03-06-chatui-streamweave/index.md`
+
+Phase P3: Web UI: Streaming Chat Interface
+
+### M1: Backend — Streaming Events & Provider Thinking
+- P3.M1.E1.T001: Add ThinkingDelta variant to Provider.stream_event
+- P3.M1.E1.T002: Anthropic provider: parse thinking content blocks in SSE stream
+- P3.M1.E1.T003: OAI-compatible provider: reasoning_content + tag-based thinking styles
+- P3.M1.E2.T001: Add ToolStart, ToolOutputDelta, ToolResult variants to Provider.stream_event
+- P3.M1.E2.T002: agent.ml: emit ToolStart/ToolResult in turn_stream via on_chunk
+- P3.M1.E2.T003: tools_builtin.ml: shell command stdout streaming with ANSI preserved
+- P3.M1.E3.T001: ui_server.ml: hybrid asset serving with versioning and dev mode
+- P3.M1.E3.T002: http_server.ml: GET routes for UI assets, /ui-version, /commands
+- P3.M1.E3.T003: http_server.ml: forward new stream events as SSE
+
+### M2: Frontend — TypeScript UI Build
+- P3.M2.E1.T001: ui/: TypeScript source tree, Bun package.json, build config
+- P3.M2.E1.T002: scripts/gen_chat_ui_assets.sh: regenerate chat_ui_assets.ml from ui/dist/
+- P3.M2.E1.T003: Makefile: add 'make ui', 'make ui-dev', 'make ui-check' targets
+- P3.M2.E2.T001: stream.ts: SSE AsyncGenerator with abort signal and error recovery
+- P3.M2.E2.T002: messages.ts: Turn/message model and DOM rendering
+- P3.M2.E2.T003: main.ts: wire form submit, abort, pairing modal, session management
+- P3.M2.E2.T004: styles/chat.css: complete stylesheet
+- P3.M2.E3.T001: thinking.ts: collapsible thinking block panel
+- P3.M2.E3.T002: tool-panel.ts: tool call card with real-time streaming output
+- P3.M2.E3.T003: ansi.ts: minimal ANSI escape code to HTML converter
+- P3.M2.E3.T004: slash.ts: slash command autocomplete popover
+- P3.M2.E3.T005: version.ts: client-side version check + reload banner
+- P3.M2.E3.T006: Markdown rendering: Marked.js + highlight.js after stream done
+
+### M3: Integration, Polish & Tests
+- P3.M3.E1.T001: Wire Ui_server.init in daemon.ml; smoke test
+- P3.M3.E1.T002: OCaml tests: versioning, ThinkingDelta parsing, ToolStart/ToolResult
+- P3.M3.E1.T003: Update docs: CLAUDE.md
+- P3.M3.E1.T004: Mark I002 done
+
+## Ingestion Notes (plan-ingest audit, 2026-03-06)
+
+Three subagent audits validated the decomposition. Key issues surfaced and resolved:
+- All Provider.stream_event match exhaustion sites enumerated (6 provider files)
+- config_loader.ml changes scoped into T002/T003 (not separate tasks)
+- Parallel tool execution (Lwt_list.map_p) documented — client matches by `id`
+- Mermaid + Marked.js interaction: custom renderer.code override required
+- ui_server.ml placed in clawq_runtime_core, not integrations
+- Route ordering in http_server.ml: GET routes before catch-all 404
+- SRI hash pinning deferred to implementation (compute at P3.M2.E1.T001 time)
+- Mermaid.js loaded lazily (2.5MB — only when diagrams detected post-render)
+- Test fixture updates for stream_event: P3.M3.E1.T005 added
 
 ## Completion Criteria
 

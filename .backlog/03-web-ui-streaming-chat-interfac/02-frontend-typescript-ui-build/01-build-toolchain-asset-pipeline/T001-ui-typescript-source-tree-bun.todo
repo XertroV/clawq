@@ -1,0 +1,33 @@
+---
+complexity: low
+depends_on: []
+estimate_hours: 1
+id: P3.M2.E1.T001
+priority: medium
+status: pending
+tags: []
+title: 'ui/: TypeScript source tree, Bun package.json, build config'
+---
+Create the full ui/ source tree. Required files:
+  ui/package.json    — bun build: entrypoint src/main.ts → dist/chat.js; CSS: styles/chat.css → dist/chat.css
+  ui/tsconfig.json   — strict TypeScript config (target: ES2020, module: ESNext, noImplicitAny: true)
+  ui/bun.lockb       — committed lockfile (bun install generates; commit for reproducibility)
+  ui/.gitignore      — ignore node_modules/, dist/
+  ui/src/main.ts     — empty entry stub (implemented in M2.E2/E3 tasks)
+  ui/styles/chat.css — empty CSS stub (implemented in P3.M2.E2.T004)
+  ui/index.html      — template with CDN scripts + <meta name="ui-version" content="{{VERSION}}">
+
+CDN scripts to include in index.html (jsDelivr, SRI-pinned):
+  - marked.js (with custom renderer for mermaid blocks, see T006/T007)
+  - highlight.js + github-dark theme CSS
+  - DOMPurify (XSS sanitizer)
+  - mermaid.js is NOT included here (lazy-loaded by T007)
+
+NOTE: SRI hashes must be computed and pinned to specific versions at implementation time.
+Document the hash update procedure in a comment block in index.html.
+
+Acceptance criteria:
+- bun install succeeds with no errors
+- bun run build produces ui/dist/chat.js, ui/dist/chat.css, ui/dist/index.html
+- TypeScript strict mode enabled
+- ui/.gitignore prevents node_modules from being committed

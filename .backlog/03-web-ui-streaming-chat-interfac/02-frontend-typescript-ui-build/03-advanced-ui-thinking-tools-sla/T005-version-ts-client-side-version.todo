@@ -1,0 +1,11 @@
+---
+complexity: low
+depends_on: []
+estimate_hours: 1
+id: P3.M2.E3.T005
+priority: medium
+status: pending
+tags: []
+title: 'version.ts: client-side version check + reload banner'
+---
+Read <meta name=ui-version>. Fetch GET /ui-version on visibilitychange and every 5min. On mismatch: insert .version-banner div with Reload + Dismiss. Dismiss stored in sessionStorage. Reload button: location.reload().

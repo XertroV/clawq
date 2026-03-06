@@ -1,0 +1,11 @@
+---
+complexity: low
+depends_on: []
+estimate_hours: 1
+id: P3.M1.E2.T001
+priority: medium
+status: pending
+tags: []
+title: Add ToolStart, ToolOutputDelta, ToolResult variants to Provider.stream_event
+---
+See backend-events.md. ToolStart {id; name; arguments}, ToolOutputDelta {id; chunk}, ToolResult {id; name; result; is_error}. Update all match exhaustion.

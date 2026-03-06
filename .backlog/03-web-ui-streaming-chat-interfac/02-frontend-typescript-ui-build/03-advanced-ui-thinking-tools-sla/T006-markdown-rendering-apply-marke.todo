@@ -1,0 +1,12 @@
+---
+complexity: low
+depends_on:
+    - P3.M2.E2.T002
+estimate_hours: 2
+id: P3.M2.E3.T006
+priority: medium
+status: pending
+tags: []
+title: 'Markdown rendering: apply Marked.js + highlight.js after stream done'
+---
+Load marked.js + highlight.js + DOMPurify from jsDelivr CDN in index.html (SRI hashes). After 'done' event: parse assistant text through marked(), sanitize through DOMPurify.sanitize(), inject innerHTML. During streaming: plain text. Pin library versions and document SRI update procedure.

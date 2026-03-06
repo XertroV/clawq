@@ -1,0 +1,11 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 2
+id: P3.M2.E3.T003
+priority: medium
+status: pending
+tags: []
+title: 'ansi.ts: minimal ANSI escape code to HTML converter'
+---
+SGR sequences: 30-37 (fg colors), 90-97 (bright fg), 1 (bold), 0 (reset). State machine: tracks current fg color + bold. Output: span elements with inline style. No external deps. Handle partial sequences across chunk boundaries.

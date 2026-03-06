@@ -1,0 +1,44 @@
+complexity: medium
+depends_on: []
+estimate_hours: 8
+id: P3.M2.E2
+locked: false
+name: 'Core UI: Messages, Streaming, Layout'
+status: pending
+tasks:
+    - complexity: medium
+      depends_on:
+        - P3.M2.E1.T001
+      estimate_hours: 2
+      file: T001-stream-ts-sse-asyncgenerator-w.todo
+      id: T001
+      priority: medium
+      status: pending
+      title: 'stream.ts: SSE AsyncGenerator with abort signal and error recovery'
+    - complexity: medium
+      depends_on:
+        - P3.M2.E2.T001
+      estimate_hours: 3
+      file: T002-messages-ts-turn-message-model.todo
+      id: T002
+      priority: medium
+      status: pending
+      title: 'messages.ts: Turn/message model and DOM rendering (user + assistant bubbles)'
+    - complexity: medium
+      depends_on:
+        - P3.M2.E2.T002
+      estimate_hours: 2
+      file: T003-main-ts-wire-form-submit-abort.todo
+      id: T003
+      priority: medium
+      status: pending
+      title: 'main.ts: wire form submit, abort, pairing modal, session management, version check'
+    - complexity: low
+      depends_on:
+        - P3.M2.E1.T001
+      estimate_hours: 2
+      file: T004-styles-chat-css-complete-style.todo
+      id: T004
+      priority: medium
+      status: pending
+      title: 'styles/chat.css: complete stylesheet (layout, bubbles, tool cards, thinking panel, slash popover, ANSI, version banner)'

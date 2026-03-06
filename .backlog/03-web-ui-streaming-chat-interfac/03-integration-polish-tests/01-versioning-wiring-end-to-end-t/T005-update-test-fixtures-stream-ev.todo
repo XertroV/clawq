@@ -1,0 +1,12 @@
+---
+complexity: low
+depends_on:
+    - P3.M1.E1.T001
+estimate_hours: 1
+id: P3.M3.E1.T005
+priority: medium
+status: pending
+tags: []
+title: 'Update test fixtures: stream_event exhaustive match across all provider test suites'
+---
+When Provider.stream_event gains new variants (ThinkingDelta, ToolStart, ToolOutputDelta, ToolResult), any test that pattern-matches stream_event exhaustively must be updated. Audit: test/test_provider.ml, test/test_main.ml, any mock on_chunk handlers in tests. Add wildcard catch-all in test helpers where exhaustiveness isn't the point. Acceptance: make test passes after T001 without any match-warning suppressions.

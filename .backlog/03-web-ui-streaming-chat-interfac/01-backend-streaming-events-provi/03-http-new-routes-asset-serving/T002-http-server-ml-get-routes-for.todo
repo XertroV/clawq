@@ -1,0 +1,35 @@
+---
+complexity: low
+depends_on:
+    - P3.M1.E3.T001
+estimate_hours: 2
+id: P3.M1.E3.T002
+priority: medium
+status: pending
+tags: []
+title: 'http_server.ml: GET routes for UI assets, /ui-version, /commands'
+---
+Add to http_server.ml handler match. CRITICAL: Route ordering matters — new GET routes must be added BEFORE the existing catch-all `| _ -> 404` and BEFORE the web_channel prefix match.
+
+New routes (add after /health, before Slack/GitHub/web_channel):
+  | `GET, "/" -> serve Ui_server.serve_asset "index.html"
+  | `GET, "/chat.js" -> serve Ui_server.serve_asset "chat.js"
+  | `GET, "/chat.css" -> serve Ui_server.serve_asset "chat.css"
+  | `GET, "/ui-version" -> {"version": Chat_ui_assets.ui_version}  (no auth needed)
+  | `GET, "/commands" -> JSON array of Slash_commands.commands  (no auth needed)
+
+Response helpers:
+- serve_asset: use Ui_server.serve_asset; if None return 404; set Content-Type from mime_type
+- /ui-version: Content-Type: application/json
+- /commands: Content-Type: application/json; serialize as [{"name":"...","description":"..."}]
+
+Also: Call Ui_server.init () in daemon.ml startup, before http server starts (during initialization phase, not Lwt.async).
+
+Add Ui_server to http_server.ml and daemon.ml dependencies; add to dune library module list.
+
+Acceptance criteria:
+- curl http://localhost:PORT/ returns HTML with 200
+- curl http://localhost:PORT/chat.js returns JS with Content-Type: application/javascript
+- curl http://localhost:PORT/commands returns JSON array of slash commands
+- curl http://localhost:PORT/ui-version returns {"version":"sha256:..."}
+- Existing /health, /chat, /chat/stream routes unaffected

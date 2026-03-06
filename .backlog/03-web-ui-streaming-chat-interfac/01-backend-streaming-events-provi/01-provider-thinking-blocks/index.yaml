@@ -1,0 +1,34 @@
+complexity: medium
+depends_on: []
+estimate_hours: 8
+id: P3.M1.E1
+locked: false
+name: 'Provider: Thinking Blocks'
+status: pending
+tasks:
+    - complexity: medium
+      depends_on: []
+      estimate_hours: 2
+      file: T001-add-thinkingdelta-variant-to-p.todo
+      id: T001
+      priority: medium
+      status: pending
+      title: Add ThinkingDelta variant to Provider.stream_event; thread through complete_stream dispatch
+    - complexity: medium
+      depends_on:
+        - P3.M1.E1.T001
+      estimate_hours: 3
+      file: T002-anthropic-provider-parse-think.todo
+      id: T002
+      priority: medium
+      status: pending
+      title: 'Anthropic provider: parse thinking content blocks in SSE stream'
+    - complexity: medium
+      depends_on:
+        - P3.M1.E1.T001
+      estimate_hours: 3
+      file: T003-oai-compatible-provider-reason.todo
+      id: T003
+      priority: medium
+      status: pending
+      title: 'OAI-compatible provider: reasoning_content field + tag-based thinking styles'

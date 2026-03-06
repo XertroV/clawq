@@ -1,0 +1,18 @@
+complexity: medium
+depends_on:
+    - P3.M2
+epics:
+    - complexity: medium
+      depends_on: []
+      description: ""
+      estimate_hours: 6
+      id: E1
+      locked: false
+      name: Versioning, Wiring & End-to-End Tests
+      path: 01-versioning-wiring-end-to-end-t
+      status: pending
+estimate_hours: 8
+id: P3.M3
+locked: false
+name: Integration, Polish & Tests
+status: pending

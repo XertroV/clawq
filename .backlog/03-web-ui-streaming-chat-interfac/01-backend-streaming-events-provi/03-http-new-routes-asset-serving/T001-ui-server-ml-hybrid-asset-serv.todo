@@ -1,0 +1,45 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 3
+id: P3.M1.E3.T001
+priority: medium
+status: pending
+tags: []
+title: 'ui_server.ml: hybrid asset serving with versioning and dev mode'
+---
+New module. See versioning.md for full spec.
+
+PLACEMENT: Add to clawq_runtime_core in src/dune (not integrations — UI serving is core, not network-dependent).
+
+Signatures:
+  val init : unit -> unit
+  val serve_asset : string -> (string * string) option  (* returns (mime_type, content) *)
+
+init logic:
+1. Determine ui_dir = $HOME/.clawq/ui/
+2. Create ui_dir if it doesn't exist (Sys.mkdir or Unix.mkdir, handle EEXIST)
+3. If ui_dir/DEV exists: return (dev mode — skip overwrite)
+4. Read ui_dir/VERSION; if matches Chat_ui_assets.ui_version: return
+5. Else: write index.html, chat.js, chat.css from Chat_ui_assets.*; write VERSION
+6. Log info on extract ("Extracted UI assets v<hash> to <ui_dir>")
+
+serve_asset "chat.js":
+- Try Stdlib.In_channel.input_all (open ui_dir/chat.js)
+- On Sys_error (ENOENT): return embedded Chat_ui_assets.chat_js
+- On other error: log warning; return embedded fallback
+- Return (mime_type, content) where mime_type = text/html|application/javascript|text/css
+
+MIME map:
+- "index.html" or "" or "/" → "text/html"
+- "chat.js" → "application/javascript"
+- "chat.css" → "text/css"
+- Unknown: "application/octet-stream"
+
+Acceptance criteria:
+- Fresh $HOME/.clawq/: init creates directory and extracts assets
+- Version match: init is a no-op (no file writes)
+- DEV file: init is a no-op even if version mismatch
+- serve_asset returns embedded fallback when disk file missing
+- All MIME types correct
+- make test passes (add unit tests for version comparison logic)
