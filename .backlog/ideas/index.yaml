@@ -19,3 +19,5 @@ ideas:
       title: 'Web UI chat interface. Heavily research requirements and existing web UI features based on nullclaw and other projects (see ~/src/pag-server/ref-projects/*). Should support all normal expected things: show tool calls, show thinking, stream messages from LLM (including thinking), support slash commands with autocomplete menu and suggestions, etc.'
     - file: I003-support-self-restarting-this-s.todo
       id: I003
+    - file: I004-config-wizard-for-intuitive-cl.todo
+      id: I004
