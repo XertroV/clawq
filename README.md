@@ -98,7 +98,7 @@ For ChatGPT/Codex subscription auth instead of an API key, add a provider like t
     "openai-codex": {
       "kind": "openai-codex",
       "base_url": "https://chatgpt.com/backend-api/codex",
-      "default_model": "openai-codex/gpt-5-codex"
+      "default_model": "openai-codex/gpt-5.3-codex"
     }
   }
 }

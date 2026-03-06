@@ -317,6 +317,47 @@ let test_find_provider_with_codex_oauth_auth () =
       Alcotest.(check string) "matched codex provider" "openai-codex" name
   | None -> Alcotest.fail "expected match for codex oauth provider"
 
+let test_find_provider_codex_associated_models () =
+  let providers =
+    [
+      ( "openai-codex",
+        {
+          Runtime_config.api_key = "";
+          kind = Some "openai-codex";
+          base_url = Some "https://chatgpt.com/backend-api/codex";
+          default_model = Some "openai-codex/gpt-5.3-codex";
+          project_id = None;
+          location = None;
+          service_account_json = None;
+          codex_oauth =
+            Some
+              {
+                Runtime_config.access_token = "access-token";
+                refresh_token = "refresh-token";
+                expires_at_ms = 1730000000000;
+                account_id = None;
+                email = None;
+              };
+        } );
+    ]
+  in
+  let check msg model =
+    match Provider.find_provider_for_model ~providers ~model_name:model with
+    | Some (name, _) -> Alcotest.(check string) msg "openai-codex" name
+    | None -> Alcotest.fail (Printf.sprintf "expected match for %s" model)
+  in
+  check "gpt-5.2 routes to codex" "gpt-5.2";
+  check "gpt-5.3-codex routes to codex" "gpt-5.3-codex";
+  check "gpt-5.3-codex-spark routes to codex" "gpt-5.3-codex-spark";
+  check "gpt-5.4 routes to codex" "gpt-5.4";
+  check "gpt-5 routes to codex" "gpt-5";
+  check "gpt-5.1 routes to codex" "gpt-5.1";
+  check "gpt-5.1-codex-max routes to codex" "gpt-5.1-codex-max";
+  check "gpt-5.2-codex routes to codex" "gpt-5.2-codex";
+  check "gpt-5-codex-mini routes to codex" "gpt-5-codex-mini";
+  check "gpt-5.4-pro routes to codex" "gpt-5.4-pro";
+  check "gpt-5-mini routes to codex" "gpt-5-mini"
+
 let test_find_provider_ignores_empty_codex_oauth_tokens () =
   let providers =
     [
@@ -399,6 +440,8 @@ let suite =
       test_find_provider_first_wins;
     Alcotest.test_case "find provider with codex oauth auth" `Quick
       test_find_provider_with_codex_oauth_auth;
+    Alcotest.test_case "find provider codex associated models" `Quick
+      test_find_provider_codex_associated_models;
     Alcotest.test_case "find provider ignores empty codex oauth tokens" `Quick
       test_find_provider_ignores_empty_codex_oauth_tokens;
   ]

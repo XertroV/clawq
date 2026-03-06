@@ -196,6 +196,31 @@ let strip_date_suffix s =
 let normalize_model_name s =
   String.lowercase_ascii (strip_date_suffix (String.trim s))
 
+let codex_associated_models =
+  [
+    "gpt-5";
+    "gpt-5-codex";
+    "gpt-5-codex-mini";
+    "gpt-5-mini";
+    "gpt-5.1";
+    "gpt-5.1-codex";
+    "gpt-5.1-codex-mini";
+    "gpt-5.1-codex-max";
+    "gpt-5.2";
+    "gpt-5.2-codex";
+    "gpt-5.3-codex";
+    "gpt-5.3-codex-spark";
+    "gpt-5.4";
+    "gpt-5.4-pro";
+  ]
+
+let is_codex_associated_model norm =
+  List.exists
+    (fun prefix ->
+      String.length norm >= String.length prefix
+      && String.sub norm 0 (String.length prefix) = prefix)
+    codex_associated_models
+
 let find_provider_for_model ~providers ~model_name =
   let norm = normalize_model_name model_name in
   let match_provider (name, (p : Runtime_config.provider_config)) =
@@ -206,12 +231,15 @@ let find_provider_for_model ~providers ~model_name =
       && Runtime_config.provider_has_auth p
     then Some (name, p)
     else
+      let is_codex_kind =
+        match p.kind with
+        | Some "openai-codex" | Some "codex" -> true
+        | _ -> false
+      in
       let codex_match =
-        (match p.kind with
-          | Some "openai-codex" | Some "codex" -> true
-          | _ -> false)
-        && String.length norm >= 13
-        && String.sub norm 0 13 = "openai-codex"
+        is_codex_kind
+        && ((String.length norm >= 13 && String.sub norm 0 13 = "openai-codex")
+           || is_codex_associated_model norm)
         && Runtime_config.provider_has_auth p
       in
       if codex_match then Some (name, p)

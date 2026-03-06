@@ -1,10 +1,15 @@
 ---
+claimed_at: "2026-03-06T19:51:51Z"
+claimed_by: cli-user
+completed_at: "2026-03-06T19:56:00Z"
 complexity: medium
 depends_on: []
+duration_minutes: 4.163954786483333
 estimate_hours: 1
 id: B030
 priority: high
-status: pending
+started_at: "2026-03-06T19:51:51Z"
+status: done
 tags: []
 title: 'task: update codex associated models: gpt-5.2, gpt-5.3-codex, gpt-5.3-codex-spark, gpt-5.4, etc.'
 ---

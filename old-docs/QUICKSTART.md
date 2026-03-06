@@ -106,7 +106,7 @@ Minimal `openai-codex` config:
     "openai-codex": {
       "kind": "openai-codex",
       "base_url": "https://chatgpt.com/backend-api/codex",
-      "default_model": "openai-codex/gpt-5-codex"
+      "default_model": "openai-codex/gpt-5.3-codex"
     }
   },
   "channels": {
