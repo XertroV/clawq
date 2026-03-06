@@ -279,6 +279,46 @@ let test_tool_result_roundtrip () =
   Alcotest.(check (option string)) "tool_call_id" (Some "tc-99") m.tool_call_id;
   Alcotest.(check string) "content" "done" m.content
 
+let test_tool_cycle_history_shape () =
+  let db = Memory.init ~db_path:":memory:" () in
+  let tc1 =
+    { Provider.id = "call-1"; function_name = "shell_exec"; arguments = "{}" }
+  in
+  let tc2 =
+    { Provider.id = "call-2"; function_name = "file_read"; arguments = "{}" }
+  in
+  let assistant_with_calls =
+    {
+      Provider.role = "assistant";
+      content = "";
+      tool_calls = [ tc1; tc2 ];
+      tool_call_id = None;
+      name = None;
+    }
+  in
+  Memory.store_message ~db ~session_key:"s1" assistant_with_calls;
+  Memory.store_message ~db ~session_key:"s1"
+    (Provider.make_tool_result ~tool_call_id:"call-1" ~name:"shell_exec"
+       ~content:"ok-1");
+  Memory.store_message ~db ~session_key:"s1"
+    (Provider.make_tool_result ~tool_call_id:"call-2" ~name:"file_read"
+       ~content:"ok-2");
+  let msgs = Memory.load_history ~db ~session_key:"s1" in
+  Alcotest.(check int) "three messages in cycle" 3 (List.length msgs);
+  let first = List.nth msgs 0 in
+  let second = List.nth msgs 1 in
+  let third = List.nth msgs 2 in
+  Alcotest.(check string)
+    "assistant call shell first" "shell_exec"
+    (List.nth first.tool_calls 0).function_name;
+  Alcotest.(check string)
+    "assistant call file second" "file_read"
+    (List.nth first.tool_calls 1).function_name;
+  Alcotest.(check (option string))
+    "tool result #1 id" (Some "call-1") second.tool_call_id;
+  Alcotest.(check (option string))
+    "tool result #2 id" (Some "call-2") third.tool_call_id
+
 let suite =
   [
     Alcotest.test_case "init creates db" `Quick test_init_creates_db;
@@ -326,4 +366,6 @@ let suite =
     Alcotest.test_case "cleanup all multiple sessions" `Quick
       test_cleanup_all_multiple_sessions;
     Alcotest.test_case "tool result roundtrip" `Quick test_tool_result_roundtrip;
+    Alcotest.test_case "tool cycle history shape" `Quick
+      test_tool_cycle_history_shape;
   ]

@@ -167,20 +167,62 @@ let set_chain_anchor ~db anchor =
   ignore (Sqlite3.step stmt);
   ignore (Sqlite3.finalize stmt)
 
-let compute_retained_anchor ~db ~max_age_days ~max_entries =
-  let retained_ids_sql =
-    Printf.sprintf
-      "SELECT id FROM audit_log WHERE timestamp >= datetime('now', '-%d days') \
-       ORDER BY id DESC LIMIT %d"
-      max_age_days max_entries
+let retention_cutoff ~db ~max_age_days =
+  let sql = Printf.sprintf "SELECT datetime('now', '-%d days')" max_age_days in
+  let stmt = Sqlite3.prepare db sql in
+  let result =
+    if Sqlite3.step stmt = Sqlite3.Rc.ROW then
+      match Sqlite3.column stmt 0 with Sqlite3.Data.TEXT s -> s | _ -> ""
+    else ""
   in
-  let sql =
-    Printf.sprintf
-      "SELECT signature FROM audit_log WHERE signature IS NOT NULL AND id NOT \
-       IN (%s) ORDER BY id DESC LIMIT 1"
-      retained_ids_sql
+  ignore (Sqlite3.finalize stmt);
+  result
+
+let compute_retention_boundary ~db ~max_age_days ~max_entries =
+  let cutoff = retention_cutoff ~db ~max_age_days in
+  let stmt =
+    Sqlite3.prepare db "SELECT id, timestamp FROM audit_log ORDER BY id DESC"
+  in
+  (* Retain only a contiguous newest suffix so signed-chain verification stays
+     valid even if imported timestamps are not monotone with ids. *)
+  let rec loop kept boundary =
+    if kept >= max_entries then boundary
+    else
+      match Sqlite3.step stmt with
+      | Sqlite3.Rc.ROW ->
+          let id =
+            match Sqlite3.column stmt 0 with
+            | Sqlite3.Data.INT i -> Int64.to_int i
+            | _ -> 0
+          in
+          let timestamp =
+            match Sqlite3.column stmt 1 with
+            | Sqlite3.Data.TEXT s -> s
+            | _ -> ""
+          in
+          if timestamp >= cutoff then loop (kept + 1) (Some id) else boundary
+      | _ -> boundary
+  in
+  let boundary = if max_entries <= 0 then None else loop 0 None in
+  ignore (Sqlite3.finalize stmt);
+  boundary
+
+let latest_deleted_signature ~db ~boundary_id =
+  let sql, bind =
+    match boundary_id with
+    | Some id ->
+        ( "SELECT signature FROM audit_log WHERE signature IS NOT NULL AND id \
+           < ? ORDER BY id DESC LIMIT 1",
+          Some id )
+    | None ->
+        ( "SELECT signature FROM audit_log WHERE signature IS NOT NULL ORDER \
+           BY id DESC LIMIT 1",
+          None )
   in
   let stmt = Sqlite3.prepare db sql in
+  (match bind with
+  | Some id -> ignore (Sqlite3.bind stmt 1 (Sqlite3.Data.INT (Int64.of_int id)))
+  | None -> ());
   let result =
     if Sqlite3.step stmt = Sqlite3.Rc.ROW then
       match Sqlite3.column stmt 0 with
@@ -212,9 +254,35 @@ let compute_prev_hash last_sig =
   | None -> "genesis"
   | Some sig_str -> Digestif.SHA256.(digest_string sig_str |> to_hex)
 
-let compute_signature ~key ~prev_hash ~timestamp ~event_type ~details_str =
+let encode_signed_field value =
+  Printf.sprintf "%d:%s" (String.length value) value
+
+let compute_signature_legacy ~key ~prev_hash ~timestamp ~event_type ~details_str
+    =
   let payload = prev_hash ^ timestamp ^ event_type ^ details_str in
   Digestif.SHA256.(hmac_string ~key payload |> to_hex)
+
+let compute_signature ~key ~prev_hash ~timestamp ~event_type ~session_key
+    ~details_str ~tool_name ~risk_level =
+  let text = function Some s -> s | None -> "" in
+  let payload_fields =
+    [
+      prev_hash;
+      timestamp;
+      event_type;
+      text session_key;
+      details_str;
+      text tool_name;
+      text risk_level;
+    ]
+  in
+  let payload =
+    String.concat "|" (List.map encode_signed_field payload_fields)
+  in
+  Digestif.SHA256.(hmac_string ~key payload |> to_hex)
+
+let legacy_signature_eligible ~session_key ~tool_name ~risk_level =
+  session_key = None && tool_name = None && risk_level = None
 
 let log_signed ~db ~key event =
   let event_type, session_key, details, tool_name, risk_level =
@@ -235,7 +303,8 @@ let log_signed ~db ~key event =
     ts
   in
   let signature =
-    compute_signature ~key ~prev_hash ~timestamp ~event_type ~details_str
+    compute_signature ~key ~prev_hash ~timestamp ~event_type ~session_key
+      ~details_str ~tool_name ~risk_level
   in
   let sql =
     "INSERT INTO audit_log (timestamp, event_type, session_key, details, \
@@ -265,10 +334,14 @@ let log ~db ?signing_key event =
 
 let verify_chain ~db ~key =
   let sql =
-    "SELECT id, timestamp, event_type, details, signature, prev_hash FROM \
-     audit_log ORDER BY id ASC"
+    "SELECT id, timestamp, event_type, session_key, details, tool_name, \
+     risk_level, signature, prev_hash FROM audit_log ORDER BY id ASC"
   in
   let stmt = Sqlite3.prepare db sql in
+  (* Unsigned rows are preserved as audit records but are not part of the
+     cryptographic chain. Verification only advances across signed rows, so a
+     retained-chain anchor applies to the first retained signed row; any leading
+     unsigned rows remain informational only. *)
   let last_sig = ref (get_chain_anchor ~db) in
   let result = ref (Ok ()) in
   while Sqlite3.step stmt = Sqlite3.Rc.ROW && !result = Ok () do
@@ -284,22 +357,39 @@ let verify_chain ~db ~key =
       match Sqlite3.column stmt 2 with Sqlite3.Data.TEXT s -> s | _ -> ""
     in
     let details_str =
-      match Sqlite3.column stmt 3 with Sqlite3.Data.TEXT s -> s | _ -> ""
+      match Sqlite3.column stmt 4 with Sqlite3.Data.TEXT s -> s | _ -> ""
     in
-    let signature =
-      match Sqlite3.column stmt 4 with
+    let session_key =
+      match Sqlite3.column stmt 3 with
       | Sqlite3.Data.TEXT s -> Some s
       | _ -> None
     in
-    let prev_hash =
+    let tool_name =
       match Sqlite3.column stmt 5 with
       | Sqlite3.Data.TEXT s -> Some s
       | _ -> None
     in
+    let risk_level =
+      match Sqlite3.column stmt 6 with
+      | Sqlite3.Data.TEXT s -> Some s
+      | _ -> None
+    in
+    let signature =
+      match Sqlite3.column stmt 7 with
+      | Sqlite3.Data.TEXT s -> Some s
+      | _ -> None
+    in
+    let prev_hash =
+      match Sqlite3.column stmt 8 with
+      | Sqlite3.Data.TEXT s -> Some s
+      | _ -> None
+    in
     match (signature, prev_hash) with
-    | None, _ ->
+    | None, None ->
         (* Unsigned entry, skip *)
         ()
+    | None, Some _ ->
+        result := Error (id, "unsigned entry unexpectedly carries prev_hash")
     | Some sig_str, Some ph ->
         let expected_prev = compute_prev_hash !last_sig in
         if ph <> expected_prev then
@@ -311,9 +401,18 @@ let verify_chain ~db ~key =
         else begin
           let expected_sig =
             compute_signature ~key ~prev_hash:ph ~timestamp ~event_type
-              ~details_str
+              ~session_key ~details_str ~tool_name ~risk_level
           in
-          if sig_str <> expected_sig then
+          let legacy_match =
+            legacy_signature_eligible ~session_key ~tool_name ~risk_level
+            &&
+            let expected_legacy =
+              compute_signature_legacy ~key ~prev_hash:ph ~timestamp ~event_type
+                ~details_str
+            in
+            sig_str = expected_legacy
+          in
+          if sig_str <> expected_sig && not legacy_match then
             result := Error (id, Printf.sprintf "signature mismatch")
           else last_sig := Some sig_str
         end
@@ -322,31 +421,38 @@ let verify_chain ~db ~key =
   ignore (Sqlite3.finalize stmt);
   !result
 
+let signature_counts ~db =
+  let stmt =
+    Sqlite3.prepare db
+      "SELECT SUM(CASE WHEN signature IS NOT NULL THEN 1 ELSE 0 END), SUM(CASE \
+       WHEN signature IS NULL THEN 1 ELSE 0 END) FROM audit_log"
+  in
+  let counts =
+    if Sqlite3.step stmt = Sqlite3.Rc.ROW then
+      let count i =
+        match Sqlite3.column stmt i with
+        | Sqlite3.Data.INT n -> Int64.to_int n
+        | _ -> 0
+      in
+      (count 0, count 1)
+    else (0, 0)
+  in
+  ignore (Sqlite3.finalize stmt);
+  counts
+
 (* Retention: purge old entries *)
 let purge_old ~db ~max_age_days ~max_entries =
   let existing_anchor = get_chain_anchor ~db in
-  let retained_anchor =
-    compute_retained_anchor ~db ~max_age_days ~max_entries
-  in
+  let boundary_id = compute_retention_boundary ~db ~max_age_days ~max_entries in
+  let retained_anchor = latest_deleted_signature ~db ~boundary_id in
   let deleted = ref 0 in
-  (* Delete by age *)
-  let sql_age =
-    Printf.sprintf
-      "DELETE FROM audit_log WHERE timestamp < datetime('now', '-%d days')"
-      max_age_days
+  let delete_sql =
+    match boundary_id with
+    | Some id -> Printf.sprintf "DELETE FROM audit_log WHERE id < %d" id
+    | None -> "DELETE FROM audit_log"
   in
-  (match Sqlite3.exec db sql_age with
-  | Sqlite3.Rc.OK -> deleted := !deleted + Sqlite3.changes db
-  | _ -> ());
-  (* Delete by count: keep only newest max_entries *)
-  let sql_count =
-    Printf.sprintf
-      "DELETE FROM audit_log WHERE id NOT IN (SELECT id FROM audit_log ORDER \
-       BY id DESC LIMIT %d)"
-      max_entries
-  in
-  (match Sqlite3.exec db sql_count with
-  | Sqlite3.Rc.OK -> deleted := !deleted + Sqlite3.changes db
+  (match Sqlite3.exec db delete_sql with
+  | Sqlite3.Rc.OK -> deleted := Sqlite3.changes db
   | _ -> ());
   (if !deleted > 0 then
      let next_anchor =
@@ -418,6 +524,172 @@ let export_json ~db ~path =
   close_out oc;
   export_anchor ~db ~path;
   !count
+
+let import_anchor ~anchor_path =
+  let open Yojson.Safe.Util in
+  try
+    let json = Yojson.Safe.from_file anchor_path in
+    let format = json |> member "format" |> to_string in
+    if format <> "clawq-audit-anchor-v1" then
+      Error
+        (Printf.sprintf "Unsupported audit anchor format in %s: %s" anchor_path
+           format)
+    else
+      let anchor =
+        match json |> member "chain_anchor_signature" with
+        | `Null -> None
+        | `String s when s <> "" -> Some s
+        | `String _ -> None
+        | _ ->
+            raise
+              (Failure
+                 (Printf.sprintf
+                    "Invalid chain_anchor_signature value in anchor file %s"
+                    anchor_path))
+      in
+      Ok anchor
+  with
+  | Yojson.Json_error msg ->
+      Error
+        (Printf.sprintf "Invalid audit anchor JSON in %s: %s" anchor_path msg)
+  | Yojson.Safe.Util.Type_error (msg, _) ->
+      Error (Printf.sprintf "Invalid audit anchor in %s: %s" anchor_path msg)
+  | Sys_error msg -> Error msg
+  | Failure msg -> Error msg
+
+let audit_row_count ~db =
+  let stmt = Sqlite3.prepare db "SELECT COUNT(*) FROM audit_log" in
+  let count =
+    if Sqlite3.step stmt = Sqlite3.Rc.ROW then
+      match Sqlite3.column stmt 0 with
+      | Sqlite3.Data.INT n -> Int64.to_int n
+      | _ -> 0
+    else 0
+  in
+  ignore (Sqlite3.finalize stmt);
+  count
+
+let import_json ~db ~path:file_path ?anchor_path () =
+  let open Yojson.Safe.Util in
+  if audit_row_count ~db > 0 then
+    Error "Audit import requires an empty audit log"
+  else
+    try
+      let resolved_anchor_path =
+        match anchor_path with
+        | Some p -> Some p
+        | None ->
+            let default_path = file_path ^ ".anchor.json" in
+            if Sys.file_exists default_path then Some default_path else None
+      in
+      let anchor =
+        match resolved_anchor_path with
+        | Some p -> (
+            match import_anchor ~anchor_path:p with
+            | Ok a -> a
+            | Error msg -> raise (Failure msg))
+        | None -> None
+      in
+      let insert_sql =
+        "INSERT INTO audit_log (timestamp, event_type, session_key, details, \
+         tool_name, risk_level, signature, prev_hash) VALUES (?, ?, ?, ?, ?, \
+         ?, ?, ?)"
+      in
+      let stmt = Sqlite3.prepare db insert_sql in
+      let count = ref 0 in
+      let signed_rows = ref 0 in
+      let success = ref false in
+      let ic = open_in file_path in
+      let finalize_import success =
+        ignore (Sqlite3.finalize stmt);
+        close_in_noerr ic;
+        ignore (Sqlite3.exec db (if success then "COMMIT" else "ROLLBACK"))
+      in
+      (match Sqlite3.exec db "BEGIN IMMEDIATE" with
+      | Sqlite3.Rc.OK -> ()
+      | rc ->
+          raise
+            (Failure
+               (Printf.sprintf "Failed to start audit import transaction: %s"
+                  (Sqlite3.Rc.to_string rc))));
+      Fun.protect
+        (fun () ->
+          try
+            while true do
+              let line = input_line ic in
+              if String.trim line <> "" then begin
+                let json = Yojson.Safe.from_string line in
+                let text name = json |> member name |> to_string in
+                let text_opt name =
+                  match json |> member name with
+                  | `Null -> None
+                  | `String s -> Some s
+                  | _ ->
+                      raise
+                        (Failure
+                           (Printf.sprintf "Invalid %s value in %s" name
+                              file_path))
+                in
+                let bind_text idx value =
+                  ignore (Sqlite3.bind stmt idx (Sqlite3.Data.TEXT value))
+                in
+                bind_text 1 (text "timestamp");
+                bind_text 2 (text "event_type");
+                bind_opt stmt 3 (text_opt "session_key");
+                bind_opt stmt 4 (text_opt "details");
+                bind_opt stmt 5 (text_opt "tool_name");
+                bind_opt stmt 6 (text_opt "risk_level");
+                let signature = text_opt "signature" in
+                (match signature with Some _ -> incr signed_rows | None -> ());
+                bind_opt stmt 7 signature;
+                bind_opt stmt 8 (text_opt "prev_hash");
+                (match Sqlite3.step stmt with
+                | Sqlite3.Rc.DONE -> incr count
+                | rc ->
+                    raise
+                      (Failure
+                         (Printf.sprintf "Audit import failed: %s"
+                            (Sqlite3.Rc.to_string rc))));
+                ignore (Sqlite3.reset stmt);
+                ignore (Sqlite3.clear_bindings stmt)
+              end
+            done;
+            assert false
+          with End_of_file ->
+            (match (anchor, !signed_rows) with
+            | Some _, 0 ->
+                raise
+                  (Failure
+                     "Audit import anchor requires at least one signed row")
+            | _ -> ());
+            set_chain_anchor ~db anchor;
+            (if !signed_rows > 0 then
+               match get_signing_key () with
+               | Ok key -> (
+                   match verify_chain ~db ~key with
+                   | Ok () -> ()
+                   | Error (id, reason) ->
+                       raise
+                         (Failure
+                            (Printf.sprintf
+                               "Imported audit chain failed verification at \
+                                id=%d: %s"
+                               id reason)))
+               | Error msg ->
+                   raise
+                     (Failure
+                        (Printf.sprintf
+                           "Signed audit import requires verification key: %s"
+                           msg)));
+            success := true)
+        ~finally:(fun () -> finalize_import !success);
+      Ok (!count, resolved_anchor_path)
+    with
+    | Failure msg -> Error msg
+    | Yojson.Json_error msg ->
+        Error (Printf.sprintf "Invalid audit JSON: %s" msg)
+    | Yojson.Safe.Util.Type_error (msg, _) -> Error msg
+    | Sys_error msg -> Error msg
 
 (* Retention tick: export if configured, then purge *)
 let retention_tick ~db ~(config : Runtime_config.t) =

@@ -1,5 +1,4 @@
-let config = lazy (Config_loader.load ())
-let get_config () = Lazy.force config
+let get_config () = Config_loader.load ()
 
 let daemon_state_path () =
   let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
@@ -852,12 +851,21 @@ let cmd_audit args =
         | Error msg -> Printf.sprintf "Error: %s" msg
         | Ok key -> (
             let anchor = Audit.get_chain_anchor ~db in
+            let signed_entries, unsigned_entries = Audit.signature_counts ~db in
             match Audit.verify_chain ~db ~key with
             | Ok () -> (
-                match anchor with
-                | Some _ ->
-                    "Audit chain verification: OK (using retained-chain anchor)"
-                | None -> "Audit chain verification: OK")
+                match (anchor, signed_entries, unsigned_entries) with
+                | Some _, 0, _ ->
+                    "Audit chain verification: OK (no signed entries; stored \
+                     retained-chain anchor not exercised)"
+                | Some _, _, n when n > 0 ->
+                    "Audit chain verification: OK (signed retained suffix \
+                     verified against anchor; unsigned entries are \
+                     informational only)"
+                | Some _, _, _ ->
+                    "Audit chain verification: OK (signed retained suffix \
+                     verified against anchor)"
+                | None, _, _ -> "Audit chain verification: OK")
             | Error (id, reason) ->
                 Printf.sprintf "Audit chain verification FAILED at entry %d: %s"
                   id reason))
@@ -872,14 +880,36 @@ let cmd_audit args =
         let count = Audit.export_json ~db ~path in
         Printf.sprintf "Exported %d audit entries to %s (anchor sidecar: %s)"
           count path (path ^ ".anchor.json")
+    | [ "import"; path ] -> (
+        match Audit.import_json ~db ~path () with
+        | Ok (count, Some anchor_path) ->
+            Printf.sprintf
+              "Imported %d audit entries from %s (anchor sidecar: %s)" count
+              path anchor_path
+        | Ok (count, None) ->
+            Printf.sprintf "Imported %d audit entries from %s" count path
+        | Error msg -> Printf.sprintf "Error: %s" msg)
+    | [ "import"; path; "--anchor"; anchor_path ] -> (
+        match Audit.import_json ~db ~path ~anchor_path () with
+        | Ok (count, Some used_anchor) ->
+            Printf.sprintf "Imported %d audit entries from %s (anchor: %s)"
+              count path used_anchor
+        | Ok (count, None) ->
+            Printf.sprintf "Imported %d audit entries from %s" count path
+        | Error msg -> Printf.sprintf "Error: %s" msg)
     | [ "purge" ] ->
         let ret = cfg.security.audit_retention in
         let deleted =
           Audit.purge_old ~db ~max_age_days:ret.max_age_days
             ~max_entries:ret.max_entries
         in
-        Printf.sprintf "Purged %d audit entries" deleted
-    | _ -> "Usage: clawq audit <list|list --limit N|verify|export [path]|purge>"
+        Printf.sprintf
+          "Purged %d audit entries while preserving a contiguous retained \
+           suffix"
+          deleted
+    | _ ->
+        "Usage: clawq audit <list|list --limit N|verify|export [path]|import \
+         PATH [--anchor PATH.anchor.json]|purge>"
 
 let cmd_skills args =
   match args with

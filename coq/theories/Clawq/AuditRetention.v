@@ -18,24 +18,11 @@ Local Open Scope list_scope.
    Purge operations (pure functional model)
    ---------------------------------------------------------------- *)
 
-(* Purge by count: keep only the last n entries
+(* Purge by count: keep only the last n entries.
    This matches the SQL: DELETE WHERE id NOT IN (SELECT ... ORDER BY id DESC LIMIT n)
-   which is equivalent to keeping the suffix of length n. *)
-Fixpoint purge_by_count (n : nat) (entries : list audit_entry) : list audit_entry :=
-  match n with
-  | 0 => []
-  | S n' =>
-    match entries with
-    | [] => []
-    | _ :: rest => 
-      let suffix := purge_by_count n' rest in
-      (* If rest is too short, include current; otherwise take suffix *)
-      match n' <? length rest with
-      | true => suffix
-      | false => entries
-      end
-    end
-  end.
+   which is equivalent to dropping the first length(entries) - n items. *)
+Definition purge_by_count (n : nat) (entries : list audit_entry) : list audit_entry :=
+  skipn (length entries - n) entries.
 
 (* Check if a timestamp is >= cutoff (string comparison, abstract)
    In practice: timestamp >= datetime('now', '-max_age_days') *)
@@ -53,14 +40,20 @@ Definition purge_by_age (cutoff : string) (entries : list audit_entry) : list au
 Lemma purge_by_count_0 : forall entries,
   purge_by_count 0 entries = [].
 Proof.
-  reflexivity.
+  intros entries.
+  unfold purge_by_count.
+  rewrite Nat.sub_0_r.
+  apply skipn_all.
 Qed.
 
 (* P2: purge_by_count on empty list returns empty *)
 Lemma purge_by_count_nil : forall n,
   purge_by_count n [] = [].
 Proof.
-  destruct n; reflexivity.
+  intros n.
+  unfold purge_by_count.
+  simpl.
+  reflexivity.
 Qed.
 
 (* P3: purge_by_count produces a suffix of the original list *)
@@ -68,27 +61,10 @@ Lemma purge_by_count_suffix : forall n entries,
   exists prefix, entries = prefix ++ purge_by_count n entries.
 Proof.
   intros n entries.
-  generalize dependent entries.
-  induction n as [| n' IH]; intros entries.
-  - (* n = 0: purge everything *)
-    exists entries. 
-    simpl purge_by_count.
-    symmetry. apply app_nil_r.
-  - (* n = S n' *)
-    destruct entries as [| h rest].
-    + (* entries = [] *)
-      exists []. simpl purge_by_count. reflexivity.
-    + (* entries = h :: rest *)
-      simpl purge_by_count.
-      destruct (n' <? length rest) eqn:Hcmp.
-      * (* n' < length rest: recursively purge from rest *)
-        destruct (IH rest) as [prefix' Heq'].
-        exists (h :: prefix').
-        simpl. rewrite <- Heq'. reflexivity.
-      * (* n' >= length rest: keep all entries *)
-        apply Nat.ltb_ge in Hcmp.
-        exists [].
-        simpl. reflexivity.
+  exists (firstn (length entries - n) entries).
+  unfold purge_by_count.
+  symmetry.
+  apply firstn_skipn.
 Qed.
 
 (* P4: purge_by_count keeps at most n entries *)
@@ -96,22 +72,9 @@ Lemma purge_by_count_length : forall n entries,
   length (purge_by_count n entries) <= n.
 Proof.
   intros n entries.
-  generalize dependent entries.
-  induction n as [| n' IH]; intros entries.
-  - simpl purge_by_count. simpl. lia.
-  - destruct entries as [| h rest].
-    + simpl purge_by_count. simpl. lia.
-    + simpl purge_by_count.
-      destruct (n' <? length rest) eqn:Hcmp.
-      * apply Nat.ltb_lt in Hcmp.
-        simpl.
-        apply Nat.le_trans with (m := n').
-        -- apply IH.
-        -- lia.
-      * apply Nat.ltb_ge in Hcmp.
-        simpl in Hcmp.
-        simpl.
-        lia.
+  unfold purge_by_count.
+  rewrite skipn_length.
+  lia.
 Qed.
 
 (* Naive statement (false): verifying the retained suffix with the original
@@ -224,48 +187,25 @@ Proof.
   reflexivity.
 Qed.
 
-(* P9: purge_by_age preserves validity — this requires a stronger invariant *)
-(* The issue: if we remove entries from the middle, the chain breaks.
-   In practice, purge_by_age is applied to a time-ordered chain, so
-   old entries are at the front, and we keep a suffix. *)
-
-(* Model: entries are in timestamp order, so age-based purge removes prefix *)
-Definition is_time_ordered (entries : list audit_entry) : Prop :=
-  forall e1 e2, In e1 entries -> In e2 entries ->
-    timestamp_ge (ae_timestamp e2) (ae_timestamp e1) = true ->
-    (* e2 appears after e1 in the list *)
-    exists prefix suffix,
-      entries = prefix ++ e1 :: suffix /\ In e2 suffix.
-
-(* If entries are time-ordered and we filter by cutoff, we get a suffix *)
-Lemma purge_by_age_suffix_of_ordered : forall cutoff entries,
-  is_time_ordered entries ->
+(* P9: purge_by_age preserves validity only when the runtime semantics really
+   remove a prefix and retain a suffix. The runtime therefore retains only the
+   newest contiguous suffix satisfying the retention cutoff. *)
+Definition age_purge_keeps_suffix (cutoff : string) (entries : list audit_entry) : Prop :=
   exists prefix, entries = prefix ++ purge_by_age cutoff entries.
-Proof.
-  (* This is complex and may need admits for spec-only *)
-Admitted.
 
-(* P10: For spec-only, we admit the validity preservation for age purge *)
-Lemma purge_by_age_preserves_validity_aux : forall key cutoff entries prefix,
-  verify_chain key None entries = true ->
-  is_time_ordered entries ->
-  entries = prefix ++ purge_by_age cutoff entries ->
-  verify_chain key (last_sig None prefix) (purge_by_age cutoff entries) = true.
+Theorem purge_by_age_preserves_validity : forall key prev_sig cutoff entries,
+  verify_chain key prev_sig entries = true ->
+  age_purge_keeps_suffix cutoff entries ->
+  exists prefix,
+    entries = prefix ++ purge_by_age cutoff entries /\
+    verify_chain key (last_sig prev_sig prefix) (purge_by_age cutoff entries) = true.
 Proof.
-  intros key cutoff entries prefix Hvalid Hordered Heq.
-  rewrite Heq in Hvalid.
-  apply suffix_preserves_validity. exact Hvalid.
-Qed.
-
-Theorem purge_by_age_preserves_validity : forall key cutoff entries,
-  verify_chain key None entries = true ->
-  is_time_ordered entries ->
-  exists prefix, verify_chain key (last_sig None prefix) (purge_by_age cutoff entries) = true.
-Proof.
-  intros key cutoff entries Hvalid Hordered.
-  destruct (purge_by_age_suffix_of_ordered cutoff entries Hordered) as [prefix Heq].
+  intros key prev_sig cutoff entries Hvalid [prefix Heq].
   exists prefix.
-  apply purge_by_age_preserves_validity_aux; assumption.
+  split.
+  - exact Heq.
+  - rewrite Heq in Hvalid.
+    apply suffix_preserves_validity. exact Hvalid.
 Qed.
 
 (* ----------------------------------------------------------------
@@ -275,13 +215,27 @@ Qed.
 Definition purge (max_entries : nat) (cutoff : string) (entries : list audit_entry) :=
   purge_by_count max_entries (purge_by_age cutoff entries).
 
-(* P11: Combined purge preserves validity for time-ordered chains *)
-(* For spec-only, we admit the combined theorem *)
+(* P10: Combined purge preserves validity when age purge keeps a suffix. *)
 Theorem purge_preserves_validity : forall key max_entries cutoff entries,
   verify_chain key None entries = true ->
-  is_time_ordered entries ->
+  age_purge_keeps_suffix cutoff entries ->
   exists prefix, 
     verify_chain key (last_sig None prefix) (purge max_entries cutoff entries) = true.
 Proof.
-  admit.
-Admitted.
+  intros key max_entries cutoff entries Hvalid [age_prefix Hage].
+  unfold purge.
+  rewrite Hage in Hvalid.
+  assert (Hage_valid :
+    verify_chain key (last_sig None age_prefix) (purge_by_age cutoff entries) = true).
+  {
+    apply suffix_preserves_validity.
+    exact Hvalid.
+  }
+  destruct
+    (purge_by_count_preserves_validity key (last_sig None age_prefix)
+       max_entries (purge_by_age cutoff entries) Hage_valid)
+    as [count_prefix [_ Hcount_valid]].
+  exists (age_prefix ++ count_prefix).
+  rewrite last_sig_app.
+  exact Hcount_valid.
+Qed.

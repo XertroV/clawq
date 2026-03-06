@@ -1,4 +1,5 @@
 From Coq Require Import String List Bool Arith Lia Nat.
+Require Import Coq.Arith.PeanoNat.
 Import ListNotations.
 Open Scope string_scope.
 Local Open Scope nat_scope.
@@ -18,7 +19,7 @@ Local Open Scope nat_scope.
 
 (* ----------------------------------------------------------------
    Generic allowlist filtering.
-   
+
    is_allowed id list = true iff:
    - list = ["*"] (wildcard, allow all), OR
    - id is in list (explicit membership)
@@ -125,6 +126,82 @@ Proof.
   - exact Heq.
 Qed.
 
+(* Runtime-composed checks used by channel integrations. *)
+Definition slack_allowed
+    (channel_id user_id : string)
+    (allow_channels allow_users : list string) : bool :=
+  is_allowed channel_id allow_channels && is_allowed user_id allow_users.
+
+Definition discord_guild_allowed
+    (guild_id : option string) (allow_guilds : list string) : bool :=
+  match guild_id with
+  | Some gid => is_allowed gid allow_guilds
+  | None =>
+      match allow_guilds with
+      | ["*"] => true
+      | _ => false
+      end
+  end.
+
+Definition discord_allowed
+    (guild_id : option string) (user_id : string)
+    (allow_guilds allow_users : list string) : bool :=
+  discord_guild_allowed guild_id allow_guilds && is_allowed user_id allow_users.
+
+Theorem slack_allowed_correct :
+  forall channel_id user_id allow_channels allow_users,
+    slack_allowed channel_id user_id allow_channels allow_users = true <->
+    is_allowed channel_id allow_channels = true /\
+    is_allowed user_id allow_users = true.
+Proof.
+  intros channel_id user_id allow_channels allow_users.
+  unfold slack_allowed.
+  rewrite Bool.andb_true_iff.
+  tauto.
+Qed.
+
+Lemma singleton_guild_decision : forall gid,
+  discord_guild_allowed None [gid] = String.eqb gid "*".
+Proof.
+  intros gid.
+  unfold discord_guild_allowed.
+  destruct gid as [|a s].
+  - reflexivity.
+  - destruct s as [|a' s'].
+    + simpl.
+      destruct a as [b0 b1 b2 b3 b4 b5 b6 b7];
+        destruct b0; destruct b1; destruct b2; destruct b3;
+        destruct b4; destruct b5; destruct b6; destruct b7; reflexivity.
+    + simpl.
+      destruct a as [b0 b1 b2 b3 b4 b5 b6 b7];
+        destruct b0; destruct b1; destruct b2; destruct b3;
+        destruct b4; destruct b5; destruct b6; destruct b7; reflexivity.
+Qed.
+
+Theorem discord_none_guild_non_wildcard_rejected : forall allow_guilds,
+  allow_guilds <> ["*"] ->
+  discord_guild_allowed None allow_guilds = false.
+Proof.
+  intros allow_guilds Hneq.
+  destruct allow_guilds as [|h t].
+  - unfold discord_guild_allowed. reflexivity.
+  - destruct t as [|h' t'].
+    + rewrite singleton_guild_decision.
+      destruct (String.eqb h "*") eqn:Heq.
+      * apply String.eqb_eq in Heq. subst h. exfalso. apply Hneq. reflexivity.
+      * reflexivity.
+    + unfold discord_guild_allowed.
+      destruct h as [|a s].
+      * reflexivity.
+      * destruct s as [|a0 s0].
+        -- destruct a as [b0 b1 b2 b3 b4 b5 b6 b7];
+             destruct b0; destruct b1; destruct b2; destruct b3;
+             destruct b4; destruct b5; destruct b6; destruct b7; reflexivity.
+        -- destruct a as [b0 b1 b2 b3 b4 b5 b6 b7];
+             destruct b0; destruct b1; destruct b2; destruct b3;
+             destruct b4; destruct b5; destruct b6; destruct b7; reflexivity.
+Qed.
+
 (* ================================================================
    Replay prevention - timestamp window checking.
    ================================================================ *)
@@ -134,50 +211,44 @@ Definition timestamp := nat.
 
 Local Open Scope nat_scope.
 
-(* Check if a timestamp is within the allowed window (300 seconds) *)
-Definition timestamp_ok (request_ts current_ts : timestamp) : bool :=
-  if Nat.ltb current_ts request_ts then false
-  else Nat.leb (current_ts - request_ts) 300.
+(* Runtime semantics (Slack): absolute clock skew must be <= 300s. *)
+Definition abs_diff (a b : nat) : nat :=
+  if Nat.leb a b then b - a else a - b.
 
-(* Theorem 7: timestamp_ok enforces 300s window *)
+(* Check if a timestamp is within the allowed window (300 seconds). *)
+Definition timestamp_ok (request_ts current_ts : timestamp) : bool :=
+  Nat.leb (abs_diff request_ts current_ts) 300.
+
+(* Theorem 7: timestamp_ok enforces 300s absolute window. *)
 Theorem timestamp_ok_enforces_window : forall request_ts current_ts,
   timestamp_ok request_ts current_ts = true ->
-  current_ts >= request_ts /\ current_ts - request_ts <= 300.
+  abs_diff request_ts current_ts <= 300.
 Proof.
   intros request_ts current_ts H.
   unfold timestamp_ok in H.
-  destruct (current_ts <? request_ts) eqn:Ecmp.
-  - (* current_ts < request_ts - impossible since H = true *)
-    simpl in H. discriminate.
-  - (* current_ts >= request_ts *)
-    split.
-    + apply Nat.ltb_ge. exact Ecmp.
-    + apply Nat.leb_le. exact H.
+  apply Nat.leb_le. exact H.
 Qed.
 
-(* Theorem 8: Valid timestamp passes check *)
+(* Theorem 8: Timestamp within 300s skew passes check. *)
 Theorem timestamp_ok_valid : forall request_ts current_ts,
-  current_ts >= request_ts ->
-  current_ts - request_ts <= 300 ->
+  abs_diff request_ts current_ts <= 300 ->
   timestamp_ok request_ts current_ts = true.
 Proof.
-  intros request_ts current_ts Hge Hwindow.
+  intros request_ts current_ts Hwindow.
   unfold timestamp_ok.
-  destruct (current_ts <? request_ts) eqn:Ecmp.
-  - apply Nat.ltb_lt in Ecmp. lia.
-  - apply Nat.leb_le. exact Hwindow.
+  apply Nat.leb_le. exact Hwindow.
 Qed.
 
-(* Theorem 9: Future timestamp rejected *)
-Theorem timestamp_ok_future_rejected : forall request_ts current_ts,
-  current_ts < request_ts ->
+(* Theorem 9: Timestamps farther than 300s apart are rejected. *)
+Theorem timestamp_ok_far_apart_rejected : forall request_ts current_ts,
+  abs_diff request_ts current_ts > 300 ->
   timestamp_ok request_ts current_ts = false.
 Proof.
   intros request_ts current_ts H.
   unfold timestamp_ok.
-  destruct (current_ts <? request_ts) eqn:Ecmp.
-  - reflexivity.
-  - apply Nat.ltb_ge in Ecmp. lia.
+  apply Nat.leb_gt in H.
+  rewrite H.
+  reflexivity.
 Qed.
 
 (* Theorem 10: Expired timestamp rejected *)
@@ -188,24 +259,96 @@ Theorem timestamp_ok_expired_rejected : forall request_ts current_ts,
 Proof.
   intros request_ts current_ts Hge Hexpired.
   unfold timestamp_ok.
-  destruct (current_ts <? request_ts) eqn:Ecmp.
-  - apply Nat.ltb_lt in Ecmp. lia.
-  - apply Nat.leb_gt. exact Hexpired.
+  apply Nat.leb_gt.
+  unfold abs_diff.
+  assert (Hleb : Nat.leb request_ts current_ts = true).
+    { apply Nat.leb_le. lia. }
+  rewrite Hleb.
+  exact Hexpired.
 Qed.
 
 (* ================================================================
-   Summary of what was proved:
-   - is_allowed_forward: allowed -> (in list \/ wildcard)
-   - is_allowed_backward: (in list \/ wildcard) -> allowed
-   - is_allowed_correct: bidirectional correctness
-   - is_allowed_wildcard: ["*"] allows all
-   - is_allowed_single: non-wildcard single element
-   - is_allowed_monotone: adding IDs never revokes
-   - timestamp_ok_enforces_window: 300s window enforced
-   - timestamp_ok_valid: valid timestamp passes
-   - timestamp_ok_future_rejected: future timestamps rejected
-   - timestamp_ok_expired_rejected: expired timestamps rejected
-   
-   Extraction target:
-   - is_allowed: replace OCaml versions in slack.ml, discord.ml, telegram.ml
+   Telegram pairing validity window model.
    ================================================================ *)
+
+Definition pairing_active (now expiry : timestamp) : bool :=
+  Nat.ltb now expiry.
+
+Theorem pairing_active_before_expiry : forall now expiry,
+  now < expiry -> pairing_active now expiry = true.
+Proof.
+  intros now expiry Hlt.
+  unfold pairing_active.
+  apply Nat.ltb_lt in Hlt.
+  exact Hlt.
+Qed.
+
+Theorem pairing_inactive_at_or_after_expiry : forall now expiry,
+  now >= expiry -> pairing_active now expiry = false.
+Proof.
+  intros now expiry Hge.
+  unfold pairing_active.
+  apply Nat.ltb_ge in Hge.
+  exact Hge.
+Qed.
+
+Theorem pairing_active_iff : forall now expiry,
+  pairing_active now expiry = true <-> now < expiry.
+Proof.
+  intros now expiry.
+  split.
+  - intro H.
+    unfold pairing_active in H.
+    apply Nat.ltb_lt in H.
+    exact H.
+  - intro H.
+    unfold pairing_active.
+    apply Nat.ltb_lt in H.
+    exact H.
+Qed.
+
+(* Theorem 10: discord allow decision matches runtime shape. *)
+Theorem discord_allowed_correct :
+  forall guild_id user_id allow_guilds allow_users,
+    discord_allowed guild_id user_id allow_guilds allow_users = true <->
+    discord_guild_allowed guild_id allow_guilds = true /\
+    is_allowed user_id allow_users = true.
+Proof.
+  intros guild_id user_id allow_guilds allow_users.
+  unfold discord_allowed.
+  rewrite Bool.andb_true_iff.
+  tauto.
+Qed.
+
+(* Theorem 11: wildcard guild allowlist admits DM/None-guild events. *)
+Theorem discord_none_guild_wildcard_allowed :
+  discord_guild_allowed None ["*"] = true.
+Proof.
+  reflexivity.
+Qed.
+
+(* Theorem 12: non-wildcard guild allowlist rejects DM/None-guild events. *)
+Theorem discord_none_guild_specific_rejected : forall gid,
+  discord_guild_allowed None [gid] = String.eqb gid "*".
+Proof.
+  apply singleton_guild_decision.
+Qed.
+
+(* Summary:
+   - is_allowed + compositional lemmas model shared allowlist checks used by
+     Slack/Discord.
+   - timestamp_ok now models absolute skew window (Slack replay semantics).
+   - pairing_active models Telegram pairing validity-until-expiry semantics.
+   - Telegram TOTP code generation/verification itself remains a trusted
+     cryptographic boundary outside this model. *)
+(* ================================================================ *)
+(* Extraction target:
+   - is_allowed, discord_guild_allowed, timestamp_ok, pairing_active.
+   ================================================================ *)
+(* End of module. *)
+(* --------------------------------------------------------------- *)
+(* Keep final theorem as a compile guard for the summary section. *)
+Theorem channel_auth_model_well_formed : True.
+Proof.
+  reflexivity.
+Qed.

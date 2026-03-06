@@ -4,7 +4,7 @@ depends_on: []
 estimate_hours: 3
 id: P5.M2.E1.T001
 priority: high
-status: pending
+status: done
 tags:
     - formal-verification
     - session

@@ -116,6 +116,11 @@ Definition store_message (key : session_key) (msg : message)
   | None => add key (msg :: empty_agent_state) sessions
   end.
 
+(** Reset session: remove key from table (runtime also clears persisted history). *)
+Definition reset_session (key : session_key) (sessions : t agent_state)
+    : t agent_state :=
+  remove key sessions.
+
 (** * Isolation Properties *)
 
 (** Keys are distinct *)
@@ -195,19 +200,64 @@ Proof.
     + symmetry. exact Hneq.
 Qed.
 
-(** * Concurrency Skeleton *)
+(** * Same-key and cross-key operational properties *)
 
-(** This theorem is only a minimal logical skeleton: it does not prove any
-    runtime mutex behavior, but it removes the vacuous axiom previously used
-    for independent-key reasoning. Real lock behavior is still modeled at the
-    implementation layer in `src/session.ml`. *)
-Theorem session_operations_atomic :
-  forall k1 k2 (op : nat -> Prop),
-    k1 <> k2 ->
-    op k1 -> op k2 -> op k1 /\ op k2.
+Theorem reset_session_idempotent :
+  forall k sessions,
+    SessionMap.Equal
+      (reset_session k (reset_session k sessions))
+      (reset_session k sessions).
 Proof.
-  intros k1 k2 op _ Hop1 Hop2.
-  split; assumption.
+  intros k sessions key.
+  unfold reset_session.
+  destruct (SessionMap.E.eq_dec k key) as [Heq | Hneq].
+  - rewrite SessionMapFacts.remove_eq_o by exact Heq.
+    rewrite SessionMapFacts.remove_eq_o by exact Heq.
+    reflexivity.
+  - rewrite SessionMapFacts.remove_neq_o by exact Hneq.
+    rewrite SessionMapFacts.remove_neq_o by exact Hneq.
+    reflexivity.
+Qed.
+
+Lemma reset_session_preserves_other :
+  forall k1 k2 sessions state,
+    k1 <> k2 ->
+    find k1 sessions = Some state ->
+    find k1 (reset_session k2 sessions) = Some state.
+Proof.
+  intros k1 k2 sessions state Hneq Hfind.
+  unfold reset_session.
+  rewrite SessionMapFacts.remove_neq_o.
+  - exact Hfind.
+  - symmetry. exact Hneq.
+Qed.
+
+Lemma get_or_create_twice_stable :
+  forall k sessions,
+    snd (get_or_create k (snd (get_or_create k sessions))) =
+    snd (get_or_create k sessions).
+Proof.
+  intros k sessions.
+  unfold get_or_create.
+  destruct (find k sessions) as [state|] eqn:Hfind.
+  - simpl.
+    rewrite Hfind.
+    reflexivity.
+  - simpl.
+    rewrite SessionMapFacts.add_eq_o.
+    + reflexivity.
+    + reflexivity.
+Qed.
+
+Lemma reset_then_create_gives_empty_state :
+  forall k sessions,
+    fst (get_or_create k (reset_session k sessions)) = empty_agent_state.
+Proof.
+  intros k sessions.
+  unfold get_or_create, reset_session.
+  rewrite SessionMapFacts.remove_eq_o.
+  - reflexivity.
+  - reflexivity.
 Qed.
 
 (** * Session Table Invariants *)
@@ -301,10 +351,9 @@ Qed.
     1. Key-disjoint access: operations on k1 don't affect k2's state
     2. get_or_create preservation: existing entries unchanged
     3. store_message isolation: updating k1 doesn't change k2's history
-    4. Atomicity: assumed via Lwt_mutex axiom
+    4. Same-key idempotence/stability: reset_session_idempotent,
+       get_or_create_twice_stable, reset_then_create_gives_empty_state
     5. Valid state invariant: all histories have non-negative length
 *)
 
 End SessionIsolation.
-
-Print Assumptions SessionIsolation.session_operations_atomic.

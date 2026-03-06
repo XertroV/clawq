@@ -1,5 +1,4 @@
-let config = lazy (Config_loader.load ())
-let get_config () = Lazy.force config
+let get_config () = Config_loader.load ()
 
 let redact_key s =
   let len = String.length s in

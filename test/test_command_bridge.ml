@@ -58,6 +58,32 @@ let test_handle_models () =
   let result = Command_bridge.handle [ "models" ] in
   Alcotest.(check bool) "models returns output" true (String.length result > 0)
 
+let with_temp_home f =
+  let base = Filename.get_temp_dir_name () in
+  let dir = Filename.temp_file ~temp_dir:base "clawq_home_" "" in
+  Sys.remove dir;
+  Unix.mkdir dir 0o755;
+  let old_home = try Some (Sys.getenv "HOME") with Not_found -> None in
+  Unix.putenv "HOME" dir;
+  Fun.protect
+    (fun () -> f dir)
+    ~finally:(fun () ->
+      (match old_home with
+      | Some v -> Unix.putenv "HOME" v
+      | None -> Unix.putenv "HOME" "");
+      (try
+         let clawq_dir = Filename.concat dir ".clawq" in
+         if Sys.file_exists clawq_dir then begin
+           Array.iter
+             (fun name ->
+               let path = Filename.concat clawq_dir name in
+               try Sys.remove path with _ -> ())
+             (Sys.readdir clawq_dir);
+           Unix.rmdir clawq_dir
+         end
+       with _ -> ());
+      try Unix.rmdir dir with _ -> ())
+
 let test_handle_channel () =
   let result = Command_bridge.handle [ "channel" ] in
   Alcotest.(check bool)
@@ -144,6 +170,57 @@ let test_handle_audit () =
   let result = Command_bridge.handle [ "audit" ] in
   Alcotest.(check bool) "audit returns output" true (String.length result > 0)
 
+let test_handle_audit_usage_mentions_anchor () =
+  with_temp_home (fun home ->
+      let clawq_dir = Filename.concat home ".clawq" in
+      Unix.mkdir clawq_dir 0o755;
+      let config_path = Filename.concat clawq_dir "config.json" in
+      let oc = open_out config_path in
+      output_string oc {|{"security":{"audit_enabled":true}}|};
+      close_out oc;
+      let result = Command_bridge.handle [ "audit"; "import" ] in
+      Alcotest.(check bool)
+        "audit usage mentions optional anchor" true
+        ((try
+            ignore (Str.search_forward (Str.regexp_string "import") result 0);
+            true
+          with Not_found -> false)
+        &&
+          try
+            ignore (Str.search_forward (Str.regexp_string "--anchor") result 0);
+            true
+          with Not_found -> false))
+
+let test_handle_reloads_config_between_calls () =
+  with_temp_home (fun home ->
+      let clawq_dir = Filename.concat home ".clawq" in
+      Unix.mkdir clawq_dir 0o755;
+      let config_path = Filename.concat clawq_dir "config.json" in
+      let write_config contents =
+        let oc = open_out config_path in
+        output_string oc contents;
+        close_out oc
+      in
+      write_config {|{"security":{"audit_enabled":false}}|};
+      let disabled = Command_bridge.handle [ "audit"; "import" ] in
+      write_config {|{"security":{"audit_enabled":true}}|};
+      let enabled = Command_bridge.handle [ "audit"; "import" ] in
+      Alcotest.(check bool)
+        "first call sees disabled audit" true
+        (try
+           ignore
+             (Str.search_forward
+                (Str.regexp_string "Audit trail is disabled")
+                disabled 0);
+           true
+         with Not_found -> false);
+      Alcotest.(check bool)
+        "second call reloads config" true
+        (try
+           ignore (Str.search_forward (Str.regexp_string "--anchor") enabled 0);
+           true
+         with Not_found -> false))
+
 let test_handle_tunnel_status () =
   let result = Command_bridge.handle [ "tunnel"; "status" ] in
   Alcotest.(check bool)
@@ -204,6 +281,10 @@ let suite =
     Alcotest.test_case "handle skills" `Quick test_handle_skills;
     Alcotest.test_case "handle skills path" `Quick test_handle_skills_path;
     Alcotest.test_case "handle audit" `Quick test_handle_audit;
+    Alcotest.test_case "handle audit usage mentions anchor" `Quick
+      test_handle_audit_usage_mentions_anchor;
+    Alcotest.test_case "handle reloads config between calls" `Quick
+      test_handle_reloads_config_between_calls;
     Alcotest.test_case "handle tunnel status" `Quick test_handle_tunnel_status;
     Alcotest.test_case "status cleans stale daemon state" `Quick
       test_status_cleans_stale_daemon_state;

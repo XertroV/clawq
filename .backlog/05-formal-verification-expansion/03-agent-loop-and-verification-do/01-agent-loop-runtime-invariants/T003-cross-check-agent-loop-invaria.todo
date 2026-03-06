@@ -5,7 +5,7 @@ depends_on:
 estimate_hours: 3
 id: P5.M3.E1.T003
 priority: medium
-status: pending
+status: done
 tags:
     - formal-verification
     - agent

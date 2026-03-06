@@ -109,8 +109,8 @@
 - phase: "F7"
   module: "SecretStore.v"
   title: "Encryption Correctness"
-  status: "planned"
-  theorems: 0
+  status: "in_progress"
+  theorems: 12
   extracted: false
   security_roi: "high"
   difficulty: "medium"
@@ -121,24 +121,24 @@
     - "resolve_secret completeness"
 
 - phase: "F8"
-  module: "ChannelAuth.v + SlackAuth.v"
+  module: "ChannelAuth.v"
   title: "Channel Authentication"
-  status: "planned"
-  theorems: 0
+  status: "in_progress"
+  theorems: 18
   extracted: false
   security_roi: "high"
   difficulty: "low"
   coq_file: "coq/theories/Clawq/ChannelAuth.v"
   key_properties:
-    - "Generic allowlist filtering"
-    - "Replay prevention window"
-    - "HMAC basestring construction"
+    - "Shared allowlist semantics"
+    - "Absolute-skew replay window"
+    - "Telegram pairing validity"
 
 - phase: "F9"
   module: "AuditRetention.v"
   title: "Audit Retention Safety"
-  status: "planned"
-  theorems: 0
+  status: "in_progress"
+  theorems: 12
   extracted: false
   security_roi: "medium"
   difficulty: "low"
@@ -151,36 +151,36 @@
 - phase: "F10"
   module: "AgentLoop.v"
   title: "Agent Loop Termination"
-  status: "planned"
-  theorems: 0
+  status: "in_progress"
+  theorems: 10
   extracted: false
   security_roi: "medium"
   difficulty: "low"
   coq_file: "coq/theories/Clawq/AgentLoop.v"
   key_properties:
     - "Termination in max_tool_iterations"
-    - "History length bound"
-    - "trim_history idempotence"
+    - "Tool-call/tool-result history shape"
+    - "Trim and emergency compaction ordering"
 
 - phase: "F11"
   module: "SessionIsolation.v"
   title: "Session Isolation"
-  status: "planned"
-  theorems: 0
+  status: "in_progress"
+  theorems: 18
   extracted: false
   security_roi: "medium"
   difficulty: "medium"
   coq_file: "coq/theories/Clawq/SessionIsolation.v"
   key_properties:
-    - "Session key disjointness"
-    - "get_or_create isolation"
-    - "store_message non-interference"
+    - "Cross-key non-interference"
+    - "Same-key reset/create stability"
+    - "get_or_create and store_message isolation"
 
 - phase: "F12"
   module: "LandlockPolicy.v"
   title: "Landlock Sandbox Policy"
-  status: "planned"
-  theorems: 0
+  status: "in_progress"
+  theorems: 12
   extracted: false
   security_roi: "medium"
   difficulty: "high"

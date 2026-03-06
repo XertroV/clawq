@@ -1,6 +1,6 @@
 ---
 title: "Verification Status"
-description: "Machine-checked correctness: 69 theorems proven in Coq"
+description: "Machine-checked status across 12 Coq verification phases"
 section: "formal-properties"
 order: 1
 ---
@@ -23,7 +23,7 @@ import Callout from '../../components/Callout.astro';
 </p>
 
 <p style="font-size: var(--fs-xs); color: var(--text-tertiary); font-family: var(--font-label); margin-bottom: 3rem;">
-  Last extraction: 2026-03-06 &middot; Coq 8.19 &middot; 69 theorems
+  Last verification refresh: 2026-03-07 &middot; Coq 8.19 &middot; 153 theorem/lemma statements tracked across public phases F1&ndash;F12
 </p>
 
 <div style="margin-bottom: 2rem; padding: 1rem 1.1rem; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px;">
@@ -39,9 +39,9 @@ import Callout from '../../components/Callout.astro';
 {/* ===== MECHANICAL COUNTERS ===== */}
 
 <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 3rem; margin-bottom: 3.5rem;">
-  <MechanicalCounter value={69} label="Theorems Proven" />
+  <MechanicalCounter value={153} label="Statements Tracked" />
   <MechanicalCounter value={2} label="Modules Extracted" />
-  <MechanicalCounter value={1847} label="Lines of Coq" />
+  <MechanicalCounter value={3159} label="Lines of Coq" />
 </div>
 
 {/* ===== VERIFICATION SCORECARD ===== */}
@@ -52,30 +52,30 @@ import Callout from '../../components/Callout.astro';
 
   <div style="text-align: center; margin-bottom: 1.25rem;">
     <div style="display: flex; align-items: baseline; justify-content: center; gap: 0.4rem; margin-bottom: 0.35rem;">
-      <span style="font-family: var(--font-mono); font-size: var(--fs-2xl); font-weight: 700; color: var(--text-primary); line-height: 1;">69</span>
-      <span style="font-family: var(--font-label); font-size: var(--fs-lg); color: var(--text-tertiary);">/ ~120</span>
+      <span style="font-family: var(--font-mono); font-size: var(--fs-2xl); font-weight: 700; color: var(--text-primary); line-height: 1;">153</span>
+      <span style="font-family: var(--font-label); font-size: var(--fs-lg); color: var(--text-tertiary);">/ 153 tracked</span>
     </div>
-    <p style="font-family: var(--font-label); font-variant: small-caps; font-size: var(--fs-sm); color: var(--text-secondary); letter-spacing: 0.1em; text-align: center; max-width: none; margin: 0;">Properties Verified</p>
+    <p style="font-family: var(--font-label); font-variant: small-caps; font-size: var(--fs-sm); color: var(--text-secondary); letter-spacing: 0.1em; text-align: center; max-width: none; margin: 0;">Tracked Theorem/Lemma Statements</p>
   </div>
 
   {/* Progress bar */}
-  <div style="width: 100%; height: 6px; background: repeating-linear-gradient(135deg, rgba(139,115,50,0.45) 0px, rgba(139,115,50,0.45) 2px, rgba(139,115,50,0.25) 2px, rgba(139,115,50,0.25) 4px); border-radius: 12px; margin-bottom: 1.25rem; overflow: hidden;">
-    <div style="width: 57.5%; height: 100%; background: var(--coq-teal); border-radius: 12px;" />
+    <div style="width: 100%; height: 6px; background: repeating-linear-gradient(135deg, rgba(139,115,50,0.45) 0px, rgba(139,115,50,0.45) 2px, rgba(139,115,50,0.25) 2px, rgba(139,115,50,0.25) 4px); border-radius: 12px; margin-bottom: 1.25rem; overflow: hidden;">
+    <div style="width: 46.4%; height: 100%; background: var(--coq-teal); border-radius: 12px;" />
   </div>
 
   {/* Status legend */}
   <div class="legend-row">
     <span class="legend-item">
       <span class="legend-swatch legend-swatch-verified"></span>
-      <span class="legend-label">69 verified</span>
+      <span class="legend-label">71 fully verified</span>
     </span>
     <span class="legend-item">
       <span class="legend-swatch legend-swatch-progress"></span>
-      <span class="legend-label">0 in progress</span>
+      <span class="legend-label">82 in progress</span>
     </span>
     <span class="legend-item">
       <span class="legend-swatch legend-swatch-planned"></span>
-      <span class="legend-label">~51 planned</span>
+      <span class="legend-label">0 planned</span>
     </span>
   </div>
 
@@ -168,40 +168,40 @@ import Callout from '../../components/Callout.astro';
     <span class="phase-pill phase-pill-verified">&#10003; Verified</span>
   </div>
 
-  <div class="phase-card phase-planned">
+  <div class="phase-card phase-progress">
     <span class="phase-id">F7</span>
     <span class="phase-name">SecretStore</span>
-    <span class="phase-pill phase-pill-planned">&#8987; Planned</span>
+    <span class="phase-pill phase-pill-progress">&#9889; In Progress</span>
   </div>
 
-  <div class="phase-card phase-planned">
+  <div class="phase-card phase-progress">
     <span class="phase-id">F8</span>
     <span class="phase-name">ChannelAuth</span>
-    <span class="phase-pill phase-pill-planned">&#8987; Planned</span>
+    <span class="phase-pill phase-pill-progress">&#9889; In Progress</span>
   </div>
 
-  <div class="phase-card phase-planned">
+  <div class="phase-card phase-progress">
     <span class="phase-id">F9</span>
     <span class="phase-name">AuditRetention</span>
-    <span class="phase-pill phase-pill-planned">&#8987; Planned</span>
+    <span class="phase-pill phase-pill-progress">&#9889; In Progress</span>
   </div>
 
-  <div class="phase-card phase-planned">
+  <div class="phase-card phase-progress">
     <span class="phase-id">F10</span>
     <span class="phase-name">AgentLoop</span>
-    <span class="phase-pill phase-pill-planned">&#8987; Planned</span>
+    <span class="phase-pill phase-pill-progress">&#9889; In Progress</span>
   </div>
 
-  <div class="phase-card phase-planned">
+  <div class="phase-card phase-progress">
     <span class="phase-id">F11</span>
     <span class="phase-name">Session</span>
-    <span class="phase-pill phase-pill-planned">&#8987; Planned</span>
+    <span class="phase-pill phase-pill-progress">&#9889; In Progress</span>
   </div>
 
-  <div class="phase-card phase-planned">
+  <div class="phase-card phase-progress">
     <span class="phase-id">F12</span>
     <span class="phase-name">Landlock</span>
-    <span class="phase-pill phase-pill-planned">&#8987; Planned</span>
+    <span class="phase-pill phase-pill-progress">&#9889; In Progress</span>
   </div>
 
 </div>
@@ -232,6 +232,10 @@ import Callout from '../../components/Callout.astro';
   .phase-card.phase-planned {
     border-left: 3px solid var(--border-emphasis);
     opacity: 0.72;
+  }
+
+  .phase-card.phase-progress {
+    border-left: 3px solid var(--brass-primary);
   }
 
   .phase-id {
@@ -273,6 +277,12 @@ import Callout from '../../components/Callout.astro';
     background: rgba(139, 115, 50, 0.08);
     color: var(--brass-dark);
     border: 1px solid var(--border);
+  }
+
+  .phase-pill-progress {
+    background: rgba(139, 115, 50, 0.12);
+    color: var(--brass-dark);
+    border: 1px solid rgba(139, 115, 50, 0.35);
   }
 
   html[data-theme="light"] .phase-pill-planned {
@@ -372,81 +382,87 @@ import Callout from '../../components/Callout.astro';
     </div>
   </div>
 
-  <div class="ledger-row ledger-planned">
+  <div class="ledger-row ledger-progress">
     <div class="ledger-left">
       <span class="ledger-id">F7</span>
       <code class="ledger-module">SecretStore.v</code>
     </div>
     <div class="ledger-center">
-      <span class="ledger-props">Encrypt/decrypt identity, nonce uniqueness bound</span>
+      <span class="ledger-props">Encrypted/plain/env resolution, missing-key/decrypt-failure modeling, config rewrite preservation</span>
     </div>
     <div class="ledger-right">
-      <span class="phase-pill phase-pill-planned">&#8987; Planned</span>
+      <span class="ledger-count"><span class="ledger-n">12</span> statements</span>
+      <span class="phase-pill phase-pill-progress">&#9889; In Progress</span>
     </div>
   </div>
 
-  <div class="ledger-row ledger-planned">
+  <div class="ledger-row ledger-progress">
     <div class="ledger-left">
       <span class="ledger-id">F8</span>
-      <code class="ledger-module">ChannelAuth.v + SlackAuth.v</code>
+      <code class="ledger-module">ChannelAuth.v</code>
     </div>
     <div class="ledger-center">
-      <span class="ledger-props">Generic allowlist filtering, replay prevention, HMAC basestring</span>
+      <span class="ledger-props">Shared allowlist semantics, absolute-skew freshness, Telegram pairing validity window</span>
     </div>
     <div class="ledger-right">
-      <span class="phase-pill phase-pill-planned">&#8987; Planned</span>
+      <span class="ledger-count"><span class="ledger-n">18</span> statements</span>
+      <span class="phase-pill phase-pill-progress">&#9889; In Progress</span>
     </div>
   </div>
 
-  <div class="ledger-row ledger-planned">
+  <div class="ledger-row ledger-progress">
     <div class="ledger-left">
       <span class="ledger-id">F9</span>
       <code class="ledger-module">AuditRetention.v</code>
     </div>
     <div class="ledger-center">
-      <span class="ledger-props">purge_by_count/age correctness, purge preserves chain validity</span>
+      <span class="ledger-props">Anchored retention, suffix-preserving age purge assumptions, combined purge validity</span>
     </div>
     <div class="ledger-right">
-      <span class="phase-pill phase-pill-planned">&#8987; Planned</span>
+      <span class="ledger-count"><span class="ledger-n">12</span> statements</span>
+      <span class="phase-pill phase-pill-progress">&#9889; In Progress</span>
     </div>
   </div>
 
-  <div class="ledger-row ledger-planned">
+  <div class="ledger-row ledger-progress">
     <div class="ledger-left">
       <span class="ledger-id">F10</span>
       <code class="ledger-module">AgentLoop.v</code>
     </div>
     <div class="ledger-center">
-      <span class="ledger-props">Termination in max_tool_iterations, history bound, trim idempotence</span>
+      <span class="ledger-props">Fuel-bounded tool-iteration model, tool-call/tool-result cycle shape, trim ordering/idempotence</span>
     </div>
     <div class="ledger-right">
-      <span class="phase-pill phase-pill-planned">&#8987; Planned</span>
+      <span class="ledger-count"><span class="ledger-n">10</span> statements</span>
+      <span class="phase-pill phase-pill-progress">&#9889; In Progress</span>
     </div>
   </div>
 
-  <div class="ledger-row ledger-planned">
+  <div class="ledger-row ledger-progress">
     <div class="ledger-left">
       <span class="ledger-id">F11</span>
       <code class="ledger-module">SessionIsolation.v</code>
     </div>
     <div class="ledger-center">
-      <span class="ledger-props">Session key disjointness, get_or_create isolation, non-interference</span>
+      <span class="ledger-props">Cross-key isolation plus same-key reset/create idempotence and stability</span>
     </div>
     <div class="ledger-right">
-      <span class="phase-pill phase-pill-planned">&#8987; Planned</span>
+      <span class="ledger-count"><span class="ledger-n">18</span> statements</span>
+      <span class="phase-pill phase-pill-progress">&#9889; In Progress</span>
     </div>
   </div>
 
-  <div class="ledger-row ledger-planned">
+  <div class="ledger-row ledger-progress">
     <div class="ledger-left">
       <span class="ledger-id">F12</span>
       <code class="ledger-module">LandlockPolicy.v</code>
     </div>
     <div class="ledger-center">
-      <span class="ledger-props">Least-privilege access flags, path set closure, policy monotonicity</span>
+      <span class="ledger-props">Least-privilege access flags, path-set closure, policy monotonicity (admits remain)</span>
     </div>
     <div class="ledger-right">
-      <span class="phase-pill phase-pill-planned">&#8987; Planned</span>
+      <span class="ledger-count"><span class="ledger-n">12</span> statements</span>
+      <span class="phase-pill phase-pill-progress">&#9889; In Progress</span>
     </div>
   </div>
 
@@ -477,6 +493,10 @@ import Callout from '../../components/Callout.astro';
   .ledger-row.ledger-planned {
     border-left: 3px solid var(--border-emphasis);
     opacity: 0.72;
+  }
+
+  .ledger-row.ledger-progress {
+    border-left: 3px solid var(--brass-primary);
   }
 
   .ledger-left {
@@ -886,7 +906,7 @@ is_allowed cmd allowlist = true implies is_allowed cmd (allowlist ++ extra) = tr
     <div style="display: flex; align-items: center; justify-content: center; gap: 1rem; flex-wrap: wrap;">
       <div style="padding: 0.6rem 1.25rem; background: rgba(46, 139, 122, 0.08); border: 1px solid rgba(46, 139, 122, 0.35); text-align: center; min-width: 7rem;">
         <div style="font-weight: 600; color: var(--coq-teal-light); margin-bottom: 0.2rem;">Coq Core</div>
-        <div style="font-size: var(--fs-xs); color: var(--text-tertiary); font-variant: small-caps; letter-spacing: 0.06em;">69 theorems</div>
+        <div style="font-size: var(--fs-xs); color: var(--text-tertiary); font-variant: small-caps; letter-spacing: 0.06em;">71 theorems</div>
       </div>
       <span style="color: rgba(46,139,122,0.5); font-size: 1.1rem; letter-spacing: -0.05em;">&#8212;&#x25B8;</span>
       <div style="padding: 0.6rem 1.25rem; background: rgba(46, 139, 122, 0.08); border: 1px solid rgba(46, 139, 122, 0.35); text-align: center; min-width: 7rem;">
@@ -926,7 +946,7 @@ is_allowed cmd allowlist = true implies is_allowed cmd (allowlist ++ extra) = tr
 
 ## Verification Roadmap
 
-The remaining six phases (F7--F12) are ordered by security return on investment. Phases that yield extracted OCaml code -- replacing hand-written implementations with machine-checked versions -- are prioritized over spec-only proofs.
+The remaining phase work (F7--F12) is prioritized by runtime-risk reduction and model/runtime alignment. Extraction is selective and deferred unless a pure kernel is stable and demonstrably worth replacing in shipped OCaml.
 
 <Callout type="note" title="FAQ: Should Every Formalization Be Extracted?">
   No. We aim to extract the right pure kernels, not every formalization by default.
@@ -964,7 +984,7 @@ The remaining six phases (F7--F12) are ordered by security return on investment.
     <tr>
       <td>F8</td>
       <td><code>ChannelAuth.v</code></td>
-      <td><span style="color: var(--coq-teal);">Yes</span> (allowlist)</td>
+      <td>Candidate later (allowlist kernels only)</td>
       <td>High</td>
       <td>Low</td>
       <td style="font-weight: 600; color: var(--brass-primary);">2nd</td>
@@ -972,7 +992,7 @@ The remaining six phases (F7--F12) are ordered by security return on investment.
     <tr>
       <td>F9</td>
       <td><code>AuditRetention.v</code></td>
-      <td><span style="color: var(--coq-teal);">Yes</span> (purge)</td>
+      <td>Candidate later (pure purge helpers only)</td>
       <td>Medium-High</td>
       <td>Low</td>
       <td style="font-weight: 600; color: var(--brass-primary);">3rd</td>
@@ -1009,18 +1029,18 @@ The remaining six phases (F7--F12) are ordered by security return on investment.
 
 **F7: Encryption Correctness** -- Spec-only proofs for `secret_store.ml`. Prove encrypt/decrypt is identity (modelling AES-GCM as abstract parameters), nonce uniqueness birthday-bound, and `resolve_secret` completeness across encrypted, env-var, and plaintext cases.
 
-**F8: Channel Authentication** -- Extract a generic allowlist filter to replace hand-written OCaml versions in Slack, Discord, and Telegram channels. Prove replay prevention enforces the 300-second timestamp window. Verify Slack HMAC basestring construction.
+**F8: Channel Authentication** -- Keep formal/runtime alignment current for shared allowlist, replay/freshness semantics, and Telegram pairing validity. Treat extraction as optional follow-through once kernels are stable.
 
-**F9: Audit Retention Safety** -- Extract `purge_by_count` and `purge_by_age` to replace OCaml `purge_entries`. Prove purge preserves chain validity using the existing `verify_chain_suffix` lemma from AuditChain.v.
+**F9: Audit Retention Safety** -- Maintain anchored-retention correctness under runtime assumptions (suffix-preserving age purge + count purge). Extraction remains optional and limited to pure helper kernels.
 
-**F10: Agent Loop Termination** -- Spec-only proof that the agent turn loop terminates in at most `max_tool_iterations` steps, history length is bounded after `trim_history`, and trim is idempotent. Models the loop as a Coq `Fixpoint` with fuel.
+**F10: Agent Loop Termination** -- Spec-only proof that the agent turn loop stays within `max_tool_iterations`, preserves the tool-call/tool-result history shape, and keeps newest-first ordering under `trim_history` and emergency compaction. Models the loop as a Coq `Fixpoint` with fuel.
 
-**F11: Session Isolation** -- Spec-only proof using Coq `FMap` that sessions indexed by distinct keys have disjoint state. Proves `get_or_create` and `store_message` preserve cross-session non-interference. Lwt_mutex atomicity assumed axiomatically.
+**F11: Session Isolation** -- Spec-only proof using Coq `FMap` for cross-key non-interference plus same-key reset/create stability and idempotence; runtime lock behavior remains modeled with explicit assumptions and review notes.
 
 **F12: Landlock Sandbox Policy** -- Spec-only proof of least-privilege access flags, path set closure under `extra_paths` extension, and policy monotonicity. Assumes C FFI stubs implement Landlock semantics correctly.
 
 <hr class="ornamental-rule" />
 
 <p style="text-align: center; font-size: var(--fs-xs); color: var(--text-tertiary); font-family: var(--font-label); margin-top: 2rem;">
-  Data sourced from <code>docs/src/data/formal_verification.yml</code> &middot; Validated by <code>make update-fv</code>
+  Data sourced from the F1&ndash;F12 slice of <code>docs/src/data/formal_verification.yml</code> (with <code>F0</code> tracked separately as internal CLI work) &middot; Theorem counts checked by <code>make update-fv</code>
 </p>

@@ -5,7 +5,7 @@ depends_on:
 estimate_hours: 6
 id: P5.M2.E1.T002
 priority: high
-status: pending
+status: done
 tags:
     - formal-verification
     - coq

@@ -60,11 +60,11 @@ Not every `Axiom` is bad. Crypto primitives and OS availability checks may remai
 
 - [x] finish the anchored-suffix theorem story for audit retention
 - [x] review `src/audit.ml` for explicit anchor or checkpoint support
-- [ ] replace vacuous session-isolation claims with non-vacuous invariants
-- [ ] align `SecretStore.v` with the real `src/secret_store.ml` API
-- [ ] remove core admissions from `ChannelAuth.v` or replace the model
-- [ ] refine `AgentLoop.v` toward the real turn structure in `src/agent.ml`
-- [ ] revisit the public verification status page after high-risk proof areas improve
+- [x] replace vacuous session-isolation claims with non-vacuous invariants
+- [x] align `SecretStore.v` with the real `src/secret_store.ml` API
+- [x] remove core admissions from `ChannelAuth.v` or replace the model
+- [x] refine `AgentLoop.v` toward the real turn structure in `src/agent.ml`
+- [x] revisit the public verification status page after high-risk proof areas improve
 
 ## Phase 1: Audit Retention Correctness
 
@@ -74,7 +74,7 @@ Replace the currently false naive retention theorem with the right anchored-suff
 
 Current status note: runtime support for retained-chain anchors now exists in `src/audit.ml`; the remaining work is to keep the proof story, export story, and operator-facing verification model aligned with that behavior.
 
-Current gap note: export now writes an anchor sidecar, but there is not yet a matching import or restore flow that consumes that anchor explicitly.
+Current gap note: export now writes an anchor sidecar and the runtime import path consumes the default or explicit anchor sidecar. The remaining gap is operator-facing documentation around mixed signed/unsigned retained histories and anchored verification behavior.
 
 ### Why this phase is first
 
@@ -86,9 +86,9 @@ Current gap note: export now writes an anchor sidecar, but there is not yet a ma
 
 - [x] clean anchored-suffix theorem for retained audit chains
 - [x] count-based retention theorem with explicit inherited anchor
-- [ ] age-based retention theorem or explicit impossibility/assumption note
-- [ ] runtime recommendation for `src/audit.ml`
-- [ ] anchor-aware import or restore story for exported retained chains
+- [x] age-based retention theorem or explicit impossibility/assumption note
+- [x] runtime recommendation for `src/audit.ml`
+- [x] anchor-aware import or restore story for exported retained chains
 
 ### Implementation Checklist
 
@@ -105,8 +105,8 @@ Current gap note: export now writes an anchor sidecar, but there is not yet a ma
 
 ### Implementation alignment tasks
 
-- inspect whether runtime verification should accept an explicit starting anchor
-- inspect whether retention/export should preserve the dropped-prefix terminal signature
+- runtime verification now accepts an explicit starting anchor during import/restore; remaining work is to document mixed signed/unsigned operator expectations
+- retention/export now preserve the retained-prefix verification story via the exported anchor sidecar; remaining work is to document mixed signed/unsigned operator expectations
 - document whether mixed signed/unsigned histories are intentionally supported
 
 ### Exit criteria
@@ -131,15 +131,15 @@ Current status note: the runtime now synchronizes `reset` with the same per-sess
 
 ### Deliverables
 
-- [ ] stronger session state model for same-key and different-key behavior
-- [ ] non-vacuous non-interference theorems
-- [ ] explicit assumptions around mutex/atomicity boundaries
+- [x] stronger session state model for same-key and different-key behavior
+- [x] non-vacuous non-interference theorems
+- [x] explicit assumptions around mutex/atomicity boundaries
 
 ### Implementation Checklist
 
-- [ ] inspect `src/session.ml` for same-key double-creation windows
-- [ ] inspect DB persistence ordering assumptions after a turn
-- [ ] decide whether the right fix is a stronger model, a runtime refactor, or both
+- [x] inspect `src/session.ml` for same-key double-creation windows
+- [x] inspect DB persistence ordering assumptions after a turn
+- [x] decide whether the right fix is a stronger model, a runtime refactor, or both
 
 ### Concrete theorem targets
 
@@ -172,15 +172,15 @@ The main issue here is not theorem scarcity. It is model mismatch. Proving addit
 
 ### Deliverables
 
-- [ ] update Coq API shape to match plaintext passthrough behavior
-- [ ] clarify trusted boundaries for crypto, base64, and randomness
-- [ ] shrink to a more honest theorem set over the aligned model
+- [x] update Coq API shape to match plaintext passthrough behavior
+- [x] clarify trusted boundaries for crypto, base64, and randomness
+- [x] shrink to a more honest theorem set over the aligned model
 
 ### Implementation Checklist
 
-- [ ] verify exact behavior when decryption fails
-- [ ] verify exact behavior when `CLAWQ_MASTER_KEY` is missing
-- [ ] decide whether warnings and fallback behavior need to be modeled or left observational
+- [x] verify exact behavior when decryption fails
+- [x] verify exact behavior when `CLAWQ_MASTER_KEY` is missing
+- [x] decide whether warnings and fallback behavior need to be modeled or left observational
 
 ### Concrete theorem targets
 
@@ -209,9 +209,9 @@ Move from generic allowlist lemmas to proofs that match the actual authorization
 
 ### Deliverables
 
-- [ ] common allowlist theorem set reusable across channels
-- [ ] timestamp freshness theorems that match real replay windows
-- [ ] Telegram-specific TOTP pairing invariants
+- [x] common allowlist theorem set reusable across channels
+- [x] timestamp freshness theorems that match real replay windows
+- [x] Telegram-specific TOTP pairing invariants
 
 ### Concrete theorem targets
 
@@ -241,9 +241,9 @@ Model the real loop in `src/agent.ml` more faithfully so that theorem work start
 
 ### Deliverables
 
-- [ ] refined loop model closer to the real turn structure
-- [ ] bounded-iteration theorems for tool use
-- [ ] history well-formedness invariants
+- [x] refined loop model closer to the real turn structure
+- [x] bounded-iteration theorems for tool use
+- [x] history well-formedness invariants
 
 ### Concrete theorem targets
 
@@ -257,6 +257,8 @@ Model the real loop in `src/agent.ml` more faithfully so that theorem work start
 
 - the model is no longer a thin dummy loop
 - at least one theorem clearly constrains the real runtime turn structure
+
+Note: the roadmap tasks for this phase are complete, but the public F10 status remains `In Progress` because the status page tracks broader theorem verification state, not just roadmap task completion.
 
 ## Phase 6: Secondary Expansions
 

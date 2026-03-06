@@ -71,30 +71,30 @@ The runtime in `src/audit.ml` originally had the same shape:
 - verification starts from genesis in `verify_chain`
 - retention deletes old rows by age and count in `purge_old`
 
-That theory gap pointed directly at a real runtime design constraint. The runtime now preserves a retained-chain anchor across purge/export, but the remaining work is to tighten the formal story around that anchored behavior rather than the false genesis-based one. One notable remaining gap is restore/import: exports now carry an anchor sidecar, but there is not yet a matching import path that consumes it.
+That theory gap pointed directly at a real runtime design constraint. The runtime now preserves a retained-chain anchor across purge/export/import, so the remaining work is to keep the public proof story and operator docs aligned with that anchored behavior rather than the false genesis-based one.
 
 ### 2. Session isolation proofs are materially too weak
 
-`coq/theories/Clawq/SessionIsolation.v` has useful local lemmas, but two pieces sharply limit its value:
+`coq/theories/Clawq/SessionIsolation.v` was previously limited by a vacuous disjointness story and an over-abstract atomicity narrative. The current theory is stronger:
 
-- it assumes atomicity with `session_operations_atomic`
-- `states_disjoint` is effectively vacuous because it concludes `state1 <> state2 \/ True`
+- `states_disjoint` is now phrased as key-local non-interference under `store_message`
+- same-key properties such as `reset_session_idempotent`, `get_or_create_twice_stable`, and `reset_then_create_gives_empty_state` are modeled explicitly
 
-On the implementation side, `src/session.ml` creates session entries before the per-session mutex is used for turn execution, so same-key creation/concurrency deserves a much more precise model.
+On the implementation side, `src/session.ml` still deserves careful concurrency review, but the proof/runtime story now matches the shipped same-key reset/create behavior much more closely.
 
 ### 3. Secret-store proofs do not match the shipped API closely enough
 
-`coq/theories/Clawq/SecretStore.v` captures the intended shape of the feature, but it diverges from `src/secret_store.ml` in important ways:
+`coq/theories/Clawq/SecretStore.v` is now materially closer to `src/secret_store.ml`, but it remains intentionally spec-oriented around trusted crypto boundaries:
 
-- the Coq `decrypt_secret` returns `None` on plaintext
-- the OCaml `decrypt_secret` returns plaintext unchanged when the value is not encrypted
-- `resolve_secret` is intentionally simplified in Coq and does not model the real decryption path closely enough
+- plaintext passthrough is modeled explicitly
+- missing-master-key and decrypt-failure branches are represented
+- config rewrite preservation and no-double-encrypt properties are covered
 
-This means the current proofs are more like design notes than implementation-level verification.
+This is now useful implementation-aligned verification, even though crypto correctness itself remains axiom-backed.
 
 ### 4. Channel-auth proofs are not yet buying much runtime assurance
 
-`coq/theories/Clawq/ChannelAuth.v` has good intent, but many of the core theorems are still admitted, and the extracted function is not the one most channels actually use.
+`coq/theories/Clawq/ChannelAuth.v` is now more valuable than the earlier audit state: the core allowlist, freshness, and Telegram pairing properties are proved, with no remaining `Admitted` statements in the file. The main remaining limitation is that the theory is still a shared model for several channel runtimes rather than a proof over each integration's full implementation.
 
 The real authorization checks live separately in:
 

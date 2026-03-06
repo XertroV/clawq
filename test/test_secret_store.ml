@@ -113,6 +113,14 @@ let test_resolve_secret_encrypted_decrypts_with_master_key () =
         "encrypted value decrypts" "resolved-secret"
         (Secret_store.resolve_secret ~encrypt_secrets:true encrypted))
 
+let test_resolve_secret_encrypted_decrypt_failure_passthrough () =
+  let correct = Secret_store.derive_key ~passphrase:"correct-master" in
+  let encrypted = Secret_store.encrypt_secret ~key:correct "resolved-secret" in
+  with_env "CLAWQ_MASTER_KEY" (Some "wrong-master") (fun () ->
+      Alcotest.(check string)
+        "encrypted value preserved when decrypt fails" encrypted
+        (Secret_store.resolve_secret ~encrypt_secrets:true encrypted))
+
 let test_encrypt_config_secrets () =
   let key = Secret_store.derive_key ~passphrase:"test" in
   let json =
@@ -147,6 +155,52 @@ let test_encrypt_config_secrets () =
       | Ok decrypted ->
           Alcotest.(check string) "round-trip" "sk-real-key" decrypted
       | Error msg -> Alcotest.fail msg)
+
+let test_encrypt_config_secrets_preserves_non_provider_fields () =
+  let key = Secret_store.derive_key ~passphrase:"test" in
+  let json =
+    Yojson.Safe.from_string
+      {|{
+        "agent": {"model": "gpt-5.3-codex"},
+        "providers": {
+          "openai": {"api_key": "sk-real-key", "base_url": "https://api.openai.com"}
+        }
+      }|}
+  in
+  match Secret_store.encrypt_config_secrets ~key json with
+  | Error msg -> Alcotest.fail msg
+  | Ok new_json ->
+      let open Yojson.Safe.Util in
+      let model = new_json |> member "agent" |> member "model" |> to_string in
+      Alcotest.(check string) "unrelated fields preserved" "gpt-5.3-codex" model
+
+let test_encrypt_config_secrets_avoids_double_encrypt () =
+  let key = Secret_store.derive_key ~passphrase:"test" in
+  let existing = Secret_store.encrypt_secret ~key "already-secret" in
+  let json =
+    `Assoc
+      [
+        ( "providers",
+          `Assoc
+            [
+              ( "openai",
+                `Assoc
+                  [
+                    ("api_key", `String existing);
+                    ("base_url", `String "https://api.openai.com");
+                  ] );
+            ] );
+      ]
+  in
+  match Secret_store.encrypt_config_secrets ~key json with
+  | Error msg -> Alcotest.fail msg
+  | Ok new_json ->
+      let open Yojson.Safe.Util in
+      let after =
+        new_json |> member "providers" |> member "openai" |> member "api_key"
+        |> to_string
+      in
+      Alcotest.(check string) "already encrypted key unchanged" existing after
 
 let test_empty_plaintext () =
   let key = Secret_store.derive_key ~passphrase:"test" in
@@ -215,8 +269,14 @@ let suite =
       `Quick test_resolve_secret_encrypted_passthrough_without_master_key;
     Alcotest.test_case "resolve_secret encrypted decrypts with master key"
       `Quick test_resolve_secret_encrypted_decrypts_with_master_key;
+    Alcotest.test_case "resolve_secret encrypted decrypt failure passthrough"
+      `Quick test_resolve_secret_encrypted_decrypt_failure_passthrough;
     Alcotest.test_case "encrypt config secrets" `Quick
       test_encrypt_config_secrets;
+    Alcotest.test_case "encrypt config secrets preserves non-provider fields"
+      `Quick test_encrypt_config_secrets_preserves_non_provider_fields;
+    Alcotest.test_case "encrypt config secrets avoids double encrypt" `Quick
+      test_encrypt_config_secrets_avoids_double_encrypt;
     Alcotest.test_case "empty plaintext" `Quick test_empty_plaintext;
     Alcotest.test_case "encrypt config codex oauth secrets" `Quick
       test_encrypt_config_codex_oauth_secrets;

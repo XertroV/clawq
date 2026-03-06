@@ -40,10 +40,48 @@ let test_reset_waits_for_session_lock () =
     "history cleared after unlock" 0
     (List.length (Memory.load_history ~db ~session_key:"s1"))
 
+let test_same_key_restore_from_db_on_first_create () =
+  let db = Memory.init ~db_path:":memory:" () in
+  let config = Runtime_config.default in
+  let mgr = Session.create ~config ~db () in
+  Memory.store_message ~db ~session_key:"s1"
+    (Provider.make_message ~role:"user" ~content:"hello");
+  Memory.store_message ~db ~session_key:"s1"
+    (Provider.make_message ~role:"assistant" ~content:"hi");
+  Lwt_main.run
+    (Session.with_session_lock mgr ~key:"s1" (fun agent _interrupt ->
+         Alcotest.(check int)
+           "history restored for same key" 2
+           (List.length agent.Agent.history);
+         Lwt.return_unit));
+  Alcotest.(check bool)
+    "session created for key" true
+    (Hashtbl.mem mgr.sessions "s1")
+
+let test_reset_then_same_key_create_is_fresh () =
+  let db = Memory.init ~db_path:":memory:" () in
+  let config = Runtime_config.default in
+  let mgr = Session.create ~config ~db () in
+  Memory.store_message ~db ~session_key:"s1"
+    (Provider.make_message ~role:"user" ~content:"hello");
+  Lwt_main.run
+    (Session.with_session_lock mgr ~key:"s1" (fun _ _ -> Lwt.return_unit));
+  Lwt_main.run (Session.reset mgr ~key:"s1");
+  Lwt_main.run
+    (Session.with_session_lock mgr ~key:"s1" (fun agent _ ->
+         Alcotest.(check int)
+           "same key recreated with empty history after reset" 0
+           (List.length agent.Agent.history);
+         Lwt.return_unit))
+
 let suite =
   [
     Alcotest.test_case "reset clears active session and history" `Quick
       test_reset_clears_active_session_and_history;
     Alcotest.test_case "reset waits for session lock" `Quick
       test_reset_waits_for_session_lock;
+    Alcotest.test_case "same key restore from db on first create" `Quick
+      test_same_key_restore_from_db_on_first_create;
+    Alcotest.test_case "reset then same key create is fresh" `Quick
+      test_reset_then_same_key_create_is_fresh;
   ]

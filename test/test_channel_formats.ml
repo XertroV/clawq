@@ -438,6 +438,34 @@ let test_slack_verify_valid_signature () =
   in
   Alcotest.(check bool) "valid signature accepted" true result
 
+let test_slack_verify_signature_small_future_skew () =
+  let secret = "test-signing-secret" in
+  let ts = string_of_float (Unix.gettimeofday () +. 120.0) in
+  let body = "future=small" in
+  let basestring = "v0:" ^ ts ^ ":" ^ body in
+  let expected =
+    "v0=" ^ Digestif.SHA256.(hmac_string ~key:secret basestring |> to_hex)
+  in
+  let result =
+    Slack.verify_signature ~signing_secret:secret ~timestamp:ts ~body
+      ~signature:expected
+  in
+  Alcotest.(check bool) "small future skew accepted" true result
+
+let test_slack_verify_signature_far_future_skew () =
+  let secret = "test-signing-secret" in
+  let ts = string_of_float (Unix.gettimeofday () +. 600.0) in
+  let body = "future=far" in
+  let basestring = "v0:" ^ ts ^ ":" ^ body in
+  let expected =
+    "v0=" ^ Digestif.SHA256.(hmac_string ~key:secret basestring |> to_hex)
+  in
+  let result =
+    Slack.verify_signature ~signing_secret:secret ~timestamp:ts ~body
+      ~signature:expected
+  in
+  Alcotest.(check bool) "far future skew rejected" false result
+
 let test_slack_parse_empty_body () =
   match Slack.parse_event "" with
   | None -> ()
@@ -528,6 +556,36 @@ let test_telegram_api_base_format () =
     (let len = String.length Telegram.api_base in
      len > 4 && String.sub Telegram.api_base (len - 4) 4 = "/bot")
 
+let test_telegram_pairing_active_before_expiry () =
+  let chat_id = "chat_pair_active" in
+  Hashtbl.replace Telegram._paired_sessions chat_id (Unix.gettimeofday () +. 5.0);
+  let paired = Telegram.is_totp_paired ~chat_id ~now:(Unix.gettimeofday ()) in
+  Alcotest.(check bool) "paired session active before expiry" true paired;
+  Hashtbl.remove Telegram._paired_sessions chat_id
+
+let test_telegram_pairing_inactive_after_expiry () =
+  let chat_id = "chat_pair_expired" in
+  Hashtbl.replace Telegram._paired_sessions chat_id (Unix.gettimeofday () -. 1.0);
+  let paired = Telegram.is_totp_paired ~chat_id ~now:(Unix.gettimeofday ()) in
+  Alcotest.(check bool) "paired session rejected after expiry" false paired;
+  Hashtbl.remove Telegram._paired_sessions chat_id
+
+let test_telegram_cleanup_expired_pairings () =
+  let expired_id = "chat_pair_cleanup_expired" in
+  let active_id = "chat_pair_cleanup_active" in
+  Hashtbl.replace Telegram._paired_sessions expired_id
+    (Unix.gettimeofday () -. 10.0);
+  Hashtbl.replace Telegram._paired_sessions active_id
+    (Unix.gettimeofday () +. 10.0);
+  Telegram.cleanup_expired_sessions ();
+  Alcotest.(check bool)
+    "expired pairing removed" true
+    (Hashtbl.find_opt Telegram._paired_sessions expired_id = None);
+  Alcotest.(check bool)
+    "active pairing retained" true
+    (Hashtbl.find_opt Telegram._paired_sessions active_id <> None);
+  Hashtbl.remove Telegram._paired_sessions active_id
+
 let test_telegram_multiple_accounts_config () =
   let cfg : Runtime_config.telegram_config =
     {
@@ -595,6 +653,10 @@ let suite =
       test_slack_parse_missing_user;
     Alcotest.test_case "slack verify valid signature" `Quick
       test_slack_verify_valid_signature;
+    Alcotest.test_case "slack verify signature small future skew" `Quick
+      test_slack_verify_signature_small_future_skew;
+    Alcotest.test_case "slack verify signature far future skew" `Quick
+      test_slack_verify_signature_far_future_skew;
     Alcotest.test_case "slack parse empty body" `Quick
       test_slack_parse_empty_body;
     Alcotest.test_case "slack parse empty json" `Quick
@@ -670,6 +732,12 @@ let suite =
       test_telegram_parse_missing_from;
     Alcotest.test_case "telegram api_base format" `Quick
       test_telegram_api_base_format;
+    Alcotest.test_case "telegram pairing active before expiry" `Quick
+      test_telegram_pairing_active_before_expiry;
+    Alcotest.test_case "telegram pairing inactive after expiry" `Quick
+      test_telegram_pairing_inactive_after_expiry;
+    Alcotest.test_case "telegram cleanup expired pairings" `Quick
+      test_telegram_cleanup_expired_pairings;
     Alcotest.test_case "telegram multiple accounts config" `Quick
       test_telegram_multiple_accounts_config;
   ]
