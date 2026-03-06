@@ -27,3 +27,4 @@ bugs:
     - file: B026-we-need-a-simple-command-prefe.todo
     - file: B027-find-out-how-gpt-5-4-tool-sear.todo
     - file: B028-openai-codex-oauth-doesn-t-wor.todo
+    - file: B029-task-add-to-config-wizard-tool.todo

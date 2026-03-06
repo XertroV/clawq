@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B029
+priority: high
+status: pending
+tags: []
+title: 'task: add to config wizard: tool search enabeld (for gpt 5.4)'
+---
+
+task: add to config wizard: tool search enabeld (for gpt 5.4)
