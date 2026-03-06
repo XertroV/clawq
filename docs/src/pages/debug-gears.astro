@@ -1,0 +1,588 @@
+---
+import LandingLayout from '../layouts/LandingLayout.astro';
+import { createMeshedPairScene, solveGearScene } from '../lib/gears';
+import { buildGearPath, DEFAULT_GEAR_PROFILE_TUNING, getTunedRadii, sampleGearOutlinePoints } from '../lib/gears/path.ts';
+import type { Point } from '../lib/gears/model';
+
+const baseSceneConfig = {
+  circularPitch: 34,
+  minTeeth: 12,
+  driverId: 'gear-large',
+  driverPeriodSec: 120,
+  driverDirection: 'cw' as const,
+  first: {
+    id: 'gear-large',
+    center: { x: 360, y: 320 },
+    targetPitchRadius: 130,
+  },
+  second: {
+    id: 'gear-small',
+    idealCenter: { x: 150, y: 122 },
+    targetPitchRadius: 65,
+  },
+};
+
+const scene = solveGearScene(createMeshedPairScene(baseSceneConfig));
+const initialTuning = {
+  ...DEFAULT_GEAR_PROFILE_TUNING,
+  rotationDeg: 0,
+  speed: 1,
+  showFullRotation: false,
+  showGuides: true,
+  showPolyline: true,
+  showPhase: true,
+};
+
+const initialOutlines = scene.gears.map((gear) => ({
+  gear,
+  tunedRadii: getTunedRadii(gear, initialTuning),
+  points: sampleGearOutlinePoints(gear, initialTuning),
+  path: buildGearPath(gear, initialTuning),
+  pointsString: sampleGearOutlinePoints(gear, initialTuning)
+    .map((point: Point) => `${point.x.toFixed(2)},${point.y.toFixed(2)}`)
+    .join(' '),
+}));
+
+const controls = [
+  {
+    key: 'valleyWidth',
+    label: 'Base / Valley Width',
+    min: 0,
+    max: 0.28,
+    step: 0.005,
+    value: initialTuning.valleyWidth,
+  },
+  {
+    key: 'tipWidth',
+    label: 'Tip Width',
+    min: 0,
+    max: 0.2,
+    step: 0.005,
+    value: initialTuning.tipWidth,
+  },
+  {
+    key: 'toothLength',
+    label: 'Tooth Length',
+    min: 0.75,
+    max: 1.25,
+    step: 0.01,
+    value: initialTuning.toothLength,
+  },
+  {
+    key: 'roundness',
+    label: 'Corner Roundness',
+    min: 0.2,
+    max: 12,
+    step: 0.05,
+    value: initialTuning.roundness,
+  },
+  {
+    key: 'rotationDeg',
+    label: 'Exact Angular Rotation',
+    min: 0,
+    max: 90,
+    step: 0.1,
+    value: initialTuning.rotationDeg,
+  },
+  {
+    key: 'speed',
+    label: 'Playback Speed',
+    min: 0.2,
+    max: 3,
+    step: 0.05,
+    value: initialTuning.speed,
+  },
+];
+---
+
+<LandingLayout title="Gear Debug">
+  <div class="debug-wrap" id="gear-debug-root">
+    <header class="hero">
+      <p class="eyebrow">Debug Surface</p>
+      <h1>Gear Geometry Debug</h1>
+      <p class="lede">Interactive tuning surface for the background pair. Adjust tooth profile, scrub rotation, and inspect overlap with live geometry checks.</p>
+    </header>
+
+    <div class="workbench">
+      <section class="panel toolbar-panel">
+        <div class="toolbar-header">
+          <div>
+            <h2>Toolbar</h2>
+            <p class="toolbar-note">Tune the tooth profile live. The small gear stays mechanically coupled to the large gear while you scrub or animate rotation.</p>
+          </div>
+          <div class="toolbar-actions">
+            <button type="button" class="toolbar-button" id="play-pause">Play</button>
+            <button type="button" class="toolbar-button toolbar-button-secondary" id="reset-controls">Reset</button>
+          </div>
+        </div>
+
+        <div class="toolbar-grid">
+          {controls.map((control) => (
+            <label class={`control-card ${control.key === 'rotationDeg' ? 'control-card-rotation' : ''}`} for={`control-${control.key}`}>
+              <span class="control-head">
+                <span>{control.label}</span>
+                <span class="control-head-right">
+                  {control.key === 'rotationDeg' && (
+                    <span class="rotation-mode-toggle">
+                      <input id="toggle-full-rotation" type="checkbox" />
+                      <span>Use 0-360 deg</span>
+                    </span>
+                  )}
+                  <output id={`value-${control.key}`} for={`control-${control.key}`}>{control.value}</output>
+                </span>
+              </span>
+              <input
+                id={`control-${control.key}`}
+                class="control-range"
+                type="range"
+                min={control.min}
+                max={control.max}
+                step={control.step}
+                value={control.value}
+                data-control={control.key}
+              />
+            </label>
+          ))}
+        </div>
+
+        <div class="toolbar-toggles">
+          <label class="toggle-pill"><input id="toggle-guides" type="checkbox" checked /> Show guide circles</label>
+          <label class="toggle-pill"><input id="toggle-polyline" type="checkbox" checked /> Show sampled polyline</label>
+          <label class="toggle-pill"><input id="toggle-phase" type="checkbox" checked /> Show phase marker</label>
+        </div>
+
+        <div class="status-strip">
+          <div class="status-card">
+            <span class="status-label">Overlap Status</span>
+            <strong id="overlap-status">Clear</strong>
+          </div>
+          <div class="status-card">
+            <span class="status-label">Intersections</span>
+            <strong id="intersection-count">0</strong>
+          </div>
+          <div class="status-card">
+            <span class="status-label">Driver Rotation</span>
+            <strong id="driver-rotation-readout">0.0 deg</strong>
+          </div>
+          <div class="status-card">
+            <span class="status-label">Follower Rotation</span>
+            <strong id="follower-rotation-readout">0.0 deg</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel preview-panel">
+        <h2>Meshed Pair</h2>
+        <svg class="debug-scene" viewBox="0 0 640 520" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Gear debug scene">
+          <rect x="0" y="0" width="640" height="520" class="bg" />
+
+          <line
+            id="mesh-line"
+            x1={scene.gears[0].center.x}
+            y1={scene.gears[0].center.y}
+            x2={scene.gears[1].center.x}
+            y2={scene.gears[1].center.y}
+            class="mesh-line"
+          />
+
+          {initialOutlines.map(({ gear, path, pointsString, tunedRadii }) => (
+            <g data-gear-group={gear.id} transform={`translate(${gear.center.x} ${gear.center.y}) rotate(${gear.phaseDeg})`}>
+              <circle data-guide="outer" r={tunedRadii.outerRadius} class="debug-circle debug-circle-outer" />
+              <circle data-guide="pitch" r={gear.pitchRadius} class="debug-circle debug-circle-pitch" />
+              <circle data-guide="root" r={tunedRadii.rootRadius} class="debug-circle debug-circle-root" />
+              <path data-gear-path d={path} class="gear-outline" />
+              <polyline data-gear-points points={pointsString} class="gear-points" />
+              <circle r={gear.innerRingRadius} class="gear-inner" />
+              <circle r={gear.holeRadius} class="gear-hole" />
+              <line data-phase-marker x1="0" y1="0" x2={gear.pitchRadius} y2="0" class="phase-marker" />
+            </g>
+          ))}
+        </svg>
+      </section>
+    </div>
+
+    <section class="panel split">
+      {initialOutlines.map(({ gear, path, pointsString, tunedRadii }) => (
+        <article class="gear-card">
+          <h2>{gear.id}</h2>
+          <svg class="single-gear" viewBox="-190 -190 380 380" xmlns="http://www.w3.org/2000/svg" role="img" aria-label={`${gear.id} isolated`}>
+            <g data-isolated-gear={gear.id} transform={`rotate(${gear.phaseDeg})`}>
+              <circle data-guide="outer" r={tunedRadii.outerRadius} class="debug-circle debug-circle-outer" />
+              <circle data-guide="pitch" r={gear.pitchRadius} class="debug-circle debug-circle-pitch" />
+              <circle data-guide="root" r={tunedRadii.rootRadius} class="debug-circle debug-circle-root" />
+              <path data-gear-path d={path} class="gear-outline" />
+              <polyline data-gear-points points={pointsString} class="gear-points" />
+              <circle r={gear.innerRingRadius} class="gear-inner" />
+              <circle r={gear.holeRadius} class="gear-hole" />
+              <line data-phase-marker x1="0" y1="0" x2={gear.pitchRadius} y2="0" class="phase-marker" />
+            </g>
+          </svg>
+          <dl class="metrics">
+            <div><dt>Teeth</dt><dd>{gear.teeth}</dd></div>
+            <div><dt>Pitch radius</dt><dd>{gear.pitchRadius.toFixed(2)}</dd></div>
+            <div><dt>Outer radius</dt><dd data-metric={`${gear.id}-outer`}>{tunedRadii.outerRadius.toFixed(2)}</dd></div>
+            <div><dt>Root radius</dt><dd data-metric={`${gear.id}-root`}>{tunedRadii.rootRadius.toFixed(2)}</dd></div>
+            <div><dt>Phase</dt><dd data-metric={`${gear.id}-phase`}>{gear.phaseDeg.toFixed(2)} deg</dd></div>
+            <div><dt>Period</dt><dd>{gear.periodSec.toFixed(2)} s</dd></div>
+          </dl>
+        </article>
+      ))}
+    </section>
+
+    <section class="panel">
+      <h2>Solver Diagnostics</h2>
+      <table class="diag-table">
+        <thead>
+          <tr>
+            <th>Pair</th>
+            <th>Expected dist</th>
+            <th>Actual dist</th>
+            <th>Residual</th>
+            <th>Parent phase residual</th>
+            <th>Child phase residual</th>
+          </tr>
+        </thead>
+        <tbody>
+          {scene.diagnostics.map((diag) => (
+            <tr>
+              <td>{diag.a} -&gt; {diag.b}</td>
+              <td>{diag.expectedDistance.toFixed(3)}</td>
+              <td>{diag.actualDistance.toFixed(3)}</td>
+              <td>{diag.distanceResidual.toFixed(6)}</td>
+              <td>{diag.phaseResidualA.toFixed(6)}</td>
+              <td>{diag.phaseResidualB.toFixed(6)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  </div>
+</LandingLayout>
+
+<style>
+  .debug-wrap {
+    width: min(96vw, 110rem);
+    margin: 0 auto;
+    padding: 4rem 1.25rem 6rem;
+    display: grid;
+    gap: 1.5rem;
+  }
+
+  .workbench {
+    display: grid;
+    grid-template-columns: minmax(22rem, 30rem) minmax(0, 1fr);
+    gap: 1.25rem;
+    align-items: start;
+  }
+
+  .hero h1::after {
+    display: none;
+  }
+
+  .eyebrow {
+    margin: 0 0 0.5rem;
+    font-family: var(--font-label);
+    font-variant: small-caps;
+    letter-spacing: 0.12em;
+    color: var(--brass-primary);
+  }
+
+  .lede,
+  .toolbar-note {
+    max-width: 60ch;
+    color: var(--text-secondary);
+  }
+
+  .panel {
+    padding: 1.25rem;
+    background: color-mix(in srgb, var(--bg-secondary) 88%, transparent);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+  }
+
+  .toolbar-panel {
+    display: grid;
+    gap: 1.1rem;
+    position: sticky;
+    top: 1rem;
+  }
+
+  .preview-panel {
+    min-height: 100%;
+  }
+
+  .toolbar-header,
+  .toolbar-actions,
+  .toolbar-toggles,
+  .status-strip {
+    display: flex;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .toolbar-actions {
+    justify-content: flex-end;
+  }
+
+  .toolbar-button {
+    appearance: none;
+    border: 1px solid var(--brass-primary);
+    background: var(--brass-primary);
+    color: var(--bg-primary);
+    border-radius: 999px;
+    padding: 0.7rem 1rem;
+    font-family: var(--font-label);
+    cursor: pointer;
+    transition: transform 140ms ease, box-shadow 180ms ease, filter 180ms ease, background-color 180ms ease, color 180ms ease;
+    box-shadow: 0 0 0 rgba(0, 0, 0, 0);
+  }
+
+  .toolbar-button:hover {
+    transform: translateY(-1px);
+    filter: brightness(1.04);
+    box-shadow: 0 8px 18px color-mix(in srgb, var(--brass-primary) 30%, transparent);
+  }
+
+  .toolbar-button:active {
+    transform: translateY(1px) scale(0.985);
+    filter: brightness(0.96);
+    box-shadow: inset 0 2px 7px color-mix(in srgb, var(--bg-primary) 55%, transparent);
+  }
+
+  .toolbar-button-secondary {
+    background: transparent;
+    color: var(--brass-primary);
+  }
+
+  .toolbar-button-secondary:hover {
+    background: color-mix(in srgb, var(--brass-primary) 14%, transparent);
+  }
+
+  .toolbar-button-secondary:active {
+    background: color-mix(in srgb, var(--brass-primary) 24%, transparent);
+  }
+
+  .toolbar-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .control-card,
+  .status-card {
+    display: grid;
+    gap: 0.55rem;
+    padding: 0.9rem 1rem;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+  }
+
+  .control-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.8rem;
+    align-items: baseline;
+    font-family: var(--font-label);
+    color: var(--text-secondary);
+  }
+
+  .control-head-right {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.7rem;
+  }
+
+  .control-head output,
+  .status-card strong {
+    font-family: var(--font-mono);
+    color: var(--text-primary);
+  }
+
+  .control-range {
+    width: 100%;
+  }
+
+  .control-card-rotation {
+    gap: 0.45rem;
+  }
+
+  .rotation-mode-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-family: var(--font-label);
+    font-size: var(--fs-xs);
+    color: var(--text-tertiary);
+  }
+
+  .toggle-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.55rem 0.8rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--bg-tertiary);
+    font-family: var(--font-label);
+    color: var(--text-secondary);
+  }
+
+  .status-strip {
+    justify-content: flex-start;
+  }
+
+  .status-card {
+    min-width: 10rem;
+  }
+
+  .status-label {
+    font-family: var(--font-label);
+    color: var(--text-tertiary);
+    font-size: var(--fs-xs);
+  }
+
+  .split {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.25rem;
+  }
+
+  .debug-scene,
+  .single-gear {
+    width: 100%;
+    height: auto;
+    display: block;
+    background: #0b0b12;
+    border-radius: 16px;
+  }
+
+  .bg {
+    fill: #0b0b12;
+  }
+
+  .gear-outline,
+  .gear-inner,
+  .gear-hole,
+  .debug-circle,
+  .mesh-line,
+  .phase-marker,
+  .gear-points {
+    fill: none;
+    vector-effect: non-scaling-stroke;
+  }
+
+  .gear-outline {
+    stroke: #f2d37a;
+    stroke-width: 2.2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .gear-points {
+    stroke: rgba(255, 255, 255, 0.22);
+    stroke-width: 0.7;
+  }
+
+  .gear-inner,
+  .gear-hole {
+    stroke: rgba(242, 211, 122, 0.7);
+    stroke-width: 1.5;
+  }
+
+  .debug-circle-pitch {
+    stroke: rgba(68, 207, 180, 0.9);
+    stroke-width: 1.2;
+  }
+
+  .debug-circle-root {
+    stroke: rgba(244, 98, 98, 0.7);
+    stroke-width: 1.2;
+  }
+
+  .debug-circle-outer {
+    stroke: rgba(255, 214, 102, 0.7);
+    stroke-width: 1.2;
+  }
+
+  .mesh-line,
+  .phase-marker {
+    stroke: rgba(133, 197, 255, 0.9);
+    stroke-width: 1.3;
+    stroke-dasharray: 6 6;
+  }
+
+  .gear-card {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .metrics {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem 1rem;
+    margin: 0;
+  }
+
+  .metrics div {
+    padding: 0.65rem 0.8rem;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--bg-tertiary);
+  }
+
+  .metrics dt {
+    font-family: var(--font-label);
+    font-size: var(--fs-xs);
+    color: var(--text-tertiary);
+    margin-bottom: 0.2rem;
+  }
+
+  .metrics dd {
+    margin: 0;
+    font-family: var(--font-mono);
+    color: var(--text-primary);
+  }
+
+  .diag-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-mono);
+    font-size: 0.92rem;
+  }
+
+  .diag-table th,
+  .diag-table td {
+    padding: 0.7rem 0.8rem;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+  }
+
+  .diag-table th {
+    color: var(--text-tertiary);
+    font-family: var(--font-label);
+    font-size: var(--fs-xs);
+    letter-spacing: 0.05em;
+  }
+
+  @media (max-width: 64rem) {
+    .workbench,
+    .split {
+      grid-template-columns: 1fr;
+    }
+
+    .toolbar-panel {
+      position: static;
+    }
+  }
+</style>
+
+<script id="gear-debug-config" type="application/json" set:html={JSON.stringify({ baseSceneConfig, initialTuning })}></script>
+<script>
+  import { initGearDebug } from '../scripts/debug-gears';
+
+  initGearDebug();
+  document.addEventListener('astro:page-load', initGearDebug);
+</script>

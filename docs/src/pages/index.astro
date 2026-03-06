@@ -1,10 +1,20 @@
 ---
 import LandingLayout from '../layouts/LandingLayout.astro';
+import HeroGearBackdrop from '../components/HeroGearBackdrop.astro';
+import { BACKDROP_ALGORITHMS } from '../lib/gears/backdrop_algorithms.ts';
+
+const allowedGearAlgorithms = BACKDROP_ALGORITHMS;
+const gearAlgoFromUrl = Astro.url.searchParams.get('gearAlgo');
+const heroGearAlgorithm: (typeof allowedGearAlgorithms)[number] =
+  allowedGearAlgorithms.includes(gearAlgoFromUrl as (typeof allowedGearAlgorithms)[number])
+    ? (gearAlgoFromUrl as (typeof allowedGearAlgorithms)[number])
+    : 'hex-web';
 ---
 <LandingLayout title="Clawq -- The Formal AI Assistant">
 
   <!-- Hero Section -->
   <section class="hero">
+    <HeroGearBackdrop algorithm={heroGearAlgorithm} />
     <div class="hero-inner">
 
       <!-- Cover Art -->
@@ -119,14 +129,18 @@ import LandingLayout from '../layouts/LandingLayout.astro';
 <style>
   /* ===== Hero Section ===== */
   .hero {
+    position: relative;
     min-height: 100vh;
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 2rem 1.5rem;
+    isolation: isolate;
   }
 
   .hero-inner {
+    position: relative;
+    z-index: 3;
     max-width: 56.25rem;
     text-align: center;
     display: flex;
@@ -136,10 +150,12 @@ import LandingLayout from '../layouts/LandingLayout.astro';
 
   /* --- Cover Art Frame --- */
   .cover-frame {
+    opacity: 0.05;
     max-width: 51.25rem;
     width: 100%;
     margin-bottom: 2.5rem;
     position: relative;
+    z-index: 4;
     border: 3px solid var(--brass-dark);
     padding: 4px;
     box-shadow: 0 0 60px var(--brass-glow), 0 0 120px rgba(201, 168, 76, 0.08);

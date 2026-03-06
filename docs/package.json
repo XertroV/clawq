@@ -7,9 +7,11 @@
     "start": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
+    "test:gears": "node --test --experimental-strip-types scripts/gear-geometry.test.mjs",
     "astro": "astro"
   },
   "dependencies": {
+    "@astrojs/check": "^0.9.6",
     "@astrojs/mdx": "^4.3.0",
     "@fontsource-variable/jetbrains-mono": "^5.0.0",
     "@fontsource/cormorant-garamond": "^5.2.11",
@@ -22,6 +24,7 @@
     "@fontsource/uncial-antiqua": "^5.0.0",
     "astro": "^5.8.0",
     "mermaid": "^11.12.3",
-    "sharp": "^0.33.0"
+    "sharp": "^0.33.0",
+    "typescript": "^5.9.3"
   }
 }

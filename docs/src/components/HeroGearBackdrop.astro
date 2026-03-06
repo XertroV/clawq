@@ -1,0 +1,752 @@
+---
+import {
+  generateHeroBackdropDraft,
+  HERO_GEAR_CIRCULAR_PITCH,
+} from "../lib/gears/backdrop_generation.ts";
+import type { DraftGear, DraftMeshEdge } from "../lib/gears/backdrop/types.ts";
+import { solveNeighborPhaseTurn } from "../lib/gears/backdrop/shared.ts";
+import { BACKDROP_ALGORITHMS, type BackdropAlgorithm } from "../lib/gears/backdrop_algorithms.ts";
+import { buildGearPath, type GearProfileTuning, type RotationDirection, type SolvedGear } from "../lib/gears";
+
+interface Props {
+  algorithm?: BackdropAlgorithm;
+}
+
+const { algorithm = "hex-web" } = Astro.props as Props;
+const showDebugLabel = import.meta.env.DEV;
+const debugAlgorithms = BACKDROP_ALGORITHMS;
+const renderedCache = new Map<BackdropAlgorithm, { rendered: RenderedGear[]; trueMeshEdges: RenderedMeshEdge[] }>();
+
+const VIEWBOX = { width: 1600, height: 760 };
+const ROOT_PERIOD_SEC = 132;
+const ROOT_DIRECTION: RotationDirection = "cw";
+const TOOTH_TUNING: GearProfileTuning = {
+  valleyWidth: 0.085,
+  tipWidth: 0.02,
+  toothLength: 1.08,
+  roundness: 1.05,
+};
+
+type RenderedGear = {
+  gear: SolvedGear;
+  path: string;
+  line: string;
+  fill: string;
+  stroke: number;
+  insetStroke: number;
+  appearIndex: number;
+};
+
+type RenderedMeshEdge = {
+  aId: string;
+  bId: string;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+};
+
+const TRUE_MESH_RENDER_EPSILON = 0.06;
+
+function normalizeTurn(value: number): number {
+  return ((value % 1) + 1) % 1;
+}
+
+function draftPhaseTurn(gear: DraftGear): number | undefined {
+  const value = (gear as Record<string, unknown>)["phaseTurn"];
+  return typeof value === "number" ? value : undefined;
+}
+
+function buildSolvedGears(draft: DraftGear[], edges: DraftMeshEdge[]): SolvedGear[] {
+  const byId = new Map(draft.map((gear: DraftGear) => [gear.id, gear]));
+
+  const root = draft[0];
+  if (!root) return [];
+  const rootOmega = (2 * Math.PI) / ROOT_PERIOD_SEC * (ROOT_DIRECTION === "cw" ? 1 : -1);
+  const gearModule = HERO_GEAR_CIRCULAR_PITCH / Math.PI;
+
+  const solved = draft.map((gear) => {
+    const sign = gear.parity === root.parity ? 1 : -1;
+    const angularVelocity = rootOmega * sign * (root.teeth / gear.teeth);
+    const periodSec = (2 * Math.PI) / Math.abs(angularVelocity);
+    const toothAmplitude = gearModule * 0.82;
+    const outerRadius = gear.pitchRadius + toothAmplitude;
+    const rootRadius = Math.max(gear.pitchRadius - toothAmplitude, gear.pitchRadius * 0.7);
+    const rotationDirection: RotationDirection = angularVelocity >= 0 ? "cw" : "ccw";
+
+    return {
+      id: gear.id,
+      center: gear.center,
+      teeth: gear.teeth,
+      module: gearModule,
+      circularPitch: HERO_GEAR_CIRCULAR_PITCH,
+      pitchRadius: gear.pitchRadius,
+      outerRadius,
+      rootRadius,
+      holeRadius: Math.max(gear.pitchRadius * 0.16, gearModule * 1.8),
+      innerRingRadius: gear.pitchRadius * 0.48,
+      angularVelocity,
+      rotationDirection,
+      periodSec,
+      phaseDeg: 0,
+    };
+  });
+
+  const solvedById = new Map(solved.map((gear) => [gear.id, gear]));
+  const adjacency = new Map<string, Array<{ other: string; solve: (currentTurn: number) => number }>>();
+
+  for (const edge of edges) {
+    const a = byId.get(edge.a);
+    const b = byId.get(edge.b);
+    if (!a || !b) continue;
+
+    const alpha = Math.atan2(b.center.y - a.center.y, b.center.x - a.center.x);
+    if (!adjacency.has(a.id)) adjacency.set(a.id, []);
+    if (!adjacency.has(b.id)) adjacency.set(b.id, []);
+    adjacency.get(a.id)!.push({
+      other: b.id,
+      solve: (currentTurn) =>
+        solveNeighborPhaseTurn({
+          currentTeeth: a.teeth,
+          neighborTeeth: b.teeth,
+          currentTurn,
+          contactAngleCurrentToNeighbor: alpha,
+        }),
+    });
+    adjacency.get(b.id)!.push({
+      other: a.id,
+      solve: (currentTurn) =>
+        solveNeighborPhaseTurn({
+          currentTeeth: b.teeth,
+          neighborTeeth: a.teeth,
+          currentTurn,
+          contactAngleCurrentToNeighbor: alpha + Math.PI,
+        }),
+    });
+  }
+
+  const assignedTurns = new Map<string, number>();
+
+  for (const gear of draft) {
+    const phase = draftPhaseTurn(gear);
+    if (typeof phase === "number") {
+      assignedTurns.set(gear.id, normalizeTurn(phase));
+    }
+  }
+
+  for (const gear of draft) {
+    if (assignedTurns.has(gear.id)) continue;
+    assignedTurns.set(gear.id, draftPhaseTurn(gear) ?? 0);
+    const queue = [gear.id];
+
+    while (queue.length > 0) {
+      const current = queue.shift();
+      if (!current) continue;
+      const currentTurn = assignedTurns.get(current) ?? 0;
+      const neighbors = adjacency.get(current) ?? [];
+
+      for (const neighbor of neighbors) {
+        if (assignedTurns.has(neighbor.other)) continue;
+        assignedTurns.set(neighbor.other, neighbor.solve(currentTurn));
+        queue.push(neighbor.other);
+      }
+    }
+  }
+
+  for (const gear of solved) {
+    const turn = assignedTurns.get(gear.id) ?? 0;
+    gear.phaseDeg = turn * 360;
+  }
+
+  return solved;
+}
+
+const palette = [
+  { line: "rgba(235, 207, 132, 0.56)", fill: "rgba(201, 159, 66, 0.08)" },
+  { line: "rgba(178, 216, 213, 0.48)", fill: "rgba(83, 155, 150, 0.07)" },
+  { line: "rgba(201, 178, 159, 0.46)", fill: "rgba(154, 105, 72, 0.07)" },
+];
+
+function buildTrueMeshEdges(draft: DraftGear[], edges: DraftMeshEdge[]): RenderedMeshEdge[] {
+  const byId = new Map(draft.map((gear) => [gear.id, gear]));
+  const renderedEdges: RenderedMeshEdge[] = [];
+
+  for (const edge of edges) {
+    const a = byId.get(edge.a);
+    const b = byId.get(edge.b);
+    if (!a || !b) continue;
+
+    const centerDistance = Math.hypot(a.center.x - b.center.x, a.center.y - b.center.y);
+    const expected = a.pitchRadius + b.pitchRadius;
+    if (Math.abs(centerDistance - expected) > TRUE_MESH_RENDER_EPSILON) continue;
+
+    renderedEdges.push({
+      aId: a.id,
+      bId: b.id,
+      x1: a.center.x,
+      y1: a.center.y,
+      x2: b.center.x,
+      y2: b.center.y,
+    });
+  }
+
+  return renderedEdges;
+}
+
+function buildRenderedForAlgorithm(method: BackdropAlgorithm): {
+  rendered: RenderedGear[];
+  trueMeshEdges: RenderedMeshEdge[];
+} {
+  const cached = renderedCache.get(method);
+  if (cached) return cached;
+
+  const generated = (generateHeroBackdropDraft as any)({ algorithm: method as unknown as string });
+  const solved = buildSolvedGears(generated.gears, generated.edges);
+  const trueMeshEdges = buildTrueMeshEdges(generated.gears, generated.edges);
+
+  const rendered = solved
+    .slice()
+    .sort((a, b) => a.center.y - b.center.y)
+    .map((gear, index) => {
+      const p = palette[index % palette.length];
+      const source = generated.gears.find((draft: DraftGear) => draft.id === gear.id)!;
+      return {
+        gear,
+        path: buildGearPath(gear, TOOTH_TUNING),
+        line: p.line,
+        fill: p.fill,
+        stroke: 1.05 + (index % 3) * 0.18,
+        insetStroke: 0.7 + (index % 2) * 0.2,
+        appearIndex: source.appearIndex,
+      };
+    });
+
+  const built: { rendered: RenderedGear[]; trueMeshEdges: RenderedMeshEdge[] } = {
+    rendered,
+    trueMeshEdges,
+  };
+  renderedCache.set(method, built);
+  return built;
+}
+
+// Be careful touching this: rendering every algorithm in dev makes `/` generation explode into multi-second rebuilds.
+const renderAlgorithms = [String(algorithm)];
+const renderedByAlgorithm = renderAlgorithms.map((method) => ({
+  method,
+  ...buildRenderedForAlgorithm(method as BackdropAlgorithm),
+}));
+---
+
+<div class="hero-gear-backdrop" aria-hidden="true">
+  <svg class="hero-gear-svg" viewBox={`0 0 ${VIEWBOX.width} ${VIEWBOX.height}`} xmlns="http://www.w3.org/2000/svg" role="presentation">
+    {renderedByAlgorithm.map(({ method, rendered, trueMeshEdges }) => (
+      <g data-gear-algorithm={method} display={method === algorithm ? "inline" : "none"}>
+        {rendered.map(({ gear, path, line, fill, stroke, insetStroke, appearIndex }) => (
+          <g transform={`translate(${gear.center.x} ${gear.center.y})`} class="hero-gear-entry" style={`--appear-delay:${appearIndex * 70}ms;`}>
+            <g
+              class:list={[
+                "hero-gear-rotor",
+                { "hero-gear-rotor-cw": gear.rotationDirection === "cw", "hero-gear-rotor-ccw": gear.rotationDirection === "ccw" },
+              ]}
+              data-gear-id={gear.id}
+              data-center-x={gear.center.x}
+              data-center-y={gear.center.y}
+              data-teeth={gear.teeth}
+              data-pitch-radius={gear.pitchRadius}
+              data-root-radius={gear.rootRadius}
+              data-outer-radius={gear.outerRadius}
+              data-phase-turn={gear.phaseDeg / 360}
+              style={`--gear-phase:${gear.phaseDeg}deg; --gear-period:${gear.periodSec}s; --gear-line:${line}; --gear-fill:${fill}; --gear-stroke:${stroke}; --inset-stroke:${insetStroke};`}
+            >
+              <path class="hero-gear-fill" d={path} />
+              <path class="hero-gear-outline" d={path} />
+              <circle class="hero-gear-inner" r={gear.innerRingRadius} />
+              <circle class="hero-gear-hub" r={gear.holeRadius} />
+            </g>
+          </g>
+        ))}
+        <g class="hero-gear-mesh-overlay">
+          {trueMeshEdges.map((edge) => (
+            <line class="hero-gear-mesh-edge" data-edge-a-id={edge.aId} data-edge-b-id={edge.bId} x1={edge.x1} y1={edge.y1} x2={edge.x2} y2={edge.y2} />
+          ))}
+          {trueMeshEdges.map((edge) => (
+            <circle
+              class="hero-gear-collision-marker"
+              data-edge-a-id={edge.aId}
+              data-edge-b-id={edge.bId}
+              cx="0"
+              cy="0"
+              r="7"
+              style="display:none"
+            />
+          ))}
+        </g>
+      </g>
+    ))}
+  </svg>
+</div>
+
+{showDebugLabel && (
+  <details class="hero-gear-debug-panel" id="hero-gear-debug-panel">
+    <summary class="hero-gear-debug-label">gear generator: {algorithm}</summary>
+    <label class="hero-gear-debug-field" for="hero-gear-debug-select">
+      Method
+      <select id="hero-gear-debug-select">
+        {debugAlgorithms.map((value: BackdropAlgorithm) => (
+          <option value={value} selected={value === algorithm}>{value}</option>
+        ))}
+      </select>
+    </label>
+    <label class="hero-gear-debug-field" for="hero-gear-debug-mesh-toggle">
+      Show true mesh edges
+      <input id="hero-gear-debug-mesh-toggle" type="checkbox" />
+    </label>
+  </details>
+)}
+
+{showDebugLabel && (
+  <script is:inline>
+    (() => {
+      const select = document.getElementById('hero-gear-debug-select');
+      const meshToggle = document.getElementById('hero-gear-debug-mesh-toggle');
+      const panel = document.getElementById('hero-gear-debug-panel');
+      let backdrop = document.querySelector('.hero-gear-backdrop');
+      if (!(select instanceof HTMLSelectElement)) return;
+
+      const groups = () => Array.from(backdrop?.querySelectorAll('[data-gear-algorithm]') ?? []);
+
+      const setVisibleAlgorithm = (chosen) => {
+        for (const group of groups()) {
+          if (!(group instanceof SVGGElement)) continue;
+          group.setAttribute('display', group.dataset.gearAlgorithm === chosen ? 'inline' : 'none');
+        }
+      };
+
+      const applyMeshOverlay = (enabled) => {
+        if (!(backdrop instanceof HTMLDivElement)) return;
+        backdrop.classList.toggle('hero-gear-show-mesh', enabled);
+      };
+
+      const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+      const normalizeTurn = (value) => ((value % 1) + 1) % 1;
+      const edgeState = new Map();
+
+      const OVERLAP_THRESHOLD = 0.25;
+      const FRAMES_TO_SHOW = 3;
+      const FRAMES_TO_HIDE = 2;
+
+      const smootherstep = (value) => {
+        const t = clamp(value, 0, 1);
+        return t * t * t * (t * (t * 6 - 15) + 10);
+      };
+
+      const gearRadiusAtAngle = (gear, angleRad) => {
+        const valleyWidth = 0.085;
+        const tipWidth = 0.02;
+        const toothLength = 1.08;
+        const roundness = 1.05;
+
+        const halfHeight = ((gear.outerRadius - gear.rootRadius) * 0.5) * toothLength;
+        const tunedOuter = gear.pitchRadius + halfHeight;
+        const tunedRoot = gear.pitchRadius - halfHeight;
+        const toothPitch = (Math.PI * 2) / gear.teeth;
+        const toothPosition = angleRad / toothPitch;
+        const fractional = toothPosition - Math.floor(toothPosition + 0.5);
+        const phase = clamp(Math.abs(fractional) / 0.5, 0, 1);
+        const valleyStart = clamp(1 - valleyWidth, tipWidth + 0.01, 1);
+
+        let lift = 0;
+        if (phase <= tipWidth) {
+          lift = 1;
+        } else if (phase >= valleyStart) {
+          lift = 0;
+        } else {
+          const t = (phase - tipWidth) / (valleyStart - tipWidth);
+          const baseLift = (Math.cos(t * Math.PI) + 1) * 0.5;
+          if (roundness >= 1) {
+            const roundedT = smootherstep(t);
+            const roundedLift = (Math.cos(roundedT * Math.PI) + 1) * 0.5;
+            const roundMix = clamp((roundness - 1) / 11, 0, 1);
+            lift = baseLift * (1 - roundMix) + roundedLift * roundMix;
+          } else {
+            const crispT = Math.pow(t, 0.72);
+            const crispLift = (Math.cos(crispT * Math.PI) + 1) * 0.5;
+            const crispMix = clamp((1 - roundness) / 0.8, 0, 1);
+            lift = baseLift * (1 - crispMix) + crispLift * crispMix;
+          }
+        }
+
+        return tunedRoot + (tunedOuter - tunedRoot) * lift;
+      };
+
+      const readTurnFromTransform = (node, fallbackTurn) => {
+        if (!(node instanceof SVGGElement)) return normalizeTurn(fallbackTurn);
+        const transform = window.getComputedStyle(node).transform;
+        if (!transform || transform === 'none') return normalizeTurn(fallbackTurn);
+
+        const matrix2d = transform.match(/^matrix\(([^)]+)\)$/);
+        if (matrix2d) {
+          const parts = matrix2d[1].split(',').map((value) => Number(value.trim()));
+          if (parts.length >= 2 && Number.isFinite(parts[0]) && Number.isFinite(parts[1])) {
+            return normalizeTurn(Math.atan2(parts[1], parts[0]) / (Math.PI * 2));
+          }
+        }
+
+        const matrix3d = transform.match(/^matrix3d\(([^)]+)\)$/);
+        if (matrix3d) {
+          const parts = matrix3d[1].split(',').map((value) => Number(value.trim()));
+          if (parts.length >= 2 && Number.isFinite(parts[0]) && Number.isFinite(parts[1])) {
+            return normalizeTurn(Math.atan2(parts[1], parts[0]) / (Math.PI * 2));
+          }
+        }
+
+        return normalizeTurn(fallbackTurn);
+      };
+
+      const updateCollisionOverlay = () => {
+        const activeGroup = groups().find(
+          (group) => group instanceof SVGGElement && group.getAttribute('display') !== 'none'
+        );
+        if (!(activeGroup instanceof SVGGElement)) {
+          requestAnimationFrame(updateCollisionOverlay);
+          return;
+        }
+
+        const markers = Array.from(activeGroup.querySelectorAll('.hero-gear-collision-marker'));
+        if (!backdrop?.classList.contains('hero-gear-show-mesh')) {
+          for (const marker of markers) {
+            if (marker instanceof SVGCircleElement) {
+              marker.style.display = 'none';
+            }
+          }
+          requestAnimationFrame(updateCollisionOverlay);
+          return;
+        }
+
+        const rotors = Array.from(activeGroup.querySelectorAll('[data-gear-id]'));
+        const gearById = new Map();
+        for (const node of rotors) {
+          if (!(node instanceof SVGGElement)) continue;
+          const id = node.dataset.gearId;
+          if (!id) continue;
+          gearById.set(id, {
+            node,
+            centerX: Number(node.dataset.centerX ?? '0'),
+            centerY: Number(node.dataset.centerY ?? '0'),
+            teeth: Number(node.dataset.teeth ?? '12'),
+            pitchRadius: Number(node.dataset.pitchRadius ?? '0'),
+            rootRadius: Number(node.dataset.rootRadius ?? '0'),
+            outerRadius: Number(node.dataset.outerRadius ?? '0'),
+            phaseTurn: Number(node.dataset.phaseTurn ?? '0'),
+          });
+        }
+
+        for (const marker of markers) {
+          if (!(marker instanceof SVGCircleElement)) continue;
+          const aId = marker.dataset.edgeAId;
+          const bId = marker.dataset.edgeBId;
+          if (!aId || !bId) {
+            marker.style.display = 'none';
+            continue;
+          }
+
+          const a = gearById.get(aId);
+          const b = gearById.get(bId);
+          if (!a || !b) {
+            marker.style.display = 'none';
+            continue;
+          }
+
+          const alpha = Math.atan2(b.centerY - a.centerY, b.centerX - a.centerX);
+          const aTurn = readTurnFromTransform(a.node, a.phaseTurn);
+          const bTurn = readTurnFromTransform(b.node, b.phaseTurn);
+          const aLocal = alpha - aTurn * Math.PI * 2;
+          const bLocal = alpha + Math.PI - bTurn * Math.PI * 2;
+          const aRadius = gearRadiusAtAngle(a, aLocal);
+          const bRadius = gearRadiusAtAngle(b, bLocal);
+          const centerDistance = Math.hypot(a.centerX - b.centerX, a.centerY - b.centerY);
+          const overlap = aRadius + bRadius - centerDistance;
+
+          const edgeKey = `${aId}|${bId}`;
+          const prior = edgeState.get(edgeKey) ?? { hit: 0, miss: 0, visible: false };
+          const isCollisionNow = overlap > OVERLAP_THRESHOLD;
+
+          if (isCollisionNow) {
+            prior.hit += 1;
+            prior.miss = 0;
+            if (prior.hit >= FRAMES_TO_SHOW) {
+              prior.visible = true;
+            }
+          } else {
+            prior.miss += 1;
+            prior.hit = 0;
+            if (prior.miss >= FRAMES_TO_HIDE) {
+              prior.visible = false;
+            }
+          }
+          edgeState.set(edgeKey, prior);
+
+          if (!prior.visible) {
+            marker.style.display = 'none';
+            continue;
+          }
+
+          const pointA = {
+            x: a.centerX + Math.cos(alpha) * aRadius,
+            y: a.centerY + Math.sin(alpha) * aRadius,
+          };
+          const pointB = {
+            x: b.centerX - Math.cos(alpha) * bRadius,
+            y: b.centerY - Math.sin(alpha) * bRadius,
+          };
+
+          marker.setAttribute('cx', String((pointA.x + pointB.x) * 0.5));
+          marker.setAttribute('cy', String((pointA.y + pointB.y) * 0.5));
+          marker.style.display = 'inline';
+        }
+
+        requestAnimationFrame(updateCollisionOverlay);
+      };
+
+      requestAnimationFrame(updateCollisionOverlay);
+
+      if (meshToggle instanceof HTMLInputElement) {
+        const url = new URL(window.location.href);
+        const enabled = url.searchParams.get('gearMesh') === '1';
+        meshToggle.checked = enabled;
+        applyMeshOverlay(enabled);
+
+        meshToggle.addEventListener('change', () => {
+          const isEnabled = meshToggle.checked;
+          applyMeshOverlay(isEnabled);
+
+          const nextUrl = new URL(window.location.href);
+          if (isEnabled) {
+            nextUrl.searchParams.set('gearMesh', '1');
+          } else {
+            nextUrl.searchParams.delete('gearMesh');
+          }
+          history.replaceState({}, '', nextUrl.toString());
+        });
+      }
+
+      select.addEventListener('change', async () => {
+        const chosen = select.value;
+
+        const url = new URL(window.location.href);
+        url.searchParams.set('gearAlgo', chosen);
+
+        try {
+          const response = await fetch(url.toString(), { headers: { 'X-Requested-With': 'hero-gear-debug' } });
+          if (!response.ok) throw new Error(`Failed to load ${chosen}: ${response.status}`);
+
+          const html = await response.text();
+          const doc = new DOMParser().parseFromString(html, 'text/html');
+          const nextBackdrop = doc.querySelector('.hero-gear-backdrop');
+          if (!(nextBackdrop instanceof HTMLDivElement) || !(backdrop instanceof HTMLDivElement)) {
+            throw new Error('Missing replacement backdrop');
+          }
+
+          edgeState.clear();
+          if (typeof backdrop.getAnimations === 'function') {
+            for (const animation of backdrop.getAnimations()) {
+              animation.finish();
+              animation.cancel();
+            }
+          }
+          backdrop.classList.remove('hero-gear-show-mesh');
+          await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+          const replacement = nextBackdrop.cloneNode(true);
+          backdrop.replaceWith(replacement);
+          backdrop = replacement;
+          setVisibleAlgorithm(chosen);
+          applyMeshOverlay(meshToggle instanceof HTMLInputElement ? meshToggle.checked : false);
+          history.replaceState({}, '', url.toString());
+        } catch (error) {
+          console.error(error);
+          window.location.assign(url.toString());
+          return;
+        }
+
+        const summary = panel?.querySelector('summary');
+        if (summary) summary.textContent = `gear generator: ${chosen}`;
+      });
+    })();
+  </script>
+)}
+
+<style>
+  .hero-gear-backdrop {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+    overflow: hidden;
+  }
+
+  .hero-gear-debug-panel {
+    position: fixed;
+    left: 0.9rem;
+    bottom: 1rem;
+    z-index: 100;
+    pointer-events: auto;
+  }
+
+  .hero-gear-debug-label {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.5rem;
+    border: 1px solid color-mix(in srgb, var(--brass-primary) 55%, transparent);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--bg-primary) 82%, transparent);
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.02em;
+    user-select: none;
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .hero-gear-debug-label::-webkit-details-marker {
+    display: none;
+  }
+
+  .hero-gear-debug-field {
+    margin-top: 0.35rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.35rem 0.55rem;
+    border: 1px solid color-mix(in srgb, var(--border-emphasis) 75%, transparent);
+    border-radius: 0.45rem;
+    background: color-mix(in srgb, var(--bg-secondary) 90%, transparent);
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+  }
+
+  .hero-gear-debug-field select {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-emphasis);
+    color: var(--text-primary);
+    border-radius: 0.35rem;
+    padding: 0.1rem 0.35rem;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+  }
+
+  .hero-gear-svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+    overflow: visible;
+    transform: translateY(-08vh);
+  }
+
+  .hero-gear-entry {
+    opacity: 0;
+    animation: hero-gear-appear 0.28s ease-out forwards;
+    animation-delay: var(--appear-delay);
+  }
+
+  .hero-gear-rotor {
+    /* Be careful touching this: rotating around anything except the true local origin makes the gears look out of phase. */
+    transform-origin: 0 0;
+  }
+
+  .hero-gear-rotor-cw {
+    animation: hero-gear-spin-cw var(--gear-period) linear infinite;
+  }
+
+  .hero-gear-rotor-ccw {
+    animation: hero-gear-spin-ccw var(--gear-period) linear infinite;
+  }
+
+  .hero-gear-fill,
+  .hero-gear-outline,
+  .hero-gear-inner,
+  .hero-gear-hub {
+    fill: none;
+    vector-effect: non-scaling-stroke;
+  }
+
+  .hero-gear-fill {
+    fill: var(--gear-fill);
+    stroke: transparent;
+  }
+
+  .hero-gear-outline {
+    stroke: var(--gear-line);
+    stroke-width: var(--gear-stroke);
+    stroke-linejoin: round;
+    stroke-linecap: round;
+  }
+
+  .hero-gear-inner,
+  .hero-gear-hub {
+    stroke: color-mix(in srgb, var(--gear-line) 80%, rgba(255, 255, 255, 0.33));
+    stroke-width: var(--inset-stroke);
+  }
+
+  .hero-gear-mesh-overlay {
+    display: none;
+    pointer-events: none;
+  }
+
+  .hero-gear-show-mesh .hero-gear-mesh-overlay {
+    display: inline;
+  }
+
+  .hero-gear-mesh-overlay line {
+    stroke: rgba(116, 217, 227, 0.95);
+    stroke-width: 1.25;
+    vector-effect: non-scaling-stroke;
+    stroke-linecap: round;
+    opacity: 0.88;
+  }
+
+  .hero-gear-collision-marker {
+    fill: transparent;
+    stroke: #ec4a38;
+    stroke-width: 2;
+    vector-effect: non-scaling-stroke;
+    filter: drop-shadow(0 0 4px rgba(236, 74, 56, 0.55));
+  }
+
+  @keyframes hero-gear-appear {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes hero-gear-spin-cw {
+    from { transform: rotate(var(--gear-phase)); }
+    to { transform: rotate(calc(var(--gear-phase) + 360deg)); }
+  }
+
+  @keyframes hero-gear-spin-ccw {
+    from { transform: rotate(var(--gear-phase)); }
+    to { transform: rotate(calc(var(--gear-phase) - 360deg)); }
+  }
+
+  @media (max-width: 80rem) {
+    .hero-gear-backdrop { opacity: 0.78; }
+  }
+
+  @media (max-width: 64rem) {
+    .hero-gear-backdrop { display: none; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .hero-gear-entry {
+      opacity: 1;
+      animation: none;
+    }
+
+    .hero-gear-rotor-cw,
+    .hero-gear-rotor-ccw {
+      animation: none;
+      transform: rotate(var(--gear-phase));
+    }
+  }
+</style>
