@@ -635,6 +635,94 @@ let run ~(config : Runtime_config.t) =
               Lwt.return_unit));
       Logs.info (fun m -> m "Cron scheduler started")
   | None -> Logs.info (fun m -> m "Cron scheduler disabled (no database)"));
+  if config.heartbeat.heartbeat_enabled then begin
+    let hb = config.heartbeat in
+    Logs.info (fun m ->
+        m "Heartbeat enabled: interval=%ds quiet=%d:00-%d:00"
+          hb.heartbeat_interval_seconds hb.heartbeat_quiet_start
+          hb.heartbeat_quiet_end);
+    Lwt.async (fun () ->
+        Lwt.catch
+          (fun () ->
+            let rec hb_loop () =
+              let open Lwt.Syntax in
+              let* () =
+                Lwt_unix.sleep (float_of_int hb.heartbeat_interval_seconds)
+              in
+              let tm = Unix.localtime (Unix.gettimeofday ()) in
+              let hour = tm.Unix.tm_hour in
+              let in_quiet =
+                if hb.heartbeat_quiet_start > hb.heartbeat_quiet_end then
+                  hour >= hb.heartbeat_quiet_start
+                  || hour < hb.heartbeat_quiet_end
+                else
+                  hour >= hb.heartbeat_quiet_start
+                  && hour < hb.heartbeat_quiet_end
+              in
+              if in_quiet then begin
+                Logs.debug (fun m -> m "Heartbeat: quiet hours, skipping");
+                hb_loop ()
+              end
+              else
+                let hb_path = Filename.concat workspace "HEARTBEAT.md" in
+                if Sys.file_exists hb_path then begin
+                  let content =
+                    try
+                      let ic = open_in hb_path in
+                      let n = in_channel_length ic in
+                      let buf = Bytes.create n in
+                      really_input ic buf 0 n;
+                      close_in ic;
+                      String.trim (Bytes.to_string buf)
+                    with _ -> ""
+                  in
+                  if content = "" then hb_loop ()
+                  else begin
+                    Logs.info (fun m ->
+                        m "Heartbeat: processing HEARTBEAT.md (%d chars)"
+                          (String.length content));
+                    let key = "__heartbeat__" in
+                    let* response =
+                      Lwt.catch
+                        (fun () ->
+                          Session.with_session_lock session_manager ~key
+                            (fun agent _interrupt ->
+                              Agent.turn agent ~user_message:content ?db
+                                ~session_key:key ()))
+                        (fun exn ->
+                          Lwt.return
+                            ("Heartbeat error: " ^ Printexc.to_string exn))
+                    in
+                    let trimmed = String.trim response in
+                    if trimmed = "HEARTBEAT_OK" then
+                      Logs.info (fun m ->
+                          m "Heartbeat: agent replied HEARTBEAT_OK, no outbound")
+                    else begin
+                      Logs.info (fun m ->
+                          m "Heartbeat: agent response (%d chars)"
+                            (String.length trimmed));
+                      match config.notify with
+                      | Some nc ->
+                          Logs.info (fun m ->
+                              m "Heartbeat: would notify via %s -> %s"
+                                nc.notify_channel nc.notify_target)
+                      | None ->
+                          Logs.warn (fun m ->
+                              m
+                                "Heartbeat: agent wants to send a message but \
+                                 no notify target configured")
+                    end;
+                    hb_loop ()
+                  end
+                end
+                else hb_loop ()
+            in
+            hb_loop ())
+          (fun exn ->
+            Logs.err (fun m ->
+                m "Heartbeat loop error: %s" (Printexc.to_string exn));
+            Lwt.return_unit))
+  end;
   let* () = Lwt.pick [ shutdown_waiter; gateway ] in
   write_state ~config
     ~components:

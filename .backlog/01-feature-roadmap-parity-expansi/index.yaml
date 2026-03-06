@@ -2,7 +2,7 @@ complexity: medium
 depends_on: []
 estimate_hours: 300
 id: P1
-locked: false
+locked: true
 milestones:
     - complexity: medium
       depends_on: []
@@ -39,7 +39,7 @@ milestones:
       locked: false
       name: Formalization
       path: 04-formalization
-      status: pending
+      status: done
 name: 'Feature Roadmap: Parity & Expansion'
 stats:
     blocked: 0
@@ -47,5 +47,5 @@ stats:
     in_progress: 1
     pending: 4
     total_tasks: 35
-status: pending
+status: done
 weeks: 12

@@ -9,7 +9,7 @@ epics:
       locked: false
       name: Coq Proofs and Extraction
       path: 01-coq-proofs-and-extraction
-      status: pending
+      status: done
 estimate_hours: 40
 id: P1.M4
 locked: false
@@ -20,4 +20,4 @@ stats:
     in_progress: 1
     pending: 0
     total_tasks: 2
-status: pending
+status: done

@@ -74,7 +74,8 @@ tasks:
       file: T007-implement-heartbeat-md-polling.todo
       id: T007
       priority: medium
-      status: pending
+      status: done
+      tags: []
       title: Implement HEARTBEAT.md polling in daemon
     - complexity: low
       depends_on:
@@ -83,7 +84,8 @@ tasks:
       file: T008-config-default-notification-ta.todo
       id: T008
       priority: medium
-      status: pending
+      status: done
+      tags: []
       title: 'Config: default notification target for proactive outreach'
     - complexity: medium
       depends_on:
@@ -92,7 +94,8 @@ tasks:
       file: T009-memory-md-session-privacy-gate.todo
       id: T009
       priority: medium
-      status: pending
+      status: done
+      tags: []
       title: MEMORY.md session-privacy gate
     - complexity: medium
       depends_on: []
@@ -100,5 +103,6 @@ tasks:
       file: T010-workspace-file-write-tool-for.todo
       id: T010
       priority: medium
-      status: pending
+      status: done
+      tags: []
       title: Workspace file-write tool for agent memory continuity

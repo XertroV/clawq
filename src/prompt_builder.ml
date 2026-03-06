@@ -32,17 +32,22 @@ let read_file_limited path limit =
     if n > limit then s ^ "\n[...truncated...]" else s
   with _ -> ""
 
-let workspace_doc_blocks ~(config : Runtime_config.t) =
+let private_only_files = [ "MEMORY.md"; "memory.md" ]
+
+let workspace_doc_blocks ~(config : Runtime_config.t)
+    ?(session_type = "private") () =
   let workspace = Runtime_config.effective_workspace config in
   let ego_path = Filename.concat workspace "EGO.md" in
   let ego_exists = Sys.file_exists ego_path in
+  let is_group = session_type = "group" in
   let budget = ref config.prompt.max_workspace_total_chars in
   let blocks = ref [] in
   List.iter
     (fun file ->
       if
         safe_prompt_filename file && !budget > 0
-        && not (file = "SOUL.md" && ego_exists)
+        && (not (file = "SOUL.md" && ego_exists))
+        && not (is_group && List.mem file private_only_files)
       then
         let path = Filename.concat workspace file in
         if Sys.file_exists path then
@@ -168,7 +173,7 @@ let build ~(config : Runtime_config.t) ~tool_registry ?(attachments = [])
     if config.prompt.include_workspace_section then begin
       add "## Workspace Context";
       add ("Root: " ^ ws);
-      let docs = workspace_doc_blocks ~config in
+      let docs = workspace_doc_blocks ~config ~session_type:channel_type () in
       if docs = [] then
         add "No workspace identity files found. Operating with defaults only."
       else begin

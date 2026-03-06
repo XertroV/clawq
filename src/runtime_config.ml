@@ -305,6 +305,15 @@ type telemetry_config = {
   service_name : string;
 }
 
+type heartbeat_config = {
+  heartbeat_enabled : bool;
+  heartbeat_interval_seconds : int;
+  heartbeat_quiet_start : int;
+  heartbeat_quiet_end : int;
+}
+
+type notify_config = { notify_channel : string; notify_target : string }
+
 type t = {
   workspace : string;
   default_temperature : float;
@@ -325,6 +334,8 @@ type t = {
   web_channel : web_channel_config option;
   telemetry : telemetry_config option;
   agent_bindings : Agent_router.binding list;
+  heartbeat : heartbeat_config;
+  notify : notify_config option;
 }
 
 let default_workspace_files =
@@ -469,6 +480,14 @@ let default =
     web_channel = None;
     telemetry = None;
     agent_bindings = [];
+    heartbeat =
+      {
+        heartbeat_enabled = false;
+        heartbeat_interval_seconds = 300;
+        heartbeat_quiet_start = 23;
+        heartbeat_quiet_end = 8;
+      };
+    notify = None;
   }
 
 let is_key_set key =
@@ -1143,6 +1162,34 @@ let to_json (cfg : t) : Yojson.Safe.t =
     | None -> res_fields
   in
   let fields = fields @ [ ("resilience", `Assoc res_fields) ] in
+  let fields =
+    fields
+    @ [
+        ( "heartbeat",
+          `Assoc
+            [
+              ("heartbeat_enabled", `Bool cfg.heartbeat.heartbeat_enabled);
+              ( "heartbeat_interval_seconds",
+                `Int cfg.heartbeat.heartbeat_interval_seconds );
+              ("heartbeat_quiet_start", `Int cfg.heartbeat.heartbeat_quiet_start);
+              ("heartbeat_quiet_end", `Int cfg.heartbeat.heartbeat_quiet_end);
+            ] );
+      ]
+  in
+  let fields =
+    match cfg.notify with
+    | Some nc ->
+        fields
+        @ [
+            ( "notify",
+              `Assoc
+                [
+                  ("notify_channel", `String nc.notify_channel);
+                  ("notify_target", `String nc.notify_target);
+                ] );
+          ]
+    | None -> fields
+  in
   `Assoc fields
 
 let merge_with_coq (coq_cfg : Clawq_core.clawqConfig) (cfg : t) : t =

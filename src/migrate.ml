@@ -184,6 +184,8 @@ let convert (json : Yojson.Safe.t) =
       web_channel = None;
       telemetry = None;
       agent_bindings = [];
+      heartbeat = default.heartbeat;
+      notify = None;
     }
   in
   (config, List.rev !warnings)

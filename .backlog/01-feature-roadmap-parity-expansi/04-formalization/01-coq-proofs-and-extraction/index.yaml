@@ -10,7 +10,7 @@ stats:
     in_progress: 1
     pending: 0
     total: 2
-status: pending
+status: done
 tasks:
     - complexity: high
       depends_on: []
@@ -27,6 +27,6 @@ tasks:
       file: T002-coq-extraction-native-type-map.todo
       id: T002
       priority: low
-      status: in_progress
+      status: done
       tags: []
       title: Coq extraction native type mapping optimizations

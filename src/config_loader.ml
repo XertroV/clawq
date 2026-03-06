@@ -1133,6 +1133,44 @@ let parse_config ?(resolve_secrets = true) json =
               : Runtime_config.telemetry_config)
     with _ -> None
   in
+  let heartbeat =
+    try
+      let h = json |> member "heartbeat" in
+      let heartbeat_enabled =
+        try h |> member "enabled" |> to_bool with _ -> false
+      in
+      let heartbeat_interval_seconds =
+        try h |> member "interval_seconds" |> to_int with _ -> 300
+      in
+      let heartbeat_quiet_start =
+        try h |> member "quiet_start_hour" |> to_int with _ -> 23
+      in
+      let heartbeat_quiet_end =
+        try h |> member "quiet_end_hour" |> to_int with _ -> 8
+      in
+      ({
+         heartbeat_enabled;
+         heartbeat_interval_seconds;
+         heartbeat_quiet_start;
+         heartbeat_quiet_end;
+       }
+        : Runtime_config.heartbeat_config)
+    with _ -> Runtime_config.default.heartbeat
+  in
+  let notify =
+    try
+      let n = json |> member "notify" in
+      let notify_channel =
+        try n |> member "channel" |> to_string with _ -> ""
+      in
+      let notify_target =
+        try n |> member "target" |> to_string with _ -> ""
+      in
+      if notify_channel <> "" && notify_target <> "" then
+        Some ({ notify_channel; notify_target } : Runtime_config.notify_config)
+      else None
+    with _ -> None
+  in
   {
     workspace;
     Runtime_config.default_temperature;
@@ -1153,6 +1191,8 @@ let parse_config ?(resolve_secrets = true) json =
     web_channel;
     telemetry;
     agent_bindings;
+    heartbeat;
+    notify;
   }
 
 let rec merge_json (original : Yojson.Safe.t) (complete : Yojson.Safe.t) :

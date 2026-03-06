@@ -13,11 +13,11 @@ phases:
       description: 'Features identified via nullclaw comparison and doc review. Organized by effort tier: quick wins, high impact, ecosystem expansion, and formalization.'
       estimate_hours: 300
       id: P1
-      locked: false
+      locked: true
       name: 'Feature Roadmap: Parity & Expansion'
       path: 01-feature-roadmap-parity-expansi
       priority: high
-      status: pending
+      status: done
       weeks: 12
     - depends_on: []
       description: Close the remaining feature gaps vs nullclaw identified in NULLCLAW_COMPARISON_1.tmp.md. Covers native providers, 13 new channels, OTP pairing, memory export, sandbox hardening, WASM runtime, Chat UI, test coverage, and tunnel alternatives.
