@@ -1,38 +1,77 @@
 ---
-function generateGearPath(innerR: number, outerR: number, teeth: number): string {
-  const points: string[] = [];
-  for (let i = 0; i < teeth; i++) {
-    const a1 = (i / teeth) * Math.PI * 2;
-    const a2 = ((i + 0.3) / teeth) * Math.PI * 2;
-    const a3 = ((i + 0.5) / teeth) * Math.PI * 2;
-    const a4 = ((i + 0.8) / teeth) * Math.PI * 2;
-    points.push(
-      `${innerR * Math.cos(a1)},${innerR * Math.sin(a1)}`,
-      `${outerR * Math.cos(a2)},${outerR * Math.sin(a2)}`,
-      `${outerR * Math.cos(a3)},${outerR * Math.sin(a3)}`,
-      `${innerR * Math.cos(a4)},${innerR * Math.sin(a4)}`
-    );
-  }
-  return `M ${points[0]} L ${points.slice(1).join(' L ')} Z`;
-}
+import { buildDebugOverlay, buildGearPath, createMeshedPairScene, solveGearScene } from "../lib/gears";
 
-const largeGearPath = generateGearPath(120, 135, 20);
-const smallGearPath = generateGearPath(50, 62, 14);
+const debugMeshes = false;
+
+const scene = createMeshedPairScene({
+  circularPitch: 34,
+  minTeeth: 12,
+  driverId: "gear-large",
+  driverPeriodSec: 120,
+  driverDirection: "cw",
+  first: {
+    id: "gear-large",
+    center: { x: 280, y: 252 },
+    targetPitchRadius: 130,
+  },
+  second: {
+    id: "gear-small",
+    idealCenter: { x: 136, y: 116 },
+    targetPitchRadius: 65,
+  },
+});
+
+const solvedScene = solveGearScene(scene);
+const debugOverlay = buildDebugOverlay(solvedScene);
+const sceneWidth = 430;
+const sceneHeight = 370;
 ---
 <div class="gear-background" aria-hidden="true">
-  <svg class="gear gear-large" viewBox="0 0 280 280" xmlns="http://www.w3.org/2000/svg">
-    <g transform="translate(140,140)">
-      <path d={largeGearPath} fill="none" stroke="currentColor" stroke-width="1.5"/>
-      <circle r="60" fill="none" stroke="currentColor" stroke-width="1"/>
-      <circle r="20" fill="none" stroke="currentColor" stroke-width="1"/>
-    </g>
-  </svg>
-  <svg class="gear gear-small" viewBox="0 0 140 140" xmlns="http://www.w3.org/2000/svg">
-    <g transform="translate(70,70)">
-      <path d={smallGearPath} fill="none" stroke="currentColor" stroke-width="1.5"/>
-      <circle r="25" fill="none" stroke="currentColor" stroke-width="1"/>
-      <circle r="10" fill="none" stroke="currentColor" stroke-width="1"/>
-    </g>
+  <svg
+    class="gear-scene"
+    viewBox={`0 0 ${sceneWidth} ${sceneHeight}`}
+    xmlns="http://www.w3.org/2000/svg"
+    role="presentation"
+  >
+    {solvedScene.gears.map((gear) => (
+      <g transform={`translate(${gear.center.x} ${gear.center.y})`}>
+        <g
+          class:list={[
+            "gear-rotor",
+            { "gear-rotor-cw": gear.rotationDirection === "cw", "gear-rotor-ccw": gear.rotationDirection === "ccw" },
+          ]}
+          style={`--gear-phase:${gear.phaseDeg}deg; --gear-period:${gear.periodSec}s;`}
+        >
+          <path class="gear-outline" d={buildGearPath(gear)} />
+          <circle class="gear-inner-ring" r={gear.innerRingRadius} />
+          <circle class="gear-hub" r={gear.holeRadius} />
+        </g>
+      </g>
+    ))}
+
+    {debugMeshes &&
+      debugOverlay.circles.map((circle) => (
+        <circle
+          class:list={[
+            "gear-debug-circle",
+            `gear-debug-${circle.kind}`,
+          ]}
+          cx={circle.center.x}
+          cy={circle.center.y}
+          r={circle.radius}
+        />
+      ))}
+
+    {debugMeshes &&
+      debugOverlay.lines.map((line) => (
+        <line
+          class="gear-debug-line"
+          x1={line.from.x}
+          y1={line.from.y}
+          x2={line.to.x}
+          y2={line.to.y}
+        />
+      ))}
   </svg>
 </div>
 
@@ -45,44 +84,92 @@ const smallGearPath = generateGearPath(50, 62, 14);
     overflow: hidden;
   }
 
-  .gear {
+  .gear-scene {
     position: absolute;
+    right: -46px;
+    bottom: -46px;
+    width: 430px;
+    height: 370px;
     color: var(--brass-primary);
     opacity: var(--gear-opacity, 0.03);
+    overflow: visible;
   }
 
-  .gear-large {
-    width: 280px;
-    height: 280px;
-    bottom: -40px;
-    right: -40px;
-    animation: spin-cw 120s linear infinite;
-    will-change: transform;
+  .gear-outline,
+  .gear-inner-ring,
+  .gear-hub {
+    fill: none;
+    stroke: currentColor;
+    vector-effect: non-scaling-stroke;
   }
 
-  .gear-small {
-    width: 140px;
-    height: 140px;
-    bottom: 80px;
-    right: 200px;
-    animation: spin-ccw 60s linear infinite;
-    will-change: transform;
+  .gear-outline {
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
   }
 
-  @keyframes spin-cw {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
+  .gear-inner-ring,
+  .gear-hub {
+    stroke-width: 1;
   }
 
-  @keyframes spin-ccw {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(-360deg); }
+  .gear-rotor {
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+
+  .gear-rotor-cw {
+    animation: gear-spin-cw var(--gear-period) linear infinite;
+  }
+
+  .gear-rotor-ccw {
+    animation: gear-spin-ccw var(--gear-period) linear infinite;
+  }
+
+  @keyframes gear-spin-cw {
+    from {
+      transform: rotate(var(--gear-phase));
+    }
+    to {
+      transform: rotate(calc(var(--gear-phase) + 360deg));
+    }
+  }
+
+  @keyframes gear-spin-ccw {
+    from {
+      transform: rotate(var(--gear-phase));
+    }
+    to {
+      transform: rotate(calc(var(--gear-phase) - 360deg));
+    }
+  }
+
+  .gear-debug-circle,
+  .gear-debug-line {
+    fill: none;
+    stroke-width: 0.75;
+    vector-effect: non-scaling-stroke;
+  }
+
+  .gear-debug-pitch {
+    stroke: rgba(91, 191, 173, 0.55);
+  }
+
+  .gear-debug-root {
+    stroke: rgba(196, 75, 63, 0.45);
+  }
+
+  .gear-debug-outer,
+  .gear-debug-line {
+    stroke: rgba(240, 216, 120, 0.45);
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .gear-large,
-    .gear-small {
+    .gear-rotor-cw,
+    .gear-rotor-ccw {
       animation: none;
+      transform: rotate(var(--gear-phase));
     }
   }
 
