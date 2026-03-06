@@ -53,3 +53,5 @@ ideas:
       status: done
       tags: []
       title: Add support for using codex pro subscription. Check if nullclaw supports that. otherwise check ~/src/pag-server/ref-projects, particularly check out openclaw and see if it has code for it. If all else fails, start some research agnets to search the web how to do this.
+    - file: I007-add-more-tools-research-src-nu.todo
+      id: I007
