@@ -18,3 +18,4 @@ bugs:
     - file: B017-add-better-editing-tooling-res.todo
     - file: B018-task-if-user-sends-a-message-s.todo
     - file: B019-task-update-binary-download-mo.todo
+    - file: B020-formal-verification-svg-badge.todo
