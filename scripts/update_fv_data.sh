@@ -189,6 +189,7 @@ flush_verified() {
     b=$(basename "$_cur_coq_file" .v)
     [[ -z "${_v_seen[$b]+_}" ]] && { _v_seen[$b]=1; _v_total=$((_v_total + ${actual_counts[$b]:-0})); }
   fi
+  return 0
 }
 
 while IFS= read -r line; do

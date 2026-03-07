@@ -124,7 +124,7 @@
   module: "ChannelAuth.v"
   title: "Channel Authentication"
   status: "in_progress"
-  theorems: 18
+  theorems: 20
   extracted: false
   security_roi: "high"
   difficulty: "low"
@@ -152,7 +152,7 @@
   module: "AgentLoop.v"
   title: "Agent Loop Termination"
   status: "in_progress"
-  theorems: 10
+  theorems: 11
   extracted: false
   security_roi: "medium"
   difficulty: "low"
