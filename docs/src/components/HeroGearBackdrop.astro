@@ -247,10 +247,20 @@ const renderedByAlgorithm = renderAlgorithms.map((method) => ({
     xmlns="http://www.w3.org/2000/svg"
     role="presentation"
   >
-    {renderedByAlgorithm.map(({ method, rendered, trueMeshEdges }) => (
+    {renderedByAlgorithm.map(({ method, rendered, trueMeshEdges }) => {
+      const n = rendered.length;
+      const shuffledIndices = Array.from({ length: n }, (_, i) => i);
+      for (let i = n - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffledIndices[i], shuffledIndices[j]] = [shuffledIndices[j], shuffledIndices[i]];
+      }
+      const staggerMs = n > 1 ? Math.round(800 / (n - 1)) : 0;
+      return (
       <g data-gear-algorithm={method} display={method === algorithm ? "inline" : "none"}>
-        {rendered.map(({ gear, path, line, fill, stroke, insetStroke, appearIndex }) => (
-          <g transform={`translate(${gear.center.x} ${gear.center.y})`} class="hero-gear-entry" style={`--appear-delay:${appearIndex * 70}ms;`}>
+        {rendered.map(({ gear, path, line, fill, stroke, insetStroke }, renderIdx) => {
+          const appearIndex = shuffledIndices[renderIdx];
+          return (
+          <g transform={`translate(${gear.center.x} ${gear.center.y})`} class="hero-gear-entry" style={`--appear-delay:${appearIndex * staggerMs}ms;`}>
             <g
               class:list={[
                 "hero-gear-rotor",
@@ -272,7 +282,8 @@ const renderedByAlgorithm = renderAlgorithms.map((method) => ({
               <circle class="hero-gear-hub" r={gear.holeRadius} />
             </g>
           </g>
-        ))}
+          );
+        })}
         <g class="hero-gear-mesh-overlay">
           {trueMeshEdges.map((edge) => (
             <line class="hero-gear-mesh-edge" data-edge-a-id={edge.aId} data-edge-b-id={edge.bId} x1={edge.x1} y1={edge.y1} x2={edge.x2} y2={edge.y2} />
@@ -290,7 +301,8 @@ const renderedByAlgorithm = renderAlgorithms.map((method) => ({
           ))}
         </g>
       </g>
-    ))}
+      );
+    })}
   </svg>
 </div>
 
@@ -700,7 +712,7 @@ const renderedByAlgorithm = renderAlgorithms.map((method) => ({
 
   .hero-gear-entry {
     opacity: 0;
-    animation: hero-gear-appear 0.28s ease-out forwards;
+    animation: hero-gear-appear 0.2s ease-out forwards;
     animation-delay: var(--appear-delay);
   }
 
