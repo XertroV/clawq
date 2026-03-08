@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B078
+priority: high
+status: pending
+tags: []
+title: config updates should be live-reloaded
+---
+
+config updates should be live-reloaded
