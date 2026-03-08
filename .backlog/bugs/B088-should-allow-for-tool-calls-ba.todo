@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B088
+priority: high
+status: pending
+tags: []
+title: should allow for tool calls (bash) longer than 30s with some kind of arg
+---
+
+should allow for tool calls (bash) longer than 30s with some kind of arg
