@@ -94,3 +94,4 @@ bugs:
     - file: B093-add-to-system-prompt-info-abou.todo
     - file: B094-when-we-recieve-a-message-we-s.todo
     - file: B095-tool-calls-via-telegram-are-no.todo
+    - file: B096-generalize-config-reload-refre.todo
