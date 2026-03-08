@@ -134,11 +134,7 @@ let test_slack_handle_event_emits_tool_call_notifications () =
       Alcotest.(check string) "returns ok" "ok" result;
       Alcotest.(check (list string))
         "tool notifications and final response"
-        [
-          "Tool call: test_tool\n{\"value\":\"hi\"}";
-          "Tool result: test_tool\nran hi";
-          "final answer";
-        ]
+        [ "\xF0\x9F\x94\xA7 test_tool \xE2\x9C\x93"; "final answer" ]
         (List.rev !sent))
 
 let test_discord_handle_message_emits_tool_call_notifications () =
@@ -174,11 +170,7 @@ let test_discord_handle_message_emits_tool_call_notifications () =
            msg);
       Alcotest.(check (list string))
         "tool notifications and final response"
-        [
-          "Tool call: test_tool\n{\"value\":\"hi\"}";
-          "Tool result: test_tool\nran hi";
-          "final answer";
-        ]
+        [ "\xF0\x9F\x94\xA7 test_tool \xE2\x9C\x93"; "final answer" ]
         (List.rev !sent))
 
 let suite =
