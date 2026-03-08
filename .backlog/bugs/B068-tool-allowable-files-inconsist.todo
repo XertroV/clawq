@@ -1,10 +1,15 @@
 ---
+claimed_at: "2026-03-08T11:22:29Z"
+claimed_by: cli-user
+completed_at: "2026-03-08T11:32:08Z"
 complexity: medium
 depends_on: []
+duration_minutes: 9.661567646950001
 estimate_hours: 1
 id: B068
 priority: high
-status: pending
+started_at: "2026-03-08T11:22:29Z"
+status: done
 tags: []
 title: Tool allowable files inconsistency
 ---

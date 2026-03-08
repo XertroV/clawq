@@ -1,5 +1,11 @@
 type backend = Firejail | Bubblewrap | None
-type t = { backend : backend; workspace : string }
+
+type t = {
+  backend : backend;
+  workspace : string;
+  extra_allowed_paths : string list;
+  isolate_filesystem : bool;
+}
 
 let is_available b =
   let cmd =
@@ -15,35 +21,58 @@ let detect () =
   else if is_available Bubblewrap then Bubblewrap
   else None
 
-let create ~workspace () =
+let create ~workspace ~extra_allowed_paths ~workspace_only () =
   let backend = detect () in
-  { backend; workspace }
+  let extra_allowed_paths =
+    extra_allowed_paths
+    |> List.map Runtime_config.expand_home
+    |> List.filter (fun path -> path <> "" && path <> workspace)
+    |> List.sort_uniq String.compare
+  in
+  {
+    backend;
+    workspace;
+    extra_allowed_paths;
+    isolate_filesystem = workspace_only;
+  }
 
 let bind_if_exists path =
   if Sys.file_exists path then
     " --bind " ^ Filename.quote path ^ " " ^ Filename.quote path
   else ""
 
+let whitelist_if_exists path =
+  if Sys.file_exists path then " --whitelist=" ^ Filename.quote path else ""
+
+let extra_binds t =
+  String.concat "" (List.map bind_if_exists t.extra_allowed_paths)
+
+let extra_whitelists t =
+  String.concat "" (List.map whitelist_if_exists t.extra_allowed_paths)
+
 let wrap_command t cmd =
-  match t.backend with
-  | None -> cmd
-  | Firejail ->
-      Printf.sprintf
-        "firejail --private=%s --net=none --quiet --noprofile -- /bin/sh -c %s"
-        (Filename.quote t.workspace)
-        (Filename.quote cmd)
-  | Bubblewrap ->
-      let extra_binds =
-        bind_if_exists "/lib" ^ bind_if_exists "/lib64" ^ bind_if_exists "/bin"
-        ^ bind_if_exists "/etc"
-      in
-      let dev_binds =
-        " --dev /dev" ^ bind_if_exists "/dev/null"
-        ^ bind_if_exists "/dev/urandom"
-      in
-      Printf.sprintf
-        "bwrap --ro-bind /usr /usr --unshare-all --bind %s %s%s%s --tmpfs /tmp \
-         --die-with-parent -- /bin/sh -c %s"
-        (Filename.quote t.workspace)
-        (Filename.quote t.workspace)
-        extra_binds dev_binds (Filename.quote cmd)
+  if not t.isolate_filesystem then cmd
+  else
+    match t.backend with
+    | None -> cmd
+    | Firejail ->
+        Printf.sprintf
+          "firejail --private=%s%s --net=none --quiet --noprofile -- /bin/sh \
+           -c %s"
+          (Filename.quote t.workspace)
+          (extra_whitelists t) (Filename.quote cmd)
+    | Bubblewrap ->
+        let extra_binds =
+          bind_if_exists "/lib" ^ bind_if_exists "/lib64"
+          ^ bind_if_exists "/bin" ^ bind_if_exists "/etc" ^ extra_binds t
+        in
+        let dev_binds =
+          " --dev /dev" ^ bind_if_exists "/dev/null"
+          ^ bind_if_exists "/dev/urandom"
+        in
+        Printf.sprintf
+          "bwrap --ro-bind /usr /usr --unshare-all --bind %s %s%s%s --tmpfs \
+           /tmp --die-with-parent -- /bin/sh -c %s"
+          (Filename.quote t.workspace)
+          (Filename.quote t.workspace)
+          extra_binds dev_binds (Filename.quote cmd)

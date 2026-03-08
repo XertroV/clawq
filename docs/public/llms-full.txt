@@ -272,16 +272,16 @@ You also support MCP (Model Context Protocol) for exposing and consuming externa
 
 - Commands are executed via `Lwt_process.shell`, so normal `/bin/sh -c`-style shell semantics apply.
 - Shell builtins and compound syntax generally work here.
-- The shell command may still be wrapped by the selected sandbox backend.
+- Filesystem isolation is not applied in this mode; shell sees the host filesystem like the file tools do.
 
 ### Sandbox backend and visible filesystem
 
 - `security.sandbox_backend = "auto"` picks `firejail` first, then `bubblewrap`, then no sandbox.
-- Firejail wrapper: `firejail --private=<workspace> --net=none --quiet --noprofile -- /bin/sh -c <cmd>`.
-- Bubblewrap wrapper: `bwrap --ro-bind /usr /usr --unshare-all --bind <workspace> <workspace> ... --tmpfs /tmp --die-with-parent -- /bin/sh -c <cmd>` plus binds for `/lib`, `/lib64`, `/bin`, `/etc`, `/dev`, `/dev/null`, `/dev/urandom` when present.
-- File tools and shell tools do not necessarily see the same filesystem view. File tools read the host filesystem directly (subject to path checks). Shell tools see the sandboxed process view.
-- In `workspace_only` mode, successful file reads outside the workspace usually require `security.extra_allowed_paths`; shell access to the same path may still differ if the sandbox does not mount it.
-- If shell can read a path but file tools cannot, suspect path-safety checks. If file tools can read a path but shell cannot, suspect sandbox mounts, workspace cwd, or direct-exec semantics.
+- In `workspace_only = true`, Firejail wrapper: `firejail --private=<workspace> --whitelist=<extra_allowed_path>... --net=none --quiet --noprofile -- /bin/sh -c <cmd>`.
+- In `workspace_only = true`, Bubblewrap wrapper: `bwrap --ro-bind /usr /usr --unshare-all --bind <workspace> <workspace> ... --bind <extra_allowed_path> <extra_allowed_path> ... --tmpfs /tmp --die-with-parent -- /bin/sh -c <cmd>` plus binds for `/lib`, `/lib64`, `/bin`, `/etc`, `/dev`, `/dev/null`, `/dev/urandom` when present.
+- File tools always use direct OCaml filesystem access with path checks.
+- In `workspace_only = true`, shell and file tools are intended to agree on the allowed roots: workspace plus `security.extra_allowed_paths`.
+- In `workspace_only = false`, shell and file tools both use the host filesystem view.
 
 ### Path and cwd diagnostics
 
@@ -289,7 +289,7 @@ You also support MCP (Model Context Protocol) for exposing and consuming externa
 - To inspect current security settings: `clawq config show security`.
 - To allow host paths outside the workspace for path-checked tools, add them to `security.extra_allowed_paths`.
 - `~/src` in a shell command is expanded before path safety checks. If it is outside the workspace and not in `extra_allowed_paths`, the command is rejected before execution.
-- Even with an allowed path, sandbox mounts may still prevent the shell child process from seeing that host path.
+- `clawq workspace` reports the configured effective workspace, not the process cwd.
 
 ## Session Identity and Routing
 
@@ -463,12 +463,12 @@ Tell users:
 1. Identify the path and session involved: workspace path (`clawq workspace`), session key shape (`web:...`, `telegram:...`, `__main__`, etc.), and channel.
 2. Inspect security posture: `clawq config show security` and note `workspace_only`, `sandbox_backend`, and `extra_allowed_paths`.
 3. Inspect daemon state: `clawq service status`, `clawq status`, `~/.clawq/daemon.log`, `~/.clawq/daemon_state.json`.
-4. Distinguish host-file access from shell access: file tools use direct OCaml I/O; shell uses separate execution rules and maybe a sandbox.
+4. Distinguish path-policy errors from shell-semantics errors: file tools use direct OCaml I/O; shell may still reject commands because of allowlist/direct-exec rules even when the filesystem view matches.
 5. For restart/resume issues, inspect whether the session had channel metadata and whether the response was marked sent in SQLite state.
 
 ### Common runtime-specific failures
 
-- **Shell cannot access `~/src`, but file tools can**: file tools are reading the host filesystem directly; shell is using workspace cwd plus path checks and maybe Firejail/Bubblewrap. Check `workspace_only`, `extra_allowed_paths`, and sandbox backend.
+- **Shell cannot access `~/src`, but file tools can**: if `workspace_only = true`, first check whether `~/src` is in `security.extra_allowed_paths`; if `workspace_only = false`, suspect shell command semantics rather than filesystem visibility.
 - **`cd ~/src/clawq && ...` fails**: in default `workspace_only` mode, `cd` and `&&` are not supported because execution is direct-process style and unsafe shell syntax is rejected. Use a direct allowed binary with explicit path arguments, or disable `workspace_only` if you truly need shell semantics.
 - **Shell builtin fails with `No such file or directory`**: you are likely in direct-exec mode, not `/bin/sh -c` mode.
 - **Git or tools complain about missing `/dev/null`**: inspect sandbox backend. Bubblewrap tries to bind `/dev` and `/dev/null`; if this still fails, verify host `/dev/null` exists and try `security.sandbox_backend = "none"` or `"firejail"` to isolate the backend problem.

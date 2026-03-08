@@ -91,7 +91,11 @@ let build_tool_registry (cfg : Runtime_config.t) =
   else begin
     let registry = Tool_registry.create () in
     let ws = Runtime_config.effective_workspace cfg in
-    let sandbox = Sandbox.create ~workspace:ws () in
+    let sandbox =
+      Sandbox.create ~workspace:ws
+        ~extra_allowed_paths:cfg.security.extra_allowed_paths
+        ~workspace_only:cfg.security.workspace_only ()
+    in
     Tools_builtin.register_all ~config:cfg ~sandbox registry;
     let skills =
       Skills.load_all ~workspace_only:cfg.security.workspace_only
@@ -121,7 +125,9 @@ let cmd_debug_prompt args =
   let tool_registry = build_tool_registry cfg in
   let provider_name, _provider, model = Provider.select_provider ~config:cfg in
   let agent = Agent.create ~config:cfg ?tool_registry () in
-  let user_message = String.concat " " args in
+  let user_message =
+    match String.concat " " args with "" -> "Hello!" | msg -> msg
+  in
   let messages =
     if user_message = "" then Agent.build_messages agent
     else begin
@@ -495,7 +501,9 @@ let cmd_memory args =
       \  memory export [path]                             - Export to JSON\n\
       \  memory import <path>                             - Import from JSON"
 
-let cmd_workspace () = Printf.sprintf "Workspace: %s" (Sys.getcwd ())
+let cmd_workspace () =
+  let cfg = get_config () in
+  Printf.sprintf "Workspace: %s" (Runtime_config.effective_workspace cfg)
 
 let cmd_capabilities () =
   let cfg = get_config () in

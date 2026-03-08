@@ -363,7 +363,14 @@ let run ~(config : Runtime_config.t) =
       | "none" -> Sandbox.None
       | _ -> Sandbox.detect ()
     in
-    { Sandbox.backend; workspace }
+    {
+      Sandbox.backend;
+      workspace;
+      extra_allowed_paths =
+        config.security.extra_allowed_paths
+        |> List.map Runtime_config.expand_home;
+      isolate_filesystem = config.security.workspace_only;
+    }
   in
   Logs.info (fun m ->
       m "Sandbox backend: %s"

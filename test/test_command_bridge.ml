@@ -106,6 +106,25 @@ let test_handle_workspace () =
     "workspace contains 'Workspace:'" true
     (String.length result > 0 && String.sub result 0 10 = "Workspace:")
 
+let test_handle_workspace_uses_effective_workspace () =
+  with_temp_home (fun home ->
+      let clawq_dir = Filename.concat home ".clawq" in
+      Unix.mkdir clawq_dir 0o755;
+      let workspace = Filename.concat home "custom-workspace" in
+      let oc = open_out (Filename.concat clawq_dir "config.json") in
+      output_string oc
+        (Printf.sprintf
+           "{\n\
+           \  \"workspace\": %S,\n\
+           \  \"security\": { \"tools_enabled\": false }\n\
+            }\n"
+           workspace);
+      close_out oc;
+      Alcotest.(check string)
+        "workspace reports effective config path"
+        ("Workspace: " ^ workspace)
+        (Command_bridge.handle [ "workspace" ]))
+
 let test_handle_capabilities () =
   let result = Command_bridge.handle [ "capabilities" ] in
   Alcotest.(check bool)
@@ -401,6 +420,37 @@ let test_debug_prompt_prints_logical_messages () =
            runtime_idx > user_idx && runtime_idx < msg_idx
          with Not_found -> false))
 
+let test_debug_prompt_defaults_message_when_missing () =
+  with_temp_home (fun home ->
+      let clawq_dir = Filename.concat home ".clawq" in
+      Unix.mkdir clawq_dir 0o755;
+      let config_path = Filename.concat clawq_dir "config.json" in
+      let oc = open_out config_path in
+      output_string oc
+        {|{
+  "default_provider": "testprov",
+  "providers": {
+    "testprov": {
+      "api_key": "sk-test",
+      "default_model": "test-model"
+    }
+  },
+  "prompt": {
+    "dynamic_enabled": false
+  },
+  "security": {
+    "tools_enabled": false
+  }
+}|};
+      close_out oc;
+      let result = Command_bridge.handle [ "debug"; "prompt" ] in
+      Alcotest.(check bool)
+        "debug prompt includes default message" true
+        (try
+           ignore (Str.search_forward (Str.regexp_string "Hello!") result 0);
+           true
+         with Not_found -> false))
+
 let test_debug_usage_mentions_prompt_and_html_preview () =
   let result = Command_bridge.handle [ "debug" ] in
   Alcotest.(check bool)
@@ -427,6 +477,8 @@ let suite =
     Alcotest.test_case "handle channel" `Quick test_handle_channel;
     Alcotest.test_case "handle memory" `Quick test_handle_memory;
     Alcotest.test_case "handle workspace" `Quick test_handle_workspace;
+    Alcotest.test_case "handle workspace uses effective workspace" `Quick
+      test_handle_workspace_uses_effective_workspace;
     Alcotest.test_case "handle capabilities" `Quick test_handle_capabilities;
     Alcotest.test_case "handle auth" `Quick test_handle_auth;
     Alcotest.test_case "handle not-impl commands" `Quick
@@ -456,6 +508,8 @@ let suite =
       test_otp_show_reads_live_gateway_pairing_code;
     Alcotest.test_case "debug prompt prints logical messages" `Quick
       test_debug_prompt_prints_logical_messages;
+    Alcotest.test_case "debug prompt defaults missing message" `Quick
+      test_debug_prompt_defaults_message_when_missing;
     Alcotest.test_case "debug usage mentions prompt and html-preview" `Quick
       test_debug_usage_mentions_prompt_and_html_preview;
   ]

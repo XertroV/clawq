@@ -1,15 +1,19 @@
 (* Tests for Sandbox module *)
 
+let mk_sandbox ?(extra_allowed_paths = []) ?(isolate_filesystem = true) ~backend
+    ~workspace () =
+  { Sandbox.backend; workspace; extra_allowed_paths; isolate_filesystem }
+
 (* --- backend type tests --- *)
 
 let test_none_backend () =
-  let sb = { Sandbox.backend = Sandbox.None; workspace = "/tmp" } in
+  let sb = mk_sandbox ~backend:Sandbox.None ~workspace:"/tmp" () in
   Alcotest.(check string)
     "none wraps identity" "ls"
     (Sandbox.wrap_command sb "ls")
 
 let test_firejail_wrap () =
-  let sb = { Sandbox.backend = Sandbox.Firejail; workspace = "/workspace" } in
+  let sb = mk_sandbox ~backend:Sandbox.Firejail ~workspace:"/workspace" () in
   let wrapped = Sandbox.wrap_command sb "echo hello" in
   let contains s sub =
     try
@@ -24,7 +28,7 @@ let test_firejail_wrap () =
   Alcotest.(check bool) "contains command" true (contains wrapped "echo hello")
 
 let test_bubblewrap_wrap () =
-  let sb = { Sandbox.backend = Sandbox.Bubblewrap; workspace = "/workspace" } in
+  let sb = mk_sandbox ~backend:Sandbox.Bubblewrap ~workspace:"/workspace" () in
   let wrapped = Sandbox.wrap_command sb "echo hello" in
   let contains s sub =
     try
@@ -58,16 +62,36 @@ let test_detect_returns_backend () =
 (* --- create tests --- *)
 
 let test_create_workspace () =
-  let sb = Sandbox.create ~workspace:"/test/workspace" () in
+  let sb =
+    Sandbox.create ~workspace:"/test/workspace" ~extra_allowed_paths:[]
+      ~workspace_only:true ()
+  in
   Alcotest.(check string) "workspace" "/test/workspace" sb.workspace
 
 let test_create_sets_backend () =
-  let sb = Sandbox.create ~workspace:"/tmp" () in
+  let sb =
+    Sandbox.create ~workspace:"/tmp" ~extra_allowed_paths:[]
+      ~workspace_only:true ()
+  in
   let is_valid =
     match sb.backend with
     | Sandbox.Firejail | Sandbox.Bubblewrap | Sandbox.None -> true
   in
   Alcotest.(check bool) "backend set" true is_valid
+
+let test_create_tracks_extra_allowed_paths () =
+  let sb =
+    Sandbox.create ~workspace:"/workspace"
+      ~extra_allowed_paths:[ "~/src"; "/workspace"; "~/src" ]
+      ~workspace_only:true ()
+  in
+  let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
+  Alcotest.(check (list string))
+    "extra paths expanded and deduped"
+    [ Filename.concat home "src" ]
+    sb.extra_allowed_paths;
+  Alcotest.(check bool)
+    "workspace_only sets isolation" true sb.isolate_filesystem
 
 (* --- bind_if_exists tests --- *)
 
@@ -90,11 +114,11 @@ let test_bind_if_exists_nonexistent () =
 (* --- wrap_command edge cases --- *)
 
 let test_wrap_empty_command () =
-  let sb = { Sandbox.backend = Sandbox.None; workspace = "/tmp" } in
+  let sb = mk_sandbox ~backend:Sandbox.None ~workspace:"/tmp" () in
   Alcotest.(check string) "empty command" "" (Sandbox.wrap_command sb "")
 
 let test_wrap_firejail_net_none () =
-  let sb = { Sandbox.backend = Sandbox.Firejail; workspace = "/tmp" } in
+  let sb = mk_sandbox ~backend:Sandbox.Firejail ~workspace:"/tmp" () in
   let wrapped = Sandbox.wrap_command sb "test" in
   let contains s sub =
     try
@@ -105,7 +129,7 @@ let test_wrap_firejail_net_none () =
   Alcotest.(check bool) "net=none" true (contains wrapped "--net=none")
 
 let test_wrap_firejail_quiet () =
-  let sb = { Sandbox.backend = Sandbox.Firejail; workspace = "/tmp" } in
+  let sb = mk_sandbox ~backend:Sandbox.Firejail ~workspace:"/tmp" () in
   let wrapped = Sandbox.wrap_command sb "test" in
   let contains s sub =
     try
@@ -116,7 +140,7 @@ let test_wrap_firejail_quiet () =
   Alcotest.(check bool) "quiet" true (contains wrapped "--quiet")
 
 let test_wrap_bubblewrap_ro_bind () =
-  let sb = { Sandbox.backend = Sandbox.Bubblewrap; workspace = "/tmp" } in
+  let sb = mk_sandbox ~backend:Sandbox.Bubblewrap ~workspace:"/tmp" () in
   let wrapped = Sandbox.wrap_command sb "test" in
   let contains s sub =
     try
@@ -129,7 +153,7 @@ let test_wrap_bubblewrap_ro_bind () =
     (contains wrapped "--ro-bind /usr /usr")
 
 let test_wrap_bubblewrap_unshare () =
-  let sb = { Sandbox.backend = Sandbox.Bubblewrap; workspace = "/tmp" } in
+  let sb = mk_sandbox ~backend:Sandbox.Bubblewrap ~workspace:"/tmp" () in
   let wrapped = Sandbox.wrap_command sb "test" in
   let contains s sub =
     try
@@ -140,7 +164,7 @@ let test_wrap_bubblewrap_unshare () =
   Alcotest.(check bool) "unshare-all" true (contains wrapped "--unshare-all")
 
 let test_wrap_bubblewrap_die_with_parent () =
-  let sb = { Sandbox.backend = Sandbox.Bubblewrap; workspace = "/tmp" } in
+  let sb = mk_sandbox ~backend:Sandbox.Bubblewrap ~workspace:"/tmp" () in
   let wrapped = Sandbox.wrap_command sb "test" in
   let contains s sub =
     try
@@ -152,6 +176,47 @@ let test_wrap_bubblewrap_die_with_parent () =
     "die-with-parent" true
     (contains wrapped "--die-with-parent")
 
+let test_wrap_firejail_whitelists_extra_paths () =
+  let sb =
+    mk_sandbox ~backend:Sandbox.Firejail ~workspace:"/tmp"
+      ~extra_allowed_paths:[ "/etc/hosts" ] ()
+  in
+  let wrapped = Sandbox.wrap_command sb "test" in
+  let contains s sub =
+    try
+      ignore (Str.search_forward (Str.regexp_string sub) s 0);
+      true
+    with Not_found -> false
+  in
+  Alcotest.(check bool)
+    "contains whitelist" true
+    (contains wrapped "--whitelist='/etc/hosts'")
+
+let test_wrap_bubblewrap_binds_extra_paths () =
+  let sb =
+    mk_sandbox ~backend:Sandbox.Bubblewrap ~workspace:"/tmp"
+      ~extra_allowed_paths:[ "/etc/hosts" ] ()
+  in
+  let wrapped = Sandbox.wrap_command sb "test" in
+  let contains s sub =
+    try
+      ignore (Str.search_forward (Str.regexp_string sub) s 0);
+      true
+    with Not_found -> false
+  in
+  Alcotest.(check bool)
+    "contains extra bind" true
+    (contains wrapped "--bind '/etc/hosts' '/etc/hosts'")
+
+let test_wrap_command_skips_fs_isolation_when_disabled () =
+  let sb =
+    mk_sandbox ~backend:Sandbox.Firejail ~workspace:"/tmp"
+      ~isolate_filesystem:false ()
+  in
+  Alcotest.(check string)
+    "returns raw command" "echo hello"
+    (Sandbox.wrap_command sb "echo hello")
+
 let suite =
   [
     Alcotest.test_case "none backend identity" `Quick test_none_backend;
@@ -162,6 +227,8 @@ let suite =
       test_detect_returns_backend;
     Alcotest.test_case "create workspace" `Quick test_create_workspace;
     Alcotest.test_case "create sets backend" `Quick test_create_sets_backend;
+    Alcotest.test_case "create tracks extra paths" `Quick
+      test_create_tracks_extra_allowed_paths;
     Alcotest.test_case "bind_if_exists existing" `Quick
       test_bind_if_exists_existing;
     Alcotest.test_case "bind_if_exists nonexistent" `Quick
@@ -173,4 +240,10 @@ let suite =
     Alcotest.test_case "bubblewrap unshare" `Quick test_wrap_bubblewrap_unshare;
     Alcotest.test_case "bubblewrap die-with-parent" `Quick
       test_wrap_bubblewrap_die_with_parent;
+    Alcotest.test_case "firejail whitelists extra paths" `Quick
+      test_wrap_firejail_whitelists_extra_paths;
+    Alcotest.test_case "bubblewrap binds extra paths" `Quick
+      test_wrap_bubblewrap_binds_extra_paths;
+    Alcotest.test_case "disabled fs isolation returns raw command" `Quick
+      test_wrap_command_skips_fs_isolation_when_disabled;
   ]
