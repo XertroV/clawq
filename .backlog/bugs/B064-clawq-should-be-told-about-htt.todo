@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B064
+priority: high
+status: pending
+tags: []
+title: clawq should be told about https://clawq.org/llms-full.txt so it can alter itself
+---
+
+clawq should be told about https://clawq.org/llms-full.txt so it can alter itself

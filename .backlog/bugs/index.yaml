@@ -62,3 +62,4 @@ bugs:
     - file: B061-add-llms-txt-to-docs-site-get.todo
     - file: B062-option-to-show-tool-calls-in-t.todo
     - file: B063-implement-thinking-level-if-le.todo
+    - file: B064-clawq-should-be-told-about-htt.todo
