@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B108
+priority: high
+status: pending
+tags: []
+title: 'Autonomous-loop messaging discipline: when send_message is used for blocker/milestone notification, the agent should avoid also emitting a synchronous reply in the same turn. Track any runtime affordances or prompt guidance needed to prevent duplicate/pausing behavior.'
+---
+
+Autonomous-loop messaging discipline: when send_message is used for blocker/milestone notification, the agent should avoid also emitting a synchronous reply in the same turn. Track any runtime affordances or prompt guidance needed to prevent duplicate/pausing behavior.

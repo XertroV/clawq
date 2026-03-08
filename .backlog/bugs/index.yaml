@@ -106,3 +106,4 @@ bugs:
     - file: B105-background-tasks-can-be-enqueu.todo
     - file: B106-background-task-smoke-test-sti.todo
     - file: B107-implement-version-which-shows.todo
+    - file: B108-autonomous-loop-messaging-disc.todo
