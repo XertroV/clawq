@@ -1160,7 +1160,7 @@ let parse_config ?(resolve_secrets = true) json =
     try
       let h = json |> member "heartbeat" in
       let heartbeat_enabled =
-        try h |> member "enabled" |> to_bool with _ -> false
+        try h |> member "enabled" |> to_bool with _ -> true
       in
       let heartbeat_interval_seconds =
         try h |> member "interval_seconds" |> to_int with _ -> 300

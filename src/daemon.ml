@@ -1015,42 +1015,55 @@ let run ~(config : Runtime_config.t) =
                       hb_loop ()
                     end
                     else begin
-                      Logs.info (fun m ->
-                          m "Heartbeat: processing HEARTBEAT.md (%d chars)"
-                            (String.length content));
-                      let key = "__heartbeat__" in
-                      let* response =
+                      let key = "__main__" in
+                      let* result =
                         Lwt.catch
                           (fun () ->
-                            Session.with_session_lock session_manager ~key
+                            Session.try_session_lock session_manager ~key
                               (fun agent _interrupt ->
+                                Logs.info (fun m ->
+                                    m
+                                      "Heartbeat: processing HEARTBEAT.md \
+                                       (%d chars) on main session"
+                                      (String.length content));
                                 Agent.turn agent ~user_message:content ?db
                                   ~session_key:key ()))
                           (fun exn ->
-                            Lwt.return
-                              ("Heartbeat error: " ^ Printexc.to_string exn))
+                            Logs.err (fun m ->
+                                m "Heartbeat error: %s"
+                                  (Printexc.to_string exn));
+                            Lwt.return_none)
                       in
-                      let trimmed = String.trim response in
-                      if trimmed = "HEARTBEAT_OK" then
-                        Logs.info (fun m ->
-                            m
-                              "Heartbeat: agent replied HEARTBEAT_OK, no \
-                               outbound")
-                      else begin
-                        Logs.info (fun m ->
-                            m "Heartbeat: agent response (%d chars)"
-                              (String.length trimmed));
-                        match config.notify with
-                        | Some nc ->
+                      (match result with
+                      | None ->
+                          Logs.info (fun m ->
+                              m
+                                "Heartbeat: main session busy, skipping \
+                                 this tick")
+                      | Some response ->
+                          let trimmed = String.trim response in
+                          if trimmed = "HEARTBEAT_OK" then
                             Logs.info (fun m ->
-                                m "Heartbeat: would notify via %s -> %s"
-                                  nc.notify_channel nc.notify_target)
-                        | None ->
-                            Logs.warn (fun m ->
                                 m
-                                  "Heartbeat: agent wants to send a message \
-                                   but no notify target configured")
-                      end;
+                                  "Heartbeat: agent replied HEARTBEAT_OK, \
+                                   no outbound")
+                          else begin
+                            Logs.info (fun m ->
+                                m "Heartbeat: agent response (%d chars)"
+                                  (String.length trimmed));
+                            match config.notify with
+                            | Some nc ->
+                                Logs.info (fun m ->
+                                    m
+                                      "Heartbeat: would notify via %s -> %s"
+                                      nc.notify_channel nc.notify_target)
+                            | None ->
+                                Logs.warn (fun m ->
+                                    m
+                                      "Heartbeat: agent wants to send a \
+                                       message but no notify target \
+                                       configured")
+                          end);
                       hb_loop ()
                     end
                   end

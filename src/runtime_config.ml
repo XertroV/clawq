@@ -498,7 +498,7 @@ let default =
     agent_bindings = [];
     heartbeat =
       {
-        heartbeat_enabled = false;
+        heartbeat_enabled = true;
         heartbeat_interval_seconds = 300;
         heartbeat_quiet_start = 23;
         heartbeat_quiet_end = 8;

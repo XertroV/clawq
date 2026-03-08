@@ -133,6 +133,27 @@ let with_session_lock mgr ~key f =
       Lwt_mutex.unlock mutex;
       Lwt.return_unit)
 
+let try_session_lock mgr ~key f =
+  let open Lwt.Syntax in
+  let* state =
+    Lwt_mutex.with_lock mgr.sessions_lock (fun () ->
+        let agent, mutex, interrupt = get_or_create_locked mgr ~key in
+        if Lwt_mutex.is_locked mutex then Lwt.return_none
+        else
+          let* () = Lwt_mutex.lock mutex in
+          Lwt.return_some (agent, mutex, interrupt))
+  in
+  match state with
+  | None -> Lwt.return_none
+  | Some (agent, mutex, interrupt) ->
+      Lwt.finalize
+        (fun () ->
+          let* result = f agent interrupt in
+          Lwt.return_some result)
+        (fun () ->
+          Lwt_mutex.unlock mutex;
+          Lwt.return_unit)
+
 let with_session_lock_unless_draining mgr ~key ~on_draining f =
   let open Lwt.Syntax in
   let* state =
