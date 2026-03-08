@@ -29,6 +29,12 @@ export function generateHeroBackdropDraft(options: {
   algorithm?: BackdropAlgorithm;
   seed?: number;
   targetCount?: number;
+  viewport?: {
+    minX?: number;
+    minY?: number;
+    width: number;
+    height: number;
+  };
 } = {}) {
   const algorithm = options.algorithm ?? DEFAULT_HERO_GEAR_ALGORITHM;
   const seed = options.seed ?? 0x6a11cf;
@@ -38,6 +44,8 @@ export function generateHeroBackdropDraft(options: {
       ? 999
       : algorithm === "chaos-fill" || algorithm === "chaos-cluster" || algorithm === "hex-web"
         ? 116
+      : algorithm === "organic-field"
+        ? 96
         : algorithm === "topology-first"
           ? 72
         : algorithm === "constraint-solver"
@@ -48,7 +56,7 @@ export function generateHeroBackdropDraft(options: {
   if (cached) return cloneBackdrop(cached);
 
   const generated = assertBackdropResult(
-    BACKDROP_GENERATORS[algorithm]({ seed, targetCount }),
+    BACKDROP_GENERATORS[algorithm]({ seed, targetCount, viewport: options.viewport }),
     `${algorithm} backdrop generator`,
   );
   cacheBackdrop(cacheKey, generated);

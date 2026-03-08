@@ -8,9 +8,11 @@ import defaultPresented from "../lib/gears/backdrop/data/constraint_solver.defau
 
 const seedParam = Number(Astro.url.searchParams.get("seed") ?? DEFAULT_SPEC_BACKDROP_SEED);
 const targetParam = Number(Astro.url.searchParams.get("targetCount") ?? DEFAULT_SPEC_BACKDROP_TARGET_COUNT);
+const liveParam = Astro.url.searchParams.get("live");
 const seed = Number.isFinite(seedParam) ? seedParam : DEFAULT_SPEC_BACKDROP_SEED;
 const targetCount = Number.isFinite(targetParam) ? targetParam : DEFAULT_SPEC_BACKDROP_TARGET_COUNT;
-const useSnapshots = !import.meta.env.DEV && seed === DEFAULT_SPEC_BACKDROP_SEED && targetCount === DEFAULT_SPEC_BACKDROP_TARGET_COUNT;
+const forceLive = liveParam === "1" || liveParam === "true";
+const useSnapshots = !forceLive && seed === DEFAULT_SPEC_BACKDROP_SEED && targetCount === DEFAULT_SPEC_BACKDROP_TARGET_COUNT;
 
 const raw = useSnapshots ? defaultRaw : generateSpecBackdrop({ mode: "constraint-solver", seed, targetCount });
 const presented = useSnapshots

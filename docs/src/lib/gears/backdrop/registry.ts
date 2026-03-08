@@ -9,6 +9,7 @@ import { generateConstraintSolverBackdrop } from "./constraint_solver.ts";
 import { generateChaosFillBackdrop } from "./chaos_fill.ts";
 import { generateHexWebBackdrop } from "./hex_web.ts";
 import { generateLatticeBackdrop } from "./lattice.ts";
+import { generateOrganicFieldBackdrop } from "./organic_field.ts";
 import { generateRadialBackdrop } from "./radial.ts";
 import { generateRingWebBackdrop } from "./ring_web.ts";
 import { generateRowDebugBackdrop } from "./row_debug.ts";
@@ -26,6 +27,7 @@ export const BACKDROP_GENERATORS: Record<BackdropAlgorithm, BackdropGeneratorFn>
   "constraint-solver": generateConstraintSolverBackdrop,
   "hex-web": generateHexWebBackdrop,
   lattice: generateLatticeBackdrop,
+  "organic-field": generateOrganicFieldBackdrop,
   radial: generateRadialBackdrop,
   "ring-web": generateRingWebBackdrop,
   "row-debug": generateRowDebugBackdrop,

@@ -3,6 +3,8 @@ import LandingLayout from "../layouts/LandingLayout.astro";
 
 const DEFAULT_SEED = 0x6a11cf;
 const DEFAULT_TARGET = 96;
+const DEFAULT_WIDTH = 3440;
+const DEFAULT_HEIGHT = 900;
 const quickSeeds = Array.from({ length: 6 }, (_, index) => DEFAULT_SEED + index);
 ---
 
@@ -32,6 +34,14 @@ const quickSeeds = Array.from({ length: 6 }, (_, index) => DEFAULT_SEED + index)
         <label>
           <span>Target gears</span>
           <input id="organic-target-input" name="targetCount" type="number" inputmode="numeric" value={DEFAULT_TARGET} min="8" max="220" />
+        </label>
+        <label>
+          <span>World width</span>
+          <input id="organic-width-input" name="width" type="number" inputmode="numeric" value={DEFAULT_WIDTH} min="320" max="5000" />
+        </label>
+        <label>
+          <span>World height</span>
+          <input id="organic-height-input" name="height" type="number" inputmode="numeric" value={DEFAULT_HEIGHT} min="220" max="2400" />
         </label>
         <button type="submit">Render</button>
       </form>
@@ -73,7 +83,7 @@ const quickSeeds = Array.from({ length: 6 }, (_, index) => DEFAULT_SEED + index)
   </div>
 </LandingLayout>
 
-<script>
+      <script>
   import "../scripts/debug-organic-field.ts";
 </script>
 
@@ -164,7 +174,7 @@ const quickSeeds = Array.from({ length: 6 }, (_, index) => DEFAULT_SEED + index)
 
   .controls-form {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, max-content));
+    grid-template-columns: repeat(5, minmax(0, max-content));
     gap: 0.8rem;
     align-items: end;
   }

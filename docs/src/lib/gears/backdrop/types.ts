@@ -20,6 +20,12 @@ export type DraftMeshEdge = {
 export interface BackdropGeneratorOptions {
   seed: number;
   targetCount?: number;
+  viewport?: {
+    minX?: number;
+    minY?: number;
+    width: number;
+    height: number;
+  };
 }
 
 export type BackdropGeneratorResult = {
