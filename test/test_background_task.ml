@@ -248,9 +248,11 @@ let test_start_queued_spawns_queued_tasks () =
       in
       let spawned = ref [] in
       Background_task.start_queued_with_callback_impl ~db
-        ~spawn_task:(fun ~on_task_finished:_ ~db:_ task -> spawned := task.id :: !spawned)
+        ~spawn_task:(fun ~on_task_finished:_ ~db:_ task ->
+          spawned := task.id :: !spawned)
         ~on_task_finished:(fun _ -> Lwt.return_unit);
-      Alcotest.(check (list int)) "queued task spawned" [ id ] (List.rev !spawned))
+      Alcotest.(check (list int))
+        "queued task spawned" [ id ] (List.rev !spawned))
 
 let test_spawn_task_marks_failed_when_worktree_creation_fails () =
   with_temp_git_repo (fun repo_path ->

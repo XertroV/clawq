@@ -1030,21 +1030,25 @@ let poll_account ~bot_token ~(account : Runtime_config.telegram_account) ~name
           Lwt.return (0, []))
     in
     if max_uid + 1 > !offset then offset := max_uid + 1;
-    let* () =
-      Lwt_list.iter_s
-        (fun update ->
-          offset := update.update_id + 1;
-          if should_process_update update then
-            handle_update ~bot_token ~account ~session_mgr ?run_update_command
-              ?chat_limiter update
-          else begin
-            Logs.info (fun m ->
-                m "Telegram: ignoring duplicate update update_id=%d chat_id=%s"
-                  update.update_id update.chat_id);
-            Lwt.return_unit
-          end)
-        updates
-    in
+    List.iter
+      (fun update ->
+        offset := update.update_id + 1;
+        if should_process_update update then
+          Lwt.async (fun () ->
+              Lwt.catch
+                (fun () ->
+                  handle_update ~bot_token ~account ~session_mgr
+                    ?run_update_command ?chat_limiter update)
+                (fun exn ->
+                  Logs.err (fun m ->
+                      m "Telegram: handle_update error for update_id=%d: %s"
+                        update.update_id (Printexc.to_string exn));
+                  Lwt.return_unit))
+        else
+          Logs.info (fun m ->
+              m "Telegram: ignoring duplicate update update_id=%d chat_id=%s"
+                update.update_id update.chat_id))
+      updates;
     let* () =
       let rec drain_callbacks () =
         if Queue.is_empty pending_callbacks then Lwt.return_unit

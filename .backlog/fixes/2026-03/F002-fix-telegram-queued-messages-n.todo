@@ -1,0 +1,14 @@
+---
+completed_at: "2026-03-08T17:03:23Z"
+complexity: low
+created_at: "2026-03-08T17:03:23Z"
+depends_on: []
+description: 'Three interacting root causes fixed: (1) Telegram poll loop now non-blocking via Lwt.async so messages arrive while agent processes; (2) Notifier lifecycle save/restore prevents clobbering on concurrent queued path; (3) Queued-message interrupt continues agent turn instead of abandoning — messages injected mid-turn after tool calls via new inject_messages callback. Four new regression tests added.'
+estimate_hours: 0
+id: F002
+priority: low
+status: done
+tags: []
+title: Fix Telegram queued messages not processed while agent is busy
+type: fixed
+---

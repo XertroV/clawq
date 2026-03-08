@@ -117,7 +117,8 @@ let enqueue_message_if_busy mgr ~key queued_message =
               m "Queued inbound message for busy session %s (queue depth: %d)"
                 key
                 (List.length existing + 1));
-          if !interrupt = None then interrupt := Some "[queued inbound message]";
+          if !interrupt = None then
+            interrupt := Some Agent.queued_message_interrupt_token;
           Lwt.return_true
       | _ -> Lwt.return_false)
 
@@ -128,6 +129,13 @@ let take_next_queued_message mgr ~key =
       else Hashtbl.replace mgr.queued_messages key rest;
       Some msg
   | _ -> None
+
+let take_all_queued_messages mgr ~key =
+  match Hashtbl.find_opt mgr.queued_messages key with
+  | Some msgs ->
+      Hashtbl.remove mgr.queued_messages key;
+      msgs
+  | None -> []
 
 let queued_message_prompt message =
   "A new message arrived in this same channel while you were working on the "
@@ -153,14 +161,17 @@ let interrupt_resumable_channel_sessions mgr =
         mgr.channel_notifiers;
       Lwt.return_unit)
 
-let with_registered_notifier mgr ~key ~notify f =
-  register_channel_notifier mgr ~key notify;
-  Lwt.finalize f (fun () ->
-      unregister_channel_notifier mgr ~key;
-      Lwt.return_unit)
-
 let find_registered_notifier mgr ~key =
   Hashtbl.find_opt mgr.channel_notifiers key
+
+let with_registered_notifier mgr ~key ~notify f =
+  let prev = find_registered_notifier mgr ~key in
+  register_channel_notifier mgr ~key notify;
+  Lwt.finalize f (fun () ->
+      (match prev with
+      | Some old -> register_channel_notifier mgr ~key old
+      | None -> unregister_channel_notifier mgr ~key);
+      Lwt.return_unit)
 
 let compaction_notice =
   "Compacting earlier chat history to stay within the model's context window."
@@ -430,7 +441,7 @@ let respond_if_draining ?on_chunk mgr =
   else Lwt.return_none
 
 let stream_turn_with_visibility mgr ~notify agent ~key ~effective_message
-    ~prepared_history_len ~interrupt_check ~runtime_context =
+    ~prepared_history_len ~interrupt_check ~inject_messages ~runtime_context =
   let open Lwt.Syntax in
   let visibility = Stream_visibility.create () in
   let settings : Stream_visibility.settings =
@@ -443,7 +454,8 @@ let stream_turn_with_visibility mgr ~notify agent ~key ~effective_message
   in
   let* response =
     Agent.turn_stream agent ~user_message:effective_message ?db:mgr.db
-      ~session_key:key ~interrupt_check ?runtime_context ~history_prepared:true
+      ~session_key:key ~interrupt_check ~inject_messages ?runtime_context
+      ~history_prepared:true
       ~on_chunk:(Stream_visibility.on_chunk visibility ~settings ~notify)
       ()
   in
@@ -529,6 +541,16 @@ let run_locked_turn mgr ~key agent interrupt ~message ?(attachments = [])
   in
   let prepared_history_len = List.length agent.history in
   record_agent_turn mgr ~key ?channel ?channel_id ();
+  let inject_messages () =
+    let msgs = take_all_queued_messages mgr ~key in
+    List.map
+      (fun (qm : queued_message) ->
+        queued_message_prompt
+          (effective_message_for_turn ~message:qm.message
+             ?channel_name:qm.channel_name ?channel_type:qm.channel_type
+             ?sender_id:qm.sender_id ?sender_name:qm.sender_name ()))
+      msgs
+  in
   let* response =
     Lwt.catch
       (fun () ->
@@ -542,11 +564,11 @@ let run_locked_turn mgr ~key agent interrupt ~message ?(attachments = [])
                    || mgr.config.agent_defaults.show_tool_calls ->
                 stream_turn_with_visibility mgr ~notify:send agent ~key
                   ~effective_message ~prepared_history_len ~interrupt_check
-                  ~runtime_context
+                  ~inject_messages ~runtime_context
             | _ ->
                 Agent.turn agent ~user_message:effective_message ?db:mgr.db
-                  ~session_key:key ~interrupt_check ?runtime_context
-                  ~history_prepared:true ()))
+                  ~session_key:key ~interrupt_check ~inject_messages
+                  ?runtime_context ~history_prepared:true ()))
       (function
         | Agent.Restart_requested ->
             persist_new_messages mgr ~key ~history_before:prepared_history_len
@@ -598,7 +620,16 @@ let rec drain_queued_messages mgr ~key agent interrupt =
       let* () = notify response in
       if not (take_response_deferred mgr ~key) then mark_response_sent mgr ~key;
       drain_queued_messages mgr ~key agent interrupt
-  | Some _, None -> Lwt.return_unit
+  | Some queued, None ->
+      Logs.warn (fun m ->
+          m
+            "Dropping queued message for session %s: no notifier registered \
+             (message: %s)"
+            key
+            (if String.length queued.message > 80 then
+               String.sub queued.message 0 80 ^ "..."
+             else queued.message));
+      Lwt.return_unit
   | None, _ -> Lwt.return_unit
 
 let turn mgr ~key ~message ?(attachments = []) ?channel_name ?channel_type
@@ -734,6 +765,17 @@ let turn_stream mgr ~key ~message ?(attachments = []) ?channel_name
                 in
                 let prepared_history_len = List.length agent.history in
                 record_agent_turn mgr ~key ?channel ?channel_id ();
+                let inject_messages () =
+                  let msgs = take_all_queued_messages mgr ~key in
+                  List.map
+                    (fun (qm : queued_message) ->
+                      queued_message_prompt
+                        (effective_message_for_turn ~message:qm.message
+                           ?channel_name:qm.channel_name
+                           ?channel_type:qm.channel_type ?sender_id:qm.sender_id
+                           ?sender_name:qm.sender_name ()))
+                    msgs
+                in
                 let* response =
                   Lwt.catch
                     (fun () ->
@@ -745,8 +787,8 @@ let turn_stream mgr ~key ~message ?(attachments = []) ?channel_name
                       | None ->
                           Agent.turn_stream agent
                             ~user_message:effective_message ?db:mgr.db
-                            ~session_key:key ~interrupt_check ?runtime_context
-                            ~history_prepared:true ~on_chunk ())
+                            ~session_key:key ~interrupt_check ~inject_messages
+                            ?runtime_context ~history_prepared:true ~on_chunk ())
                     (function
                       | Agent.Restart_requested ->
                           persist_new_messages mgr ~key

@@ -550,7 +550,7 @@ let test_enqueue_message_if_busy_marks_interrupt_and_preserves_message () =
      in
      Alcotest.(check bool) "message queued" true queued;
      Alcotest.(check (option string))
-       "interrupt marked" (Some "[queued inbound message]") !interrupt;
+       "interrupt marked" (Some Agent.queued_message_interrupt_token) !interrupt;
      Lwt.return_unit);
   match Session.take_next_queued_message mgr ~key:"telegram:1:u" with
   | None -> Alcotest.fail "expected queued message"
@@ -912,6 +912,135 @@ let test_interrupt_latch_skips_after_first_tool () =
     "three tool results in history" 3
     (List.length agent.history)
 
+let test_with_registered_notifier_restores_previous () =
+  let config = Runtime_config.default in
+  let mgr = Session.create ~config () in
+  Lwt_main.run
+    (Session.with_registered_notifier mgr ~key:"telegram:1:u"
+       ~notify:(fun _ -> Lwt.return_unit)
+       (fun () ->
+         let open Lwt.Syntax in
+         let* () =
+           Session.with_registered_notifier mgr ~key:"telegram:1:u"
+             ~notify:(fun _ -> Lwt.return_unit)
+             (fun () -> Lwt.return_unit)
+         in
+         Alcotest.(check bool)
+           "notifier restored" true
+           (Session.find_registered_notifier mgr ~key:"telegram:1:u" <> None);
+         Lwt.return_unit));
+  Alcotest.(check bool)
+    "notifier removed after outer scope" true
+    (Session.find_registered_notifier mgr ~key:"telegram:1:u" = None)
+
+let test_drain_works_after_concurrent_notifier_registration () =
+  with_fake_chat_provider (fun config ->
+      let db = Memory.init ~db_path:":memory:" () in
+      let mgr = Session.create ~config ~db () in
+      let sent = ref [] in
+      Lwt_main.run
+        (Session.with_registered_notifier mgr ~key:"telegram:1:u"
+           ~notify:(fun text ->
+             sent := text :: !sent;
+             Lwt.return_unit)
+           (fun () ->
+             Session.with_session_lock mgr ~key:"telegram:1:u"
+               (fun agent interrupt ->
+                 let open Lwt.Syntax in
+                 let* () =
+                   Session.with_registered_notifier mgr ~key:"telegram:1:u"
+                     ~notify:(fun _ -> Lwt.return_unit)
+                     (fun () ->
+                       let* _queued =
+                         Session.enqueue_message_if_busy mgr ~key:"telegram:1:u"
+                           (queued_message ~channel:"telegram" ~channel_id:"1"
+                              "queued msg")
+                       in
+                       Lwt.return_unit)
+                 in
+                 Session.drain_queued_messages mgr ~key:"telegram:1:u" agent
+                   interrupt)));
+      Alcotest.(check int)
+        "queued message drained and sent" 1 (List.length !sent))
+
+let test_queued_interrupt_does_not_skip_tools () =
+  let config = Runtime_config.default in
+  let invocations = ref [] in
+  let registry = Tool_registry.create () in
+  List.iter
+    (fun n -> Tool_registry.register registry (make_fake_tool n invocations))
+    [ "tool_a"; "tool_b"; "tool_c" ];
+  let agent = Agent.create ~config ~tool_registry:registry () in
+  let interrupt_check () = Some Agent.queued_message_interrupt_token in
+  let calls =
+    [
+      make_tool_call ~id:"tc1" ~name:"tool_a";
+      make_tool_call ~id:"tc2" ~name:"tool_b";
+      make_tool_call ~id:"tc3" ~name:"tool_c";
+    ]
+  in
+  Lwt_main.run
+    (Agent.execute_tool_calls agent ~db:None ~audit_enabled:false
+       ~session_key:None ~interrupt_check calls);
+  Alcotest.(check (list string))
+    "all tools invoked"
+    [ "tool_a"; "tool_b"; "tool_c" ]
+    (List.rev !invocations);
+  Alcotest.(check int)
+    "three tool results in history" 3
+    (List.length agent.history);
+  List.iter
+    (fun (msg : Provider.message) ->
+      Alcotest.(check bool)
+        "not skipped" true
+        (not (string_contains msg.content "[skipped")))
+    agent.history
+
+let test_mid_turn_injection_adds_to_history () =
+  let config = Runtime_config.default in
+  let invocations = ref [] in
+  let registry = Tool_registry.create () in
+  List.iter
+    (fun n -> Tool_registry.register registry (make_fake_tool n invocations))
+    [ "tool_a" ];
+  let agent = Agent.create ~config ~tool_registry:registry () in
+  let injected = ref false in
+  let inject_messages () =
+    if not !injected then begin
+      injected := true;
+      [ "A new message arrived...\n\nNew message:\nhey there" ]
+    end
+    else []
+  in
+  agent.history <-
+    [
+      {
+        Provider.role = "assistant";
+        content = "";
+        tool_calls = [ make_tool_call ~id:"tc1" ~name:"tool_a" ];
+        tool_call_id = None;
+        name = None;
+      };
+    ];
+  Lwt_main.run
+    (Agent.execute_tool_calls agent ~db:None ~audit_enabled:false
+       ~session_key:None
+       [ make_tool_call ~id:"tc1" ~name:"tool_a" ]);
+  (match inject_messages () with
+  | msgs ->
+      List.iter
+        (fun msg ->
+          agent.history <-
+            Provider.make_message ~role:"user" ~content:msg :: agent.history)
+        msgs);
+  let has_injected =
+    List.exists
+      (fun (m : Provider.message) ->
+        m.role = "user" && string_contains m.content "hey there")
+      agent.history
+  in
+  Alcotest.(check bool) "injected message in history" true has_injected
+
 let suite =
   [
     Alcotest.test_case "reset clears active session and history" `Quick
@@ -976,4 +1105,12 @@ let suite =
       test_interrupt_skips_remaining_tools_stream;
     Alcotest.test_case "interrupt latch skips after first tool" `Quick
       test_interrupt_latch_skips_after_first_tool;
+    Alcotest.test_case "notifier restores previous after nested registration"
+      `Quick test_with_registered_notifier_restores_previous;
+    Alcotest.test_case "drain works after concurrent notifier registration"
+      `Quick test_drain_works_after_concurrent_notifier_registration;
+    Alcotest.test_case "queued interrupt does not skip tools" `Quick
+      test_queued_interrupt_does_not_skip_tools;
+    Alcotest.test_case "mid-turn injection adds to history" `Quick
+      test_mid_turn_injection_adds_to_history;
   ]

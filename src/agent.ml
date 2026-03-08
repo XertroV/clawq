@@ -9,6 +9,11 @@ exception Interrupted of string
 exception Restart_requested
 
 let restart_interrupt_token = "__clawq_restart__"
+let queued_message_interrupt_token = "[queued inbound message]"
+
+let is_queued_message_interrupt = function
+  | Some reason when reason = queued_message_interrupt_token -> true
+  | _ -> false
 
 let create ~config ?tool_registry () =
   let system_prompt = Prompt_builder.build ~config ~tool_registry () in
@@ -313,6 +318,7 @@ let execute_tool_calls_stream agent ~db ~audit_enabled ~session_key
       match interrupt_check with
       | Some check -> (
           match check () with
+          | Some reason when reason = queued_message_interrupt_token -> false
           | Some _ ->
               interrupted := true;
               true
@@ -494,6 +500,7 @@ let execute_tool_calls agent ~db ~audit_enabled ~session_key ?interrupt_check
       match interrupt_check with
       | Some check -> (
           match check () with
+          | Some reason when reason = queued_message_interrupt_token -> false
           | Some _ ->
               interrupted := true;
               true
@@ -695,8 +702,8 @@ let prepare_turn_history agent ~user_message ?db () =
   trim_history agent;
   Lwt.return compacted
 
-let turn agent ~user_message ?db ?session_key ?interrupt_check ?runtime_context
-    ?(history_prepared = false) () =
+let turn agent ~user_message ?db ?session_key ?interrupt_check ?inject_messages
+    ?runtime_context ?(history_prepared = false) () =
   let is_restart_interrupt = function
     | Some reason when reason = restart_interrupt_token -> true
     | _ -> false
@@ -815,11 +822,23 @@ let turn agent ~user_message ?db ?session_key ?interrupt_check ?runtime_context
           execute_tool_calls agent ~db ~audit_enabled ~session_key
             ?interrupt_check calls
         in
+        (match inject_messages with
+        | Some get_msgs ->
+            let msgs = get_msgs () in
+            List.iter
+              (fun msg ->
+                agent.history <-
+                  Provider.make_message ~role:"user" ~content:msg
+                  :: agent.history)
+              msgs
+        | None -> ());
         match interrupt_check with
         | Some check -> (
             match check () with
             | interrupt when is_restart_interrupt interrupt ->
                 Lwt.fail Restart_requested
+            | interrupt when is_queued_message_interrupt interrupt ->
+                loop (iteration + 1)
             | Some _ ->
                 let partial =
                   "[Agent was interrupted mid-task] --- [NOTE: interrupted by \
@@ -836,7 +855,7 @@ let turn agent ~user_message ?db ?session_key ?interrupt_check ?runtime_context
   loop 0
 
 let turn_stream agent ~user_message ?db ?session_key ?interrupt_check
-    ?runtime_context ?(history_prepared = false) ~on_chunk () =
+    ?inject_messages ?runtime_context ?(history_prepared = false) ~on_chunk () =
   let is_restart_interrupt = function
     | Some reason when reason = restart_interrupt_token -> true
     | _ -> false
@@ -862,6 +881,8 @@ let turn_stream agent ~user_message ?db ?session_key ?interrupt_check
             match check () with
             | interrupt when is_restart_interrupt interrupt ->
                 Lwt.fail Restart_requested
+            | interrupt when is_queued_message_interrupt interrupt ->
+                Lwt.return_unit
             | Some _ ->
                 let note = " --- [NOTE: interrupted by user]" in
                 let* () = on_chunk (Provider.Delta note) in
@@ -981,11 +1002,23 @@ let turn_stream agent ~user_message ?db ?session_key ?interrupt_check
               execute_tool_calls_stream agent ~db ~audit_enabled ~session_key
                 ?interrupt_check ~on_chunk calls
             in
+            (match inject_messages with
+            | Some get_msgs ->
+                let msgs = get_msgs () in
+                List.iter
+                  (fun msg ->
+                    agent.history <-
+                      Provider.make_message ~role:"user" ~content:msg
+                      :: agent.history)
+                  msgs
+            | None -> ());
             match interrupt_check with
             | Some check -> (
                 match check () with
                 | interrupt when is_restart_interrupt interrupt ->
                     Lwt.fail Restart_requested
+                | interrupt when is_queued_message_interrupt interrupt ->
+                    loop (iteration + 1)
                 | Some _ ->
                     let partial = " --- [NOTE: interrupted by user]" in
                     agent.history <-
