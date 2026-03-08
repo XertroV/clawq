@@ -596,7 +596,7 @@ let run ~(config : Runtime_config.t) =
            ())
   | None -> ());
   Session.set_special_command_handler session_manager
-    (fun ~key:_ ~message ~send_progress ->
+    (fun ~key ~message ~send_progress ->
       if not (Update_tool.is_update_command message) then Lwt.return_none
       else
         let send_progress =
@@ -604,10 +604,47 @@ let run ~(config : Runtime_config.t) =
           | Some f -> f
           | None -> fun _ -> Lwt.return_unit
         in
+        let prepare_restart () =
+          (match Restart_notify.parse_channel_from_key key with
+          | Some (channel, channel_id) ->
+              Restart_notify.write ~channel ~channel_id
+          | None -> ());
+          Lwt.return (Ok ())
+        in
         let open Lwt.Syntax in
-        let* response = run_update ~send_progress () in
+        let* response = run_update ~prepare_restart ~send_progress () in
         Lwt.return_some response);
   let* () = resume_pending_agent_sessions ~session_manager ~config () in
+  let* () =
+    Lwt.catch
+      (fun () ->
+        match Restart_notify.read () with
+        | Some (channel, channel_id) ->
+            Restart_notify.remove ();
+            let text =
+              Printf.sprintf "clawq updated and restarted successfully (%s)."
+                Build_info.version_string
+            in
+            let open Lwt.Syntax in
+            let* result =
+              dispatch_resumed_message ~config ~channel ~channel_id ~text ()
+            in
+            (match result with
+            | Ok () ->
+                Logs.info (fun m ->
+                    m "Sent post-update notification to %s:%s" channel
+                      channel_id)
+            | Error err ->
+                Logs.warn (fun m ->
+                    m "Failed to send post-update notification: %s" err));
+            Lwt.return_unit
+        | None -> Lwt.return_unit)
+      (fun exn ->
+        Logs.warn (fun m ->
+            m "Error checking restart notification marker: %s"
+              (Printexc.to_string exn));
+        Lwt.return_unit)
+  in
   let tunnel_url_ref = ref None in
   let[@warning "-26"] tunnel_supervisor =
     if config.tunnel.enabled then begin

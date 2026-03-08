@@ -163,6 +163,54 @@ let test_send_drain_warnings_sends_scheduled_messages () =
   Alcotest.(check (list string))
     "warnings delivered in order" [ "five"; "ten" ] (List.rev !received)
 
+let test_restart_notify_write_read_roundtrip () =
+  Restart_notify.write ~channel:"telegram" ~channel_id:"12345";
+  let result = Restart_notify.read () in
+  Restart_notify.remove ();
+  Alcotest.(check (option (pair string string)))
+    "roundtrip"
+    (Some ("telegram", "12345"))
+    result
+
+let test_restart_notify_expired_marker () =
+  let path = Restart_notify.path () in
+  let json =
+    `Assoc
+      [
+        ("channel", `String "discord");
+        ("channel_id", `String "chan1");
+        ("timestamp", `Float (Unix.gettimeofday () -. 600.0));
+      ]
+  in
+  let oc = open_out path in
+  output_string oc (Yojson.Safe.to_string json);
+  close_out oc;
+  let result = Restart_notify.read () in
+  Alcotest.(check (option (pair string string))) "expired" None result;
+  Alcotest.(check bool) "file cleaned up" false (Sys.file_exists path)
+
+let test_restart_notify_missing_marker () =
+  Restart_notify.remove ();
+  let result = Restart_notify.read () in
+  Alcotest.(check (option (pair string string))) "missing" None result
+
+let test_parse_channel_from_key () =
+  Alcotest.(check (option (pair string string)))
+    "telegram key"
+    (Some ("telegram", "123"))
+    (Restart_notify.parse_channel_from_key "telegram:123:456");
+  Alcotest.(check (option (pair string string)))
+    "discord key"
+    (Some ("discord", "chan"))
+    (Restart_notify.parse_channel_from_key "discord:chan:user");
+  Alcotest.(check (option (pair string string)))
+    "slack key"
+    (Some ("slack", "C01"))
+    (Restart_notify.parse_channel_from_key "slack:C01:U01");
+  Alcotest.(check (option (pair string string)))
+    "main key" None
+    (Restart_notify.parse_channel_from_key "__main__")
+
 let suite =
   [
     Alcotest.test_case "dispatch resumed message routes telegram" `Quick
@@ -178,4 +226,12 @@ let suite =
       test_wait_for_drain_reports_timeout;
     Alcotest.test_case "send drain warnings sends scheduled messages" `Quick
       test_send_drain_warnings_sends_scheduled_messages;
+    Alcotest.test_case "restart notify write/read roundtrip" `Quick
+      test_restart_notify_write_read_roundtrip;
+    Alcotest.test_case "restart notify expired marker" `Quick
+      test_restart_notify_expired_marker;
+    Alcotest.test_case "restart notify missing marker" `Quick
+      test_restart_notify_missing_marker;
+    Alcotest.test_case "parse channel from key" `Quick
+      test_parse_channel_from_key;
   ]

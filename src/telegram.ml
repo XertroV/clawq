@@ -418,6 +418,8 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
         let* response =
           run_update_command
             ~prepare_restart:(fun () ->
+              Restart_notify.write ~channel:"telegram"
+                ~channel_id:update.chat_id;
               acknowledge_update ~bot_token ~update_id:update.update_id)
             ~send_progress ()
         in

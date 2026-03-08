@@ -144,7 +144,11 @@ let handle_event ~(config : Runtime_config.slack_config)
                     Lwt.catch
                       (fun () ->
                         let* response =
-                          run_update_command ~send_progress:notify ()
+                          run_update_command
+                            ~prepare_restart:(fun () ->
+                              Restart_notify.write ~channel:"slack" ~channel_id;
+                              Lwt.return (Ok ()))
+                            ~send_progress:notify ()
                         in
                         notify response)
                       (fun exn ->
