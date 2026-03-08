@@ -1,0 +1,32 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B051
+priority: high
+status: pending
+tags: []
+title: codex says instructions are required -- weird
+---
+
+codex says instructions are required -- weird
+
+❯ ./clawq agent [18:19:16.464] [INFO]clawq daemon starting (pid=2697869) [18:19:16.464] [INFO]Provider: openai-codex | Model: gpt-5.4 | Temp: 0.70 [18:19:16.464] [INFO]Workspace: 
+/home/xertrov/.clawq/workspace [18:19:16.464] [INFO]Channels: cli=true telegram=true discord=true slack=true github=false signal=true matrix=true irc=true email=true nostr=true dingtalk=true 
+onebot=true lark=false /usr/bin/bwrap [18:19:16.469] [INFO]Sandbox backend: bubblewrap [18:19:16.470] [INFO]Tools enabled, registered built-in tools + 0 skills [18:19:16.471] [INFO]SQLite 
+memory initialized at /home/xertrov/.clawq/memory.db (vector index enabled) [18:19:16.471] [INFO]OTP pairing code: 322997 (share with trusted clients) [18:19:16.472] [INFO]Web UI assets ready 
+at /home/xertrov/.clawq/ui (version=sha256:dd16eb8a83bc2b566a2f2713676047195750905b49281fd04aa5258a0324f141 dev_mode=false) [18:19:16.479] [INFO]Starting Telegram polling for account 'default' 
+[18:19:16.479] [INFO]Daemon ready. Gateway on 127.0.0.1:13451 [18:19:16.479] [WARNING]Discord bot_token is empty, skipping [18:19:16.479] [WARNING]Mattermost: url or access_token is empty, 
+skipping [18:19:16.479] [INFO]iMessage: osascript not found, disabled (not macOS) [18:19:16.479] [WARNING]Signal: base_url is empty, skipping [18:19:16.479] [WARNING]Matrix: homeserver_url or 
+access_token is empty, skipping [18:19:16.479] [WARNING]IRC: host is empty, skipping [18:19:16.479] [WARNING]Email: imap_host or smtp_host is empty, skipping [18:19:16.479] [WARNING]Nostr: 
+private_key is empty, skipping [18:19:16.479] [WARNING]DingTalk: app_key or app_secret is empty, skipping [18:19:16.479] [WARNING]OneBot: ws_url is empty, skipping [18:19:16.479] [INFO]Cron 
+scheduler started [18:19:17.947] [INFO]Telegram: registered 6 slash commands [18:19:17.947] [INFO]Telegram poll #1 for account 'default' [18:19:21.080] [INFO]Restored 197 messages for session 
+telegram:58495225:58495225 [18:19:21.080] [INFO]Compacting history: 198 messages -> summarise 178, keep 20 recent [18:19:21.080] [INFO]LLM native dispatch provider=openai-codex model=gpt-5.4 
+msgs=2 [18:19:21.762] [WARNING]History summarization failed: Failure("OpenAI Codex error (HTTP 400): {\"detail\":\"Instructions are required\"}") [18:19:21.762] [INFO]LLM native dispatch 
+provider=openai-codex model=gpt-5.4 msgs=2 [18:19:22.008] [WARNING]History summarization failed: Failure("OpenAI Codex error (HTTP 400): {\"detail\":\"Instructions are required\"}") 
+[18:19:22.017] [INFO]LLM native dispatch provider=openai-codex model=gpt-5.4 msgs=22 [18:19:22.185] [WARNING]Attempt 1/3 failed (Failure("OpenAI Codex error (HTTP 400): 
+{\"detail\":\"Instructions are required\"}")), retrying in 1.0s [18:19:23.185] [INFO]LLM native dispatch provider=openai-codex model=gpt-5.4 msgs=22 [18:19:23.366] [WARNING]Attempt 2/3 failed 
+(Failure("OpenAI Codex error (HTTP 400): {\"detail\":\"Instructions are required\"}")), retrying in 2.0s [18:19:25.368] [INFO]LLM native dispatch provider=openai-codex model=gpt-5.4 msgs=22 
+[18:19:25.568] [ERROR]Agent error for chat_id=58495225: Failure("OpenAI Codex error (HTTP 400): {\"detail\":\"Instructions are required\"}") [18:19:27.026] [INFO]Telegram poll #2 for account 
+'default' [18:19:58.253] [INFO]Telegram poll #3 for account 'default'
+[18:20:29.491] [INFO]Telegram polling stable, suppressing routine poll logs for 'default'

@@ -1,0 +1,361 @@
+---
+import LandingLayout from "../layouts/LandingLayout.astro";
+
+const DEFAULT_SEED = 0x6a11cf;
+const DEFAULT_TARGET = 96;
+const quickSeeds = Array.from({ length: 6 }, (_, index) => DEFAULT_SEED + index);
+---
+
+<LandingLayout title="Organic Field Debug">
+  <div class="debug-shell" id="organic-field-debug-root">
+    <header class="hero">
+      <p class="eyebrow">Backdrop Debug Surface</p>
+      <h1>Organic Field</h1>
+      <p class="lede">
+        A wide inspection page for the appearance-first generator. Use the controls below to drive the page with real query params and compare whether the output is forming loops or just long chain spines.
+      </p>
+
+      <div class="nav-row">
+        <a href="/debug-topology-first">Topology-First</a>
+        <a href="/debug-constraint-solver">Constraint-Solver</a>
+        <a href="/debug-gears">Pair Debug</a>
+        <a href="/?gearAlgo=organic-field">Open On Homepage</a>
+      </div>
+    </header>
+
+    <section class="panel controls-panel">
+      <form class="controls-form" id="organic-field-controls">
+        <label>
+          <span>Seed</span>
+          <input id="organic-seed-input" name="seed" type="number" inputmode="numeric" value={DEFAULT_SEED} />
+        </label>
+        <label>
+          <span>Target gears</span>
+          <input id="organic-target-input" name="targetCount" type="number" inputmode="numeric" value={DEFAULT_TARGET} min="8" max="220" />
+        </label>
+        <button type="submit">Render</button>
+      </form>
+
+      <div class="seed-row" id="organic-seed-row">
+        {quickSeeds.map((seed) => (
+          <button type="button" class="seed-chip" data-seed={seed}>seed {seed}</button>
+        ))}
+      </div>
+    </section>
+
+    <section class="metrics-grid" id="organic-metrics"></section>
+
+    <section class="panel scene-panel">
+      <div class="section-head">
+        <div>
+          <p class="kicker">Fixed world view</p>
+          <h2>Wide theatre</h2>
+          <p>The same stage every time: best for spotting whether the generator is building loops, ladders, or a stretched backbone.</p>
+        </div>
+        <p class="meta" id="organic-wide-meta"></p>
+      </div>
+      <div id="organic-wide-scene"></div>
+    </section>
+
+    <section class="panel scene-panel">
+      <div class="section-head">
+        <div>
+          <p class="kicker">Fitted view</p>
+          <h2>Bounds crop</h2>
+          <p>A tighter frame for inspecting dead ends, loop closures, and the local density around bridges.</p>
+        </div>
+        <p class="meta" id="organic-fit-meta"></p>
+      </div>
+      <div id="organic-fit-scene"></div>
+    </section>
+
+    <section class="comparison-grid" id="organic-comparison-grid"></section>
+  </div>
+</LandingLayout>
+
+<script>
+  import "../scripts/debug-organic-field.ts";
+</script>
+
+<style>
+  .debug-shell {
+    width: min(97vw, 128rem);
+    margin: 0 auto;
+    padding: 3.4rem 1rem 6rem;
+    display: grid;
+    gap: 1.2rem;
+  }
+
+  .hero h1::after {
+    display: none;
+  }
+
+  .eyebrow,
+  .kicker,
+  .meta,
+  .metric span,
+  .mini-metrics {
+    font-family: var(--font-label);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .eyebrow {
+    margin: 0 0 0.45rem;
+    color: #f0c979;
+    font-size: var(--fs-xs);
+  }
+
+  .lede {
+    max-width: 68ch;
+    color: var(--text-secondary);
+  }
+
+  .nav-row,
+  .seed-row {
+    display: flex;
+    gap: 0.7rem;
+    flex-wrap: wrap;
+    margin-top: 1rem;
+  }
+
+  .nav-row a,
+  .seed-chip,
+  .controls-form button {
+    text-decoration: none;
+    border-radius: 999px;
+    padding: 0.58rem 0.92rem;
+    border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+    color: var(--text-secondary);
+    background:
+      linear-gradient(180deg, rgba(255, 238, 204, 0.07), rgba(255, 238, 204, 0.01)),
+      color-mix(in srgb, var(--bg-tertiary) 80%, transparent);
+    box-shadow: inset 0 1px 0 rgba(255, 241, 210, 0.08);
+  }
+
+  .controls-form button,
+  .seed-chip {
+    cursor: pointer;
+  }
+
+  .seed-chip.active {
+    color: #1a1305;
+    border-color: rgba(255, 213, 128, 0.65);
+    background: linear-gradient(135deg, #f5cd7a, #d98f52);
+  }
+
+  .controls-panel,
+  .panel,
+  .metric {
+    border-radius: 22px;
+    border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
+    background:
+      radial-gradient(circle at top left, rgba(255, 220, 162, 0.07), transparent 36%),
+      linear-gradient(180deg, rgba(10, 14, 22, 0.94), rgba(8, 10, 16, 0.92));
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.04),
+      0 24px 60px rgba(0, 0, 0, 0.24);
+  }
+
+  .controls-panel,
+  .panel {
+    padding: 1.1rem;
+  }
+
+  .controls-form {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, max-content));
+    gap: 0.8rem;
+    align-items: end;
+  }
+
+  .controls-form label {
+    display: grid;
+    gap: 0.32rem;
+  }
+
+  .controls-form span,
+  .metric span,
+  .meta,
+  .mini-metrics {
+    color: var(--text-tertiary);
+    font-size: 0.74rem;
+  }
+
+  .controls-form input {
+    min-width: 12rem;
+    padding: 0.72rem 0.9rem;
+    border-radius: 14px;
+    border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+    background: rgba(6, 10, 16, 0.78);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+  }
+
+  .metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 0.8rem;
+  }
+
+  .metric {
+    padding: 0.92rem 1rem;
+    display: grid;
+    gap: 0.34rem;
+  }
+
+  .metric strong {
+    font-family: var(--font-mono);
+    color: var(--text-primary);
+    font-size: 1.05rem;
+  }
+
+  .scene-panel {
+    overflow: hidden;
+  }
+
+  .section-head {
+    display: flex;
+    gap: 1rem;
+    justify-content: space-between;
+    align-items: end;
+    flex-wrap: wrap;
+    margin-bottom: 0.9rem;
+  }
+
+  .section-head h2 {
+    margin: 0.18rem 0 0.3rem;
+  }
+
+  .section-head p {
+    margin: 0;
+    color: var(--text-secondary);
+  }
+
+  .kicker {
+    margin: 0;
+    color: #e1b96f;
+    font-size: 0.72rem;
+  }
+
+  .debug-scene {
+    width: 100%;
+    height: auto;
+    display: block;
+    border-radius: 18px;
+    background:
+      radial-gradient(circle at 20% 12%, rgba(83, 146, 152, 0.18), transparent 28%),
+      radial-gradient(circle at 82% 0%, rgba(239, 176, 96, 0.12), transparent 24%),
+      #090c12;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  .debug-scene--wide {
+    min-height: 29rem;
+  }
+
+  .bg,
+  .pitch-circle,
+  .gear-hole,
+  .mesh-line,
+  .hero-band,
+  .grid-line {
+    fill: none;
+    vector-effect: non-scaling-stroke;
+  }
+
+  .bg {
+    fill: rgba(8, 12, 18, 0.96);
+  }
+
+  .hero-band {
+    fill: rgba(222, 170, 90, 0.04);
+    stroke: rgba(222, 170, 90, 0.22);
+    stroke-width: 2;
+    stroke-dasharray: 10 12;
+  }
+
+  .hero-band--subtle {
+    fill: rgba(222, 170, 90, 0.025);
+    stroke-opacity: 0.14;
+  }
+
+  .grid-line {
+    stroke: rgba(151, 181, 192, 0.09);
+    stroke-width: 1;
+  }
+
+  .mesh-line {
+    stroke: rgba(124, 198, 214, 0.66);
+    stroke-width: 1.2;
+    stroke-dasharray: 6 6;
+  }
+
+  .gear-outline {
+    stroke-width: 1.7;
+    vector-effect: non-scaling-stroke;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .pitch-circle {
+    stroke: rgba(98, 182, 194, 0.33);
+    stroke-width: 0.85;
+  }
+
+  .gear-hole {
+    stroke: rgba(252, 223, 163, 0.46);
+    stroke-width: 0.95;
+  }
+
+  .comparison-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+  }
+
+  .comparison-card {
+    display: grid;
+    gap: 0.8rem;
+  }
+
+  .mini-metrics {
+    display: flex;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+  }
+
+  @media (max-width: 1100px) {
+    .metrics-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .comparison-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 720px) {
+    .debug-shell {
+      width: min(100vw, 52rem);
+      padding-inline: 0.75rem;
+    }
+
+    .controls-form {
+      grid-template-columns: 1fr;
+    }
+
+    .controls-form input {
+      min-width: 0;
+      width: 100%;
+    }
+
+    .metrics-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .debug-scene--wide {
+      min-height: 17rem;
+    }
+  }
+</style>
