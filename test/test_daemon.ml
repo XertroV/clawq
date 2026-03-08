@@ -10,6 +10,29 @@ let query_single_text_option db sql =
           | _ -> None)
       | _ -> None)
 
+let local_time ~year ~month ~day ~hour ~minute ~second =
+  fst
+    (Unix.mktime
+       {
+         Unix.tm_sec = second;
+         tm_min = minute;
+         tm_hour = hour;
+         tm_mday = day;
+         tm_mon = month - 1;
+         tm_year = year - 1900;
+         tm_wday = 0;
+         tm_yday = 0;
+         tm_isdst = false;
+       })
+
+let render_date_banners times =
+  let buf = Buffer.create 64 in
+  let ppf = Format.formatter_of_buffer buf in
+  let last_date = ref None in
+  List.iter (Daemon.maybe_emit_date_banner ppf last_date) times;
+  Format.pp_print_flush ppf ();
+  Buffer.contents buf
+
 let test_dispatch_resumed_message_routes_telegram () =
   let called = ref None in
   let senders =
@@ -211,6 +234,25 @@ let test_parse_channel_from_key () =
     "main key" None
     (Restart_notify.parse_channel_from_key "__main__")
 
+let test_maybe_emit_date_banner_logs_first_entry_date () =
+  let output =
+    render_date_banners
+      [ local_time ~year:2026 ~month:3 ~day:8 ~hour:10 ~minute:0 ~second:0 ]
+  in
+  Alcotest.(check string) "first date banner" "=== 2026-03-08 ===\n" output
+
+let test_maybe_emit_date_banner_logs_when_day_advances () =
+  let output =
+    render_date_banners
+      [
+        local_time ~year:2026 ~month:3 ~day:8 ~hour:10 ~minute:0 ~second:0;
+        local_time ~year:2026 ~month:3 ~day:8 ~hour:23 ~minute:59 ~second:59;
+        local_time ~year:2026 ~month:3 ~day:9 ~hour:0 ~minute:0 ~second:0;
+      ]
+  in
+  Alcotest.(check string)
+    "date rollover banners" "=== 2026-03-08 ===\n=== 2026-03-09 ===\n" output
+
 let suite =
   [
     Alcotest.test_case "dispatch resumed message routes telegram" `Quick
@@ -234,4 +276,8 @@ let suite =
       test_restart_notify_missing_marker;
     Alcotest.test_case "parse channel from key" `Quick
       test_parse_channel_from_key;
+    Alcotest.test_case "date banner logs first entry date" `Quick
+      test_maybe_emit_date_banner_logs_first_entry_date;
+    Alcotest.test_case "date banner logs on day rollover" `Quick
+      test_maybe_emit_date_banner_logs_when_day_advances;
   ]

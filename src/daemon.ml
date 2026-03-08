@@ -214,10 +214,26 @@ let resume_pending_agent_sessions ?(senders = default_resume_senders)
           Lwt.return_unit)
     pending
 
+let local_date_key t =
+  let tm = Unix.localtime t in
+  (tm.Unix.tm_year, tm.Unix.tm_yday)
+
+let pp_date_banner ppf t =
+  let tm = Unix.localtime t in
+  Fmt.pf ppf "=== %04d-%02d-%02d ===" (tm.Unix.tm_year + 1900)
+    (tm.Unix.tm_mon + 1) tm.Unix.tm_mday
+
+let maybe_emit_date_banner ppf last_date_ref t =
+  let date_key = local_date_key t in
+  if !last_date_ref <> Some date_key then begin
+    pp_date_banner ppf t;
+    Format.pp_print_newline ppf ();
+    last_date_ref := Some date_key
+  end
+
 let run ~(config : Runtime_config.t) =
   let open Lwt.Syntax in
-  let pp_header_with_ts ppf h =
-    let t = Unix.gettimeofday () in
+  let pp_header_with_ts ppf t h =
     let tm = Unix.localtime t in
     let ms = int_of_float ((t -. floor t) *. 1000.0) in
     Fmt.pf ppf "[%02d:%02d:%02d.%03d] %a" tm.Unix.tm_hour tm.Unix.tm_min
@@ -258,6 +274,7 @@ let run ~(config : Runtime_config.t) =
      Info level, but we set their level explicitly below for safety. *)
   let check_buf = Buffer.create 128 in
   let check_ppf = Format.formatter_of_buffer check_buf in
+  let last_log_date = ref None in
   let starts_with_http_method s =
     let n = String.length s in
     (n >= 4 && String.sub s 0 4 = "GET ")
@@ -314,7 +331,9 @@ let run ~(config : Runtime_config.t) =
             else begin
               let s = scrub_telegram_tokens s in
               let dst = Format.err_formatter in
-              pp_header_with_ts dst (level, header);
+              let t = Unix.gettimeofday () in
+              maybe_emit_date_banner dst last_log_date t;
+              pp_header_with_ts dst t (level, header);
               Format.pp_print_string dst s;
               Format.pp_print_newline dst ();
               over ();

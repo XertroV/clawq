@@ -1,10 +1,14 @@
 ---
+claimed_at: "2026-03-08T13:49:48Z"
+claimed_by: cli-user
+completed_at: null
 complexity: medium
 depends_on: []
 estimate_hours: 1
 id: B087
 priority: high
-status: pending
+started_at: "2026-03-08T13:49:48Z"
+status: in_progress
 tags: []
 title: should log date at start of log (and if the day advances)
 ---
