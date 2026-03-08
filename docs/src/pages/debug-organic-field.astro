@@ -44,12 +44,36 @@ const quickSeeds = Array.from({ length: 6 }, (_, index) => DEFAULT_SEED + index)
           <input id="organic-height-input" name="height" type="number" inputmode="numeric" value={DEFAULT_HEIGHT} min="220" max="2400" />
         </label>
         <button type="submit">Render</button>
+        <button type="button" id="organic-export-button">Export JSON</button>
       </form>
 
       <div class="seed-row" id="organic-seed-row">
         {quickSeeds.map((seed) => (
           <button type="button" class="seed-chip" data-seed={seed}>seed {seed}</button>
         ))}
+      </div>
+
+      <div class="status-strip">
+        <div class="status-copy">
+          <span class="status-label">Render status</span>
+          <strong id="organic-render-status">Idle</strong>
+        </div>
+        <div class="status-copy">
+          <span class="status-label">Progress</span>
+          <strong id="organic-render-progress">0%</strong>
+        </div>
+        <div class="status-copy">
+          <span class="status-label">Elapsed</span>
+          <strong id="organic-render-elapsed">0 ms</strong>
+        </div>
+        <div class="status-copy">
+          <span class="status-label">Current gears</span>
+          <strong id="organic-render-gears">0</strong>
+        </div>
+        <div class="status-copy">
+          <span class="status-label">Health</span>
+          <strong id="organic-render-health">Unknown</strong>
+        </div>
       </div>
     </section>
 
@@ -129,6 +153,35 @@ const quickSeeds = Array.from({ length: 6 }, (_, index) => DEFAULT_SEED + index)
     margin-top: 1rem;
   }
 
+  .status-strip {
+    margin-top: 1rem;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 0.7rem;
+  }
+
+  .status-copy {
+    padding: 0.72rem 0.85rem;
+    border-radius: 14px;
+    border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
+    background: rgba(6, 10, 16, 0.44);
+    display: grid;
+    gap: 0.22rem;
+  }
+
+  .status-label {
+    font-family: var(--font-label);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+    font-size: 0.72rem;
+  }
+
+  .status-copy strong {
+    font-family: var(--font-mono);
+    color: var(--text-primary);
+  }
+
   .nav-row a,
   .seed-chip,
   .controls-form button {
@@ -174,7 +227,7 @@ const quickSeeds = Array.from({ length: 6 }, (_, index) => DEFAULT_SEED + index)
 
   .controls-form {
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, max-content));
+    grid-template-columns: repeat(6, minmax(0, max-content));
     gap: 0.8rem;
     align-items: end;
   }
@@ -352,6 +405,10 @@ const quickSeeds = Array.from({ length: 6 }, (_, index) => DEFAULT_SEED + index)
     }
 
     .controls-form {
+      grid-template-columns: 1fr;
+    }
+
+    .status-strip {
       grid-template-columns: 1fr;
     }
 

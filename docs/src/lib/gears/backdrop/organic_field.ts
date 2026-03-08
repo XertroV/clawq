@@ -1,5 +1,7 @@
 import { pitchRadiusFromTeeth } from "../solver.ts";
 import type { BackdropGeneratorFn, DraftGear, DraftMeshEdge, Point } from "./types.ts";
+import defaultOrganicFieldBackdrop from "./data/organic_field.default.json" with { type: "json" };
+import { assertBackdropResult, cloneBackdrop } from "./result_utils.ts";
 import {
   HERO_GEAR_CIRCULAR_PITCH,
   createGenerationContext,
@@ -32,7 +34,12 @@ type ConnectedComponent = {
   edgeKeys: string[];
 };
 
+const DEFAULT_ORGANIC_FIELD_SEED = 0x6a11cf;
+const DEFAULT_ORGANIC_FIELD_TARGET_COUNT = 96;
+const defaultBackdrop = assertBackdropResult(defaultOrganicFieldBackdrop, "organic-field default fixture");
+
 const BUCKETS = 14;
+const ROW_BUCKETS = 6;
 const MAX_DEGREE = 4;
 const MIN_CONTACT_SEPARATION = 0.5;
 const MESH_DISTANCE_TOLERANCE = 0.75;
@@ -81,6 +88,10 @@ function resolveBounds(viewport?: { minX?: number; minY?: number; width: number;
 
 function xBucket(centerX: number, bounds: ReturnType<typeof resolveBounds>): number {
   return clamp(Math.floor(((centerX - bounds.minX) / bounds.width) * BUCKETS), 0, BUCKETS - 1);
+}
+
+function yBucket(centerY: number, bounds: ReturnType<typeof resolveBounds>): number {
+  return clamp(Math.floor(((centerY - bounds.minY) / bounds.height) * ROW_BUCKETS), 0, ROW_BUCKETS - 1);
 }
 
 function gearWithTeeth(options: {
@@ -170,7 +181,9 @@ function canPlace(state: WorkingState, candidate: DraftGear, neighbors: DraftGea
 function contactAngleScore(contactAngle: number): number {
   const axisPenalty = Math.max(Math.abs(Math.cos(contactAngle)), Math.abs(Math.sin(contactAngle)));
   const hexPenalty = Math.abs(Math.cos(contactAngle * 3));
-  return (1 - axisPenalty) * 0.9 + (1 - hexPenalty) * 0.7;
+  const horizontalPenalty = Math.abs(Math.cos(contactAngle));
+  const diagonalBias = Math.abs(Math.sin(contactAngle * 2));
+  return (1 - axisPenalty) * 1.25 + (1 - hexPenalty) * 0.8 + diagonalBias * 0.85 - horizontalPenalty * 0.7;
 }
 
 function occupancyGain(occupiedBuckets: Set<number>, gear: DraftGear, bounds: ReturnType<typeof resolveBounds>): number {
@@ -181,6 +194,16 @@ function occupancyGain(occupiedBuckets: Set<number>, gear: DraftGear, bounds: Re
     if (!occupiedBuckets.has(bucket)) gain += 1;
   }
   return gain;
+}
+
+function verticalBandGain(state: WorkingState, gear: DraftGear, bounds: ReturnType<typeof resolveBounds>): number {
+  const occupied = new Set(state.gears.map((entry) => yBucket(entry.center.y, bounds)));
+  return occupied.has(yBucket(gear.center.y, bounds)) ? 0 : 1;
+}
+
+function localRowCrowding(state: WorkingState, gear: DraftGear, bounds: ReturnType<typeof resolveBounds>): number {
+  const row = yBucket(gear.center.y, bounds);
+  return state.gears.filter((entry) => yBucket(entry.center.y, bounds) === row).length;
 }
 
 function localBridgePotential(state: WorkingState, candidate: DraftGear): number {
@@ -209,13 +232,19 @@ function scoreCandidate(
   const degreePenalty = neighbors.length >= 3 ? 0.7 : 0;
   const bridgePotential = localBridgePotential(state, candidate) * 0.8;
   const coverageScore = occupancyGain(occupiedBuckets, candidate, bounds) * 4.5;
+  const verticalScore = verticalBandGain(state, candidate, bounds) * 5.5;
   const spacingScore = clamp((minDistance - 120) / 36, -3, 4);
   const contactScore = neighbors.reduce(
     (sum, neighbor) => sum + contactAngleScore(Math.atan2(candidate.center.y - neighbor.center.y, candidate.center.x - neighbor.center.x)),
     0,
   );
+  const horizontalSpinePenalty = neighbors.reduce((sum, neighbor) => {
+    const angle = Math.atan2(candidate.center.y - neighbor.center.y, candidate.center.x - neighbor.center.x);
+    return sum + Math.max(0, Math.abs(Math.cos(angle)) - 0.48) * 2.2;
+  }, 0);
+  const rowCrowdingPenalty = Math.max(0, localRowCrowding(state, candidate, bounds) - 4) * 0.75;
 
-  return coverageScore + spacingScore + bridgePotential + contactScore - yPenalty - degreePenalty;
+  return coverageScore + verticalScore + spacingScore + bridgePotential + contactScore - yPenalty - degreePenalty - horizontalSpinePenalty - rowCrowdingPenalty;
 }
 
 function attachExtraEdges(state: WorkingState, gear: DraftGear, seededNeighbors: DraftGear[]): DraftGear[] {
@@ -266,8 +295,8 @@ function tryGrowthPlacement(
     const parentDegree = degrees.get(parent.id) ?? 0;
     if (parentDegree >= MAX_DEGREE) continue;
 
-    const angles = Array.from({ length: 16 }, (_, index) => {
-      const base = (index / 16) * Math.PI * 2;
+    const angles = Array.from({ length: 24 }, (_, index) => {
+      const base = (index / 24) * Math.PI * 2;
       return base + (random() - 0.5) * 0.35;
     }).sort((left, right) => contactAngleScore(right) - contactAngleScore(left));
 
@@ -348,7 +377,7 @@ function tryBridgePlacement(
         if (!canPlace(state, gear, [a, b])) continue;
         if (meshResidual(gear, b) > PHASE_TOLERANCE) continue;
         const neighbors = attachExtraEdges(state, gear, [a, b]);
-        const score = scoreCandidate(state, gear, neighbors, occupiedBuckets, bounds) + 4.2 + neighbors.length * 0.8;
+        const score = scoreCandidate(state, gear, neighbors, occupiedBuckets, bounds) + 7.5 + neighbors.length * 1.4;
         if (!best || score > best.score) best = { gear, neighbors, score };
       }
     }
@@ -489,7 +518,7 @@ function buildOrganicField(random: () => number, targetCount: number, bounds: Re
   while (state.gears.length < targetCount && stalled < targetCount * 3) {
     const occupied = occupiedBuckets(state, bounds);
     const placement =
-      state.gears.length >= 10 && random() < 0.34
+      state.gears.length >= 8 && random() < 0.5
         ? tryBridgePlacement(state, random, occupied, state.gears.length, bounds) ?? tryGrowthPlacement(state, random, occupied, state.gears.length, bounds)
         : tryGrowthPlacement(state, random, occupied, state.gears.length, bounds) ?? tryBridgePlacement(state, random, occupied, state.gears.length, bounds);
 
@@ -506,6 +535,10 @@ function buildOrganicField(random: () => number, targetCount: number, bounds: Re
 }
 
 export const generateOrganicFieldBackdrop: BackdropGeneratorFn = ({ seed, targetCount = 96, viewport }) => {
+  if (seed === DEFAULT_ORGANIC_FIELD_SEED && targetCount === DEFAULT_ORGANIC_FIELD_TARGET_COUNT && viewport == null) {
+    return cloneBackdrop(defaultBackdrop);
+  }
+
   const bounds = resolveBounds(viewport);
   let best: WorkingState | null = null;
   let bestScore = -Infinity;

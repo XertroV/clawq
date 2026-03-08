@@ -7,6 +7,7 @@ import type { DraftGear, DraftMeshEdge } from "../lib/gears/backdrop/types.ts";
 import { solveNeighborPhaseTurn } from "../lib/gears/backdrop/shared.ts";
 import { BACKDROP_ALGORITHMS, DEFAULT_HERO_GEAR_ALGORITHM, type BackdropAlgorithm } from "../lib/gears/backdrop_algorithms.ts";
 import { buildGearPath, type GearProfileTuning, type RotationDirection, type SolvedGear } from "../lib/gears";
+import organicFieldLanding from "../lib/gears/backdrop/data/organic_field.landing.json" with { type: "json" };
 
 interface Props {
   algorithm?: BackdropAlgorithm;
@@ -16,8 +17,22 @@ const { algorithm = DEFAULT_HERO_GEAR_ALGORITHM } = Astro.props as Props;
 const showDebugLabel = import.meta.env.DEV;
 const debugAlgorithms = BACKDROP_ALGORITHMS;
 const renderedCache = new Map<BackdropAlgorithm, { rendered: RenderedGear[]; trueMeshEdges: RenderedMeshEdge[] }>();
+const organicFieldSnapshot = organicFieldLanding as {
+  viewport?: { minX?: number; minY?: number; width?: number; height?: number };
+  result: { gears: DraftGear[]; edges: DraftMeshEdge[] };
+};
 
-const VIEWBOX = { width: 1600, height: 760 };
+const VIEWBOX =
+  algorithm === "organic-field"
+    ? {
+        minX: organicFieldSnapshot.viewport?.minX ?? 0,
+        minY: organicFieldSnapshot.viewport?.minY ?? 0,
+        width: organicFieldSnapshot.viewport?.width ?? 3440,
+        height: organicFieldSnapshot.viewport?.height ?? 900,
+      }
+    : { minX: 0, minY: 0, width: 1600, height: 760 };
+const DEFAULT_VIEWBOX_SCALE = algorithm === "organic-field" ? 1.22 : 1;
+const DEFAULT_VIEWBOX_PAN_Y_RATIO = algorithm === "organic-field" ? -0.37 : -0.24;
 const ROOT_PERIOD_SEC = 132;
 const ROOT_DIRECTION: RotationDirection = "cw";
 const TOOTH_TUNING: GearProfileTuning = {
@@ -200,7 +215,10 @@ function buildRenderedForAlgorithm(method: BackdropAlgorithm): {
   const cached = renderedCache.get(method);
   if (cached) return cached;
 
-  const generated = (generateHeroBackdropDraft as any)({ algorithm: method as unknown as string });
+  const generated =
+    method === "organic-field"
+      ? organicFieldSnapshot.result
+      : (generateHeroBackdropDraft as any)({ algorithm: method as unknown as string });
   const solved = buildSolvedGears(generated.gears, generated.edges);
   const trueMeshEdges = buildTrueMeshEdges(generated.gears, generated.edges);
 
@@ -240,10 +258,14 @@ const renderedByAlgorithm = renderAlgorithms.map((method) => ({
 <div class="hero-gear-backdrop" aria-hidden="true">
   <svg
     class="hero-gear-svg"
-    viewBox={`0 0 ${VIEWBOX.width} ${VIEWBOX.height}`}
+    viewBox={`${VIEWBOX.minX} ${VIEWBOX.minY} ${VIEWBOX.width} ${VIEWBOX.height}`}
     data-fixed-height-viewbox="true"
     data-viewbox-width={String(VIEWBOX.width)}
     data-viewbox-height={String(VIEWBOX.height)}
+    data-viewbox-origin-x={String(VIEWBOX.minX)}
+    data-viewbox-origin-y={String(VIEWBOX.minY)}
+    data-viewbox-scale={String(DEFAULT_VIEWBOX_SCALE)}
+    data-viewbox-pan-y-ratio={String(DEFAULT_VIEWBOX_PAN_Y_RATIO)}
     xmlns="http://www.w3.org/2000/svg"
     role="presentation"
   >
@@ -318,15 +340,25 @@ const renderedByAlgorithm = renderAlgorithms.map((method) => ({
 
       const baseWidth = Number(svg.dataset.viewboxWidth ?? '0');
       const fixedHeight = Number(svg.dataset.viewboxHeight ?? '0');
+      const baseOriginX = Number(svg.dataset.viewboxOriginX ?? '0');
+      const baseOriginY = Number(svg.dataset.viewboxOriginY ?? '0');
+      const requestedScale = Number(svg.dataset.viewboxScale ?? '1');
+      const requestedPanYRatio = Number(svg.dataset.viewboxPanYRatio ?? '0');
+      const scale = Number.isFinite(requestedScale) && requestedScale > 0 ? requestedScale : 1;
+      const panYRatio = Number.isFinite(requestedPanYRatio) ? requestedPanYRatio : 0;
       if (!(baseWidth > 0) || !(fixedHeight > 0)) return;
 
       const width = backdrop.clientWidth;
       const height = backdrop.clientHeight;
       if (!(width > 0) || !(height > 0)) return;
 
-      const dynamicWidth = (width / height) * fixedHeight;
-      const originX = (baseWidth - dynamicWidth) * 0.5;
-      svg.setAttribute('viewBox', `${originX} 0 ${dynamicWidth} ${fixedHeight}`);
+      const scaledHeight = fixedHeight * scale;
+      const scaledWidth = baseWidth * scale;
+      const scaledOriginX = baseOriginX - (scaledWidth - baseWidth) * 0.5;
+      const scaledOriginY = baseOriginY - (scaledHeight - fixedHeight) * 0.5 - scaledHeight * panYRatio;
+      const dynamicWidth = (width / height) * scaledHeight;
+      const originX = scaledOriginX + (scaledWidth - dynamicWidth) * 0.5;
+      svg.setAttribute('viewBox', `${originX} ${scaledOriginY} ${dynamicWidth} ${scaledHeight}`);
       svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
     };
 
@@ -349,6 +381,11 @@ const renderedByAlgorithm = renderAlgorithms.map((method) => ({
     const mutationObserver = new MutationObserver(scan);
     mutationObserver.observe(document.body, { childList: true, subtree: true });
     window.addEventListener('load', scan, { once: true });
+    window.addEventListener('clawq:hero-gear-sync', () => {
+      for (const node of document.querySelectorAll(SELECTOR)) {
+        if (node instanceof SVGSVGElement) syncViewBox(node);
+      }
+    });
   })();
 </script>
 
@@ -367,6 +404,11 @@ const renderedByAlgorithm = renderAlgorithms.map((method) => ({
       Show true mesh edges
       <input id="hero-gear-debug-mesh-toggle" type="checkbox" />
     </label>
+    <label class="hero-gear-debug-field" for="hero-gear-debug-scale">
+      Backdrop scale
+      <input id="hero-gear-debug-scale" type="range" min="0.5" max="1.8" step="0.02" value={String(DEFAULT_VIEWBOX_SCALE)} />
+      <span id="hero-gear-debug-scale-value">{DEFAULT_VIEWBOX_SCALE.toFixed(2)}x</span>
+    </label>
   </details>
 )}
 
@@ -375,7 +417,10 @@ const renderedByAlgorithm = renderAlgorithms.map((method) => ({
     (() => {
       const select = document.getElementById('hero-gear-debug-select');
       const meshToggle = document.getElementById('hero-gear-debug-mesh-toggle');
+      const scaleInput = document.getElementById('hero-gear-debug-scale');
+      const scaleValue = document.getElementById('hero-gear-debug-scale-value');
       const panel = document.getElementById('hero-gear-debug-panel');
+      const SCALE_STORAGE_KEY = 'clawq-hero-gear-scale';
       let backdrop = document.querySelector('.hero-gear-backdrop');
       if (!(select instanceof HTMLSelectElement)) return;
 
@@ -391,6 +436,26 @@ const renderedByAlgorithm = renderAlgorithms.map((method) => ({
       const applyMeshOverlay = (enabled) => {
         if (!(backdrop instanceof HTMLDivElement)) return;
         backdrop.classList.toggle('hero-gear-show-mesh', enabled);
+      };
+
+      const applyScale = (value) => {
+        const parsed = Number(value);
+        const scale = Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+        if (scaleInput instanceof HTMLInputElement) {
+          scaleInput.value = String(scale);
+        }
+        if (scaleValue instanceof HTMLElement) {
+          scaleValue.textContent = `${scale.toFixed(2)}x`;
+        }
+        for (const svg of document.querySelectorAll('.hero-gear-svg[data-fixed-height-viewbox="true"]')) {
+          if (svg instanceof SVGSVGElement) {
+            svg.dataset.viewboxScale = String(scale);
+          }
+        }
+        try {
+          window.localStorage.setItem(SCALE_STORAGE_KEY, String(scale));
+        } catch {}
+        window.dispatchEvent(new Event('clawq:hero-gear-sync'));
       };
 
       const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
@@ -596,6 +661,12 @@ const renderedByAlgorithm = renderAlgorithms.map((method) => ({
         });
       }
 
+      if (scaleInput instanceof HTMLInputElement) {
+        scaleInput.addEventListener('input', () => {
+          applyScale(scaleInput.value);
+        });
+      }
+
       select.addEventListener('change', async () => {
         const chosen = select.value;
 
@@ -627,6 +698,12 @@ const renderedByAlgorithm = renderAlgorithms.map((method) => ({
           backdrop = replacement;
           setVisibleAlgorithm(chosen);
           applyMeshOverlay(meshToggle instanceof HTMLInputElement ? meshToggle.checked : false);
+          try {
+            const storedScale = window.localStorage.getItem(SCALE_STORAGE_KEY);
+            applyScale(storedScale ?? (scaleInput instanceof HTMLInputElement ? scaleInput.value : '1'));
+          } catch {
+            applyScale(scaleInput instanceof HTMLInputElement ? scaleInput.value : '1');
+          }
           history.replaceState({}, '', url.toString());
         } catch (error) {
           console.error(error);
@@ -637,6 +714,13 @@ const renderedByAlgorithm = renderAlgorithms.map((method) => ({
         const summary = panel?.querySelector('summary');
         if (summary) summary.textContent = `gear generator: ${chosen}`;
       });
+
+      try {
+        const storedScale = window.localStorage.getItem(SCALE_STORAGE_KEY);
+        applyScale(storedScale ?? (scaleInput instanceof HTMLInputElement ? scaleInput.value : '1'));
+      } catch {
+        applyScale(scaleInput instanceof HTMLInputElement ? scaleInput.value : '1');
+      }
     })();
   </script>
 )}
@@ -707,7 +791,6 @@ const renderedByAlgorithm = renderAlgorithms.map((method) => ({
     height: 100%;
     display: block;
     overflow: visible;
-    transform: translateY(-08vh);
   }
 
   .hero-gear-entry {
