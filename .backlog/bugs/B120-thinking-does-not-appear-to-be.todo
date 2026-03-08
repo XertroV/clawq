@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B120
+priority: high
+status: pending
+tags: []
+title: Thinking does not appear to be shown in telegram (maybe not in other connectors too). Also, we should have a `/toggle-show-thinking` command to toggle that setting.
+---
+
+Thinking does not appear to be shown in telegram (maybe not in other connectors too). Also, we should have a `/toggle-show-thinking` command to toggle that setting.
