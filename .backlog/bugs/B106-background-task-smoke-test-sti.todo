@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B106
+priority: high
+status: pending
+tags: []
+title: 'Background task smoke test still fails after SQLite busy_timeout change: queued tasks remain queued with no pid/log/worktree even though daemon loop should poll them. Investigate whether the running daemon needs restart for the fix, whether background polling is actually active, and what start_queued_with_callback is doing in the live process.'
+---
+
+Background task smoke test still fails after SQLite busy_timeout change: queued tasks remain queued with no pid/log/worktree even though daemon loop should poll them. Investigate whether the running daemon needs restart for the fix, whether background polling is actually active, and what start_queued_with_callback is doing in the live process.
