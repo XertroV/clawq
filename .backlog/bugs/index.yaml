@@ -71,3 +71,4 @@ bugs:
     - file: B070-should-be-able-to-conifgure-co.todo
     - file: B071-double-tool-calls-2nd-without.todo
     - file: B072-tool-call-info-over-connectors.todo
+    - file: B073-implement-messages-from-connec.todo

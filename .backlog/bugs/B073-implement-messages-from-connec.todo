@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B073
+priority: high
+status: pending
+tags: []
+title: 'implement: messages from connectors (or anywhere) starting with `!` should interrupt the agent immediately and deliver the message.'
+---
+
+implement: messages from connectors (or anywhere) starting with `!` should interrupt the agent immediately and deliver the message.
