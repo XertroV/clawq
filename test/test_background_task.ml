@@ -247,7 +247,7 @@ let test_start_queued_spawns_queued_tasks () =
         | Error msg -> Alcotest.fail msg
       in
       let spawned = ref [] in
-      Background_task.start_queued_with_callback ~db
+      Background_task.start_queued_with_callback_impl ~db
         ~spawn_task:(fun ~on_task_finished:_ ~db:_ task -> spawned := task.id :: !spawned)
         ~on_task_finished:(fun _ -> Lwt.return_unit);
       Alcotest.(check (list int)) "queued task spawned" [ id ] (List.rev !spawned))

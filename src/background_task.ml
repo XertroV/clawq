@@ -716,13 +716,20 @@ let spawn_task ?(on_task_finished = fun _ -> Lwt.return_unit)
                 Lwt.return_unit)
         finalize)
 
-let start_queued_with_callback ?(spawn_task = spawn_task) ~on_task_finished ~db =
+let default_spawn_task ~on_task_finished ~db task =
+  spawn_task ~on_task_finished ~db task
+
+let start_queued_with_callback_impl ~spawn_task ~on_task_finished ~db =
   let queued =
     List.filter
       (fun t -> t.status = Queued && not (Hashtbl.mem running t.id))
       (list_tasks ~db)
   in
   List.iter (spawn_task ~on_task_finished ~db) queued
+
+let start_queued_with_callback ~on_task_finished ~db =
+  start_queued_with_callback_impl ~spawn_task:default_spawn_task
+    ~on_task_finished ~db
 
 let start_queued ~db =
   start_queued_with_callback ~on_task_finished:(fun _ -> Lwt.return_unit) ~db
