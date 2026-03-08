@@ -64,7 +64,7 @@ let start ~(config : Runtime_config.t) ~(session_manager : Session.t) =
       Lwt.return_unit
   | Some mm_config ->
       if mm_config.url = "" || mm_config.access_token = "" then begin
-        Logs.warn (fun m ->
+        Logs.info (fun m ->
             m "Mattermost: url or access_token is empty, skipping");
         Lwt.return_unit
       end

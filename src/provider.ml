@@ -762,11 +762,16 @@ let process_sse_stream ?(thinking_style = NoThinking) stream ~on_chunk =
     process_lines lines
   in
   let* () =
-    Lwt_stream.iter_s
-      (fun chunk ->
-        Buffer.add_string buf chunk;
-        process_buffer ())
-      stream
+    Lwt.finalize
+      (fun () ->
+        Lwt_stream.iter_s
+          (fun chunk ->
+            Buffer.add_string buf chunk;
+            process_buffer ())
+          stream)
+      (fun () ->
+        Lwt_stream.junk_available stream;
+        Lwt.return_unit)
   in
   (* process any remaining data in buffer *)
   let remaining = Buffer.contents buf in

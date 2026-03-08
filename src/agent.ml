@@ -8,6 +8,11 @@ type t = {
 exception Interrupted of string
 exception Restart_requested
 
+let () =
+  Resilience.register_non_retriable (function
+    | Restart_requested | Interrupted _ -> true
+    | _ -> false)
+
 let restart_interrupt_token = "__clawq_restart__"
 let queued_message_interrupt_token = "[queued inbound message]"
 

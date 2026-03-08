@@ -1130,7 +1130,7 @@ let start_polling ~(config : Runtime_config.t) ~(session_manager : Session.t)
             List.filter_map
               (fun (name, (account : Runtime_config.telegram_account)) ->
                 if account.bot_token = "" then (
-                  Logs.warn (fun m ->
+                  Logs.info (fun m ->
                       m "Telegram account '%s' has empty bot_token, skipping"
                         name);
                   None)

@@ -15,6 +15,10 @@ let with_timeout ~timeout_s f =
   in
   Lwt.pick [ operation; timeout ]
 
+let non_retriable : (exn -> bool) ref = ref (fun _ -> false)
+let register_non_retriable f = non_retriable := f
+let is_non_retriable exn = !non_retriable exn
+
 let with_retry ~max_retries ~base_delay_s f =
   let open Lwt.Syntax in
   let rec loop attempt last_exn =
@@ -26,7 +30,8 @@ let with_retry ~max_retries ~base_delay_s f =
       Lwt.catch
         (fun () -> f ())
         (fun exn ->
-          if attempt = max_retries then Lwt.fail exn
+          if is_non_retriable exn then Lwt.fail exn
+          else if attempt = max_retries then Lwt.fail exn
           else begin
             let delay = base_delay_s *. Float.pow 2.0 (Float.of_int attempt) in
             let delay = Float.min delay 30.0 in
@@ -44,11 +49,14 @@ let with_fallback ~primary ~fallback =
   Lwt.catch
     (fun () -> primary ())
     (fun exn ->
-      Log.info (fun m ->
-          m "Primary operation failed (%s), falling back"
-            (Printexc.to_string exn));
-      let* result = fallback () in
-      Lwt.return result)
+      if is_non_retriable exn then Lwt.fail exn
+      else begin
+        Log.info (fun m ->
+            m "Primary operation failed (%s), falling back"
+              (Printexc.to_string exn));
+        let* result = fallback () in
+        Lwt.return result
+      end)
 
 type circuit_state = Closed | Open of float | HalfOpen
 

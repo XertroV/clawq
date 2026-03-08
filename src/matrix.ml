@@ -142,7 +142,7 @@ let start ~(config : Runtime_config.t) ~(session_manager : Session.t) =
       Lwt.return_unit
   | Some cfg ->
       if cfg.homeserver_url = "" || cfg.access_token = "" then begin
-        Logs.warn (fun m ->
+        Logs.info (fun m ->
             m "Matrix: homeserver_url or access_token is empty, skipping");
         Lwt.return_unit
       end

@@ -331,7 +331,7 @@ let start ~(config : Runtime_config.t) ~(session_manager : Session.t) =
       Lwt.return_unit
   | Some cfg ->
       if cfg.host = "" then begin
-        Logs.warn (fun m -> m "IRC: host is empty, skipping");
+        Logs.info (fun m -> m "IRC: host is empty, skipping");
         Lwt.return_unit
       end
       else begin

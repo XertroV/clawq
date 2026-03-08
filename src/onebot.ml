@@ -151,7 +151,7 @@ let start ~(config : Runtime_config.t) ~(session_manager : Session.t) =
       Lwt.return_unit
   | Some ob_config ->
       if ob_config.ws_url = "" then begin
-        Logs.warn (fun m -> m "OneBot: ws_url is empty, skipping");
+        Logs.info (fun m -> m "OneBot: ws_url is empty, skipping");
         Lwt.return_unit
       end
       else begin

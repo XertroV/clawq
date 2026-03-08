@@ -553,7 +553,7 @@ let start ~(config : Runtime_config.t) ~(session_manager : Session.t) =
       Lwt.return_unit
   | Some cfg ->
       if cfg.imap_host = "" || cfg.smtp_host = "" then begin
-        Logs.warn (fun m ->
+        Logs.info (fun m ->
             m "Email: imap_host or smtp_host is empty, skipping");
         Lwt.return_unit
       end

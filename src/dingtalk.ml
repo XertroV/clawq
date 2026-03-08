@@ -113,7 +113,7 @@ let start ~(config : Runtime_config.t) ~(session_manager : Session.t) =
       Lwt.return_unit
   | Some dt_config ->
       if dt_config.app_key = "" || dt_config.app_secret = "" then begin
-        Logs.warn (fun m ->
+        Logs.info (fun m ->
             m "DingTalk: app_key or app_secret is empty, skipping");
         Lwt.return_unit
       end

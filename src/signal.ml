@@ -269,7 +269,7 @@ let start ~(config : Runtime_config.t) ~(session_manager : Session.t) =
       Lwt.return_unit
   | Some cfg ->
       if cfg.base_url = "" then begin
-        Logs.warn (fun m -> m "Signal: base_url is empty, skipping");
+        Logs.info (fun m -> m "Signal: base_url is empty, skipping");
         Lwt.return_unit
       end
       else begin

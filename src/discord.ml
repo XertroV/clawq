@@ -626,7 +626,7 @@ let start ~config ~session_manager ~db ~(message_limiter : Rate_limiter.t) =
       Lwt.return_unit
   | Some discord_config ->
       if discord_config.bot_token = "" then begin
-        Logs.warn (fun m -> m "Discord bot_token is empty, skipping");
+        Logs.info (fun m -> m "Discord bot_token is empty, skipping");
         Lwt.return_unit
       end
       else begin

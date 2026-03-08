@@ -368,11 +368,11 @@ let start ~(config : Runtime_config.t) ~(session_manager : Session.t) =
       Lwt.return_unit
   | Some nostr_config ->
       if nostr_config.private_key = "" then begin
-        Logs.warn (fun m -> m "Nostr: private_key is empty, skipping");
+        Logs.info (fun m -> m "Nostr: private_key is empty, skipping");
         Lwt.return_unit
       end
       else if nostr_config.relays = [] then begin
-        Logs.warn (fun m -> m "Nostr: no relays configured, skipping");
+        Logs.info (fun m -> m "Nostr: no relays configured, skipping");
         Lwt.return_unit
       end
       else begin
