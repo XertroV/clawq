@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B099
+priority: high
+status: pending
+tags: []
+title: 'Improve default workspace scaffold and injected workspace_files: include TOOLS.md by default, stop injecting BOOTSTRAP.md by default, add MEMORY.md scaffold, and refresh scaffolded EGO/IDENTITY/HEARTBEAT defaults to better reflect the intended agent operating model and register.'
+---
+
+Improve default workspace scaffold and injected workspace_files: include TOOLS.md by default, stop injecting BOOTSTRAP.md by default, add MEMORY.md scaffold, and refresh scaffolded EGO/IDENTITY/HEARTBEAT defaults to better reflect the intended agent operating model and register.
