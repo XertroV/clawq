@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B067
+priority: high
+status: pending
+tags: []
+title: add debug command to print out entire prompt for agent (up to first user message)
+---
+
+add debug command to print out entire prompt for agent (up to first user message)
