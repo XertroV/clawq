@@ -235,6 +235,7 @@ let make_assistant_with_tool_calls calls =
     tool_calls = calls;
     tool_call_id = None;
     name = None;
+    provider_response_items_json = None;
   }
 
 let make_tool_call id name =
@@ -377,6 +378,21 @@ let test_force_compress_tool_group_integrity () =
       else ())
     agent.history
 
+let test_cleanup_session_preserves_tool_groups () =
+  let db = Memory.init ~db_path:":memory:" () in
+  let tc = make_tool_call "tc1" "shell_exec" in
+  Memory.store_message ~db ~session_key:"s1"
+    (Provider.make_message ~role:"user" ~content:"old");
+  Memory.store_message ~db ~session_key:"s1"
+    (make_assistant_with_tool_calls [ tc ]);
+  Memory.store_message ~db ~session_key:"s1"
+    (make_tool_result_msg "tc1" "shell_exec");
+  Memory.cleanup_session ~db ~session_key:"s1" ~max_messages:1 ~max_age_days:0;
+  let after = Memory.load_history ~db ~session_key:"s1" in
+  Alcotest.(check int) "keeps complete tool group" 2 (List.length after);
+  Alcotest.(check string) "assistant kept" "assistant" (List.hd after).role;
+  Alcotest.(check string) "tool kept" "tool" (List.nth after 1).role
+
 let suite =
   [
     Alcotest.test_case "cleanup by count" `Quick test_cleanup_by_count;
@@ -413,4 +429,6 @@ let suite =
       test_trim_history_tool_group_integrity;
     Alcotest.test_case "force_compress tool group integrity" `Quick
       test_force_compress_tool_group_integrity;
+    Alcotest.test_case "cleanup session preserves tool groups" `Quick
+      test_cleanup_session_preserves_tool_groups;
   ]

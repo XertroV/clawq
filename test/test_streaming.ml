@@ -574,6 +574,92 @@ let test_codex_stream_backfill_only_missing () =
         "tc1 backfilled args" {|{"command":"pwd"}|} tc1.arguments
   | _ -> Alcotest.fail "Expected ToolCalls response"
 
+let test_codex_message_to_input_replays_raw_output_items () =
+  let raw_items =
+    {|[{"type":"reasoning","id":"rs_1"},{"type":"function_call","call_id":"call_1","name":"bash","arguments":"{}"}]|}
+  in
+  let msg =
+    {
+      Provider.role = "assistant";
+      content = "";
+      tool_calls = [];
+      tool_call_id = None;
+      name = None;
+      provider_response_items_json = Some raw_items;
+    }
+  in
+  match Provider_openai_codex.message_to_input msg with
+  | Some (`List items) ->
+      Alcotest.(check int) "replays all raw items" 2 (List.length items);
+      Alcotest.(check string)
+        "first item is reasoning" "reasoning"
+        Yojson.Safe.Util.(items |> List.hd |> member "type" |> to_string)
+  | _ -> Alcotest.fail "Expected raw output items to be replayed"
+
+let test_codex_stream_preserves_response_output_items () =
+  let sse json = "data: " ^ Yojson.Safe.to_string json ^ "\n\n" in
+  let chunks =
+    [
+      sse
+        (`Assoc
+           [
+             ("type", `String "response.completed");
+             ( "response",
+               `Assoc
+                 [
+                   ("model", `String "codex-mini");
+                   ( "usage",
+                     `Assoc
+                       [ ("input_tokens", `Int 10); ("output_tokens", `Int 5) ]
+                   );
+                   ( "output",
+                     `List
+                       [
+                         `Assoc
+                           [
+                             ("type", `String "reasoning");
+                             ("id", `String "rs_1");
+                           ];
+                         `Assoc
+                           [
+                             ("type", `String "function_call");
+                             ("call_id", `String "call_x");
+                             ("name", `String "file_read");
+                             ("arguments", `String {|{"path":"foo.ml"}|});
+                           ];
+                       ] );
+                 ] );
+           ]);
+    ]
+  in
+  let stream = Lwt_stream.of_list chunks in
+  let result =
+    Lwt_main.run
+      (Provider_openai_codex.process_stream stream ~on_chunk:(fun _ ->
+           Lwt.return_unit))
+  in
+  match result with
+  | Provider.ToolCalls { provider_response_items_json = Some raw; _ } ->
+      let items = Yojson.Safe.from_string raw |> Yojson.Safe.Util.to_list in
+      Alcotest.(check int) "raw output item count" 2 (List.length items)
+  | _ -> Alcotest.fail "Expected preserved provider response items"
+
+let test_codex_build_body_drops_orphan_tool_outputs () =
+  let body =
+    Provider_openai_codex.build_body ~model:"gpt-5"
+      ~messages:
+        [
+          Provider.make_message ~role:"system" ~content:"sys";
+          Provider.make_tool_result ~tool_call_id:"tc_missing" ~name:"bash"
+            ~content:"orphan";
+          Provider.make_message ~role:"user" ~content:"hello";
+        ]
+      None
+  in
+  let json = Yojson.Safe.from_string body in
+  let input = Yojson.Safe.Util.(json |> member "input" |> to_list) in
+  Alcotest.(check int) "orphan tool output omitted" 1 (List.length input)
+
 let suite =
   [
     Alcotest.test_case "SSE parse delta line" `Quick test_parse_sse_line_delta;
@@ -604,4 +690,10 @@ let suite =
       test_codex_stream_no_duplicate_tool_calls;
     Alcotest.test_case "codex stream backfill only missing" `Quick
       test_codex_stream_backfill_only_missing;
+    Alcotest.test_case "codex message replays raw output items" `Quick
+      test_codex_message_to_input_replays_raw_output_items;
+    Alcotest.test_case "codex stream preserves response output items" `Quick
+      test_codex_stream_preserves_response_output_items;
+    Alcotest.test_case "codex build body drops orphan tool outputs" `Quick
+      test_codex_build_body_drops_orphan_tool_outputs;
   ]

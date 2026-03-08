@@ -20,6 +20,16 @@ let strip_provider_prefix model =
     | _ -> model
   else model
 
+let restore_provider_response_items msg =
+  match msg.Provider.provider_response_items_json with
+  | Some raw -> (
+      try
+        match Yojson.Safe.from_string raw with
+        | `List items -> Some (`List items)
+        | item -> Some item
+      with _ -> None)
+  | None -> None
+
 let message_to_input (msg : Provider.message) =
   match msg.role with
   | "user" ->
@@ -37,41 +47,47 @@ let message_to_input (msg : Provider.message) =
                      ];
                  ] );
            ])
-  | "assistant" ->
-      let entries = ref [] in
-      if msg.content <> "" then
-        entries :=
-          !entries
-          @ [
-              `Assoc
-                [
-                  ("role", `String "assistant");
-                  ( "content",
-                    `List
-                      [
-                        `Assoc
-                          [
-                            ("type", `String "output_text");
-                            ("text", `String msg.content);
-                          ];
-                      ] );
-                ];
-            ];
-      List.iter
-        (fun (tc : Provider.tool_call) ->
+  | "assistant" -> (
+      let fallback () =
+        let entries = ref [] in
+        if msg.content <> "" then
           entries :=
             !entries
             @ [
                 `Assoc
                   [
-                    ("type", `String "function_call");
-                    ("call_id", `String tc.id);
-                    ("name", `String tc.function_name);
-                    ("arguments", `String tc.arguments);
+                    ("role", `String "assistant");
+                    ( "content",
+                      `List
+                        [
+                          `Assoc
+                            [
+                              ("type", `String "output_text");
+                              ("text", `String msg.content);
+                            ];
+                        ] );
                   ];
-              ])
-        msg.tool_calls;
-      Some (`List !entries)
+              ];
+        List.iter
+          (fun (tc : Provider.tool_call) ->
+            entries :=
+              !entries
+              @ [
+                  `Assoc
+                    [
+                      ("type", `String "function_call");
+                      ("call_id", `String tc.id);
+                      ("name", `String tc.function_name);
+                      ("arguments", `String tc.arguments);
+                    ];
+                ])
+          msg.tool_calls;
+        Some (`List !entries)
+      in
+      match restore_provider_response_items msg with
+      | Some (`List _ as items) -> Some items
+      | Some item -> Some item
+      | None -> fallback ())
   | "tool" -> (
       match msg.tool_call_id with
       | Some tool_call_id ->
@@ -139,6 +155,9 @@ let extract_instructions messages =
 
 let build_body ~model ~messages tools =
   let instructions, non_system_messages = extract_instructions messages in
+  let non_system_messages =
+    Message_history.ensure_tool_group_integrity non_system_messages
+  in
   `Assoc
     ([
        ("model", `String (strip_provider_prefix model));
@@ -203,6 +222,11 @@ let extract_final_output response_json =
       else (text_acc, tool_acc))
     ("", []) output
 
+let provider_response_items_json response_json =
+  let open Yojson.Safe.Util in
+  try Some (Yojson.Safe.to_string (response_json |> member "output"))
+  with _ -> None
+
 let process_stream stream ~on_chunk =
   let open Lwt.Syntax in
   let content_acc = Buffer.create 1024 in
@@ -211,6 +235,7 @@ let process_stream stream ~on_chunk =
   in
   let usage_acc = ref None in
   let model_acc = ref "" in
+  let response_items_json_acc = ref None in
   let parse_json_line line =
     let prefix = "data: " in
     if
@@ -326,6 +351,7 @@ let process_stream stream ~on_chunk =
       in
       if model <> "" then model_acc := model;
       usage_acc := usage_of_json (response_json |> member "usage");
+      response_items_json_acc := provider_response_items_json response_json;
       on_chunk Provider.Done
     end
     else Lwt.return_unit
@@ -379,8 +405,22 @@ let process_stream stream ~on_chunk =
   let text = Buffer.contents content_acc in
   if tool_calls <> [] then
     Lwt.return
-      (Provider.ToolCalls { calls = tool_calls; model; usage = !usage_acc })
-  else Lwt.return (Provider.Text { content = text; model; usage = !usage_acc })
+      (Provider.ToolCalls
+         {
+           calls = tool_calls;
+           model;
+           usage = !usage_acc;
+           provider_response_items_json = !response_items_json_acc;
+         })
+  else
+    Lwt.return
+      (Provider.Text
+         {
+           content = text;
+           model;
+           usage = !usage_acc;
+           provider_response_items_json = !response_items_json_acc;
+         })
 
 let do_request ~provider_name ~provider ~model ~messages ?tools ~on_chunk () =
   let open Lwt.Syntax in

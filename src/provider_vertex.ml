@@ -302,7 +302,14 @@ let complete_streaming ~(config : Runtime_config.t)
                calls = !tool_calls_acc;
                model = final_model;
                usage = !usage_acc;
+               provider_response_items_json = None;
              })
       else
         Lwt.return
-          (Provider.Text { content; model = final_model; usage = !usage_acc })
+          (Provider.Text
+             {
+               content;
+               model = final_model;
+               usage = !usage_acc;
+               provider_response_items_json = None;
+             })

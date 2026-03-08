@@ -83,7 +83,14 @@ let parse_cohere_response body model =
       else []
     in
     if tool_calls <> [] then
-      Ok (Provider.ToolCalls { calls = tool_calls; model = resp_model; usage })
+      Ok
+        (Provider.ToolCalls
+           {
+             calls = tool_calls;
+             model = resp_model;
+             usage;
+             provider_response_items_json = None;
+           })
     else
       let content =
         try
@@ -98,7 +105,14 @@ let parse_cohere_response body model =
         with _ -> (
           try message |> member "content" |> to_string with _ -> "")
       in
-      Ok (Provider.Text { content; model = resp_model; usage })
+      Ok
+        (Provider.Text
+           {
+             content;
+             model = resp_model;
+             usage;
+             provider_response_items_json = None;
+           })
   with exn ->
     Error ("Failed to parse Cohere response: " ^ Printexc.to_string exn)
 
@@ -284,7 +298,18 @@ let complete_streaming ~(config : Runtime_config.t)
     if !tool_calls_acc <> [] then
       Lwt.return
         (Provider.ToolCalls
-           { calls = !tool_calls_acc; model = final_model; usage = !usage_acc })
+           {
+             calls = !tool_calls_acc;
+             model = final_model;
+             usage = !usage_acc;
+             provider_response_items_json = None;
+           })
     else
       Lwt.return
-        (Provider.Text { content; model = final_model; usage = !usage_acc })
+        (Provider.Text
+           {
+             content;
+             model = final_model;
+             usage = !usage_acc;
+             provider_response_items_json = None;
+           })

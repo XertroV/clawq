@@ -1,4 +1,4 @@
-let schema_version = 2
+let schema_version = 3
 
 let exec_exn db sql =
   match Sqlite3.exec db sql with
@@ -61,7 +61,14 @@ let migrate_schema db current_version =
            schema_version)
   | 1 ->
       init_session_schema db;
-      set_schema_version db 2
+      exec_exn db
+        "ALTER TABLE messages ADD COLUMN provider_response_items_json TEXT";
+      set_schema_version db 3
+  | 2 ->
+      init_session_schema db;
+      exec_exn db
+        "ALTER TABLE messages ADD COLUMN provider_response_items_json TEXT";
+      set_schema_version db 3
   | n when n = schema_version -> ()
   | n ->
       failwith
@@ -116,6 +123,7 @@ let init ~db_path ?(search_enabled = false) () =
     \     tool_call_id TEXT,\n\
     \     tool_name TEXT,\n\
     \     tool_calls_json TEXT,\n\
+    \     provider_response_items_json TEXT,\n\
     \     created_at TEXT NOT NULL DEFAULT (datetime('now'))\n\
     \   )";
   migrate_schema db current_version;
@@ -157,7 +165,8 @@ let store_message ~db ~session_key (msg : Provider.message) =
   in
   let sql =
     "INSERT INTO messages (session_key, role, content, tool_call_id, \
-     tool_name, tool_calls_json) VALUES (?, ?, ?, ?, ?, ?)"
+     tool_name, tool_calls_json, provider_response_items_json) VALUES (?, ?, \
+     ?, ?, ?, ?, ?)"
   in
   let stmt = Sqlite3.prepare db sql in
   ignore (Sqlite3.bind stmt 1 (Sqlite3.Data.TEXT session_key));
@@ -178,6 +187,11 @@ let store_message ~db ~session_key (msg : Provider.message) =
        (match tool_calls_json with
        | Some j -> Sqlite3.Data.TEXT j
        | None -> Sqlite3.Data.NULL));
+  ignore
+    (Sqlite3.bind stmt 7
+       (match msg.provider_response_items_json with
+       | Some j -> Sqlite3.Data.TEXT j
+       | None -> Sqlite3.Data.NULL));
   (match Sqlite3.step stmt with
   | Sqlite3.Rc.DONE -> ()
   | rc ->
@@ -187,8 +201,9 @@ let store_message ~db ~session_key (msg : Provider.message) =
 
 let load_history ~db ~session_key =
   let sql =
-    "SELECT role, content, tool_call_id, tool_name, tool_calls_json FROM \
-     messages WHERE session_key = ? ORDER BY id ASC"
+    "SELECT role, content, tool_call_id, tool_name, tool_calls_json, \
+     provider_response_items_json FROM messages WHERE session_key = ? ORDER BY \
+     id ASC"
   in
   let stmt = Sqlite3.prepare db sql in
   ignore (Sqlite3.bind stmt 1 (Sqlite3.Data.TEXT session_key));
@@ -226,8 +241,21 @@ let load_history ~db ~session_key =
           with _ -> [])
       | _ -> []
     in
+    let provider_response_items_json =
+      match Sqlite3.column stmt 5 with
+      | Sqlite3.Data.TEXT s -> Some s
+      | _ -> None
+    in
     messages :=
-      { Provider.role; content; tool_calls; tool_call_id; name } :: !messages
+      {
+        Provider.role;
+        content;
+        tool_calls;
+        tool_call_id;
+        name;
+        provider_response_items_json;
+      }
+      :: !messages
   done;
   ignore (Sqlite3.finalize stmt);
   List.rev !messages
@@ -355,18 +383,25 @@ let cleanup_session ~db ~session_key ~max_messages ~max_age_days =
     ignore (Sqlite3.step stmt);
     ignore (Sqlite3.finalize stmt)
   end;
-  if max_messages > 0 then begin
-    let sql =
-      "DELETE FROM messages WHERE session_key = ? AND id NOT IN (SELECT id \
-       FROM messages WHERE session_key = ? ORDER BY id DESC LIMIT ?)"
-    in
-    let stmt = Sqlite3.prepare db sql in
-    ignore (Sqlite3.bind stmt 1 (Sqlite3.Data.TEXT session_key));
-    ignore (Sqlite3.bind stmt 2 (Sqlite3.Data.TEXT session_key));
-    ignore (Sqlite3.bind stmt 3 (Sqlite3.Data.INT (Int64.of_int max_messages)));
-    ignore (Sqlite3.step stmt);
-    ignore (Sqlite3.finalize stmt)
-  end
+  let messages = load_history ~db ~session_key in
+  let sanitized = Message_history.ensure_tool_group_integrity messages in
+  let kept =
+    if max_messages > 0 && List.length sanitized > max_messages then begin
+      let compact_count = List.length sanitized - max_messages in
+      let to_compact_raw =
+        List.filteri (fun i _ -> i < compact_count) sanitized
+      in
+      let to_keep_raw =
+        List.filteri (fun i _ -> i >= compact_count) sanitized
+      in
+      let to_keep =
+        Message_history.expand_keep_for_tool_groups to_compact_raw to_keep_raw
+      in
+      Message_history.ensure_tool_group_integrity to_keep
+    end
+    else sanitized
+  in
+  if kept <> messages then replace_session_messages ~db ~session_key kept
 
 let cleanup_all ~db ~max_messages ~max_age_days =
   let sessions = list_sessions ~db in
@@ -517,14 +552,15 @@ let search ~db ~query ?session_key ~limit () =
     match session_key with
     | Some _ ->
         ( "SELECT m.role, m.content, m.tool_call_id, m.tool_name, \
-           m.tool_calls_json FROM messages m JOIN messages_fts f ON m.id = \
-           f.rowid WHERE messages_fts MATCH ? AND f.session_key = ? ORDER BY \
-           f.rank LIMIT ?",
+           m.tool_calls_json, m.provider_response_items_json FROM messages m \
+           JOIN messages_fts f ON m.id = f.rowid WHERE messages_fts MATCH ? \
+           AND f.session_key = ? ORDER BY f.rank LIMIT ?",
           true )
     | None ->
         ( "SELECT m.role, m.content, m.tool_call_id, m.tool_name, \
-           m.tool_calls_json FROM messages m JOIN messages_fts f ON m.id = \
-           f.rowid WHERE messages_fts MATCH ? ORDER BY f.rank LIMIT ?",
+           m.tool_calls_json, m.provider_response_items_json FROM messages m \
+           JOIN messages_fts f ON m.id = f.rowid WHERE messages_fts MATCH ? \
+           ORDER BY f.rank LIMIT ?",
           false )
   in
   let stmt = Sqlite3.prepare db sql in
@@ -570,8 +606,21 @@ let search ~db ~query ?session_key ~limit () =
           with _ -> [])
       | _ -> []
     in
+    let provider_response_items_json =
+      match Sqlite3.column stmt 5 with
+      | Sqlite3.Data.TEXT s -> Some s
+      | _ -> None
+    in
     messages :=
-      { Provider.role; content; tool_calls; tool_call_id; name } :: !messages
+      {
+        Provider.role;
+        content;
+        tool_calls;
+        tool_call_id;
+        name;
+        provider_response_items_json;
+      }
+      :: !messages
   done;
   ignore (Sqlite3.finalize stmt);
   List.rev !messages

@@ -155,7 +155,14 @@ let parse_gemini_response body model =
         parts
     in
     if tool_calls <> [] then
-      Ok (Provider.ToolCalls { calls = tool_calls; model = resp_model; usage })
+      Ok
+        (Provider.ToolCalls
+           {
+             calls = tool_calls;
+             model = resp_model;
+             usage;
+             provider_response_items_json = None;
+           })
     else
       let text =
         List.fold_left
@@ -166,7 +173,14 @@ let parse_gemini_response body model =
             with _ -> acc)
           "" parts
       in
-      Ok (Provider.Text { content = text; model = resp_model; usage })
+      Ok
+        (Provider.Text
+           {
+             content = text;
+             model = resp_model;
+             usage;
+             provider_response_items_json = None;
+           })
   with exn ->
     Error ("Failed to parse Gemini response: " ^ Printexc.to_string exn)
 
@@ -353,7 +367,18 @@ let complete_streaming ~(config : Runtime_config.t)
     if !tool_calls_acc <> [] then
       Lwt.return
         (Provider.ToolCalls
-           { calls = !tool_calls_acc; model = final_model; usage = !usage_acc })
+           {
+             calls = !tool_calls_acc;
+             model = final_model;
+             usage = !usage_acc;
+             provider_response_items_json = None;
+           })
     else
       Lwt.return
-        (Provider.Text { content; model = final_model; usage = !usage_acc })
+        (Provider.Text
+           {
+             content;
+             model = final_model;
+             usage = !usage_acc;
+             provider_response_items_json = None;
+           })

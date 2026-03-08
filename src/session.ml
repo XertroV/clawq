@@ -223,10 +223,15 @@ let get_or_create_locked mgr ~key =
       | Some db ->
           let history = Memory.load_history ~db ~session_key:key in
           if history <> [] then begin
-            agent.history <- List.rev history;
+            let sanitized =
+              Message_history.ensure_tool_group_integrity history
+            in
+            agent.history <- List.rev sanitized;
             Logs.info (fun m ->
-                m "Restored %d messages for session %s" (List.length history)
-                  key)
+                m "Restored %d messages for session %s" (List.length sanitized)
+                  key);
+            if List.length sanitized <> List.length history then
+              Memory.replace_session_messages ~db ~session_key:key sanitized
           end
       | None -> ());
       (match mgr.db with

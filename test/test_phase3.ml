@@ -366,6 +366,7 @@ let test_memory_tool_calls () =
         ];
       tool_call_id = None;
       name = None;
+      provider_response_items_json = None;
     }
   in
   Memory.store_message ~db ~session_key:"tool_test" tool_msg;

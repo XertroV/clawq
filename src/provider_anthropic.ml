@@ -132,7 +132,13 @@ let parse_anthropic_response body model =
       in
       if tool_calls <> [] then
         Ok
-          (Provider.ToolCalls { calls = tool_calls; model = resp_model; usage })
+          (Provider.ToolCalls
+             {
+               calls = tool_calls;
+               model = resp_model;
+               usage;
+               provider_response_items_json = None;
+             })
       else Error "tool_use stop reason but no tool_use blocks found"
     else
       let content =
@@ -147,7 +153,14 @@ let parse_anthropic_response body model =
             with _ -> acc)
           "" content_list
       in
-      Ok (Provider.Text { content; model = resp_model; usage })
+      Ok
+        (Provider.Text
+           {
+             content;
+             model = resp_model;
+             usage;
+             provider_response_items_json = None;
+           })
   with exn ->
     Error ("Failed to parse Anthropic response: " ^ Printexc.to_string exn)
 
@@ -470,7 +483,18 @@ let complete_streaming ~(config : Runtime_config.t)
     if tool_calls <> [] then
       Lwt.return
         (Provider.ToolCalls
-           { calls = tool_calls; model = final_model; usage = !usage_acc })
+           {
+             calls = tool_calls;
+             model = final_model;
+             usage = !usage_acc;
+             provider_response_items_json = None;
+           })
     else
       Lwt.return
-        (Provider.Text { content; model = final_model; usage = !usage_acc })
+        (Provider.Text
+           {
+             content;
+             model = final_model;
+             usage = !usage_acc;
+             provider_response_items_json = None;
+           })

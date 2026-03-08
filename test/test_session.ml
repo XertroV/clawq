@@ -1020,6 +1020,7 @@ let test_mid_turn_injection_adds_to_history () =
         tool_calls = [ make_tool_call ~id:"tc1" ~name:"tool_a" ];
         tool_call_id = None;
         name = None;
+        provider_response_items_json = None;
       };
     ];
   Lwt_main.run
@@ -1040,6 +1041,27 @@ let test_mid_turn_injection_adds_to_history () =
       agent.history
   in
   Alcotest.(check bool) "injected message in history" true has_injected
+
+let test_restore_sanitizes_orphaned_tool_results () =
+  let db = Memory.init ~db_path:":memory:" () in
+  Memory.store_message ~db ~session_key:"web:s1"
+    (Provider.make_tool_result ~tool_call_id:"tc_missing" ~name:"file_read"
+       ~content:"orphan");
+  Memory.store_message ~db ~session_key:"web:s1"
+    (Provider.make_message ~role:"user" ~content:"hello");
+  let config = Runtime_config.default in
+  let mgr = Session.create ~config ~db () in
+  Lwt_main.run
+    (Session.with_session_lock mgr ~key:"web:s1" (fun agent _interrupt ->
+         Alcotest.(check int)
+           "orphan removed from restored history" 1
+           (List.length agent.Agent.history);
+         Alcotest.(check string)
+           "user message kept" "user"
+           (List.hd agent.Agent.history).Provider.role;
+         Lwt.return_unit));
+  let persisted = Memory.load_history ~db ~session_key:"web:s1" in
+  Alcotest.(check int) "sanitized history persisted" 1 (List.length persisted)
 
 let suite =
   [
@@ -1113,6 +1135,8 @@ let suite =
       test_queued_interrupt_does_not_skip_tools;
     Alcotest.test_case "mid-turn injection adds to history" `Quick
       test_mid_turn_injection_adds_to_history;
+    Alcotest.test_case "restore sanitizes orphaned tool results" `Quick
+      test_restore_sanitizes_orphaned_tool_results;
   ]
 
 let test_drain_queued_messages_drains_all_pending_without_relock () =

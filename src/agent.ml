@@ -8,9 +8,25 @@ type t = {
 exception Interrupted of string
 exception Restart_requested
 
+let string_contains_ci_small s sub =
+  let sl = String.lowercase_ascii s in
+  let subl = String.lowercase_ascii sub in
+  let ls = String.length sl and lsub = String.length subl in
+  if lsub > ls then false
+  else
+    let rec loop i =
+      if i > ls - lsub then false
+      else if String.sub sl i lsub = subl then true
+      else loop (i + 1)
+    in
+    loop 0
+
 let () =
   Resilience.register_non_retriable (function
     | Restart_requested | Interrupted _ -> true
+    | Failure msg ->
+        string_contains_ci_small msg
+          "no tool call found for function call output"
     | _ -> false)
 
 let restart_interrupt_token = "__clawq_restart__"
@@ -113,60 +129,18 @@ let max_tool_result_chars = 12000
    start of [to_keep] are moved back into [to_compact]. A tool result is
    orphaned if the assistant message whose tool_calls produced it lives in
    [to_compact] (or is absent entirely). *)
-let adjust_split_for_tool_groups to_compact to_keep =
-  let rec move_orphans compact keep =
-    match keep with
-    | (msg : Provider.message) :: rest when msg.role = "tool" ->
-        move_orphans (compact @ [ msg ]) rest
-    | _ -> (compact, keep)
-  in
-  move_orphans to_compact to_keep
+let adjust_split_for_tool_groups = Message_history.adjust_split_for_tool_groups
 
 (* Collect all tool_call ids present in assistant messages of [msgs]. *)
-let collect_tool_call_ids msgs =
-  List.fold_left
-    (fun acc (m : Provider.message) ->
-      if m.role = "assistant" && m.tool_calls <> [] then
-        List.fold_left
-          (fun acc (tc : Provider.tool_call) ->
-            (* Use a simple assoc-list set *)
-            if List.mem tc.id acc then acc else tc.id :: acc)
-          acc m.tool_calls
-      else acc)
-    [] msgs
+let collect_tool_call_ids = Message_history.collect_tool_call_ids
 
 (* Collect all tool_call_ids referenced by tool-result messages in [msgs]. *)
-let collect_tool_result_ids msgs =
-  List.fold_left
-    (fun acc (m : Provider.message) ->
-      match m.tool_call_id with
-      | Some id when m.role = "tool" ->
-          if List.mem id acc then acc else id :: acc
-      | _ -> acc)
-    [] msgs
+let collect_tool_result_ids = Message_history.collect_tool_result_ids
 
 (* Safety-net: remove orphaned tool results (no matching assistant tool_call)
    and strip dangling tool_calls from assistant messages (no matching tool
    result). Works on messages in any order. *)
-let ensure_tool_group_integrity msgs =
-  let call_ids = collect_tool_call_ids msgs in
-  let result_ids = collect_tool_result_ids msgs in
-  msgs
-  |> List.filter (fun (m : Provider.message) ->
-      if m.role = "tool" then
-        match m.tool_call_id with
-        | Some id -> List.mem id call_ids
-        | None -> true
-      else true)
-  |> List.map (fun (m : Provider.message) ->
-      if m.role = "assistant" && m.tool_calls <> [] then
-        let kept =
-          List.filter
-            (fun (tc : Provider.tool_call) -> List.mem tc.id result_ids)
-            m.tool_calls
-        in
-        { m with tool_calls = kept }
-      else m)
+let ensure_tool_group_integrity = Message_history.ensure_tool_group_integrity
 
 (* Backstop: enforce the hard message-count cap only. Token-based compaction
    (with LLM summarisation) is handled by compact_history_if_needed before
@@ -899,9 +873,11 @@ let turn agent ~user_message ?db ?session_key ?interrupt_check ?inject_messages
     in
     track_cost response;
     match response with
-    | Provider.Text { content; _ } ->
+    | Provider.Text { content; provider_response_items_json; _ } ->
         agent.history <-
-          Provider.make_message ~role:"assistant" ~content :: agent.history;
+          Provider.make_message_full ~provider_response_items_json
+            ~role:"assistant" ~content
+          :: agent.history;
         trim_history agent;
         Lwt.return content
     | Provider.ToolCalls { calls; _ } when tools = None ->
@@ -931,7 +907,7 @@ let turn agent ~user_message ?db ?session_key ?interrupt_check ?inject_messages
           Provider.make_message ~role:"assistant" ~content :: agent.history;
         trim_history agent;
         Lwt.return content
-    | Provider.ToolCalls { calls; _ } -> (
+    | Provider.ToolCalls { calls; provider_response_items_json; _ } -> (
         let assistant_msg =
           {
             Provider.role = "assistant";
@@ -939,6 +915,7 @@ let turn agent ~user_message ?db ?session_key ?interrupt_check ?inject_messages
             tool_calls = calls;
             tool_call_id = None;
             name = None;
+            provider_response_items_json;
           }
         in
         agent.history <- assistant_msg :: agent.history;
@@ -1083,9 +1060,11 @@ let turn_stream agent ~user_message ?db ?session_key ?interrupt_check
         in
         track_cost response;
         match response with
-        | Provider.Text { content; _ } ->
+        | Provider.Text { content; provider_response_items_json; _ } ->
             agent.history <-
-              Provider.make_message ~role:"assistant" ~content :: agent.history;
+              Provider.make_message_full ~provider_response_items_json
+                ~role:"assistant" ~content
+              :: agent.history;
             trim_history agent;
             Lwt.return content
         | Provider.ToolCalls { calls; _ } when tools = None ->
@@ -1111,7 +1090,7 @@ let turn_stream agent ~user_message ?db ?session_key ?interrupt_check
             trim_history agent;
             let* () = on_chunk (Provider.Delta content) in
             Lwt.return content
-        | Provider.ToolCalls { calls; _ } -> (
+        | Provider.ToolCalls { calls; provider_response_items_json; _ } -> (
             let assistant_msg =
               {
                 Provider.role = "assistant";
@@ -1119,6 +1098,7 @@ let turn_stream agent ~user_message ?db ?session_key ?interrupt_check
                 tool_calls = calls;
                 tool_call_id = None;
                 name = None;
+                provider_response_items_json;
               }
             in
             agent.history <- assistant_msg :: agent.history;

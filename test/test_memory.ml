@@ -87,10 +87,10 @@ let test_init_double_call () =
   ignore db1;
   ignore db2
 
-let test_init_schema_version_is_2 () =
+let test_init_schema_version_is_3 () =
   let db = Memory.init ~db_path:":memory:" () in
   Alcotest.(check int)
-    "schema version is 2" 2
+    "schema version is 3" 3
     (query_single_int db "SELECT version FROM schema_version")
 
 let test_init_creates_session_persistence_tables () =
@@ -102,7 +102,7 @@ let test_init_creates_session_persistence_tables () =
     "discord_resume_state exists" true
     (table_exists db "discord_resume_state")
 
-let test_migrates_v1_db_to_v2_without_data_loss () =
+let test_migrates_v1_db_to_v3_without_data_loss () =
   with_temp_db (fun db_path ->
       let db = Sqlite3.db_open db_path in
       exec_exn db "CREATE TABLE schema_version (version INTEGER NOT NULL)";
@@ -124,7 +124,7 @@ let test_migrates_v1_db_to_v2_without_data_loss () =
       ignore (Sqlite3.db_close db);
       let migrated = Memory.init ~db_path () in
       Alcotest.(check int)
-        "schema version migrated" 2
+        "schema version migrated" 3
         (query_single_int migrated "SELECT version FROM schema_version");
       Alcotest.(check bool)
         "session_state exists after migration" true
@@ -226,6 +226,7 @@ let test_store_message_with_tool_call_id () =
       tool_calls = [];
       tool_call_id = Some "tcid-123";
       name = Some "file_read";
+      provider_response_items_json = None;
     }
   in
   Memory.store_message ~db ~session_key:"s1" msg;
@@ -246,6 +247,7 @@ let test_store_message_with_tool_calls () =
       tool_calls = [ tc ];
       tool_call_id = None;
       name = None;
+      provider_response_items_json = None;
     }
   in
   Memory.store_message ~db ~session_key:"s1" msg;
@@ -457,6 +459,7 @@ let test_tool_cycle_history_shape () =
       tool_calls = [ tc1; tc2 ];
       tool_call_id = None;
       name = None;
+      provider_response_items_json = None;
     }
   in
   Memory.store_message ~db ~session_key:"s1" assistant_with_calls;
@@ -482,6 +485,22 @@ let test_tool_cycle_history_shape () =
   Alcotest.(check (option string))
     "tool result #2 id" (Some "call-2") third.tool_call_id
 
+let test_provider_response_items_roundtrip () =
+  let db = Memory.init ~db_path:":memory:" () in
+  let msg =
+    Provider.make_message_full
+      ~provider_response_items_json:
+        (Some
+           {|[{"type":"reasoning","id":"rs_1"},{"type":"function_call","call_id":"call_1","name":"bash","arguments":"{}"}]|})
+      ~role:"assistant" ~content:""
+  in
+  Memory.store_message ~db ~session_key:"s1" msg;
+  let msgs = Memory.load_history ~db ~session_key:"s1" in
+  let loaded = List.hd msgs in
+  Alcotest.(check (option string))
+    "provider response items preserved" msg.provider_response_items_json
+    loaded.provider_response_items_json
+
 let suite =
   [
     Alcotest.test_case "init sets busy_timeout" `Quick
@@ -490,12 +509,12 @@ let suite =
     Alcotest.test_case "init search enabled" `Quick test_init_search_enabled;
     Alcotest.test_case "init search disabled" `Quick test_init_search_disabled;
     Alcotest.test_case "init double call" `Quick test_init_double_call;
-    Alcotest.test_case "init schema version is 2" `Quick
-      test_init_schema_version_is_2;
+    Alcotest.test_case "init schema version is 3" `Quick
+      test_init_schema_version_is_3;
     Alcotest.test_case "init creates session persistence tables" `Quick
       test_init_creates_session_persistence_tables;
-    Alcotest.test_case "migrates v1 db to v2 without data loss" `Quick
-      test_migrates_v1_db_to_v2_without_data_loss;
+    Alcotest.test_case "migrates v1 db to v3 without data loss" `Quick
+      test_migrates_v1_db_to_v3_without_data_loss;
     Alcotest.test_case "upsert session state roundtrip" `Quick
       test_upsert_session_state_roundtrip;
     Alcotest.test_case "mark response sent updates state" `Quick
@@ -545,4 +564,6 @@ let suite =
     Alcotest.test_case "tool result roundtrip" `Quick test_tool_result_roundtrip;
     Alcotest.test_case "tool cycle history shape" `Quick
       test_tool_cycle_history_shape;
+    Alcotest.test_case "provider response items roundtrip" `Quick
+      test_provider_response_items_roundtrip;
   ]

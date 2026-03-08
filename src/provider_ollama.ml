@@ -125,7 +125,12 @@ let complete ~(config : Runtime_config.t)
       if tool_calls <> [] then
         Lwt.return
           (Provider.ToolCalls
-             { calls = tool_calls; model = resp_model; usage = None })
+             {
+               calls = tool_calls;
+               model = resp_model;
+               usage = None;
+               provider_response_items_json = None;
+             })
       else
         let raw_content =
           try msg |> member "content" |> to_string with _ -> ""
@@ -140,7 +145,13 @@ let complete ~(config : Runtime_config.t)
           Lwt.fail_with "Failed to extract content from Ollama response"
         else
           Lwt.return
-            (Provider.Text { content; model = resp_model; usage = None })
+            (Provider.Text
+               {
+                 content;
+                 model = resp_model;
+                 usage = None;
+                 provider_response_items_json = None;
+               })
     with exn ->
       Lwt.fail_with
         ("Failed to parse Ollama response: " ^ Printexc.to_string exn)
@@ -269,6 +280,18 @@ let complete_streaming ~(config : Runtime_config.t)
     if !tool_calls_acc <> [] then
       Lwt.return
         (Provider.ToolCalls
-           { calls = !tool_calls_acc; model = final_model; usage = None })
+           {
+             calls = !tool_calls_acc;
+             model = final_model;
+             usage = None;
+             provider_response_items_json = None;
+           })
     else
-      Lwt.return (Provider.Text { content; model = final_model; usage = None })
+      Lwt.return
+        (Provider.Text
+           {
+             content;
+             model = final_model;
+             usage = None;
+             provider_response_items_json = None;
+           })

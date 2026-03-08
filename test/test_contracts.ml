@@ -324,6 +324,7 @@ let test_message_to_json_assistant_with_tool_calls () =
       tool_calls = [ tc ];
       tool_call_id = None;
       name = None;
+      provider_response_items_json = None;
     }
   in
   let json = Provider.message_to_json msg in

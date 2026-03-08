@@ -4,20 +4,37 @@ type message = {
   tool_calls : tool_call list;
   tool_call_id : string option;
   name : string option;
+  provider_response_items_json : string option;
 }
 
 and tool_call = { id : string; function_name : string; arguments : string }
 
 type completion_response =
-  | Text of { content : string; model : string; usage : (int * int) option }
+  | Text of {
+      content : string;
+      model : string;
+      usage : (int * int) option;
+      provider_response_items_json : string option;
+    }
   | ToolCalls of {
       calls : tool_call list;
       model : string;
       usage : (int * int) option;
+      provider_response_items_json : string option;
     }
 
+let make_message_full ~role ~content ~provider_response_items_json =
+  {
+    role;
+    content;
+    tool_calls = [];
+    tool_call_id = None;
+    name = None;
+    provider_response_items_json;
+  }
+
 let make_message ~role ~content =
-  { role; content; tool_calls = []; tool_call_id = None; name = None }
+  make_message_full ~role ~content ~provider_response_items_json:None
 
 let make_tool_result ~tool_call_id ~name ~content =
   {
@@ -26,6 +43,7 @@ let make_tool_result ~tool_call_id ~name ~content =
     tool_calls = [];
     tool_call_id = Some tool_call_id;
     name = Some name;
+    provider_response_items_json = None;
   }
 
 let make_tool_search_result ~tool_call_id ~tools_json =
@@ -44,6 +62,7 @@ let make_tool_search_result ~tool_call_id ~tools_json =
     tool_calls = [];
     tool_call_id = Some tool_call_id;
     name = Some "tool_search";
+    provider_response_items_json = None;
   }
 
 let message_to_json m =
@@ -519,7 +538,14 @@ let complete ~(config : Runtime_config.t) ~messages ?tools () =
               with _ -> ""
             in
             if failed_gen <> "" then
-              Lwt.return (Text { content = failed_gen; model; usage = None })
+              Lwt.return
+                (Text
+                   {
+                     content = failed_gen;
+                     model;
+                     usage = None;
+                     provider_response_items_json = None;
+                   })
             else
               Lwt.fail_with
                 (Printf.sprintf "LLM API error (HTTP %d): %s" status
@@ -579,7 +605,14 @@ let complete ~(config : Runtime_config.t) ~messages ?tools () =
                   tool_calls_json
                 |> List.filter_map (fun x -> x)
               in
-              Lwt.return (ToolCalls { calls; model = resp_model; usage })
+              Lwt.return
+                (ToolCalls
+                   {
+                     calls;
+                     model = resp_model;
+                     usage;
+                     provider_response_items_json = None;
+                   })
             else
               let raw_content =
                 try choice |> member "content" |> to_string with _ -> ""
@@ -591,7 +624,15 @@ let complete ~(config : Runtime_config.t) ~messages ?tools () =
               in
               if content = "" && raw_content = "" then
                 Lwt.fail_with "Failed to extract content from LLM response"
-              else Lwt.return (Text { content; model = resp_model; usage }))
+              else
+                Lwt.return
+                  (Text
+                     {
+                       content;
+                       model = resp_model;
+                       usage;
+                       provider_response_items_json = None;
+                     }))
 
 let parse_sse_line line =
   let prefix = "data: " in
@@ -787,8 +828,23 @@ let process_sse_stream ?(thinking_style = NoThinking) stream ~on_chunk =
       !tool_calls_acc
   in
   if tool_calls <> [] then
-    Lwt.return (ToolCalls { calls = tool_calls; model; usage = !usage_acc })
-  else Lwt.return (Text { content; model; usage = !usage_acc })
+    Lwt.return
+      (ToolCalls
+         {
+           calls = tool_calls;
+           model;
+           usage = !usage_acc;
+           provider_response_items_json = None;
+         })
+  else
+    Lwt.return
+      (Text
+         {
+           content;
+           model;
+           usage = !usage_acc;
+           provider_response_items_json = None;
+         })
 
 let complete_stream ~(config : Runtime_config.t) ~messages ?tools ~on_chunk () =
   let open Lwt.Syntax in
