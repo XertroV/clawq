@@ -234,6 +234,7 @@ let config_schema =
             ("keyword_weight", L);
             ("embedding_model", L);
             ("embedding_provider", L);
+            ("compaction_threshold_percent", L);
             ("max_messages_per_session", L);
             ("max_message_age_days", L);
           ] );

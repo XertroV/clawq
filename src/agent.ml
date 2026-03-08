@@ -49,6 +49,13 @@ let context_window_for_agent agent =
   | Some w -> w
   | None -> 128000
 
+let compaction_threshold_for_agent agent =
+  let token_budget = context_window_for_agent agent in
+  let percent =
+    Runtime_config.effective_compaction_threshold_percent agent.config.memory
+  in
+  token_budget * percent / 100
+
 let effective_max_messages agent =
   let m = agent.config.memory.max_messages_per_session in
   if m <= 0 then 500 else min m 500
@@ -59,7 +66,7 @@ let runtime_context_usage agent ~compacted_before_turn =
     Prompt_builder.history_messages = List.length agent.history;
     estimated_history_tokens = estimate_history_tokens agent.history;
     context_window_tokens;
-    compaction_threshold_tokens = context_window_tokens * 3 / 4;
+    compaction_threshold_tokens = compaction_threshold_for_agent agent;
     max_messages_per_session = effective_max_messages agent;
     compacted_before_turn;
   }
@@ -188,8 +195,7 @@ let compact_history_if_needed agent =
   let open Lwt.Syntax in
   let effective_max = effective_max_messages agent in
   let len = List.length agent.history in
-  let token_budget = context_window_for_agent agent in
-  let compaction_threshold = token_budget * 3 / 4 in
+  let compaction_threshold = compaction_threshold_for_agent agent in
   let current_tokens = estimate_history_tokens agent.history in
   if len > effective_max || current_tokens > compaction_threshold then begin
     let history_chrono = List.rev agent.history in

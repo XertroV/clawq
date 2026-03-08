@@ -234,6 +234,7 @@ type memory_config = {
   keyword_weight : int;
   embedding_model : string option;
   embedding_provider : string option;
+  compaction_threshold_percent : int;
   max_messages_per_session : int;
   max_message_age_days : int;
 }
@@ -454,6 +455,7 @@ let default =
         keyword_weight = 50;
         embedding_model = None;
         embedding_provider = None;
+        compaction_threshold_percent = 75;
         max_messages_per_session = 500;
         max_message_age_days = 30;
       };
@@ -520,6 +522,10 @@ let provider_has_codex_oauth (p : provider_config) =
 
 let provider_has_auth (p : provider_config) =
   is_key_set p.api_key || provider_has_codex_oauth p
+
+let effective_compaction_threshold_percent (memory : memory_config) =
+  let p = memory.compaction_threshold_percent in
+  if p <= 0 || p >= 100 then default.memory.compaction_threshold_percent else p
 
 type model_target = { provider : string option; model : string }
 
@@ -1112,6 +1118,8 @@ let to_json (cfg : t) : Yojson.Safe.t =
                ("search_enabled", `Bool cfg.memory.search_enabled);
                ("vector_weight", `Int cfg.memory.vector_weight);
                ("keyword_weight", `Int cfg.memory.keyword_weight);
+               ( "compaction_threshold_percent",
+                 `Int cfg.memory.compaction_threshold_percent );
                ( "max_messages_per_session",
                  `Int cfg.memory.max_messages_per_session );
                ("max_message_age_days", `Int cfg.memory.max_message_age_days);

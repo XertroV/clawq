@@ -124,6 +124,30 @@ let test_parse_gateway_auth_token () =
   Alcotest.(check (option string))
     "gateway auth token parsed" (Some "abc123") cfg.gateway.auth_token
 
+let test_parse_memory_compaction_threshold_percent () =
+  let json =
+    Yojson.Safe.from_string
+      {|{
+        "memory": {"compaction_threshold_percent": 60}
+      }|}
+  in
+  let cfg = Config_loader.parse_config json in
+  Alcotest.(check int)
+    "compaction threshold parsed" 60 cfg.memory.compaction_threshold_percent
+
+let test_parse_invalid_memory_compaction_threshold_percent_uses_default () =
+  let json =
+    Yojson.Safe.from_string
+      {|{
+        "memory": {"compaction_threshold_percent": 0}
+      }|}
+  in
+  let cfg = Config_loader.parse_config json in
+  Alcotest.(check int)
+    "invalid compaction threshold defaulted"
+    Runtime_config.default.memory.compaction_threshold_percent
+    cfg.memory.compaction_threshold_percent
+
 let test_parse_lark_defaults_disabled () =
   let json =
     Yojson.Safe.from_string
@@ -306,6 +330,11 @@ let suite =
       test_backfill_replaces_type_mismatch_with_defaults;
     Alcotest.test_case "parse gateway auth token" `Quick
       test_parse_gateway_auth_token;
+    Alcotest.test_case "parse memory compaction threshold percent" `Quick
+      test_parse_memory_compaction_threshold_percent;
+    Alcotest.test_case
+      "parse invalid memory compaction threshold percent uses default" `Quick
+      test_parse_invalid_memory_compaction_threshold_percent_uses_default;
     Alcotest.test_case "parse lark defaults disabled" `Quick
       test_parse_lark_defaults_disabled;
     Alcotest.test_case "agent defaults show_tool_calls defaults true" `Quick

@@ -864,6 +864,14 @@ let parse_config ?(resolve_secrets = true) json =
         try Some (m |> member "embedding_provider" |> to_string)
         with _ -> default.memory.embedding_provider
       in
+      let compaction_threshold_percent =
+        try m |> member "compaction_threshold_percent" |> to_int
+        with _ -> default.memory.compaction_threshold_percent
+      in
+      let compaction_threshold_percent =
+        Runtime_config.effective_compaction_threshold_percent
+          { default.memory with compaction_threshold_percent }
+      in
       let max_messages_per_session =
         try m |> member "max_messages_per_session" |> to_int
         with _ -> default.memory.max_messages_per_session
@@ -880,6 +888,7 @@ let parse_config ?(resolve_secrets = true) json =
          keyword_weight;
          embedding_model;
          embedding_provider;
+         compaction_threshold_percent;
          max_messages_per_session;
          max_message_age_days;
        }

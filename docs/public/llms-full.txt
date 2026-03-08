@@ -126,6 +126,7 @@ clawq config set gateway.require_pairing true
 clawq config set memory.search_enabled true
 clawq config set memory.max_messages_per_session 500
 clawq config set memory.max_message_age_days 30
+clawq config set memory.compaction_threshold_percent 75
 clawq config set resilience.timeout_s 120.0
 clawq config set resilience.max_retries 2
 clawq config set resilience.base_delay_s 1.0
@@ -188,7 +189,7 @@ clawq config show security
 
 **gateway** — `host` (default 127.0.0.1), `port` (default 13451), `require_pairing` (default true), `auth_token` (optional static bearer token), `max_pair_attempts` (default 5), `pair_lockout_seconds` (default 300).
 
-**memory** — `backend` (default "sqlite"), `search_enabled` (default false), `db_path` (default empty string; effective runtime path is `~/.clawq/memory.db` when unset), `vector_weight` (default 50), `keyword_weight` (default 50), `embedding_provider`, `embedding_model`, `max_messages_per_session` (default 500), `max_message_age_days` (default 30).
+**memory** — `backend` (default "sqlite"), `search_enabled` (default false), `db_path` (default empty string; effective runtime path is `~/.clawq/memory.db` when unset), `vector_weight` (default 50), `keyword_weight` (default 50), `embedding_provider`, `embedding_model`, `compaction_threshold_percent` (default 75; valid range 1-99), `max_messages_per_session` (default 500), `max_message_age_days` (default 30).
 
 **resilience** — `timeout_s` (default 120.0), `max_retries` (default 2), `base_delay_s` (default 1.0), `fallback_provider` (optional).
 
