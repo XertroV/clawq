@@ -1190,6 +1190,9 @@ let run ~(config : Runtime_config.t) =
         let* () = gateway in
         Lwt.return Shutdown
     | Restart ->
+        let* () =
+          Session.interrupt_resumable_channel_sessions session_manager
+        in
         let* () = Session.start_draining session_manager in
         Lwt.wakeup_later stop_gateway ();
         let* () = gateway in

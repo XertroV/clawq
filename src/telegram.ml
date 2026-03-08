@@ -549,7 +549,8 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
                   send_chunked ~bot_token ~chat_id:update.chat_id ~text:response
                     ()
                 in
-                Session.mark_response_sent session_mgr ~key;
+                if not (Session.take_response_deferred session_mgr ~key) then
+                  Session.mark_response_sent session_mgr ~key;
                 Lwt.return_unit
             | Error err ->
                 Logs.err (fun m ->
@@ -562,7 +563,8 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
                          err)
                     ()
                 in
-                Session.mark_response_sent session_mgr ~key;
+                if not (Session.take_response_deferred session_mgr ~key) then
+                  Session.mark_response_sent session_mgr ~key;
                 Lwt.return_unit)
 
 let poll_account ~bot_token ~(account : Runtime_config.telegram_account) ~name

@@ -15,6 +15,7 @@ type t = {
   mutable draining : bool;
   in_flight_count : int ref;
   channel_notifiers : (string, string -> unit Lwt.t) Hashtbl.t;
+  deferred_responses : (string, unit) Hashtbl.t;
   mutable special_command_handler : special_command_handler option;
 }
 
@@ -33,6 +34,7 @@ let create ~config ?tool_registry ?sandbox ?(landlock_enabled = false) ?db () =
     draining = false;
     in_flight_count = ref 0;
     channel_notifiers = Hashtbl.create 16;
+    deferred_responses = Hashtbl.create 16;
     special_command_handler = None;
   }
 
@@ -64,6 +66,35 @@ let register_channel_notifier mgr ~key notify =
 
 let unregister_channel_notifier mgr ~key =
   Hashtbl.remove mgr.channel_notifiers key
+
+let set_response_deferred mgr ~key =
+  Hashtbl.replace mgr.deferred_responses key ()
+
+let response_deferred mgr ~key = Hashtbl.mem mgr.deferred_responses key
+
+let take_response_deferred mgr ~key =
+  let deferred = response_deferred mgr ~key in
+  if deferred then Hashtbl.remove mgr.deferred_responses key;
+  deferred
+
+let resumable_channel = function
+  | "telegram" | "slack" | "discord" -> true
+  | _ -> false
+
+let interrupt_resumable_channel_sessions mgr =
+  Lwt_mutex.with_lock mgr.sessions_lock (fun () ->
+      Hashtbl.iter
+        (fun key _ ->
+          match
+            ( Restart_notify.parse_channel_from_key key,
+              Hashtbl.find_opt mgr.sessions key )
+          with
+          | Some (channel, _), Some (_, _, interrupt)
+            when resumable_channel channel ->
+              interrupt := Some Agent.restart_interrupt_token
+          | _ -> ())
+        mgr.channel_notifiers;
+      Lwt.return_unit)
 
 let with_registered_notifier mgr ~key ~notify f =
   register_channel_notifier mgr ~key notify;
@@ -431,40 +462,51 @@ let turn mgr ~key ~message ?(attachments = []) ?channel_name ?channel_type
               let notify = find_registered_notifier mgr ~key in
               record_agent_turn mgr ~key ?channel ?channel_id ();
               let* response =
-                let* draining_response = respond_if_draining mgr in
-                match draining_response with
-                | Some response -> Lwt.return response
-                | None -> (
-                    match notify with
-                    | Some send
-                      when mgr.config.agent_defaults.show_thinking
-                           || mgr.config.agent_defaults.show_tool_calls ->
-                        stream_turn_with_visibility mgr ~notify:send agent ~key
-                          ~effective_message ~prepared_history_len
-                          ~interrupt_check ~runtime_context
-                    | _ ->
-                        Agent.turn agent ~user_message:effective_message
-                          ?db:mgr.db ~session_key:key ~interrupt_check
-                          ?runtime_context ~history_prepared:true ())
+                Lwt.catch
+                  (fun () ->
+                    let* draining_response = respond_if_draining mgr in
+                    match draining_response with
+                    | Some response -> Lwt.return response
+                    | None -> (
+                        match notify with
+                        | Some send
+                          when mgr.config.agent_defaults.show_thinking
+                               || mgr.config.agent_defaults.show_tool_calls ->
+                            stream_turn_with_visibility mgr ~notify:send agent
+                              ~key ~effective_message ~prepared_history_len
+                              ~interrupt_check ~runtime_context
+                        | _ ->
+                            Agent.turn agent ~user_message:effective_message
+                              ?db:mgr.db ~session_key:key ~interrupt_check
+                              ?runtime_context ~history_prepared:true ()))
+                  (function
+                    | Agent.Restart_requested ->
+                        persist_new_messages mgr ~key
+                          ~history_before:prepared_history_len agent;
+                        set_response_deferred mgr ~key;
+                        Lwt.return draining_message
+                    | exn -> Lwt.fail exn)
               in
               (match notify with
               | Some _
                 when mgr.config.agent_defaults.show_thinking
                      || mgr.config.agent_defaults.show_tool_calls ->
                   ()
-              | _ -> (
-                  persist_new_messages mgr ~key
-                    ~history_before:prepared_history_len agent;
-                  match mgr.db with
-                  | Some db when mgr.config.security.audit_enabled ->
-                      Audit.log ~db
-                        (ChatMessage
-                           {
-                             session_key = key;
-                             role = "assistant";
-                             content_preview = response;
-                           })
-                  | _ -> ()));
+              | _ ->
+                  if not (response_deferred mgr ~key) then begin
+                    persist_new_messages mgr ~key
+                      ~history_before:prepared_history_len agent;
+                    match mgr.db with
+                    | Some db when mgr.config.security.audit_enabled ->
+                        Audit.log ~db
+                          (ChatMessage
+                             {
+                               session_key = key;
+                               role = "assistant";
+                               content_preview = response;
+                             })
+                    | _ -> ()
+                  end);
               Lwt.return response))
 
 let get_config mgr = mgr.config
@@ -535,26 +577,41 @@ let turn_stream mgr ~key ~message ?(attachments = []) ?channel_name
               let prepared_history_len = List.length agent.history in
               record_agent_turn mgr ~key ?channel ?channel_id ();
               let* response =
-                let* draining_response = respond_if_draining ~on_chunk mgr in
-                match draining_response with
-                | Some response -> Lwt.return response
-                | None ->
-                    Agent.turn_stream agent ~user_message:effective_message
-                      ?db:mgr.db ~session_key:key ~interrupt_check
-                      ?runtime_context ~history_prepared:true ~on_chunk ()
+                Lwt.catch
+                  (fun () ->
+                    let* draining_response =
+                      respond_if_draining ~on_chunk mgr
+                    in
+                    match draining_response with
+                    | Some response -> Lwt.return response
+                    | None ->
+                        Agent.turn_stream agent ~user_message:effective_message
+                          ?db:mgr.db ~session_key:key ~interrupt_check
+                          ?runtime_context ~history_prepared:true ~on_chunk ())
+                  (function
+                    | Agent.Restart_requested ->
+                        persist_new_messages mgr ~key
+                          ~history_before:prepared_history_len agent;
+                        set_response_deferred mgr ~key;
+                        let* () = on_chunk (Provider.Delta draining_message) in
+                        let* () = on_chunk Provider.Done in
+                        Lwt.return draining_message
+                    | exn -> Lwt.fail exn)
               in
-              persist_new_messages mgr ~key ~history_before:prepared_history_len
-                agent;
-              (match mgr.db with
-              | Some db when mgr.config.security.audit_enabled ->
-                  Audit.log ~db
-                    (ChatMessage
-                       {
-                         session_key = key;
-                         role = "assistant";
-                         content_preview = response;
-                       })
-              | _ -> ());
+              if not (response_deferred mgr ~key) then begin
+                persist_new_messages mgr ~key
+                  ~history_before:prepared_history_len agent;
+                match mgr.db with
+                | Some db when mgr.config.security.audit_enabled ->
+                    Audit.log ~db
+                      (ChatMessage
+                         {
+                           session_key = key;
+                           role = "assistant";
+                           content_preview = response;
+                         })
+                | _ -> ()
+              end;
               Lwt.return response))
 
 let reset mgr ~key =
@@ -567,6 +624,7 @@ let reset mgr ~key =
             (match mgr.db with
             | Some db -> Memory.clear_session ~db ~session_key:key
             | None -> ());
+            Hashtbl.remove mgr.deferred_responses key;
             unregister_channel_notifier mgr ~key;
             Hashtbl.remove mgr.sessions key;
             Lwt.return (Some mutex)
@@ -574,6 +632,7 @@ let reset mgr ~key =
             (match mgr.db with
             | Some db -> Memory.clear_session ~db ~session_key:key
             | None -> ());
+            Hashtbl.remove mgr.deferred_responses key;
             unregister_channel_notifier mgr ~key;
             Lwt.return None)
   in

@@ -253,7 +253,8 @@ let handle_event ~(config : Runtime_config.slack_config)
                       send_message_fn ~bot_token:config.bot_token ~channel_id
                         ~text:response
                     in
-                    Session.mark_response_sent session_manager ~key;
+                    if not (Session.take_response_deferred session_manager ~key)
+                    then Session.mark_response_sent session_manager ~key;
                     Lwt.return "ok"
                 | Error err ->
                     Logs.err (fun m ->
@@ -267,7 +268,8 @@ let handle_event ~(config : Runtime_config.slack_config)
                               message: %s"
                              err)
                     in
-                    Session.mark_response_sent session_manager ~key;
+                    if not (Session.take_response_deferred session_manager ~key)
+                    then Session.mark_response_sent session_manager ~key;
                     Lwt.return "ok")
       end
   | Some Other | None -> Lwt.return "ok"

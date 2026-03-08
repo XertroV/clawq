@@ -6,6 +6,9 @@ type t = {
 }
 
 exception Interrupted of string
+exception Restart_requested
+
+let restart_interrupt_token = "__clawq_restart__"
 
 let create ~config ?tool_registry () =
   let system_prompt = Prompt_builder.build ~config ~tool_registry () in
@@ -610,6 +613,10 @@ let prepare_turn_history agent ~user_message ?db () =
 
 let turn agent ~user_message ?db ?session_key ?interrupt_check ?runtime_context
     ?(history_prepared = false) () =
+  let is_restart_interrupt = function
+    | Some reason when reason = restart_interrupt_token -> true
+    | _ -> false
+  in
   let open Lwt.Syntax in
   let* _compacted =
     if history_prepared then Lwt.return false
@@ -726,6 +733,8 @@ let turn agent ~user_message ?db ?session_key ?interrupt_check ?runtime_context
         match interrupt_check with
         | Some check -> (
             match check () with
+            | interrupt when is_restart_interrupt interrupt ->
+                Lwt.fail Restart_requested
             | Some _ ->
                 let partial =
                   "[Agent was interrupted mid-task] --- [NOTE: interrupted by \
@@ -743,6 +752,10 @@ let turn agent ~user_message ?db ?session_key ?interrupt_check ?runtime_context
 
 let turn_stream agent ~user_message ?db ?session_key ?interrupt_check
     ?runtime_context ?(history_prepared = false) ~on_chunk () =
+  let is_restart_interrupt = function
+    | Some reason when reason = restart_interrupt_token -> true
+    | _ -> false
+  in
   let open Lwt.Syntax in
   let* _compacted =
     if history_prepared then Lwt.return false
@@ -762,6 +775,8 @@ let turn_stream agent ~user_message ?db ?session_key ?interrupt_check
         match interrupt_check with
         | Some check -> (
             match check () with
+            | interrupt when is_restart_interrupt interrupt ->
+                Lwt.fail Restart_requested
             | Some _ ->
                 let note = " --- [NOTE: interrupted by user]" in
                 let* () = on_chunk (Provider.Delta note) in
@@ -884,6 +899,8 @@ let turn_stream agent ~user_message ?db ?session_key ?interrupt_check
             match interrupt_check with
             | Some check -> (
                 match check () with
+                | interrupt when is_restart_interrupt interrupt ->
+                    Lwt.fail Restart_requested
                 | Some _ ->
                     let partial = " --- [NOTE: interrupted by user]" in
                     agent.history <-
@@ -896,6 +913,7 @@ let turn_stream agent ~user_message ?db ?session_key ?interrupt_check
             | None -> loop (iteration + 1)))
       (fun exn ->
         match exn with
+        | Restart_requested -> Lwt.fail Restart_requested
         | Interrupted partial ->
             let annotated = partial ^ " --- [NOTE: interrupted by user]" in
             agent.history <-

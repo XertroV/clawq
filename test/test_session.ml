@@ -465,6 +465,42 @@ let test_with_registered_notifier_sends_warning () =
   Alcotest.(check (list string))
     "warning delivered" [ "Restarting soon" ] (List.rev !received)
 
+let test_interrupt_resumable_channel_sessions_targets_supported_channels () =
+  let config = Runtime_config.default in
+  let mgr = Session.create ~config () in
+  let telegram_interrupt = ref None in
+  let slack_interrupt = ref None in
+  let web_interrupt = ref None in
+  Hashtbl.replace mgr.sessions "telegram:1:u"
+    (Agent.create ~config (), Lwt_mutex.create (), telegram_interrupt);
+  Hashtbl.replace mgr.sessions "slack:c1:u"
+    (Agent.create ~config (), Lwt_mutex.create (), slack_interrupt);
+  Hashtbl.replace mgr.sessions "web:s1"
+    (Agent.create ~config (), Lwt_mutex.create (), web_interrupt);
+  Session.register_channel_notifier mgr ~key:"telegram:1:u" (fun _ ->
+      Lwt.return_unit);
+  Session.register_channel_notifier mgr ~key:"slack:c1:u" (fun _ ->
+      Lwt.return_unit);
+  Session.register_channel_notifier mgr ~key:"web:s1" (fun _ -> Lwt.return_unit);
+  Lwt_main.run (Session.interrupt_resumable_channel_sessions mgr);
+  Alcotest.(check (option string))
+    "telegram interrupted" (Some Agent.restart_interrupt_token)
+    !telegram_interrupt;
+  Alcotest.(check (option string))
+    "slack interrupted" (Some Agent.restart_interrupt_token) !slack_interrupt;
+  Alcotest.(check (option string)) "web untouched" None !web_interrupt
+
+let test_take_response_deferred_clears_marker () =
+  let config = Runtime_config.default in
+  let mgr = Session.create ~config () in
+  Session.set_response_deferred mgr ~key:"telegram:1:u";
+  Alcotest.(check bool)
+    "first read deferred" true
+    (Session.take_response_deferred mgr ~key:"telegram:1:u");
+  Alcotest.(check bool)
+    "second read cleared" false
+    (Session.take_response_deferred mgr ~key:"telegram:1:u")
+
 let test_turn_uses_special_command_handler () =
   let config = Runtime_config.default in
   let mgr = Session.create ~config () in
@@ -650,6 +686,11 @@ let suite =
       test_turn_returns_restart_message_while_draining;
     Alcotest.test_case "registered notifier sends warning" `Quick
       test_with_registered_notifier_sends_warning;
+    Alcotest.test_case
+      "interrupt resumable channel sessions targets supported channels" `Quick
+      test_interrupt_resumable_channel_sessions_targets_supported_channels;
+    Alcotest.test_case "take response deferred clears marker" `Quick
+      test_take_response_deferred_clears_marker;
     Alcotest.test_case "turn uses special command handler" `Quick
       test_turn_uses_special_command_handler;
     Alcotest.test_case "turn stream uses special command handler" `Quick

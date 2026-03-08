@@ -411,7 +411,8 @@ let handle_message ~(discord_config : Runtime_config.discord_config)
                 send_message_fn ~bot_token:discord_config.bot_token
                   ~channel_id:msg.channel_id ~text:response
               in
-              Session.mark_response_sent session_mgr ~key;
+              if not (Session.take_response_deferred session_mgr ~key) then
+                Session.mark_response_sent session_mgr ~key;
               Lwt.return_unit
           | Error err ->
               Logs.err (fun m ->
@@ -425,7 +426,8 @@ let handle_message ~(discord_config : Runtime_config.discord_config)
                        "Sorry, an error occurred processing your message: %s"
                        err)
               in
-              Session.mark_response_sent session_mgr ~key;
+              if not (Session.take_response_deferred session_mgr ~key) then
+                Session.mark_response_sent session_mgr ~key;
               Lwt.return_unit)
 
 (* Close code classification for reconnect behavior *)

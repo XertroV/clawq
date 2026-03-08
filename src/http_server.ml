@@ -276,7 +276,8 @@ let handler ~session_manager ~require_pairing ~auth_token ?slack_config
                 in
                 match result with
                 | Ok response ->
-                    Session.mark_response_sent session_manager ~key;
+                    if not (Session.take_response_deferred session_manager ~key)
+                    then Session.mark_response_sent session_manager ~key;
                     let resp_json =
                       `Assoc [ ("response", `String response) ]
                       |> Yojson.Safe.to_string
@@ -284,7 +285,8 @@ let handler ~session_manager ~require_pairing ~auth_token ?slack_config
                     Cohttp_lwt_unix.Server.respond_string ~status:`OK
                       ~headers:json_headers ~body:resp_json ()
                 | Error err ->
-                    Session.mark_response_sent session_manager ~key;
+                    if not (Session.take_response_deferred session_manager ~key)
+                    then Session.mark_response_sent session_manager ~key;
                     Cohttp_lwt_unix.Server.respond_string
                       ~status:`Internal_server_error ~headers:json_headers
                       ~body:
@@ -376,13 +378,21 @@ let handler ~session_manager ~require_pairing ~auth_token ?slack_config
                                   Lwt.return_unit)
                                 ()
                             in
-                            Session.mark_response_sent session_manager ~key;
+                            if
+                              not
+                                (Session.take_response_deferred session_manager
+                                   ~key)
+                            then Session.mark_response_sent session_manager ~key;
                             push (Some "data: [DONE]\n\n");
                             push None;
                             Lwt.return_unit)
                           (fun exn ->
                             let err = Printexc.to_string exn in
-                            Session.mark_response_sent session_manager ~key;
+                            if
+                              not
+                                (Session.take_response_deferred session_manager
+                                   ~key)
+                            then Session.mark_response_sent session_manager ~key;
                             push
                               (Some
                                  (Printf.sprintf
@@ -678,8 +688,5 @@ let start ~port ~host ~require_pairing ~auth_token ~session_manager
   let server = Cohttp_lwt_unix.Server.make ~callback () in
   match stop with
   | Some stop ->
-      Cohttp_lwt_unix.Server.create ~ctx ~stop
-        ~mode:(`TCP (`Port port)) server
-  | None ->
-      Cohttp_lwt_unix.Server.create ~ctx
-        ~mode:(`TCP (`Port port)) server
+      Cohttp_lwt_unix.Server.create ~ctx ~stop ~mode:(`TCP (`Port port)) server
+  | None -> Cohttp_lwt_unix.Server.create ~ctx ~mode:(`TCP (`Port port)) server
