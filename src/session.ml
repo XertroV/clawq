@@ -137,6 +137,14 @@ let take_all_queued_messages mgr ~key =
       msgs
   | None -> []
 
+let take_all_queued_messages_for_injection mgr ~key =
+  let msgs = take_all_queued_messages mgr ~key in
+  let count = List.length msgs in
+  if count > 0 then
+    Logs.info (fun m ->
+        m "Injecting %d queued message(s) into session %s" count key);
+  msgs
+
 let queued_message_prompt message =
   "A new message arrived in this same channel while you were working on the "
   ^ "previous task. Respond to it now. If it still makes sense afterward, "
@@ -564,7 +572,7 @@ let run_locked_turn mgr ~key agent interrupt ~message ?(attachments = [])
   let prepared_history_len = List.length agent.history in
   record_agent_turn mgr ~key ?channel ?channel_id ();
   let inject_messages () =
-    let msgs = take_all_queued_messages mgr ~key in
+    let msgs = take_all_queued_messages_for_injection mgr ~key in
     List.map
       (fun (qm : queued_message) ->
         queued_message_prompt
@@ -788,7 +796,7 @@ let turn_stream mgr ~key ~message ?(attachments = []) ?channel_name
                 let prepared_history_len = List.length agent.history in
                 record_agent_turn mgr ~key ?channel ?channel_id ();
                 let inject_messages () =
-                  let msgs = take_all_queued_messages mgr ~key in
+                  let msgs = take_all_queued_messages_for_injection mgr ~key in
                   List.map
                     (fun (qm : queued_message) ->
                       queued_message_prompt
