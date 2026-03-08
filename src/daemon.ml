@@ -1250,8 +1250,6 @@ let run ~(config : Runtime_config.t) =
           Session.interrupt_resumable_channel_sessions session_manager
         in
         let* () = Session.start_draining session_manager in
-        Lwt.wakeup_later stop_gateway ();
-        let* () = gateway in
         let* () =
           Session.notify_channel_sessions session_manager initial_drain_warning
         in
@@ -1267,8 +1265,12 @@ let run ~(config : Runtime_config.t) =
         in
         Lwt.async (fun () -> warnings_p);
         let* timed_out = wait_for_drain ~session_manager () in
-        if not timed_out then stop_warnings := true;
+        stop_warnings := true;
         let* () = if timed_out then warnings_p else Lwt.return_unit in
+        Logs.info (fun m -> m "Draining complete, stopping gateway for restart");
+        Lwt.wakeup_later stop_gateway ();
+        let* () = gateway in
+        Logs.info (fun m -> m "Gateway stopped; proceeding with restart exec");
         Lwt.return Restart
   in
   write_runtime_state

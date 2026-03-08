@@ -1,14 +1,15 @@
 ---
 claimed_at: "2026-03-08T14:58:16Z"
 claimed_by: cli-user
-completed_at: null
+completed_at: "2026-03-08T15:01:38Z"
 complexity: medium
 depends_on: []
+duration_minutes: 0.02933649146666667
 estimate_hours: 1
 id: B082
 priority: high
 started_at: "2026-03-08T14:58:16Z"
-status: in_progress
+status: done
 tags: []
 title: 'Graceful restart can race and spawn a replacement daemon before the old gateway socket is released, causing EADDRINUSE and failed restart takeover. Repro: send SIGUSR1 to live agent process running via ; replacement starts, old/new both contend for gateway port 13451.'
 ---
