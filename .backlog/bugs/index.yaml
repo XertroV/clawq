@@ -60,3 +60,4 @@ bugs:
     - file: B059-when-starting-up-clawq-should.todo
     - file: B060-clawq-needs-a-way-to-automatic.todo
     - file: B061-add-llms-txt-to-docs-site-get.todo
+    - file: B062-option-to-show-tool-calls-in-t.todo

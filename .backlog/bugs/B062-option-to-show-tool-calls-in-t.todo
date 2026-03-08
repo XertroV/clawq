@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B062
+priority: high
+status: pending
+tags: []
+title: Option to show tool calls in telegram/connector chat. (Also, thinking should show for telegram and for other connectors if enabled)
+---
+
+Option to show tool calls in telegram/connector chat. (Also, thinking should show for telegram and for other connectors if enabled)
