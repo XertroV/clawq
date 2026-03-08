@@ -51,6 +51,22 @@ let exec_exn db sql =
 
 (* --- Init tests --- *)
 
+let test_init_sets_busy_timeout () =
+  let db = Memory.init ~db_path:":memory:" () in
+  let stmt = Sqlite3.prepare db "PRAGMA busy_timeout" in
+  let value =
+    Fun.protect
+      ~finally:(fun () -> ignore (Sqlite3.finalize stmt))
+      (fun () ->
+        match Sqlite3.step stmt with
+        | Sqlite3.Rc.ROW -> (
+            match Sqlite3.column stmt 0 with
+            | Sqlite3.Data.INT n -> Int64.to_int n
+            | _ -> -1)
+        | _ -> -1)
+  in
+  Alcotest.(check int) "busy_timeout" 5000 value
+
 let test_init_creates_db () =
   let db = Memory.init ~db_path:":memory:" () in
   (* If we get here without exception, db was created *)
@@ -468,6 +484,7 @@ let test_tool_cycle_history_shape () =
 
 let suite =
   [
+    Alcotest.test_case "init sets busy_timeout" `Quick test_init_sets_busy_timeout;
     Alcotest.test_case "init creates db" `Quick test_init_creates_db;
     Alcotest.test_case "init search enabled" `Quick test_init_search_enabled;
     Alcotest.test_case "init search disabled" `Quick test_init_search_disabled;

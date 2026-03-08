@@ -99,6 +99,7 @@ let init_core_schema db =
 
 let init ~db_path ?(search_enabled = false) () =
   let db = Sqlite3.db_open db_path in
+  ignore (Sqlite3.exec db "PRAGMA busy_timeout = 5000");
   exec_exn db
     "CREATE TABLE IF NOT EXISTS schema_version (\n\
     \     version INTEGER NOT NULL\n\
