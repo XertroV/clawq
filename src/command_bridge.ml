@@ -831,19 +831,27 @@ let cmd_mcp () =
 let agent_argv () = [| Sys.executable_name; "agent" |]
 
 let cmd_agent ?(run_daemon = fun ~config -> Lwt_main.run (Daemon.run ~config))
-    ?(execv = Unix.execv) () =
+    ?(execv = Unix.execv) ?(acquire_lock = Service.acquire_singleton_lock)
+    ?(release_lock = Service.release_singleton_lock) () =
   let cfg = get_config () in
-  let result =
-    try run_daemon ~config:cfg
-    with Failure msg ->
-      print_endline ("Error: " ^ msg);
-      exit 1
-  in
-  match result with
-  | Daemon.Shutdown -> "Daemon stopped."
-  | Daemon.Restart ->
-      execv Sys.executable_name (agent_argv ());
-      "Daemon restart requested."
+  match acquire_lock () with
+  | None ->
+      "Another clawq agent instance already holds the daemon lock. Refusing to start a second live agent."
+  | Some lock_fd ->
+      let result =
+        try run_daemon ~config:cfg
+        with Failure msg ->
+          print_endline ("Error: " ^ msg);
+          release_lock (Some lock_fd);
+          exit 1
+      in
+      match result with
+      | Daemon.Shutdown ->
+          release_lock (Some lock_fd);
+          "Daemon stopped."
+      | Daemon.Restart ->
+          execv Sys.executable_name (agent_argv ());
+          "Daemon restart requested."
 
 let cmd_cron args =
   match args with

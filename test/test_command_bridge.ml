@@ -263,6 +263,25 @@ let test_handle_tunnel_status () =
            true
          with Not_found -> false))
 
+let test_cmd_agent_refuses_second_live_instance () =
+  let ran = ref false in
+  let released = ref false in
+  let result =
+    Command_bridge.cmd_agent
+      ~acquire_lock:(fun () -> None)
+      ~release_lock:(fun _ -> released := true)
+      ~run_daemon:(fun ~config:_ ->
+        ran := true;
+        Daemon.Shutdown)
+      ()
+  in
+  Alcotest.(check string)
+    "refuses duplicate instance"
+    "Another clawq agent instance already holds the daemon lock. Refusing to start a second live agent."
+    result;
+  Alcotest.(check bool) "daemon not run" false !ran;
+  Alcotest.(check bool) "no lock release needed" false !released
+
 let test_cmd_agent_reexecs_on_restart () =
   let execd = ref None in
   let result =

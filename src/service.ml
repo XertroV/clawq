@@ -109,6 +109,24 @@ let remove_pid () =
   let meta = pid_meta_path () in
   if Sys.file_exists meta then try Sys.remove meta with _ -> ()
 
+let singleton_lock_path () = Filename.concat (clawq_dir ()) "daemon.lock"
+
+let acquire_singleton_lock () =
+  ensure_dir (clawq_dir ());
+  let fd = Unix.openfile (singleton_lock_path ()) [ Unix.O_CREAT; Unix.O_RDWR ] 0o644 in
+  try
+    Unix.lockf fd Unix.F_TLOCK 0;
+    Some fd
+  with Unix.Unix_error _ ->
+    (try Unix.close fd with _ -> ());
+    None
+
+let release_singleton_lock = function
+  | None -> ()
+  | Some fd ->
+      (try Unix.lockf fd Unix.F_ULOCK 0 with _ -> ());
+      (try Unix.close fd with _ -> ())
+
 let nofork_env = "CLAWQ_DAEMON_NOFORK"
 let internal_nofork_env = "CLAWQ_DAEMON_INTERNAL_NOFORK"
 
