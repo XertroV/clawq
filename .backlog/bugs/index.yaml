@@ -108,3 +108,4 @@ bugs:
     - file: B107-implement-version-which-shows.todo
     - file: B108-autonomous-loop-messaging-disc.todo
     - file: B109-send-message-is-called-bu-tthe.todo
+    - file: B110-implement-a-compact-command-to.todo

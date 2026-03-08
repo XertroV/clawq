@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B110
+priority: high
+status: pending
+tags: []
+title: Implement a /compact command to manually trigger session history compaction on demand, so a user can force compaction without waiting for automatic thresholds.
+---
+
+Implement a /compact command to manually trigger session history compaction on demand, so a user can force compaction without waiting for automatic thresholds.
