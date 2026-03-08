@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B086
+priority: high
+status: pending
+tags: []
+title: Agent cutover / restart can leave multiple  processes alive. Need single-instance ownership/lock or pidfile discipline for direct-agent mode, plus clean stray-process handling during restart/cutover.
+---
+
+Agent cutover / restart can leave multiple  processes alive. Need single-instance ownership/lock or pidfile discipline for direct-agent mode, plus clean stray-process handling during restart/cutover.

@@ -84,3 +84,4 @@ bugs:
     - file: B083-compaction-seems-to-happen-a-b.todo
     - file: B084-triggering-an-update-should-in.todo
     - file: B085-llms-full-txt-operational-docs.todo
+    - file: B086-agent-cutover-restart-can-leav.todo
