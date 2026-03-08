@@ -236,10 +236,12 @@ let run ~(config : Runtime_config.t) =
         m
           "Gateway running without require_pairing or auth_token; suitable \
            only for local development on loopback");
-  (* cohttp/client.ml logs every outgoing HTTP request at Info level via
-     Logs.info with no explicit source, which lands at the default
-     "application" Logs source.  We intercept those by rendering to a side
-     buffer first; if the content starts with an HTTP method we drop it.
+  (* All log output is rendered to a side buffer first so we can:
+     1. Drop cohttp/client.ml HTTP-method request lines (those log the full
+        request URI at Info level via the default "application" source).
+     2. Scrub Telegram bot tokens from any message before it reaches stderr
+        (the Telegram API embeds the token in the URL path, e.g.
+        /bot<TOKEN>/sendChatAction).
      Both branches always call k () so the return type stays polymorphic.
      Named cohttp sources only log at Debug, already silenced by the global
      Info level, but we set their level explicitly below for safety. *)
@@ -254,31 +256,60 @@ let run ~(config : Runtime_config.t) =
     || (n >= 5 && String.sub s 0 5 = "HEAD ")
     || (n >= 6 && String.sub s 0 6 = "PATCH ")
   in
-  let base_reporter = Logs_fmt.reporter ~pp_header:pp_header_with_ts () in
+  (* Replace /bot<TOKEN>/ with /bot<REDACTED>/ in Telegram API URI paths. *)
+  let scrub_telegram_tokens s =
+    let marker = "/bot" in
+    let mlen = 4 in
+    let slen = String.length s in
+    let buf = Buffer.create slen in
+    let i = ref 0 in
+    while !i < slen do
+      if !i + mlen <= slen && String.sub s !i mlen = marker then begin
+        let j = ref (!i + mlen) in
+        while !j < slen && s.[!j] <> '/' do
+          incr j
+        done;
+        if !j < slen then begin
+          Buffer.add_string buf "/bot<REDACTED>";
+          i := !j
+        end
+        else begin
+          Buffer.add_char buf s.[!i];
+          incr i
+        end
+      end
+      else begin
+        Buffer.add_char buf s.[!i];
+        incr i
+      end
+    done;
+    Buffer.contents buf
+  in
   let report src level ~over k msgf =
-    if Logs.Src.name src = "application" && level = Logs.Info then
-      (* Render to check buffer to peek at message content. *)
-      msgf (fun ?header ?tags:_ fmt ->
-          Format.pp_print_flush check_ppf ();
-          Buffer.clear check_buf;
-          Format.kfprintf
-            (fun ppf ->
-              Format.pp_print_flush ppf ();
-              let s = Buffer.contents check_buf in
-              if starts_with_http_method s then (
-                over ();
-                k ())
-              else begin
-                (* Not an HTTP request log; re-emit via stderr with header. *)
-                let dst = Format.err_formatter in
-                pp_header_with_ts dst (level, header);
-                Format.pp_print_string dst s;
-                Format.pp_print_newline dst ();
-                over ();
-                k ()
-              end)
-            check_ppf fmt)
-    else base_reporter.Logs.report src level ~over k msgf
+    (* Render to check buffer to peek at and sanitize message content. *)
+    msgf (fun ?header ?tags:_ fmt ->
+        Format.pp_print_flush check_ppf ();
+        Buffer.clear check_buf;
+        Format.kfprintf
+          (fun ppf ->
+            Format.pp_print_flush ppf ();
+            let s = Buffer.contents check_buf in
+            if
+              Logs.Src.name src = "application"
+              && level = Logs.Info && starts_with_http_method s
+            then (
+              over ();
+              k ())
+            else begin
+              let s = scrub_telegram_tokens s in
+              let dst = Format.err_formatter in
+              pp_header_with_ts dst (level, header);
+              Format.pp_print_string dst s;
+              Format.pp_print_newline dst ();
+              over ();
+              k ()
+            end)
+          check_ppf fmt)
   in
   let reporter = { Logs.report } in
   Logs.set_reporter reporter;
