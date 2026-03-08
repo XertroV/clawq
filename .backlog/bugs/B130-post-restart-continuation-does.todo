@@ -1,0 +1,11 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B130
+priority: high
+status: pending
+tags: []
+title: Post-restart continuation does not auto-trigger after update restart
+---
+After successful update/restart, the daemon sends the one-shot post-update confirmation but does not automatically re-enter the prior autonomous session/work loop. Logs show the daemon resumes pending agent sessions only when session_state.turn=agent and response_sent_at is NULL, but the restart path for update confirmation does not appear to arm that state for the intended autonomous continuation behavior. Need an end-to-end restart-resumption path that actually wakes the agent after restart.

@@ -128,3 +128,4 @@ bugs:
     - file: B127-b114-delegated-implementation.todo
     - file: B128-implement-config-slash-command.todo
     - file: B129-add-delegate-slash-command-tha.todo
+    - file: B130-post-restart-continuation-does.todo
