@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B121
+priority: high
+status: pending
+tags: []
+title: for compaction, formally verify the properties necessary to satisfy openai's requirements (especially regarding tool calls)
+---
+
+for compaction, formally verify the properties necessary to satisfy openai's requirements (especially regarding tool calls)

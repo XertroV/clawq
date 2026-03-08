@@ -119,3 +119,4 @@ bugs:
     - file: B118-when-we-truncate-stdout-of-a-t.todo
     - file: B119-we-should-consider-adding-head.todo
     - file: B120-thinking-does-not-appear-to-be.todo
+    - file: B121-for-compaction-formally-verify.todo
