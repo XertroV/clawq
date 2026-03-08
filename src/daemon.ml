@@ -237,9 +237,9 @@ let maybe_emit_date_banner ppf last_date_ref t =
 let pp_header_with_ts ppf t h =
   let tm = Unix.localtime t in
   let ms = int_of_float ((t -. floor t) *. 1000.0) in
-  Fmt.pf ppf "[%04d-%02d-%02d %02d:%02d:%02d.%03d] %a"
-    (tm.Unix.tm_year + 1900) (tm.Unix.tm_mon + 1) tm.Unix.tm_mday tm.Unix.tm_hour
-    tm.Unix.tm_min tm.Unix.tm_sec ms Logs_fmt.pp_header h
+  Fmt.pf ppf "[%04d-%02d-%02d %02d:%02d:%02d.%03d] %a" (tm.Unix.tm_year + 1900)
+    (tm.Unix.tm_mon + 1) tm.Unix.tm_mday tm.Unix.tm_hour tm.Unix.tm_min
+    tm.Unix.tm_sec ms Logs_fmt.pp_header h
 
 let run ~(config : Runtime_config.t) =
   let open Lwt.Syntax in

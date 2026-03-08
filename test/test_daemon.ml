@@ -250,7 +250,8 @@ let test_pp_header_with_ts_includes_full_date () =
     try
       ignore
         (Str.search_forward
-           (Str.regexp_string "[2026-03-08 10:11:12.") output 0);
+           (Str.regexp_string "[2026-03-08 10:11:12.")
+           output 0);
       true
     with Not_found -> false
   in

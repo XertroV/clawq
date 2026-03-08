@@ -378,6 +378,11 @@ let build ~(config : Runtime_config.t) ~tool_registry ?(attachments = [])
       else List.iter add tool_lines
     end;
     add "";
+    add "## Clawq Runtime";
+    add
+      (Printf.sprintf "- Version: %s (git %s, built %s)" Build_info.version
+         Build_info.git_shorthash Build_info.build_date);
+    add "";
     add "## Self-Reference";
     add "- Full self-knowledge document: https://clawq.org/llms-full.txt";
     add
