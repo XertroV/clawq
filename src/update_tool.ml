@@ -74,10 +74,7 @@ let contains_sub s sub =
 
 let summarize_failure_lines lines =
   let cleaned =
-    lines
-    |> List.map trim
-    |> List.filter (fun s -> s <> "")
-    |> List.rev
+    lines |> List.map trim |> List.filter (fun s -> s <> "") |> List.rev
   in
   let dune_lock =
     List.find_opt
@@ -88,12 +85,11 @@ let summarize_failure_lines lines =
   in
   match dune_lock with
   | Some line ->
-      "Build blocked by Dune lock contention. Another build may still be        running, or a stale _build/.lock may need cleanup. Detail: "
+      "Build blocked by Dune lock contention. Another build may still \
+       be        running, or a stale _build/.lock may need cleanup. Detail: "
       ^ line
   | None -> (
-      match cleaned with
-      | line :: _ -> line
-      | [] -> "no build output captured")
+      match cleaned with line :: _ -> line | [] -> "no build output captured")
 
 let binary_url_of_env () =
   match Sys.getenv_opt "CLAWQ_UPDATE_BINARY_URL" with

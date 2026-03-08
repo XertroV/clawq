@@ -109,14 +109,75 @@ let force_compress_keep = 4
 (* Bound tool output persisted into conversation history. *)
 let max_tool_result_chars = 12000
 
+(* Adjust a chronological split so that orphaned tool-result messages at the
+   start of [to_keep] are moved back into [to_compact]. A tool result is
+   orphaned if the assistant message whose tool_calls produced it lives in
+   [to_compact] (or is absent entirely). *)
+let adjust_split_for_tool_groups to_compact to_keep =
+  let rec move_orphans compact keep =
+    match keep with
+    | (msg : Provider.message) :: rest when msg.role = "tool" ->
+        move_orphans (compact @ [ msg ]) rest
+    | _ -> (compact, keep)
+  in
+  move_orphans to_compact to_keep
+
+(* Collect all tool_call ids present in assistant messages of [msgs]. *)
+let collect_tool_call_ids msgs =
+  List.fold_left
+    (fun acc (m : Provider.message) ->
+      if m.role = "assistant" && m.tool_calls <> [] then
+        List.fold_left
+          (fun acc (tc : Provider.tool_call) ->
+            (* Use a simple assoc-list set *)
+            if List.mem tc.id acc then acc else tc.id :: acc)
+          acc m.tool_calls
+      else acc)
+    [] msgs
+
+(* Collect all tool_call_ids referenced by tool-result messages in [msgs]. *)
+let collect_tool_result_ids msgs =
+  List.fold_left
+    (fun acc (m : Provider.message) ->
+      match m.tool_call_id with
+      | Some id when m.role = "tool" ->
+          if List.mem id acc then acc else id :: acc
+      | _ -> acc)
+    [] msgs
+
+(* Safety-net: remove orphaned tool results (no matching assistant tool_call)
+   and strip dangling tool_calls from assistant messages (no matching tool
+   result). Works on messages in any order. *)
+let ensure_tool_group_integrity msgs =
+  let call_ids = collect_tool_call_ids msgs in
+  let result_ids = collect_tool_result_ids msgs in
+  msgs
+  |> List.filter (fun (m : Provider.message) ->
+      if m.role = "tool" then
+        match m.tool_call_id with
+        | Some id -> List.mem id call_ids
+        | None -> true
+      else true)
+  |> List.map (fun (m : Provider.message) ->
+      if m.role = "assistant" && m.tool_calls <> [] then
+        let kept =
+          List.filter
+            (fun (tc : Provider.tool_call) -> List.mem tc.id result_ids)
+            m.tool_calls
+        in
+        { m with tool_calls = kept }
+      else m)
+
 (* Backstop: enforce the hard message-count cap only. Token-based compaction
    (with LLM summarisation) is handled by compact_history_if_needed before
    each turn; this function is a cheap post-response safety net. *)
 let trim_history agent =
   let effective_max = effective_max_messages agent in
   let len = List.length agent.history in
-  if len > effective_max then
+  if len > effective_max then begin
     agent.history <- List.filteri (fun i _ -> i < effective_max) agent.history;
+    agent.history <- ensure_tool_group_integrity agent.history
+  end;
   assert_history_bound ~where:"trim_history" agent
 
 (* Emergency context-exhaustion recovery: drop all but the last
@@ -141,7 +202,7 @@ let force_compress_history agent =
             })
         recent
     in
-    agent.history <- bounded_recent;
+    agent.history <- ensure_tool_group_integrity bounded_recent;
     assert_history_bound ~where:"force_compress_history" agent;
     true
   end
@@ -238,35 +299,42 @@ let compact_history_if_needed agent =
       Logs.info (fun m ->
           m "Compacting history: %d messages -> summarise %d, keep %d recent"
             total compact_count keep);
-      let to_compact =
+      let to_compact_raw =
         List.filteri (fun i _ -> i < compact_count) history_chrono
       in
-      let to_keep =
+      let to_keep_raw =
         List.filteri (fun i _ -> i >= compact_count) history_chrono
       in
-      let mid = compact_count / 2 in
-      let first_half = List.filteri (fun i _ -> i < mid) to_compact in
-      let second_half = List.filteri (fun i _ -> i >= mid) to_compact in
-      let* summary1 = summarize_messages agent first_half in
-      let* summary2 = summarize_messages agent second_half in
-      let merged_summary =
-        Printf.sprintf
-          "[Conversation history compacted]\n\n\
-           Earlier context:\n\
-           %s\n\n\
-           Recent context:\n\
-           %s"
-          summary1 summary2
+      let to_compact, to_keep =
+        adjust_split_for_tool_groups to_compact_raw to_keep_raw
       in
-      (* Use "assistant" role so build_messages produces exactly one
+      if to_compact = [] then Lwt.return false
+      else begin
+        let to_keep = ensure_tool_group_integrity to_keep in
+        let mid = List.length to_compact / 2 in
+        let first_half = List.filteri (fun i _ -> i < mid) to_compact in
+        let second_half = List.filteri (fun i _ -> i >= mid) to_compact in
+        let* summary1 = summarize_messages agent first_half in
+        let* summary2 = summarize_messages agent second_half in
+        let merged_summary =
+          Printf.sprintf
+            "[Conversation history compacted]\n\n\
+             Earlier context:\n\
+             %s\n\n\
+             Recent context:\n\
+             %s"
+            summary1 summary2
+        in
+        (* Use "assistant" role so build_messages produces exactly one
          "system" message (the real system prompt prepended at call time).
          A second "system"-role message here would confuse many LLM APIs. *)
-      let summary_msg =
-        Provider.make_message ~role:"assistant" ~content:merged_summary
-      in
-      (* Rebuild history (newest-first) as: recent messages then summary. *)
-      agent.history <- List.rev (summary_msg :: to_keep);
-      Lwt.return true
+        let summary_msg =
+          Provider.make_message ~role:"assistant" ~content:merged_summary
+        in
+        (* Rebuild history (newest-first) as: recent messages then summary. *)
+        agent.history <- List.rev (summary_msg :: to_keep);
+        Lwt.return true
+      end
     end
   end
   else Lwt.return false
@@ -284,29 +352,38 @@ let force_compact_history agent =
           "Force-compacting history: %d messages -> summarise %d, keep %d \
            recent"
           total compact_count keep);
-    let to_compact =
+    let to_compact_raw =
       List.filteri (fun i _ -> i < compact_count) history_chrono
     in
-    let to_keep = List.filteri (fun i _ -> i >= compact_count) history_chrono in
-    let mid = compact_count / 2 in
-    let first_half = List.filteri (fun i _ -> i < mid) to_compact in
-    let second_half = List.filteri (fun i _ -> i >= mid) to_compact in
-    let* summary1 = summarize_messages agent first_half in
-    let* summary2 = summarize_messages agent second_half in
-    let merged_summary =
-      Printf.sprintf
-        "[Conversation history compacted]\n\n\
-         Earlier context:\n\
-         %s\n\n\
-         Recent context:\n\
-         %s"
-        summary1 summary2
+    let to_keep_raw =
+      List.filteri (fun i _ -> i >= compact_count) history_chrono
     in
-    let summary_msg =
-      Provider.make_message ~role:"assistant" ~content:merged_summary
+    let to_compact, to_keep =
+      adjust_split_for_tool_groups to_compact_raw to_keep_raw
     in
-    agent.history <- List.rev (summary_msg :: to_keep);
-    Lwt.return true
+    if to_compact = [] then Lwt.return false
+    else begin
+      let to_keep = ensure_tool_group_integrity to_keep in
+      let mid = List.length to_compact / 2 in
+      let first_half = List.filteri (fun i _ -> i < mid) to_compact in
+      let second_half = List.filteri (fun i _ -> i >= mid) to_compact in
+      let* summary1 = summarize_messages agent first_half in
+      let* summary2 = summarize_messages agent second_half in
+      let merged_summary =
+        Printf.sprintf
+          "[Conversation history compacted]\n\n\
+           Earlier context:\n\
+           %s\n\n\
+           Recent context:\n\
+           %s"
+          summary1 summary2
+      in
+      let summary_msg =
+        Provider.make_message ~role:"assistant" ~content:merged_summary
+      in
+      agent.history <- List.rev (summary_msg :: to_keep);
+      Lwt.return true
+    end
   end
 
 let tools_json agent =

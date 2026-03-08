@@ -1138,9 +1138,15 @@ let test_drain_queued_messages_drains_all_pending_without_relock () =
       channel_id = Some "1";
     }
   in
-  ignore (Session.enqueue_message_if_busy session_manager ~key (mkq "one") |> Lwt_main.run);
-  ignore (Session.enqueue_message_if_busy session_manager ~key (mkq "two") |> Lwt_main.run);
-  ignore (Session.enqueue_message_if_busy session_manager ~key (mkq "three") |> Lwt_main.run);
-  Lwt_main.run (Session.drain_queued_messages session_manager ~key agent interrupt);
+  ignore
+    (Session.enqueue_message_if_busy session_manager ~key (mkq "one")
+    |> Lwt_main.run);
+  ignore
+    (Session.enqueue_message_if_busy session_manager ~key (mkq "two")
+    |> Lwt_main.run);
+  ignore
+    (Session.enqueue_message_if_busy session_manager ~key (mkq "three")
+    |> Lwt_main.run);
+  Lwt_main.run
+    (Session.drain_queued_messages session_manager ~key agent interrupt);
   Alcotest.(check int) "all queued messages notified" 3 (List.length !notified)
-

@@ -354,19 +354,19 @@ let active_background_task_summaries mgr =
       Background_task.init_schema db;
       Background_task.list_tasks ~db
       |> List.filter (fun t ->
-             match t.Background_task.status with
-             | Background_task.Queued | Background_task.Running -> true
-             | _ -> false)
-      |> List.sort (fun a b -> compare a.Background_task.id b.Background_task.id)
+          match t.Background_task.status with
+          | Background_task.Queued | Background_task.Running -> true
+          | _ -> false)
+      |> List.sort (fun a b ->
+          compare a.Background_task.id b.Background_task.id)
       |> List.map (fun t ->
-             {
-               Prompt_builder.id = t.Background_task.id;
-               runner = Background_task.string_of_runner t.runner;
-               repo_label = Filename.basename t.repo_path;
-               branch =
-                 if t.branch = "" then "(auto)" else t.branch;
-               status = Background_task.string_of_status t.status;
-             })
+          {
+            Prompt_builder.id = t.Background_task.id;
+            runner = Background_task.string_of_runner t.runner;
+            repo_label = Filename.basename t.repo_path;
+            branch = (if t.branch = "" then "(auto)" else t.branch);
+            status = Background_task.string_of_status t.status;
+          })
 
 let runtime_context_details mgr ~agent ~key ~compacted_before_turn =
   let workspace = Runtime_config.effective_workspace mgr.config in

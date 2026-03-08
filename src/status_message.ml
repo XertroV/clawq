@@ -123,9 +123,10 @@ let render t =
       List.length running = 0
       && List.length pending = 0
       && entry.id
-         = (let last_id = ref "" in
-            List.iter (fun (e : tool_entry) -> last_id := e.id) visible_completed;
-            !last_id)
+         =
+         let last_id = ref "" in
+         List.iter (fun (e : tool_entry) -> last_id := e.id) visible_completed;
+         !last_id
     in
     List.iteri
       (fun i (entry : tool_entry) ->
@@ -392,8 +393,7 @@ let tool_result t ~id ~name:_ ~result ~is_error =
               let text =
                 String.concat "\n"
                   (List.map
-                     (fun l ->
-                       Stream_visibility.truncate_text ~max_chars:60 l)
+                     (fun l -> Stream_visibility.truncate_text ~max_chars:60 l)
                      tail)
               in
               Some text

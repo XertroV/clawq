@@ -228,6 +228,155 @@ let test_cleanup_all () =
   Alcotest.(check int) "s1 has 3 messages" 3 (List.length s1);
   Alcotest.(check int) "s2 has 3 messages" 3 (List.length s2)
 
+let make_assistant_with_tool_calls calls =
+  {
+    Provider.role = "assistant";
+    content = "";
+    tool_calls = calls;
+    tool_call_id = None;
+    name = None;
+  }
+
+let make_tool_call id name =
+  { Provider.id; function_name = name; arguments = "{}" }
+
+let make_tool_result_msg id name =
+  Provider.make_tool_result ~tool_call_id:id ~name ~content:"result"
+
+let test_adjust_split_moves_orphan_tool_results () =
+  let tc = make_tool_call "tc1" "shell_exec" in
+  let assistant = make_assistant_with_tool_calls [ tc ] in
+  let tool_result = make_tool_result_msg "tc1" "shell_exec" in
+  let user_msg = Provider.make_message ~role:"user" ~content:"hello" in
+  (* Split lands between assistant+tool_calls and its tool result *)
+  let to_compact = [ assistant ] in
+  let to_keep = [ tool_result; user_msg ] in
+  let compact', keep' = Agent.adjust_split_for_tool_groups to_compact to_keep in
+  Alcotest.(check int) "orphan moved to compact" 2 (List.length compact');
+  Alcotest.(check int) "keep has only user msg" 1 (List.length keep');
+  Alcotest.(check string)
+    "kept msg is user" "user" (List.hd keep').Provider.role
+
+let test_adjust_split_noop_when_clean () =
+  let tc = make_tool_call "tc1" "shell_exec" in
+  let assistant = make_assistant_with_tool_calls [ tc ] in
+  let tool_result = make_tool_result_msg "tc1" "shell_exec" in
+  let user_msg = Provider.make_message ~role:"user" ~content:"hello" in
+  (* Clean split: tool group is entirely in to_compact *)
+  let to_compact = [ assistant; tool_result ] in
+  let to_keep = [ user_msg ] in
+  let compact', keep' = Agent.adjust_split_for_tool_groups to_compact to_keep in
+  Alcotest.(check int) "compact unchanged" 2 (List.length compact');
+  Alcotest.(check int) "keep unchanged" 1 (List.length keep')
+
+let test_ensure_integrity_removes_orphaned_results () =
+  let orphan = make_tool_result_msg "tc_missing" "file_read" in
+  let user_msg = Provider.make_message ~role:"user" ~content:"hi" in
+  let msgs = [ user_msg; orphan ] in
+  let fixed = Agent.ensure_tool_group_integrity msgs in
+  Alcotest.(check int) "orphaned tool result removed" 1 (List.length fixed);
+  Alcotest.(check string) "remaining is user msg" "user" (List.hd fixed).role
+
+let test_ensure_integrity_strips_dangling_calls () =
+  let tc = make_tool_call "tc1" "shell_exec" in
+  let assistant = make_assistant_with_tool_calls [ tc ] in
+  let user_msg = Provider.make_message ~role:"user" ~content:"hi" in
+  (* No tool result for tc1 *)
+  let msgs = [ assistant; user_msg ] in
+  let fixed = Agent.ensure_tool_group_integrity msgs in
+  Alcotest.(check int) "still 2 messages" 2 (List.length fixed);
+  let fixed_assistant = List.hd fixed in
+  Alcotest.(check int)
+    "tool_calls stripped" 0
+    (List.length fixed_assistant.Provider.tool_calls)
+
+let test_ensure_integrity_preserves_complete_groups () =
+  let tc = make_tool_call "tc1" "shell_exec" in
+  let assistant = make_assistant_with_tool_calls [ tc ] in
+  let tool_result = make_tool_result_msg "tc1" "shell_exec" in
+  let user_msg = Provider.make_message ~role:"user" ~content:"hi" in
+  let msgs = [ user_msg; assistant; tool_result ] in
+  let fixed = Agent.ensure_tool_group_integrity msgs in
+  Alcotest.(check int) "all 3 messages preserved" 3 (List.length fixed);
+  let fixed_assistant = List.nth fixed 1 in
+  Alcotest.(check int)
+    "tool_calls preserved" 1
+    (List.length fixed_assistant.Provider.tool_calls)
+
+let test_trim_history_tool_group_integrity () =
+  let config = make_config ~max_messages:3 () in
+  let agent = Agent.create ~config () in
+  (* Build history (newest-first): user, tool_result, assistant+tool_calls, ...old *)
+  let tc = make_tool_call "tc1" "shell_exec" in
+  let old_msgs =
+    List.init 5 (fun i ->
+        Provider.make_message ~role:"user" ~content:(Printf.sprintf "old %d" i))
+  in
+  (* History is newest-first, so: tool_result, assistant, then old msgs *)
+  agent.history <-
+    [
+      make_tool_result_msg "tc1" "shell_exec";
+      make_assistant_with_tool_calls [ tc ];
+    ]
+    @ old_msgs;
+  Agent.trim_history agent;
+  (* After trim to 3 + integrity fix, no orphaned tool results should remain *)
+  List.iter
+    (fun (m : Provider.message) ->
+      if m.role = "tool" then
+        match m.tool_call_id with
+        | Some id ->
+            let has_call =
+              List.exists
+                (fun (m2 : Provider.message) ->
+                  m2.role = "assistant"
+                  && List.exists
+                       (fun (tc : Provider.tool_call) -> tc.id = id)
+                       m2.tool_calls)
+                agent.history
+            in
+            Alcotest.(check bool) "tool result has matching call" true has_call
+        | None -> ()
+      else ())
+    agent.history
+
+let test_force_compress_tool_group_integrity () =
+  let config = make_config () in
+  let agent = Agent.create ~config () in
+  let tc = make_tool_call "tc1" "shell_exec" in
+  (* Build 10 messages: newest first = tool_result, assistant+tc, then 8 user msgs *)
+  let old_msgs =
+    List.init 8 (fun i ->
+        Provider.make_message ~role:"user" ~content:(Printf.sprintf "Msg %d" i))
+  in
+  agent.history <-
+    [
+      make_tool_result_msg "tc1" "shell_exec";
+      make_assistant_with_tool_calls [ tc ];
+    ]
+    @ old_msgs;
+  let compressed = Agent.force_compress_history agent in
+  Alcotest.(check bool) "compression performed" true compressed;
+  (* Verify no orphaned tool results *)
+  List.iter
+    (fun (m : Provider.message) ->
+      if m.role = "tool" then
+        match m.tool_call_id with
+        | Some id ->
+            let has_call =
+              List.exists
+                (fun (m2 : Provider.message) ->
+                  m2.role = "assistant"
+                  && List.exists
+                       (fun (tc : Provider.tool_call) -> tc.id = id)
+                       m2.tool_calls)
+                agent.history
+            in
+            Alcotest.(check bool) "tool result has matching call" true has_call
+        | None -> ()
+      else ())
+    agent.history
+
 let suite =
   [
     Alcotest.test_case "cleanup by count" `Quick test_cleanup_by_count;
@@ -250,4 +399,18 @@ let suite =
       test_trim_history_idempotent;
     Alcotest.test_case "prepare_turn_history enforces max messages" `Quick
       test_prepare_turn_history_enforces_max_messages;
+    Alcotest.test_case "adjust_split moves orphan tool results" `Quick
+      test_adjust_split_moves_orphan_tool_results;
+    Alcotest.test_case "adjust_split noop when clean" `Quick
+      test_adjust_split_noop_when_clean;
+    Alcotest.test_case "ensure_integrity removes orphaned results" `Quick
+      test_ensure_integrity_removes_orphaned_results;
+    Alcotest.test_case "ensure_integrity strips dangling calls" `Quick
+      test_ensure_integrity_strips_dangling_calls;
+    Alcotest.test_case "ensure_integrity preserves complete groups" `Quick
+      test_ensure_integrity_preserves_complete_groups;
+    Alcotest.test_case "trim_history tool group integrity" `Quick
+      test_trim_history_tool_group_integrity;
+    Alcotest.test_case "force_compress tool group integrity" `Quick
+      test_force_compress_tool_group_integrity;
   ]

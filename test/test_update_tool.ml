@@ -74,13 +74,14 @@ let test_run_update_aborts_on_build_failure () =
          ())
   in
   let expected_msg =
-    "Build failed (exit 2). Restart aborted. Most relevant detail: \
-     Starting update..."
+    "Build failed (exit 2). Restart aborted. Most relevant detail: Starting \
+     update..."
   in
   Alcotest.(check string) "build failure result" expected_msg result;
   Alcotest.(check bool) "no restart signal" false !signaled;
   Alcotest.(check bool)
-    "build failure reported" true (List.mem expected_msg !progress);
+    "build failure reported" true
+    (List.mem expected_msg !progress);
   Alcotest.(check (list (pair string (list string))))
     "commands still ran in order"
     [ ("/repo", [ "git"; "pull" ]); ("/repo", [ "make"; "build" ]) ]
@@ -94,33 +95,41 @@ let test_run_update_reports_dune_lock_detail () =
          ~find_repo_root:(fun ?start_path:_ ?exists:_ () -> Some "/repo")
          ~run_command:(fun ~cwd:_ ~argv ~send_progress ->
            let open Lwt.Syntax in
-           (match Array.to_list argv with
+           match Array.to_list argv with
            | [ "git"; "pull" ] ->
                let* () = send_progress "Already up to date." in
                Lwt.return 0
            | [ "make"; "build" ] ->
-               let* () = send_progress
-                 "ERROR: Dune build lock present at _build/.lock" in
-               let* () = send_progress
-                 "Another dune command may already be running in this repo build dir." in
+               let* () =
+                 send_progress "ERROR: Dune build lock present at _build/.lock"
+               in
+               let* () =
+                 send_progress
+                   "Another dune command may already be running in this repo \
+                    build dir."
+               in
                Lwt.return 2
-           | _ -> Lwt.return 99))
+           | _ -> Lwt.return 99)
          ~is_draining:(fun () -> false)
          ~send_progress:(fun text ->
            progress := text :: !progress;
            Lwt.return_unit)
          ())
   in
-  Alcotest.(check bool) "mentions dune lock" true
+  Alcotest.(check bool)
+    "mentions dune lock" true
     (String.contains result 'D'
     && String.length result > 0
-    && (try
-          ignore
-            (Str.search_forward
-               (Str.regexp_string "Dune lock contention") result 0);
-          true
-        with Not_found -> false));
-  Alcotest.(check bool) "progress includes final message" true
+    &&
+      try
+        ignore
+          (Str.search_forward
+             (Str.regexp_string "Dune lock contention")
+             result 0);
+        true
+      with Not_found -> false);
+  Alcotest.(check bool)
+    "progress includes final message" true
     (List.exists (fun s -> String.length s > 0 && s = result) !progress)
 
 let test_run_update_rejects_when_draining () =
