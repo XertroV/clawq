@@ -10,6 +10,150 @@ let query_single_text_option db sql =
           | _ -> None)
       | _ -> None)
 
+let free_port () =
+  let sock = Unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
+  Fun.protect
+    ~finally:(fun () -> Unix.close sock)
+    (fun () ->
+      Unix.setsockopt sock Unix.SO_REUSEADDR true;
+      Unix.bind sock (Unix.ADDR_INET (Unix.inet_addr_loopback, 0));
+      match Unix.getsockname sock with
+      | Unix.ADDR_INET (_, port) -> port
+      | Unix.ADDR_UNIX _ -> Alcotest.fail "expected inet socket")
+
+let make_fake_provider_config base_url : Runtime_config.provider_config =
+  {
+    api_key = "test-key";
+    kind = None;
+    base_url = Some base_url;
+    default_model = Some "fake-model";
+    project_id = None;
+    location = None;
+    service_account_json = None;
+    thinking_budget_tokens = None;
+    oai_thinking_style = "none";
+    codex_oauth = None;
+  }
+
+let with_fake_chat_provider f =
+  let port = free_port () in
+  let callback _conn req body =
+    let open Lwt.Syntax in
+    let* body_text = Cohttp_lwt.Body.to_string body in
+    let json = Yojson.Safe.from_string body_text in
+    let open Yojson.Safe.Util in
+    let messages = json |> member "messages" |> to_list in
+    let user_messages =
+      messages
+      |> List.filter_map (fun msg ->
+          try
+            if msg |> member "role" |> to_string = "user" then
+              Some (msg |> member "content" |> to_string)
+            else None
+          with _ -> None)
+    in
+    let latest = match List.rev user_messages with x :: _ -> x | [] -> "" in
+    let response_text = "reply:" ^ latest in
+    let stream = try json |> member "stream" |> to_bool with _ -> false in
+    match
+      (Cohttp.Request.meth req, Uri.path (Cohttp.Request.uri req), stream)
+    with
+    | `POST, "/chat/completions", false ->
+        let response_body =
+          Yojson.Safe.to_string
+            (`Assoc
+               [
+                 ("id", `String "cmpl_fake");
+                 ("object", `String "chat.completion");
+                 ("model", `String "fake-model");
+                 ( "choices",
+                   `List
+                     [
+                       `Assoc
+                         [
+                           ("index", `Int 0);
+                           ( "message",
+                             `Assoc
+                               [
+                                 ("role", `String "assistant");
+                                 ("content", `String response_text);
+                               ] );
+                           ("finish_reason", `String "stop");
+                         ];
+                     ] );
+                 ( "usage",
+                   `Assoc
+                     [
+                       ("prompt_tokens", `Int 1); ("completion_tokens", `Int 1);
+                     ] );
+               ])
+        in
+        Cohttp_lwt_unix.Server.respond_string ~status:`OK ~body:response_body ()
+    | `POST, "/chat/completions", true ->
+        let stream_body, push = Lwt_stream.create () in
+        let chunk =
+          Yojson.Safe.to_string
+            (`Assoc
+               [
+                 ("model", `String "fake-model");
+                 ( "choices",
+                   `List
+                     [
+                       `Assoc
+                         [
+                           ("index", `Int 0);
+                           ( "delta",
+                             `Assoc [ ("content", `String response_text) ] );
+                         ];
+                     ] );
+               ])
+        in
+        push (Some ("data: " ^ chunk ^ "\n\n"));
+        push (Some "data: [DONE]\n\n");
+        push None;
+        let headers =
+          Cohttp.Header.of_list [ ("Content-Type", "text/event-stream") ]
+        in
+        Cohttp_lwt_unix.Server.respond ~status:`OK ~headers
+          ~body:(Cohttp_lwt.Body.of_stream stream_body)
+          ()
+    | _ -> Cohttp_lwt_unix.Server.respond_string ~status:`Not_found ~body:"" ()
+  in
+  let stop, stopper = Lwt.wait () in
+  let server =
+    Cohttp_lwt_unix.Server.create
+      ~mode:(`TCP (`Port port))
+      (Cohttp_lwt_unix.Server.make ~callback ())
+  in
+  Lwt.async (fun () -> Lwt.pick [ server; stop ]);
+  Fun.protect
+    ~finally:(fun () -> Lwt.wakeup_later stopper ())
+    (fun () ->
+      let config =
+        {
+          Runtime_config.default with
+          default_provider = Some "fake";
+          providers =
+            [
+              ( "fake",
+                make_fake_provider_config
+                  (Printf.sprintf "http://127.0.0.1:%d" port) );
+            ];
+          prompt =
+            { Runtime_config.default.prompt with dynamic_enabled = false };
+          security =
+            { Runtime_config.default.security with tools_enabled = false };
+          agent_defaults =
+            {
+              Runtime_config.default.agent_defaults with
+              primary_model = "fake-model";
+              show_thinking = false;
+              show_tool_calls = false;
+            };
+        }
+      in
+      f config)
+
 let test_reset_clears_active_session_and_history () =
   let db = Memory.init ~db_path:":memory:" () in
   let config = Runtime_config.default in
@@ -278,6 +422,91 @@ let test_turn_stream_uses_special_command_handler () =
     "stream done sent" true
     (List.exists (function Provider.Done -> true | _ -> false) !chunks)
 
+let test_bang_message_interrupts_before_lock_and_turns_normally () =
+  with_fake_chat_provider (fun config ->
+      let db = Memory.init ~db_path:":memory:" () in
+      let mgr = Session.create ~config ~db () in
+      let mutex = Lwt_mutex.create () in
+      let interrupt = ref None in
+      let agent = Agent.create ~config () in
+      Hashtbl.replace mgr.sessions "web:s1" (agent, mutex, interrupt);
+      Lwt_main.run
+        (let open Lwt.Syntax in
+         let* () = Lwt_mutex.lock mutex in
+         let turn_p = Session.turn mgr ~key:"web:s1" ~message:"!hello" () in
+         let* () = Lwt.pause () in
+         Alcotest.(check (option string))
+           "interrupt delivered before lock release" (Some "hello") !interrupt;
+         Lwt_mutex.unlock mutex;
+         let* response = turn_p in
+         Alcotest.(check string)
+           "bang message processed as normal turn" "reply:hello" response;
+         Lwt.return_unit);
+      let history = Memory.load_history ~db ~session_key:"web:s1" in
+      Alcotest.(check (list string))
+        "history keeps normalized user message and assistant reply"
+        [ "hello"; "reply:hello" ]
+        (List.map (fun msg -> msg.Provider.content) history))
+
+let test_bang_message_turn_stream_processes_normally () =
+  with_fake_chat_provider (fun config ->
+      let db = Memory.init ~db_path:":memory:" () in
+      let mgr = Session.create ~config ~db () in
+      let mutex = Lwt_mutex.create () in
+      let interrupt = ref None in
+      let agent = Agent.create ~config () in
+      let chunks = ref [] in
+      Hashtbl.replace mgr.sessions "web:s2" (agent, mutex, interrupt);
+      Lwt_main.run
+        (let open Lwt.Syntax in
+         let on_chunk chunk =
+           chunks := chunk :: !chunks;
+           Lwt.return_unit
+         in
+         let* () = Lwt_mutex.lock mutex in
+         let turn_p =
+           Session.turn_stream mgr ~key:"web:s2" ~message:"!hello" ~on_chunk ()
+         in
+         let* () = Lwt.pause () in
+         Alcotest.(check (option string))
+           "stream interrupt delivered before lock release" (Some "hello")
+           !interrupt;
+         Lwt_mutex.unlock mutex;
+         let* response = turn_p in
+         Alcotest.(check string)
+           "stream bang message processed as normal turn" "reply:hello" response;
+         Lwt.return_unit);
+      Alcotest.(check (list string))
+        "stream emits provider response, not raw stripped message"
+        [ "reply:hello" ]
+        (List.rev_map
+           (function
+             | Provider.Delta text -> text | Provider.Done -> "[DONE]" | _ -> "")
+           (List.filter
+              (function Provider.Delta _ | Provider.Done -> true | _ -> false)
+              !chunks)
+        |> List.filter (fun text -> text <> "[DONE]"));
+      let history = Memory.load_history ~db ~session_key:"web:s2" in
+      Alcotest.(check (list string))
+        "stream history keeps normalized user message and assistant reply"
+        [ "hello"; "reply:hello" ]
+        (List.map (fun msg -> msg.Provider.content) history))
+
+let test_empty_bang_message_becomes_interrupted_message () =
+  with_fake_chat_provider (fun config ->
+      let db = Memory.init ~db_path:":memory:" () in
+      let mgr = Session.create ~config ~db () in
+      let response =
+        Lwt_main.run (Session.turn mgr ~key:"web:s3" ~message:"!" ())
+      in
+      Alcotest.(check string)
+        "empty bang becomes interrupted marker" "reply:[interrupted]" response;
+      let history = Memory.load_history ~db ~session_key:"web:s3" in
+      Alcotest.(check (list string))
+        "empty bang persists normalized message"
+        [ "[interrupted]"; "reply:[interrupted]" ]
+        (List.map (fun msg -> msg.Provider.content) history))
+
 let suite =
   [
     Alcotest.test_case "reset clears active session and history" `Quick
@@ -308,4 +537,10 @@ let suite =
       test_turn_uses_special_command_handler;
     Alcotest.test_case "turn stream uses special command handler" `Quick
       test_turn_stream_uses_special_command_handler;
+    Alcotest.test_case "bang message interrupts before lock and turns normally"
+      `Quick test_bang_message_interrupts_before_lock_and_turns_normally;
+    Alcotest.test_case "bang message turn stream processes normally" `Quick
+      test_bang_message_turn_stream_processes_normally;
+    Alcotest.test_case "empty bang message becomes interrupted message" `Quick
+      test_empty_bang_message_becomes_interrupted_message;
   ]

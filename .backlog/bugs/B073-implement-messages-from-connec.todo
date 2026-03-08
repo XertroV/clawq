@@ -1,10 +1,15 @@
 ---
+claimed_at: "2026-03-08T11:55:43Z"
+claimed_by: cli-user
+completed_at: "2026-03-08T12:07:09Z"
 complexity: medium
 depends_on: []
+duration_minutes: 11.446639067483334
 estimate_hours: 1
 id: B073
 priority: high
-status: pending
+started_at: "2026-03-08T11:55:43Z"
+status: done
 tags: []
 title: 'implement: messages from connectors (or anywhere) starting with `!` should interrupt the agent immediately and deliver the message.'
 ---
