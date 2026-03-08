@@ -259,6 +259,12 @@ let reset_agent_cmd =
      workspace defaults. Prompts for confirmation before acting. Does NOT \
      touch config.json."
 
+let reset_workspace_cmd =
+  simple "reset-workspace"
+    "Wipe conversation history and workspace identity files, then redeploy \
+     workspace defaults. Leaves cron jobs and config.json intact. Prompts for \
+     confirmation before acting."
+
 let otp_show_cmd =
   simple "otp-show"
     "Show the current browser pairing code and any Telegram TOTP codes."
@@ -304,6 +310,7 @@ let () =
       tunnel_cmd;
       migrate_cmd;
       reset_agent_cmd;
+      reset_workspace_cmd;
       otp_show_cmd;
       phase2_cmd;
       hardware_cmd;

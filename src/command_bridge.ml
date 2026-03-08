@@ -1259,6 +1259,79 @@ let cmd_reset_agent () =
     "Agent reset complete."
   end
 
+let cmd_reset_workspace () =
+  let cfg = get_config () in
+  let workspace = Runtime_config.effective_workspace cfg in
+  let db_path =
+    if cfg.memory.db_path <> "" then cfg.memory.db_path
+    else
+      let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
+      Filename.concat (Filename.concat home ".clawq") "memory.db"
+  in
+  let red s = "\027[1;31m" ^ s ^ "\027[0m" in
+  let bold s = "\027[1m" ^ s ^ "\027[0m" in
+  let dim s = "\027[2m" ^ s ^ "\027[0m" in
+  print_endline "";
+  print_endline (red "  !! RESET WORKSPACE !!");
+  print_endline "";
+  print_endline "  This will permanently delete:";
+  print_endline
+    ("    "
+    ^ bold "· All conversation history  "
+    ^ dim ("(" ^ db_path ^ " — messages, embeddings)"));
+  print_endline
+    ("    "
+    ^ bold "· All workspace identity files  "
+    ^ dim ("(" ^ workspace ^ "/)"));
+  print_endline
+    (dim
+       "      EGO.md  AGENTS.md  USER.md  IDENTITY.md  TOOLS.md  HEARTBEAT.md  \
+        BOOTSTRAP.md");
+  print_endline "";
+  print_endline "  This will NOT touch:";
+  print_endline (dim "    · config.json");
+  print_endline (dim "    · daemon.log  daemon.pid");
+  print_endline (dim "    · cron jobs and run logs");
+  print_endline "";
+  print_string "  Type ";
+  print_string (bold "RESET");
+  print_string " to confirm, or anything else to cancel: ";
+  flush stdout;
+  let answer = try input_line stdin with End_of_file -> "" in
+  print_endline "";
+  if String.trim answer <> "RESET" then begin
+    print_endline "  Cancelled. Nothing changed.";
+    print_endline "";
+    "Cancelled."
+  end
+  else begin
+    let db =
+      Memory.init ~db_path ~search_enabled:cfg.memory.search_enabled ()
+    in
+    let exec sql =
+      let stmt = Sqlite3.prepare db sql in
+      ignore (Sqlite3.step stmt);
+      ignore (Sqlite3.finalize stmt)
+    in
+    exec "DELETE FROM messages";
+    exec "DELETE FROM embeddings";
+    ignore (Sqlite3.db_close db);
+    List.iter
+      (fun (name, content) ->
+        let path = Filename.concat workspace name in
+        try
+          let oc = open_out path in
+          output_string oc content;
+          close_out oc
+        with _ -> ())
+      Workspace_scaffold.templates;
+    print_endline "  Done:";
+    print_endline "    · Conversation history cleared";
+    print_endline "    · Workspace files redeployed from defaults";
+    print_endline "";
+    "Workspace reset complete."
+  end
+
 let cmd_otp_show () =
   let cfg = get_config () in
   let lines = ref [] in
@@ -1406,6 +1479,7 @@ let handle args =
   | "migrate" :: rest -> Migrate.cmd_migrate rest
   | "service" :: rest -> cmd_service rest
   | "reset-agent" :: _ -> cmd_reset_agent ()
+  | "reset-workspace" :: _ -> cmd_reset_workspace ()
   | "otp-show" :: _ -> cmd_otp_show ()
   | "debug" :: rest -> cmd_debug rest
   | _ -> Clawq_core.dispatch args
