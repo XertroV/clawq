@@ -82,7 +82,64 @@ let detected_os_label =
     | s when String.trim s <> "" -> s
     | _ -> Sys.os_type)
 
-let build_runtime_context ~(config : Runtime_config.t) () =
+type context_usage = {
+  history_messages : int;
+  estimated_history_tokens : int;
+  context_window_tokens : int;
+  compaction_threshold_tokens : int;
+  max_messages_per_session : int;
+  compacted_before_turn : bool;
+}
+
+type runtime_context_details = {
+  session_id : string;
+  session_name : string option;
+  is_main_session : bool;
+  heartbeat_routing_applies : bool;
+  effective_workspace : string;
+  workspace_only : bool;
+  sandbox_backend_requested : string;
+  sandbox_backend_effective : string;
+  shell_is_sandboxed : bool;
+  shell_policy_summary : string;
+  shell_visible_roots_summary : string;
+  context_usage : context_usage option;
+}
+
+let yes_no b = if b then "yes" else "no"
+
+let add_runtime_details lines (details : runtime_context_details) =
+  let add line = lines := line :: !lines in
+  add ("- Session id: " ^ details.session_id);
+  (match details.session_name with
+  | Some name when String.trim name <> "" -> add ("- Session name: " ^ name)
+  | _ -> ());
+  add ("- Main session: " ^ yes_no details.is_main_session);
+  add
+    ("- Heartbeat routing applies: " ^ yes_no details.heartbeat_routing_applies);
+  add ("- Effective workspace: " ^ details.effective_workspace);
+  add ("- Workspace only: " ^ yes_no details.workspace_only);
+  add
+    (Printf.sprintf "- Shell sandboxed: %s (requested=%s effective=%s)"
+       (yes_no details.shell_is_sandboxed)
+       details.sandbox_backend_requested details.sandbox_backend_effective);
+  add ("- Shell policy: " ^ details.shell_policy_summary);
+  add ("- Shell visible roots: " ^ details.shell_visible_roots_summary);
+  match details.context_usage with
+  | None -> ()
+  | Some usage ->
+      add
+        (Printf.sprintf "- Context usage: %d messages, ~%d/%d tokens"
+           usage.history_messages usage.estimated_history_tokens
+           usage.context_window_tokens);
+      add
+        (Printf.sprintf
+           "- Compaction: before a turn when history > %d messages or est \
+            tokens > %d; compacted before this turn: %s"
+           usage.max_messages_per_session usage.compaction_threshold_tokens
+           (yes_no usage.compacted_before_turn))
+
+let build_runtime_context ~(config : Runtime_config.t) ?details () =
   if not config.prompt.dynamic_enabled then None
   else
     let lines = ref [] in
@@ -104,6 +161,9 @@ let build_runtime_context ~(config : Runtime_config.t) () =
       | None -> ());
       add ("- OS: " ^ Lazy.force detected_os_label)
     end;
+    (match details with
+    | Some details -> add_runtime_details lines details
+    | None -> ());
     match List.rev !lines with
     | [] -> None
     | items ->

@@ -53,6 +53,17 @@ let effective_max_messages agent =
   let m = agent.config.memory.max_messages_per_session in
   if m <= 0 then 500 else min m 500
 
+let runtime_context_usage agent ~compacted_before_turn =
+  let context_window_tokens = context_window_for_agent agent in
+  {
+    Prompt_builder.history_messages = List.length agent.history;
+    estimated_history_tokens = estimate_history_tokens agent.history;
+    context_window_tokens;
+    compaction_threshold_tokens = context_window_tokens * 3 / 4;
+    max_messages_per_session = effective_max_messages agent;
+    compacted_before_turn;
+  }
+
 (* Number of most-recent messages kept verbatim after compaction. *)
 let compaction_keep_recent = 20
 

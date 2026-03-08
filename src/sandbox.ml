@@ -7,6 +7,11 @@ type t = {
   isolate_filesystem : bool;
 }
 
+let backend_to_string = function
+  | Firejail -> "firejail"
+  | Bubblewrap -> "bubblewrap"
+  | None -> "none"
+
 let is_available b =
   let cmd =
     match b with
@@ -21,8 +26,15 @@ let detect () =
   else if is_available Bubblewrap then Bubblewrap
   else None
 
-let create ~workspace ~extra_allowed_paths ~workspace_only () =
-  let backend = detect () in
+let backend_of_policy policy =
+  match String.lowercase_ascii (String.trim policy) with
+  | "firejail" -> Firejail
+  | "bubblewrap" | "bwrap" -> Bubblewrap
+  | "none" -> None
+  | _ -> detect ()
+
+let create ?backend ~workspace ~extra_allowed_paths ~workspace_only () =
+  let backend = match backend with Some b -> b | None -> detect () in
   let extra_allowed_paths =
     extra_allowed_paths
     |> List.map Runtime_config.expand_home

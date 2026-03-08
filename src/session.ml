@@ -9,6 +9,8 @@ type t = {
   sessions : (string, Agent.t * Lwt_mutex.t * string option ref) Hashtbl.t;
   sessions_lock : Lwt_mutex.t;
   tool_registry : Tool_registry.t option;
+  sandbox : Sandbox.t option;
+  landlock_enabled : bool;
   db : Sqlite3.db option;
   mutable draining : bool;
   in_flight_count : int ref;
@@ -19,12 +21,14 @@ type t = {
 let draining_message =
   "Daemon is restarting, please wait a moment and try again."
 
-let create ~config ?tool_registry ?db () =
+let create ~config ?tool_registry ?sandbox ?(landlock_enabled = false) ?db () =
   {
     config;
     sessions = Hashtbl.create 16;
     sessions_lock = Lwt_mutex.create ();
     tool_registry;
+    sandbox;
+    landlock_enabled;
     db;
     draining = false;
     in_flight_count = ref 0;
@@ -179,6 +183,77 @@ let set_interrupt_if_present mgr ~key message =
       | Some (_, _, interrupt) -> interrupt := Some message
       | None -> ());
       Lwt.return_unit)
+
+let is_main_session_key key = key = "__main__"
+
+let shell_visible_roots_summary ~workspace_only ~workspace ~extra_allowed_paths
+    =
+  if not workspace_only then
+    "unrestricted host filesystem view (tool-level checks relaxed)"
+  else
+    let roots = workspace :: extra_allowed_paths in
+    String.concat ", " (List.sort_uniq String.compare roots)
+
+let shell_policy_summary mgr sandbox =
+  let workspace_only = mgr.config.security.workspace_only in
+  let allowlist = "shell allowlist + path checks" in
+  let fs_policy, backend_effective, shell_is_sandboxed =
+    match sandbox with
+    | Some sb when workspace_only ->
+        let backend = Sandbox.backend_to_string sb.Sandbox.backend in
+        let policy =
+          match sb.Sandbox.backend with
+          | Sandbox.None ->
+              "OS-level filesystem sandbox disabled; workspace boundaries are \
+               enforced by tool validation only"
+          | _ ->
+              Printf.sprintf
+                "OS-level filesystem sandbox enabled via %s with workspace \
+                 isolation"
+                backend
+        in
+        (policy, backend, sb.Sandbox.backend <> Sandbox.None)
+    | Some sb ->
+        ( "workspace_only disabled; shell can access the host filesystem",
+          Sandbox.backend_to_string sb.Sandbox.backend,
+          false )
+    | None -> ("shell runtime context unavailable", "none", false)
+  in
+  let landlock_suffix =
+    if mgr.landlock_enabled then "; landlock enabled for daemon process" else ""
+  in
+  ( allowlist ^ "; " ^ fs_policy ^ landlock_suffix,
+    backend_effective,
+    shell_is_sandboxed )
+
+let runtime_context_details mgr ~agent ~key ~compacted_before_turn =
+  let workspace = Runtime_config.effective_workspace mgr.config in
+  let extra_allowed_paths =
+    mgr.config.security.extra_allowed_paths
+    |> List.map Runtime_config.expand_home
+  in
+  let shell_policy_summary, sandbox_backend_effective, shell_is_sandboxed =
+    shell_policy_summary mgr mgr.sandbox
+  in
+  {
+    Prompt_builder.session_id = key;
+    session_name = (if is_main_session_key key then Some "main" else None);
+    is_main_session = is_main_session_key key;
+    heartbeat_routing_applies =
+      is_main_session_key key && mgr.config.heartbeat.heartbeat_enabled;
+    effective_workspace = workspace;
+    workspace_only = mgr.config.security.workspace_only;
+    sandbox_backend_requested = mgr.config.security.sandbox_backend;
+    sandbox_backend_effective;
+    shell_is_sandboxed;
+    shell_policy_summary;
+    shell_visible_roots_summary =
+      shell_visible_roots_summary
+        ~workspace_only:mgr.config.security.workspace_only ~workspace
+        ~extra_allowed_paths;
+    context_usage =
+      Some (Agent.runtime_context_usage agent ~compacted_before_turn);
+  }
 
 let format_context_block ?channel_name ?channel_type ?sender_id ?sender_name ()
     =
@@ -337,15 +412,19 @@ let turn mgr ~key ~message ?(attachments = []) ?channel_name ?channel_type
                       ctx ^ "\n" ^ message
                 in
                 let history_before = List.length agent.history in
-                let runtime_context =
-                  Prompt_builder.build_runtime_context ~config:mgr.config ()
-                in
                 let* compacted =
                   Agent.prepare_turn_history agent
                     ~user_message:effective_message ?db:mgr.db ()
                 in
                 if compacted then persist_compacted_history mgr ~key agent
                 else persist_new_messages mgr ~key ~history_before agent;
+                let runtime_context =
+                  Prompt_builder.build_runtime_context ~config:mgr.config
+                    ~details:
+                      (runtime_context_details mgr ~agent ~key
+                         ~compacted_before_turn:compacted)
+                    ()
+                in
                 let prepared_history_len = List.length agent.history in
                 let notify = find_registered_notifier mgr ~key in
                 record_agent_turn mgr ~key ?channel ?channel_id ();
@@ -450,15 +529,19 @@ let turn_stream mgr ~key ~message ?(attachments = []) ?channel_name
                       ctx ^ "\n" ^ message
                 in
                 let history_before = List.length agent.history in
-                let runtime_context =
-                  Prompt_builder.build_runtime_context ~config:mgr.config ()
-                in
                 let* compacted =
                   Agent.prepare_turn_history agent
                     ~user_message:effective_message ?db:mgr.db ()
                 in
                 if compacted then persist_compacted_history mgr ~key agent
                 else persist_new_messages mgr ~key ~history_before agent;
+                let runtime_context =
+                  Prompt_builder.build_runtime_context ~config:mgr.config
+                    ~details:
+                      (runtime_context_details mgr ~agent ~key
+                         ~compacted_before_turn:compacted)
+                    ()
+                in
                 let prepared_history_len = List.length agent.history in
                 record_agent_turn mgr ~key ?channel ?channel_id ();
                 let* response =

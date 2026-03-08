@@ -146,7 +146,7 @@ clawq config show security
 
 **agent_defaults** — `primary_model` (default "openai/gpt-4o"), `system_prompt` (default ""), `max_tool_iterations` (default 10), `tool_search_enabled` (default false), `reasoning_effort` (optional string), `show_thinking` (default false), `show_tool_calls` (default true for connector notifiers).
 
-**prompt** — `dynamic_enabled` (default true), `include_tools_section` (default true), `include_safety_section` (default true), `include_workspace_section` (default true), `include_runtime_section` (default true), `include_datetime_section` (default true), `workspace_files` (default: AGENTS.md, EGO.md, SOUL.md, TOOLS.md, IDENTITY.md, USER.md, HEARTBEAT.md, BOOTSTRAP.md, MEMORY.md, memory.md), `max_workspace_file_chars` (default 8000), `max_workspace_total_chars` (default 20000).
+**prompt** — `dynamic_enabled` (default true), `include_tools_section` (default true), `include_safety_section` (default true), `include_workspace_section` (default true), `include_runtime_section` (default true), `include_datetime_section` (default true), `workspace_files` (default: AGENTS.md, EGO.md, SOUL.md, TOOLS.md, IDENTITY.md, USER.md, HEARTBEAT.md, BOOTSTRAP.md, MEMORY.md, memory.md), `max_workspace_file_chars` (default 8000), `max_workspace_total_chars` (default 20000). When `include_runtime_section` is enabled, the per-turn runtime block can include current cwd, effective workspace, git root/branch, OS, session id, optional session name, main-session status, whether heartbeat routing currently applies, `workspace_only`, requested/effective sandbox backend, shell policy and visible roots summary, plus estimated context-usage and compaction-threshold information.
 
 **channels.telegram** — under `accounts.<name>`: `bot_token`, `allow_from` (array of chat IDs or `["*"]`), `totp.enabled`, `totp.secret`, `totp.session_ttl_hours`.
 
@@ -300,6 +300,7 @@ You also support MCP (Model Context Protocol) for exposing and consuming externa
 - Slack uses `slack:<channel_id>:<user_id>`.
 - Heartbeats use the special session key `__main__`.
 - `__main__` is the closest thing to the "main session" in current runtime behavior. Heartbeat work is routed there, not into a user channel session.
+- The runtime-context block shown to the model always includes the current session id. Session name is optional metadata; today it is only set for special internal cases such as the main session or debug prompt flows.
 - Registered channel notifiers exist only while a live channel request/stream is active; they are used for restart drain warnings and similar out-of-band messages to currently attached sessions.
 
 ## Heartbeats
@@ -309,6 +310,7 @@ You also support MCP (Model Context Protocol) for exposing and consuming externa
 - If `HEARTBEAT.md` is missing or empty, nothing happens.
 - Heartbeat execution tries to lock the `__main__` session. If that session is busy, the tick is skipped rather than queued.
 - The heartbeat prompt content is literally the trimmed contents of `HEARTBEAT.md`.
+- In the runtime-context block, "heartbeat routing applies" currently means the turn is on `__main__` and heartbeat processing is enabled. This is a routing-status hint, not a guarantee that future routing rules will stay main-session-only.
 - If the model replies exactly `HEARTBEAT_OK`, the daemon logs success and sends no outbound message.
 - Otherwise the daemon currently logs that it would notify `notify.notify_channel` / `notify.notify_target`; it does not currently deliver that heartbeat message itself.
 - Heartbeat turns are not routed into normal web/Telegram/Discord session histories unless you explicitly build your own workflow around them.

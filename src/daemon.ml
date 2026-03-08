@@ -137,7 +137,11 @@ let default_resume_turn ~(session_manager : Session.t) ~session_key agent
   if compacted then
     Session.persist_compacted_history session_manager ~key:session_key agent;
   let runtime_context =
-    Prompt_builder.build_runtime_context ~config:session_manager.config ()
+    Prompt_builder.build_runtime_context ~config:session_manager.config
+      ~details:
+        (Session.runtime_context_details session_manager ~agent ~key:session_key
+           ~compacted_before_turn:compacted)
+      ()
   in
   Agent.turn agent ~user_message:"" ?db:session_manager.db ~session_key
     ~interrupt_check:(fun () -> !interrupt)
@@ -356,13 +360,7 @@ let run ~(config : Runtime_config.t) =
         | Some lk -> lk.enabled
         | None -> false));
   let sandbox =
-    let backend =
-      match config.security.sandbox_backend with
-      | "firejail" -> Sandbox.Firejail
-      | "bubblewrap" -> Sandbox.Bubblewrap
-      | "none" -> Sandbox.None
-      | _ -> Sandbox.detect ()
-    in
+    let backend = Sandbox.backend_of_policy config.security.sandbox_backend in
     {
       Sandbox.backend;
       workspace;
@@ -374,10 +372,7 @@ let run ~(config : Runtime_config.t) =
   in
   Logs.info (fun m ->
       m "Sandbox backend: %s"
-        (match sandbox.Sandbox.backend with
-        | Sandbox.Firejail -> "firejail"
-        | Sandbox.Bubblewrap -> "bubblewrap"
-        | Sandbox.None -> "none"));
+        (Sandbox.backend_to_string sandbox.Sandbox.backend));
   let tool_registry =
     if config.security.tools_enabled then begin
       let registry = Tool_registry.create () in
@@ -560,7 +555,8 @@ let run ~(config : Runtime_config.t) =
     Rate_limiter.create ~rate_per_minute:rl.telegram_per_chat_rpm
       ~burst_multiplier:rl.burst_multiplier
   in
-  if config.security.landlock_enabled then begin
+  let landlock_enabled = config.security.landlock_enabled in
+  if landlock_enabled then begin
     Logs.info (fun m -> m "Landlock sandbox requested, activating...");
     Landlock.sandbox_workspace ~config
   end;
@@ -576,7 +572,9 @@ let run ~(config : Runtime_config.t) =
         Some t
     | _ -> None
   in
-  let session_manager = Session.create ~config ?tool_registry ?db () in
+  let session_manager =
+    Session.create ~config ?tool_registry ~sandbox ~landlock_enabled ?db ()
+  in
   let update_lock = Lwt_mutex.create () in
   let update_in_progress = ref false in
   let claim_update () =
@@ -1080,12 +1078,21 @@ let run ~(config : Runtime_config.t) =
                                       "Heartbeat: processing HEARTBEAT.md (%d \
                                        chars) on main session"
                                       (String.length content));
+                                let* compacted =
+                                  Agent.prepare_turn_history agent
+                                    ~user_message:content ?db ()
+                                in
                                 let runtime_context =
                                   Prompt_builder.build_runtime_context ~config
+                                    ~details:
+                                      (Session.runtime_context_details
+                                         session_manager ~agent ~key
+                                         ~compacted_before_turn:compacted)
                                     ()
                                 in
                                 Agent.turn agent ~user_message:content ?db
-                                  ~session_key:key ?runtime_context ()))
+                                  ~session_key:key ?runtime_context
+                                  ~history_prepared:true ()))
                           (fun exn ->
                             Logs.err (fun m ->
                                 m "Heartbeat error: %s" (Printexc.to_string exn));

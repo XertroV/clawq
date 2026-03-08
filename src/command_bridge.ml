@@ -86,16 +86,50 @@ let redact_key s =
   if len <= 8 then String.make len '*'
   else String.sub s 0 4 ^ "..." ^ String.sub s (len - 4) 4
 
+let make_sandbox (cfg : Runtime_config.t) =
+  let ws = Runtime_config.effective_workspace cfg in
+  let backend = Sandbox.backend_of_policy cfg.security.sandbox_backend in
+  Sandbox.create ~backend ~workspace:ws
+    ~extra_allowed_paths:cfg.security.extra_allowed_paths
+    ~workspace_only:cfg.security.workspace_only ()
+
+let shell_visible_roots_summary (cfg : Runtime_config.t) =
+  let workspace = Runtime_config.effective_workspace cfg in
+  let extra_allowed_paths =
+    cfg.security.extra_allowed_paths |> List.map Runtime_config.expand_home
+  in
+  if not cfg.security.workspace_only then
+    "unrestricted host filesystem view (tool-level checks relaxed)"
+  else
+    String.concat ", "
+      (List.sort_uniq String.compare (workspace :: extra_allowed_paths))
+
+let shell_policy_summary (cfg : Runtime_config.t) sandbox =
+  let allowlist = "shell allowlist + path checks" in
+  if not cfg.security.workspace_only then
+    ( allowlist
+      ^ "; workspace_only disabled; shell can access the host filesystem",
+      false )
+  else
+    match sandbox.Sandbox.backend with
+    | Sandbox.None ->
+        ( allowlist
+          ^ "; OS-level filesystem sandbox disabled; workspace boundaries are \
+             enforced by tool validation only",
+          false )
+    | _ ->
+        ( Printf.sprintf
+            "%s; OS-level filesystem sandbox enabled via %s with workspace \
+             isolation"
+            allowlist
+            (Sandbox.backend_to_string sandbox.Sandbox.backend),
+          true )
+
 let build_tool_registry (cfg : Runtime_config.t) =
   if not cfg.security.tools_enabled then None
   else begin
     let registry = Tool_registry.create () in
-    let ws = Runtime_config.effective_workspace cfg in
-    let sandbox =
-      Sandbox.create ~workspace:ws
-        ~extra_allowed_paths:cfg.security.extra_allowed_paths
-        ~workspace_only:cfg.security.workspace_only ()
-    in
+    let sandbox = make_sandbox cfg in
     Tools_builtin.register_all ~config:cfg ~sandbox registry;
     let skills =
       Skills.load_all ~workspace_only:cfg.security.workspace_only
@@ -131,11 +165,35 @@ let cmd_debug_prompt args =
   let messages =
     if user_message = "" then Agent.build_messages agent
     else begin
-      let _compacted =
+      let compacted =
         Lwt_main.run (Agent.prepare_turn_history agent ~user_message ())
       in
+      let sandbox = make_sandbox cfg in
+      let shell_policy_summary, shell_is_sandboxed =
+        shell_policy_summary cfg sandbox
+      in
       let runtime_context =
-        Prompt_builder.build_runtime_context ~config:cfg ()
+        Prompt_builder.build_runtime_context ~config:cfg
+          ~details:
+            {
+              Prompt_builder.session_id = "__debug_prompt__";
+              session_name = Some "debug prompt";
+              is_main_session = false;
+              heartbeat_routing_applies = false;
+              effective_workspace = Runtime_config.effective_workspace cfg;
+              workspace_only = cfg.security.workspace_only;
+              sandbox_backend_requested = cfg.security.sandbox_backend;
+              sandbox_backend_effective =
+                Sandbox.backend_to_string sandbox.Sandbox.backend;
+              shell_is_sandboxed;
+              shell_policy_summary;
+              shell_visible_roots_summary = shell_visible_roots_summary cfg;
+              context_usage =
+                Some
+                  (Agent.runtime_context_usage agent
+                     ~compacted_before_turn:compacted);
+            }
+          ()
       in
       Agent.build_messages ?runtime_context agent
     end

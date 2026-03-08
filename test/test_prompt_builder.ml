@@ -119,6 +119,68 @@ let test_runtime_context_includes_git_details () =
             (contains runtime "- Git branch: main"))
         ~finally:(fun () -> Sys.chdir cwd_before))
 
+let test_runtime_context_includes_session_details () =
+  with_temp_workspace (fun workspace ->
+      let prompt_cfg =
+        {
+          Runtime_config.default.prompt with
+          dynamic_enabled = true;
+          include_runtime_section = true;
+          include_datetime_section = false;
+        }
+      in
+      let cfg =
+        { Runtime_config.default with workspace; prompt = prompt_cfg }
+      in
+      let runtime =
+        Prompt_builder.build_runtime_context ~config:cfg
+          ~details:
+            {
+              Prompt_builder.session_id = "telegram:123:456";
+              session_name = Some "main";
+              is_main_session = true;
+              heartbeat_routing_applies = true;
+              effective_workspace = workspace;
+              workspace_only = true;
+              sandbox_backend_requested = "auto";
+              sandbox_backend_effective = "bubblewrap";
+              shell_is_sandboxed = true;
+              shell_policy_summary =
+                "shell allowlist + path checks; bubblewrap workspace isolation";
+              shell_visible_roots_summary = workspace ^ ", /tmp/extra";
+              context_usage =
+                Some
+                  {
+                    Prompt_builder.history_messages = 12;
+                    estimated_history_tokens = 3456;
+                    context_window_tokens = 128000;
+                    compaction_threshold_tokens = 96000;
+                    max_messages_per_session = 500;
+                    compacted_before_turn = true;
+                  };
+            }
+          ()
+        |> Option.value ~default:""
+      in
+      Alcotest.(check bool)
+        "includes session id" true
+        (contains runtime "- Session id: telegram:123:456");
+      Alcotest.(check bool)
+        "includes heartbeat applicability" true
+        (contains runtime "- Heartbeat routing applies: yes");
+      Alcotest.(check bool)
+        "includes sandbox summary" true
+        (contains runtime
+           "- Shell sandboxed: yes (requested=auto effective=bubblewrap)");
+      Alcotest.(check bool)
+        "includes context usage" true
+        (contains runtime "- Context usage: 12 messages, ~3456/128000 tokens");
+      Alcotest.(check bool)
+        "includes compaction trigger" true
+        (contains runtime
+           "- Compaction: before a turn when history > 500 messages or est \
+            tokens > 96000; compacted before this turn: yes"))
+
 let suite =
   [
     Alcotest.test_case "dynamic prompt disabled uses base prompt" `Quick
@@ -131,4 +193,6 @@ let suite =
       test_dynamic_prompt_includes_self_reference;
     Alcotest.test_case "runtime context includes git details" `Quick
       test_runtime_context_includes_git_details;
+    Alcotest.test_case "runtime context includes session details" `Quick
+      test_runtime_context_includes_session_details;
   ]

@@ -182,8 +182,9 @@ let cmd_capabilities () =
   if cfg.security.tools_enabled then begin
     let registry = Tool_registry.create () in
     let ws = Runtime_config.effective_workspace cfg in
+    let backend = Sandbox.backend_of_policy cfg.security.sandbox_backend in
     let sandbox =
-      Sandbox.create ~workspace:ws
+      Sandbox.create ~backend ~workspace:ws
         ~extra_allowed_paths:cfg.security.extra_allowed_paths
         ~workspace_only:cfg.security.workspace_only ()
     in
