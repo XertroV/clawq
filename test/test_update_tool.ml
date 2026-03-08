@@ -203,6 +203,7 @@ let test_run_update_binary_mode_requires_url () =
 let test_run_update_prepares_restart_before_signal () =
   let prepared = ref false in
   let signaled = ref false in
+  let progress = ref [] in
   let result =
     Lwt_main.run
       (Update_tool.run_update
@@ -213,12 +214,17 @@ let test_run_update_prepares_restart_before_signal () =
            Lwt.return (Ok ()))
          ~send_signal:(fun _ _ -> signaled := true)
          ~is_draining:(fun () -> false)
-         ~send_progress:(fun _ -> Lwt.return_unit)
+         ~send_progress:(fun text ->
+           progress := text :: !progress;
+           Lwt.return_unit)
          ())
   in
   Alcotest.(check string)
     "success result" "Build complete. Sending restart signal..." result;
   Alcotest.(check bool) "prepare called" true !prepared;
+  Alcotest.(check bool)
+    "prepare progress emitted" true
+    (List.mem "Restart requested. Finishing this turn before handoff..." !progress);
   Alcotest.(check bool) "restart signal sent" true !signaled
 
 let test_run_update_aborts_when_prepare_restart_fails () =
@@ -246,6 +252,9 @@ let test_run_update_aborts_when_prepare_restart_fails () =
     "Failed to acknowledge Telegram update 42 before restart. Restart aborted."
     result;
   Alcotest.(check bool) "restart signal suppressed" false !signaled;
+  Alcotest.(check bool)
+    "prepare progress emitted" true
+    (List.mem "Restart requested. Finishing this turn before handoff..." !progress);
   Alcotest.(check bool)
     "prepare failure reported" true
     (List.mem

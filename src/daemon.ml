@@ -376,9 +376,7 @@ let run ~(config : Runtime_config.t) =
   let tool_registry =
     if config.security.tools_enabled then begin
       let registry = Tool_registry.create () in
-      Tools_builtin.register_all ~config ~sandbox
-        ~send_fn:(fun ~text -> Session.notify_channel_sessions session_manager text)
-        registry;
+      Tools_builtin.register_all ~config ~sandbox registry;
       let skills =
         Skills.load_all ~workspace_only:config.security.workspace_only
           ~allowed_commands:Tools_builtin.default_shell_allowlist ()
@@ -577,6 +575,15 @@ let run ~(config : Runtime_config.t) =
   let session_manager =
     Session.create ~config ?tool_registry ~sandbox ~landlock_enabled ?db ()
   in
+  (match tool_registry with
+  | Some registry ->
+      Tool_registry.register registry
+        (Tools_builtin.send_message
+           ~send_fn:
+             (Some
+                (fun ~text ->
+                  Session.notify_channel_sessions session_manager text)))
+  | None -> ());
   let update_lock = Lwt_mutex.create () in
   let update_in_progress = ref false in
   let claim_update () =

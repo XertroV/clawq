@@ -287,7 +287,7 @@ let test_loop_terminates () =
           description = "Always succeeds";
           parameters_schema = `Assoc [];
           invoke =
-            (fun _ ->
+            (fun ?context:_ _ ->
               incr tool_invocations;
               Lwt.return "ok");
           invoke_stream = None;
