@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B114
+priority: high
+status: pending
+tags: []
+title: 'Implement a one-shot continuation check for autonomous sessions: after autonomous work goes quiet, schedule a delayed self-message to the session. The agent must either resume work or reply STAY_IDLE, which disarms further nudges until new autonomous activity begins. Make it session-scoped, cancellable on new activity, and avoid heartbeat entanglement.'
+---
+
+Implement a one-shot continuation check for autonomous sessions: after autonomous work goes quiet, schedule a delayed self-message to the session. The agent must either resume work or reply STAY_IDLE, which disarms further nudges until new autonomous activity begins. Make it session-scoped, cancellable on new activity, and avoid heartbeat entanglement.
