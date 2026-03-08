@@ -14,6 +14,103 @@ let now_utc_iso8601 () =
     (tm.Unix.tm_mon + 1) tm.Unix.tm_mday tm.Unix.tm_hour tm.Unix.tm_min
     tm.Unix.tm_sec
 
+let now_local_iso8601 () =
+  let tm = Unix.localtime (Unix.gettimeofday ()) in
+  Printf.sprintf "%04d-%02d-%02dT%02d:%02d:%02d" (tm.Unix.tm_year + 1900)
+    (tm.Unix.tm_mon + 1) tm.Unix.tm_mday tm.Unix.tm_hour tm.Unix.tm_min
+    tm.Unix.tm_sec
+
+let local_timezone_label () =
+  match Sys.getenv_opt "TZ" with
+  | Some tz when String.trim tz <> "" -> tz
+  | _ -> "system-local"
+
+let read_file_trimmed path =
+  try
+    let ic = open_in path in
+    Fun.protect
+      (fun () -> input_line ic |> String.trim)
+      ~finally:(fun () -> close_in_noerr ic)
+  with _ -> ""
+
+let parse_gitdir_file path =
+  let line = read_file_trimmed path in
+  let prefix = "gitdir: " in
+  let prefix_len = String.length prefix in
+  if String.length line > prefix_len && String.sub line 0 prefix_len = prefix
+  then
+    let raw = String.sub line prefix_len (String.length line - prefix_len) in
+    let dir = Filename.dirname path in
+    Some (if Filename.is_relative raw then Filename.concat dir raw else raw)
+  else None
+
+let git_dir_at dir =
+  let dot_git = Filename.concat dir ".git" in
+  if Sys.file_exists dot_git then
+    if Sys.is_directory dot_git then Some dot_git else parse_gitdir_file dot_git
+  else None
+
+let rec find_git_root_and_dir dir =
+  match git_dir_at dir with
+  | Some git_dir -> Some (dir, git_dir)
+  | None ->
+      let parent = Filename.dirname dir in
+      if parent = dir then None else find_git_root_and_dir parent
+
+let current_git_branch ~git_dir =
+  let head = read_file_trimmed (Filename.concat git_dir "HEAD") in
+  let prefix = "ref: refs/heads/" in
+  let prefix_len = String.length prefix in
+  if String.length head > prefix_len && String.sub head 0 prefix_len = prefix
+  then Some (String.sub head prefix_len (String.length head - prefix_len))
+  else if head = "" then None
+  else
+    let short_len = min 12 (String.length head) in
+    Some ("detached@" ^ String.sub head 0 short_len)
+
+let read_command_trimmed command =
+  try
+    let ic = Unix.open_process_in command in
+    Fun.protect
+      (fun () -> input_line ic |> String.trim)
+      ~finally:(fun () -> ignore (Unix.close_process_in ic))
+  with _ -> ""
+
+let detected_os_label =
+  lazy
+    (match read_command_trimmed "uname -s -r -m" with
+    | s when String.trim s <> "" -> s
+    | _ -> Sys.os_type)
+
+let build_runtime_context ~(config : Runtime_config.t) () =
+  if not config.prompt.dynamic_enabled then None
+  else
+    let lines = ref [] in
+    let add line = lines := line :: !lines in
+    if config.prompt.include_datetime_section then begin
+      add ("- Current UTC: " ^ now_utc_iso8601 ());
+      add ("- Local time: " ^ now_local_iso8601 ());
+      add ("- Local timezone: " ^ local_timezone_label ())
+    end;
+    if config.prompt.include_runtime_section then begin
+      add ("- Current working directory: " ^ Sys.getcwd ());
+      add ("- Workspace root: " ^ Runtime_config.effective_workspace config);
+      (match find_git_root_and_dir (Sys.getcwd ()) with
+      | Some (repo_root, git_dir) -> (
+          add ("- Git repo root: " ^ repo_root);
+          match current_git_branch ~git_dir with
+          | Some branch -> add ("- Git branch: " ^ branch)
+          | None -> ())
+      | None -> ());
+      add ("- OS: " ^ Lazy.force detected_os_label)
+    end;
+    match List.rev !lines with
+    | [] -> None
+    | items ->
+        Some
+          (String.concat "\n"
+             ([ "[Runtime context for this turn only]" ] @ items))
+
 let safe_prompt_filename name =
   name <> ""
   && (not (contains_sub name ".."))
@@ -220,23 +317,6 @@ let build ~(config : Runtime_config.t) ~tool_registry ?(attachments = [])
       if tool_lines = [] then add "- No tools registered."
       else List.iter add tool_lines
     end;
-    if config.prompt.include_runtime_section then begin
-      add "";
-      add "## Runtime";
-      add
-        (Printf.sprintf "- Provider preference: %s"
-           (match
-              Runtime_config.effective_primary_provider config.agent_defaults
-            with
-           | Some p -> p
-           | None -> "(automatic)"));
-      add
-        (Printf.sprintf "- Model preference: %s"
-           (Runtime_config.effective_primary_model config.agent_defaults));
-      add (Printf.sprintf "- Temperature: %.2f" config.default_temperature);
-      add (Printf.sprintf "- Tools enabled: %b" config.security.tools_enabled);
-      add (Printf.sprintf "- Workspace only: %b" config.security.workspace_only)
-    end;
     add "";
     add "## Self-Reference";
     add "- Full self-knowledge document: https://clawq.org/llms-full.txt";
@@ -246,11 +326,6 @@ let build ~(config : Runtime_config.t) ~tool_registry ?(attachments = [])
     add
       "- Fetch this when you need to understand your own capabilities or \
        modify your own configuration/behavior.";
-    if config.prompt.include_datetime_section then begin
-      add "";
-      add "## DateTime";
-      add ("- Current UTC: " ^ now_utc_iso8601 ())
-    end;
     (match group_chat_section ~channel_type with
     | Some s ->
         add "";

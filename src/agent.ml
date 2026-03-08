@@ -11,12 +11,28 @@ let create ~config ?tool_registry () =
   let system_prompt = Prompt_builder.build ~config ~tool_registry () in
   { history = []; config; system_prompt; tool_registry }
 
-let build_messages agent =
+let inject_runtime_context messages runtime_context =
+  let rec loop rev_prefix = function
+    | [] -> List.rev rev_prefix
+    | (msg : Provider.message) :: rest when msg.role = "user" ->
+        List.rev_append rev_prefix
+          ({ msg with content = runtime_context ^ "\n\n" ^ msg.content } :: rest)
+    | msg :: rest -> loop (msg :: rev_prefix) rest
+  in
+  loop [] (List.rev messages) |> List.rev
+
+let build_messages ?runtime_context agent =
   agent.system_prompt <-
     Prompt_builder.build ~config:agent.config ~tool_registry:agent.tool_registry
       ();
-  Provider.make_message ~role:"system" ~content:agent.system_prompt
-  :: List.rev agent.history
+  let messages =
+    Provider.make_message ~role:"system" ~content:agent.system_prompt
+    :: List.rev agent.history
+  in
+  match runtime_context with
+  | Some block when String.trim block <> "" ->
+      inject_runtime_context messages block
+  | _ -> messages
 
 let estimate_tokens content = (String.length content + 3) / 4
 
@@ -544,7 +560,7 @@ let prepare_turn_history agent ~user_message ?db () =
     Provider.make_message ~role:"user" ~content:user_message :: agent.history;
   compact_history_if_needed agent
 
-let turn agent ~user_message ?db ?session_key ?interrupt_check
+let turn agent ~user_message ?db ?session_key ?interrupt_check ?runtime_context
     ?(history_prepared = false) () =
   let open Lwt.Syntax in
   let* _compacted =
@@ -595,7 +611,7 @@ let turn agent ~user_message ?db ?session_key ?interrupt_check
     let* response =
       Lwt.catch
         (fun () ->
-          let messages = build_messages agent in
+          let messages = build_messages ?runtime_context agent in
           resilient_complete agent.config messages tools)
         (fun exn ->
           if
@@ -606,7 +622,7 @@ let turn agent ~user_message ?db ?session_key ?interrupt_check
                 m
                   "Context exhaustion detected; force-compressed history, \
                    retrying turn");
-            let messages = build_messages agent in
+            let messages = build_messages ?runtime_context agent in
             resilient_complete agent.config messages tools
           end
           else Lwt.fail exn)
@@ -678,7 +694,7 @@ let turn agent ~user_message ?db ?session_key ?interrupt_check
   loop 0
 
 let turn_stream agent ~user_message ?db ?session_key ?interrupt_check
-    ?(history_prepared = false) ~on_chunk () =
+    ?runtime_context ?(history_prepared = false) ~on_chunk () =
   let open Lwt.Syntax in
   let* _compacted =
     if history_prepared then Lwt.return false
@@ -756,7 +772,7 @@ let turn_stream agent ~user_message ?db ?session_key ?interrupt_check
         let* response =
           Lwt.catch
             (fun () ->
-              let messages = build_messages agent in
+              let messages = build_messages ?runtime_context agent in
               resilient_stream agent.config messages tools wrapped_on_chunk)
             (fun exn ->
               if
@@ -767,7 +783,7 @@ let turn_stream agent ~user_message ?db ?session_key ?interrupt_check
                     m
                       "Context exhaustion detected; force-compressed history, \
                        retrying turn");
-                let messages = build_messages agent in
+                let messages = build_messages ?runtime_context agent in
                 resilient_stream agent.config messages tools wrapped_on_chunk
               end
               else Lwt.fail exn)

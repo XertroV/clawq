@@ -253,7 +253,7 @@ let respond_if_draining ?on_chunk mgr =
   else Lwt.return_none
 
 let stream_turn_with_visibility mgr ~notify agent ~key ~effective_message
-    ~prepared_history_len ~interrupt_check =
+    ~prepared_history_len ~interrupt_check ~runtime_context =
   let open Lwt.Syntax in
   let visibility = Stream_visibility.create () in
   let settings : Stream_visibility.settings =
@@ -264,7 +264,7 @@ let stream_turn_with_visibility mgr ~notify agent ~key ~effective_message
   in
   let* response =
     Agent.turn_stream agent ~user_message:effective_message ?db:mgr.db
-      ~session_key:key ~interrupt_check ~history_prepared:true
+      ~session_key:key ~interrupt_check ?runtime_context ~history_prepared:true
       ~on_chunk:(Stream_visibility.on_chunk visibility ~settings ~notify)
       ()
   in
@@ -337,6 +337,9 @@ let turn mgr ~key ~message ?(attachments = []) ?channel_name ?channel_type
                       ctx ^ "\n" ^ message
                 in
                 let history_before = List.length agent.history in
+                let runtime_context =
+                  Prompt_builder.build_runtime_context ~config:mgr.config ()
+                in
                 let* compacted =
                   Agent.prepare_turn_history agent
                     ~user_message:effective_message ?db:mgr.db ()
@@ -357,11 +360,11 @@ let turn mgr ~key ~message ?(attachments = []) ?channel_name ?channel_type
                              || mgr.config.agent_defaults.show_tool_calls ->
                           stream_turn_with_visibility mgr ~notify:send agent
                             ~key ~effective_message ~prepared_history_len
-                            ~interrupt_check
+                            ~interrupt_check ~runtime_context
                       | _ ->
                           Agent.turn agent ~user_message:effective_message
                             ?db:mgr.db ~session_key:key ~interrupt_check
-                            ~history_prepared:true ())
+                            ?runtime_context ~history_prepared:true ())
                 in
                 (match notify with
                 | Some _
@@ -447,6 +450,9 @@ let turn_stream mgr ~key ~message ?(attachments = []) ?channel_name
                       ctx ^ "\n" ^ message
                 in
                 let history_before = List.length agent.history in
+                let runtime_context =
+                  Prompt_builder.build_runtime_context ~config:mgr.config ()
+                in
                 let* compacted =
                   Agent.prepare_turn_history agent
                     ~user_message:effective_message ?db:mgr.db ()
@@ -462,7 +468,7 @@ let turn_stream mgr ~key ~message ?(attachments = []) ?channel_name
                   | None ->
                       Agent.turn_stream agent ~user_message:effective_message
                         ?db:mgr.db ~session_key:key ~interrupt_check
-                        ~history_prepared:true ~on_chunk ()
+                        ?runtime_context ~history_prepared:true ~on_chunk ()
                 in
                 persist_new_messages mgr ~key
                   ~history_before:prepared_history_len agent;

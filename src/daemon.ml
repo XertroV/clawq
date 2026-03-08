@@ -136,9 +136,12 @@ let default_resume_turn ~(session_manager : Session.t) ~session_key agent
   let* compacted = Agent.compact_history_if_needed agent in
   if compacted then
     Session.persist_compacted_history session_manager ~key:session_key agent;
+  let runtime_context =
+    Prompt_builder.build_runtime_context ~config:session_manager.config ()
+  in
   Agent.turn agent ~user_message:"" ?db:session_manager.db ~session_key
     ~interrupt_check:(fun () -> !interrupt)
-    ~history_prepared:true ()
+    ?runtime_context ~history_prepared:true ()
 
 let resume_agent_session ?(senders = default_resume_senders) ?run_turn
     ~(session_manager : Session.t) ~(config : Runtime_config.t) ~session_key
@@ -1070,8 +1073,12 @@ let run ~(config : Runtime_config.t) =
                                       "Heartbeat: processing HEARTBEAT.md (%d \
                                        chars) on main session"
                                       (String.length content));
+                                let runtime_context =
+                                  Prompt_builder.build_runtime_context ~config
+                                    ()
+                                in
                                 Agent.turn agent ~user_message:content ?db
-                                  ~session_key:key ()))
+                                  ~session_key:key ?runtime_context ()))
                           (fun exn ->
                             Logs.err (fun m ->
                                 m "Heartbeat error: %s" (Printexc.to_string exn));

@@ -82,6 +82,43 @@ let test_dynamic_prompt_includes_self_reference () =
         "has llms-full.txt URL" true
         (contains prompt "https://clawq.org/llms-full.txt"))
 
+let test_runtime_context_includes_git_details () =
+  with_temp_workspace (fun workspace ->
+      let git_dir = Filename.concat workspace ".git" in
+      let refs_heads = Filename.concat git_dir "refs/heads" in
+      Unix.mkdir git_dir 0o755;
+      Unix.mkdir (Filename.concat git_dir "refs") 0o755;
+      Unix.mkdir refs_heads 0o755;
+      write_file (Filename.concat git_dir "HEAD") "ref: refs/heads/main\n";
+      write_file (Filename.concat refs_heads "main") "0123456789abcdef\n";
+      let prompt_cfg =
+        {
+          Runtime_config.default.prompt with
+          dynamic_enabled = true;
+          include_runtime_section = true;
+          include_datetime_section = false;
+        }
+      in
+      let cfg =
+        { Runtime_config.default with workspace; prompt = prompt_cfg }
+      in
+      let cwd_before = Sys.getcwd () in
+      Fun.protect
+        (fun () ->
+          Sys.chdir workspace;
+          let runtime =
+            Prompt_builder.build_runtime_context ~config:cfg ()
+            |> Option.value ~default:""
+          in
+          Alcotest.(check bool) "includes os" true (contains runtime "- OS: ");
+          Alcotest.(check bool)
+            "includes repo root" true
+            (contains runtime ("- Git repo root: " ^ workspace));
+          Alcotest.(check bool)
+            "includes git branch" true
+            (contains runtime "- Git branch: main"))
+        ~finally:(fun () -> Sys.chdir cwd_before))
+
 let suite =
   [
     Alcotest.test_case "dynamic prompt disabled uses base prompt" `Quick
@@ -92,4 +129,6 @@ let suite =
       test_dynamic_prompt_includes_workspace_files;
     Alcotest.test_case "dynamic prompt includes self-reference" `Quick
       test_dynamic_prompt_includes_self_reference;
+    Alcotest.test_case "runtime context includes git details" `Quick
+      test_runtime_context_includes_git_details;
   ]

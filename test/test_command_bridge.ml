@@ -331,7 +331,7 @@ let test_debug_prompt_prints_logical_messages () =
     "system_prompt": "Custom debug prompt"
   },
   "prompt": {
-    "dynamic_enabled": false
+    "dynamic_enabled": true
   },
   "security": {
     "tools_enabled": false
@@ -383,6 +383,22 @@ let test_debug_prompt_prints_logical_messages () =
            ignore
              (Str.search_forward (Str.regexp_string "hello world") result 0);
            true
+         with Not_found -> false);
+      Alcotest.(check bool)
+        "debug prompt includes runtime context" true
+        (try
+           let user_idx =
+             Str.search_forward (Str.regexp_string "--- user ---") result 0
+           in
+           let runtime_idx =
+             Str.search_forward
+               (Str.regexp_string "[Runtime context for this turn only]")
+               result 0
+           in
+           let msg_idx =
+             Str.search_forward (Str.regexp_string "hello world") result 0
+           in
+           runtime_idx > user_idx && runtime_idx < msg_idx
          with Not_found -> false))
 
 let test_debug_usage_mentions_prompt_and_html_preview () =

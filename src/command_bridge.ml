@@ -128,7 +128,10 @@ let cmd_debug_prompt args =
       let _compacted =
         Lwt_main.run (Agent.prepare_turn_history agent ~user_message ())
       in
-      Agent.build_messages agent
+      let runtime_context =
+        Prompt_builder.build_runtime_context ~config:cfg ()
+      in
+      Agent.build_messages ?runtime_context agent
     end
   in
   Printf.sprintf "provider: %s\nmodel: %s\n\n%s" provider_name model
