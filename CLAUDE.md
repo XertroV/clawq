@@ -170,6 +170,33 @@ Comments:
 4. Run formatting checks if OCaml files changed.
 5. Summarize behavior changes and verification commands in final handoff.
 
+## llms.txt Maintenance
+
+Two files in `docs/public/`:
+- `llms.txt` — spec-compliant index (follows llmstxt.org: H1, blockquote, H2 link-list sections only). Served at `clawq.org/llms.txt`.
+- `llms-full.txt` — full self-knowledge reference. Served at `clawq.org/llms-full.txt`. This is the detailed document clawq uses to understand itself: every CLI command, config field with defaults, all tools, channels, endpoints, setup guides.
+
+**When to update `docs/public/llms-full.txt`:**
+- Adding, removing, or renaming a CLI command or subcommand (`src/main.ml`, `src/command_bridge.ml`)
+- Adding or changing config fields or defaults (`src/runtime_config.ml`, `src/config_loader.ml`)
+- Adding, removing, or renaming a built-in tool (`src/tools_builtin.ml`)
+- Changing the shell allowlist or security mechanisms (`src/tools_builtin.ml`)
+- Adding or changing HTTP gateway endpoints (`src/http_server.ml`)
+- Adding or changing a channel implementation (`src/telegram.ml`, `src/discord.ml`, `src/slack.ml`, `src/slack_socket.ml`, etc.)
+- Changing tunnel provider support
+- Changing any user-facing behavior documented in the file
+
+**When to update `docs/public/llms.txt`:**
+- Adding new doc pages (add to the appropriate H2 link-list section)
+- Changing the project summary
+
+**How to update:**
+- Keep llms-full.txt factual, concise, and oriented toward clawq operating on itself — not a marketing overview.
+- Verify defaults against `Runtime_config.default` in `src/runtime_config.ml`.
+- Verify tool names and counts against `src/tools_builtin.ml` registrations.
+- Verify command names against `src/main.ml` command list.
+- Keep llms.txt spec-compliant: no headings in body, H2 sections are link lists only.
+
 ## Research Source: nullclaw
 
 - See `nullclaw/` in this repo's root.

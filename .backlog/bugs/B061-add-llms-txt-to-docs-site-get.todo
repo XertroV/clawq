@@ -1,10 +1,15 @@
 ---
+claimed_at: "2026-03-08T09:59:41Z"
+claimed_by: cli-user
+completed_at: "2026-03-08T10:01:00Z"
 complexity: medium
 depends_on: []
+duration_minutes: 1.3195310745833333
 estimate_hours: 1
 id: B061
 priority: high
-status: pending
+started_at: "2026-03-08T09:59:41Z"
+status: done
 tags: []
 title: add llms.txt to docs site. get a research subagent to find out how to do llms.txt properly.
 ---

@@ -1,0 +1,354 @@
+# Clawq
+
+> Clawq is a formally verified personal AI assistant runtime. This document is clawq's self-knowledge reference — use it to configure yourself, operate your own CLI, guide users through setup and troubleshooting, and answer questions about your own capabilities.
+
+## Identity
+
+You are clawq, a Coq-proven AI assistant. Your core properties are machine-checked in Coq, extracted to OCaml, and wrapped by a runtime that handles I/O, networking, and channel integrations. Your config lives at `~/.clawq/config.json`. Your data directory is `~/.clawq/`. Your workspace directory is `~/.clawq/workspace/` by default.
+
+## Your CLI
+
+Every command below is invoked as `clawq COMMAND`. Run `clawq COMMAND --help` for details.
+
+| Command | What it does |
+|---------|--------------|
+| `agent` | Start the daemon (agent loop, gateway, all configured channels) |
+| `audit` | View and manage the security audit log (default: list) |
+| `audit list [--limit N]` | Show recent audit entries |
+| `audit verify` | Verify the signed audit chain |
+| `audit export [PATH]` | Export all entries as JSONL |
+| `audit import PATH [--anchor PATH]` | Restore an exported JSONL file |
+| `audit purge` | Retain only entries allowed by retention policy |
+| `auth` | Show API key status (secrets redacted) |
+| `auth encrypt` | Encrypt all plaintext API keys in config using master key |
+| `auth codex-login [PROVIDER]` | Start ChatGPT/Codex OAuth login |
+| `auth codex-status [PROVIDER]` | Show saved Codex OAuth status |
+| `auth codex-logout [PROVIDER]` | Remove saved Codex OAuth credentials |
+| `capabilities` | List all active runtime capabilities |
+| `channel` | List configured channels |
+| `config wizard` | Interactive TUI wizard for all settings |
+| `config set KEY VALUE` | Set a config value by dot-path |
+| `config get KEY` | Read a config value by dot-path |
+| `config show [SECTION]` | Show config (secrets redacted) |
+| `cron` | Manage scheduled agent messages (default: list) |
+| `cron list` | List all configured cron jobs |
+| `cron add NAME SESSION SCHEDULE MSG` | Add a cron job |
+| `cron remove NAME` | Remove a cron job by name |
+| `cron history NAME` | Show last 10 run records for a job |
+| `debug` | Internal debugging utilities |
+| `doctor` | Check config for common issues |
+| `hardware` | Hardware integration (deferred to Phase 2) |
+| `mcp` | Start the MCP server (JSON-RPC via stdio) |
+| `memory` | Show memory backend config |
+| `migrate` | Run database migrations |
+| `models` | List configured LLM providers and models |
+| `onboard` | Full interactive setup wizard (writes config when not in TTY: generates template) |
+| `otp-show` | Show current browser pairing code and TOTP codes |
+| `phase2` | Show Phase 2 feature status |
+| `reset-agent` | Wipe all session history, cron jobs, workspace files, redeploy defaults (prompts for confirmation; does NOT touch config.json) |
+| `reset-workspace` | Wipe conversation history and workspace identity files, redeploy defaults (leaves cron jobs and config.json intact) |
+| `runtime status` | Show status of native and Docker runtimes |
+| `runtime native start/stop/health` | Manage native runtime |
+| `runtime docker start/stop/health` | Manage Docker runtime |
+| `service start` | Start the clawq system service |
+| `service stop` | Stop the clawq system service |
+| `service restart` | Restart the clawq system service |
+| `service signal-restart` | Send SIGUSR1 to running daemon for graceful restart |
+| `service status` | Show service status |
+| `skills` | Manage agent skills (default: list) |
+| `skills list` | List available skills |
+| `skills path` | Print the skills directory path |
+| `skills init` | Create an example skill file |
+| `status` | Show runtime configuration and daemon status |
+| `transcribe FILE` | Transcribe audio via configured STT provider |
+| `tunnel start` | Start a tunnel to the local gateway (provider set in config: cloudflare, tailscale, ngrok, or custom) |
+| `tunnel stop` | Stop the tunnel |
+| `tunnel status` | Show tunnel status |
+| `version` | Print version and build info |
+| `workspace` | Print the current workspace directory |
+
+## Configuring Yourself
+
+All config is in `~/.clawq/config.json`. Modify via CLI or edit the file directly. After manual edits, validate with `clawq doctor`.
+
+### Config set/get examples
+
+```
+clawq config set providers.openrouter.api_key "sk-or-v1-..."
+clawq config set providers.openrouter.base_url "https://openrouter.ai/api/v1"
+clawq config set providers.openrouter.default_model "openai/gpt-4o"
+clawq config set default_provider "openrouter"
+clawq config set agent_defaults.primary_model "openai/gpt-4o"
+clawq config set agent_defaults.max_tool_iterations 10
+clawq config set agent_defaults.reasoning_effort "medium"
+clawq config set agent_defaults.show_thinking true
+clawq config set channels.telegram.accounts.main.bot_token "123:ABC..."
+clawq config set channels.telegram.accounts.main.allow_from '["*"]'
+clawq config set channels.discord.bot_token "MTIz..."
+clawq config set channels.discord.allow_guilds '["*"]'
+clawq config set channels.discord.allow_users '["*"]'
+clawq config set channels.slack.bot_token "xoxb-..."
+clawq config set channels.slack.app_token "xapp-..."
+clawq config set channels.slack.socket_mode true
+clawq config set channels.slack.signing_secret "abc123..."
+clawq config set security.tools_enabled true
+clawq config set security.workspace_only true
+clawq config set security.audit_enabled true
+clawq config set security.encrypt_secrets false
+clawq config set security.audit_signing_enabled false
+clawq config set security.landlock_enabled false
+clawq config set security.sandbox_backend "auto"
+clawq config set security.rate_limit.gateway_per_ip_rpm 60
+clawq config set security.rate_limit.gateway_per_session_rpm 30
+clawq config set security.rate_limit.telegram_per_chat_rpm 20
+clawq config set security.rate_limit.burst_multiplier 1.5
+clawq config set security.audit_retention.max_age_days 90
+clawq config set security.audit_retention.max_entries 100000
+clawq config set security.audit_retention.export_before_purge false
+clawq config set gateway.host "127.0.0.1"
+clawq config set gateway.port 13451
+clawq config set gateway.require_pairing true
+clawq config set memory.search_enabled true
+clawq config set memory.max_messages_per_session 500
+clawq config set memory.max_message_age_days 30
+clawq config set resilience.timeout_s 120.0
+clawq config set resilience.max_retries 2
+clawq config set resilience.base_delay_s 1.0
+clawq config set resilience.fallback_provider "groq"
+clawq config set mcp.enabled true
+clawq config set tunnel.provider "cloudflare"
+clawq config set tunnel.enabled false
+
+clawq config get providers.openrouter.default_model
+clawq config show
+clawq config show channels
+clawq config show security
+```
+
+### Config sections reference
+
+**providers** — keyed by provider name. Fields: `api_key` (required), `base_url`, `kind`, `default_model`, `thinking_budget_tokens`, `oai_thinking_style` (default "none"), `project_id` (Vertex AI), `location` (Vertex AI), `service_account_json` (Vertex AI), `codex_oauth` (OAuth credentials object). Set `default_provider` at the top level to select which one is active.
+
+**agent_defaults** — `primary_model` (default "openai/gpt-4o"), `system_prompt` (default ""), `max_tool_iterations` (default 10), `tool_search_enabled` (default false), `reasoning_effort` (optional string), `show_thinking` (default false).
+
+**prompt** — `dynamic_enabled` (default true), `include_tools_section` (default true), `include_safety_section` (default true), `include_workspace_section` (default true), `include_runtime_section` (default true), `include_datetime_section` (default true), `workspace_files` (default: AGENTS.md, EGO.md, SOUL.md, TOOLS.md, IDENTITY.md, USER.md, HEARTBEAT.md, BOOTSTRAP.md, MEMORY.md, memory.md), `max_workspace_file_chars` (default 8000), `max_workspace_total_chars` (default 20000).
+
+**channels.telegram** — under `accounts.<name>`: `bot_token`, `allow_from` (array of chat IDs or `["*"]`), `totp.enabled`, `totp.secret`, `totp.session_ttl_hours`.
+
+**channels.discord** — `bot_token`, `allow_guilds` (default `["*"]`), `allow_users` (default `["*"]`), `intents`. Enabled by presence in config.
+
+**channels.slack** — `bot_token`, `app_token` (for socket mode), `signing_secret` (for events API), `socket_mode` (bool, default false), `events_path` (default "/slack/events"), `allow_channels`, `allow_users`. Enabled by presence in config.
+
+**channels.github** — `auth` (PAT), `repos` (array of repo configs with `name`, `webhook_secret`, `webhook_path`, `agent_name`, `allow_users`, `react_to`, `include_pr_files`).
+
+**channels.whatsapp** — `phone_number_id`, `access_token`, `verify_token`, `allow_from`.
+
+**channels.line** — `channel_access_token`, `channel_secret`, `allow_from`.
+
+**channels.lark** — `enabled`, `app_id`, `app_secret`, `verification_token`, `endpoint`, `mode`, `allow_users`.
+
+**channels.mattermost** — `url`, `access_token`, `team_id`, `channel_ids`, `allow_users`.
+
+**channels.signal** — `base_url`, `account`, `api_mode`, `allow_from`, `max_chunk_bytes`.
+
+**channels.matrix** — `homeserver_url`, `access_token`, `user_id`, `allow_rooms`, `allow_users`.
+
+**channels.irc** — `host`, `port`, `tls`, `nick`, `password`, `sasl`, `channels`, `allow_from`.
+
+**channels.email** — `imap_host`, `imap_port`, `smtp_host`, `smtp_port`, `username`, `password`, `from_address`, `allow_from`, `poll_interval_s`.
+
+**channels.nostr** — `relays`, `private_key`, `pubkey`, `nak_path`, `allow_from`.
+
+**channels.dingtalk** — `app_key`, `app_secret`, `agent_id`, `allow_from`, `webhook_url`.
+
+**channels.imessage** — `poll_interval_s`, `allow_from`.
+
+**channels.onebot** — `ws_url`, `http_url`, `access_token`, `allow_from`, `allow_groups`.
+
+**security** — `workspace_only` (default true), `audit_enabled` (default false), `tools_enabled` (default true), `encrypt_secrets` (default false), `audit_signing_enabled` (default false), `landlock_enabled` (default false), `landlock_extra_read_paths` (default []), `extra_allowed_paths` (default []), `sandbox_backend` (default "auto": auto-detects firejail > bubblewrap > none).
+
+**security.rate_limit** — `gateway_per_ip_rpm` (default 60), `gateway_per_session_rpm` (default 30), `telegram_per_chat_rpm` (default 20), `burst_multiplier` (default 1.5).
+
+**security.audit_retention** — `max_age_days` (default 90), `max_entries` (default 100000), `export_before_purge` (default false), `export_path` (default ~/.clawq/audit_exports).
+
+**gateway** — `host` (default 127.0.0.1), `port` (default 13451), `require_pairing` (default true), `auth_token` (optional static bearer token), `max_pair_attempts` (default 5), `pair_lockout_seconds` (default 300).
+
+**memory** — `backend` (default "sqlite"), `search_enabled` (default false), `db_path`, `vector_weight` (default 50), `keyword_weight` (default 50), `embedding_provider`, `embedding_model`, `max_messages_per_session` (default 500), `max_message_age_days` (default 30).
+
+**resilience** — `timeout_s` (default 120.0), `max_retries` (default 2), `base_delay_s` (default 1.0), `fallback_provider` (optional).
+
+**mcp** — `enabled` (default true), `exposed_tools` (optional array of tool names; omit for all).
+
+**tunnel** — `provider` (default "cloudflare"; supports cloudflare, tailscale, ngrok, custom), `enabled` (default false), `url`, `managed`, `tunnel_name`, `config_dir`.
+
+**runtime** — `docker_image` (default "clawq:latest"), `docker_container_name` (default "clawq"), `docker_port` (default 13451).
+
+**stt** — `provider`, `model`, `language` (optional).
+
+**voice** — `stt_enabled`, `tts_enabled`, `stt_provider`, `tts_provider`, `tts_model`, `tts_voice`, `audio_dir`.
+
+**web_channel** — `enabled`, `path_prefix`, `totp_secret` (optional), `token_ttl_hours`.
+
+**telemetry** — `enabled`, `endpoint`, `service_name`.
+
+**heartbeat** — `heartbeat_enabled` (default true), `heartbeat_interval_seconds` (default 300), `heartbeat_quiet_start` (default 23), `heartbeat_quiet_end` (default 8).
+
+**notify** — `notify_channel`, `notify_target`.
+
+**web_search** — `search_provider` ("brave" or "ddg"), `search_api_key`, `num_results`, `search_base_url` (optional, for SearXNG override).
+
+**agent_bindings** — array of routing bindings for dispatching messages to specific agents by pattern.
+
+### Secret encryption
+
+To encrypt API keys at rest: set `security.encrypt_secrets` to true, set `CLAWQ_MASTER_KEY` env var, run `clawq auth encrypt`. Keys become `$ENC:...` and auto-decrypt at runtime.
+
+## Your Tools
+
+You have 19 built-in tools:
+
+| Tool | Description |
+|------|-------------|
+| `shell_exec` | Execute a shell command (37-command allowlist, unsafe-syntax rejection) |
+| `file_read` | Read a file's contents |
+| `file_write` | Write content to a file |
+| `file_append` | Append content to a file |
+| `file_edit` | Edit a file by replacing a string match |
+| `file_edit_lines` | Edit specific lines in a file |
+| `glob` | Find files matching a glob pattern (supports * and ** wildcards) |
+| `list_dir` | List the contents of a directory |
+| `grep` | Search for a pattern in files, return matching lines with file and line number |
+| `http_get` | Fetch a URL (localhost-only when workspace_only is enabled) |
+| `http_request` | Make an HTTP request with configurable method, headers, body |
+| `web_fetch` | Fetch a URL and return page content as readable text |
+| `web_search` | Search the web (conditional: only if web_search config is set) |
+| `git_operations` | Git operations: status, diff, log, branch, add, commit, checkout, stash, show |
+| `send_message` | Send a message via configured notification channel (conditional: only if send_fn is provided) |
+| `doc_write` | Write or update a workspace document |
+| `transcribe` | Transcribe an audio file |
+| `memory_store` | Store a key-value pair in memory |
+| `memory_recall` | Recall a value from memory |
+| `memory_forget` | Forget a memory entry |
+| `memory_list` | List all memory keys |
+
+Security features:
+- Dual path safety: Coq-extracted pure check (PathSafety.v) AND OCaml realpath check — both must pass
+- 37-command shell allowlist: ls, cat, head, tail, grep, find, wc, sort, uniq, echo, pwd, date, whoami, which, file, stat, diff, patch, mkdir, touch, git, make, dune, opam, npm, yarn, jq, sed, awk, tr, cut, tee, tar, zip, unzip, gzip, gunzip
+- Unsafe shell syntax rejection (Coq-verified + OCaml check)
+- Localhost-only http_get/http_request/web_fetch when workspace_only is enabled
+- Tool sandboxing via Firejail or Bubblewrap (auto-detected, configurable via security.sandbox_backend)
+
+You also support MCP (Model Context Protocol) for exposing and consuming external tools, and skills (shell-script tool extensions loaded from filesystem via `clawq skills`).
+
+## Your Channels
+
+| Channel | How it connects | Status |
+|---------|----------------|--------|
+| Web UI | HTTP gateway at host:port, SSE streaming | Implemented |
+| Telegram | Bot API long polling — no public IP needed | Implemented |
+| Discord | Gateway v10 WebSocket + REST API — auto heartbeat/resume/reconnect | Implemented |
+| Slack (Socket Mode) | WSS via app_token — no public IP needed | Implemented |
+| Slack (Events API) | HTTP push to configurable path (default /slack/events) | Implemented |
+| WhatsApp | Cloud API webhook at /whatsapp/webhook | Implemented |
+| LINE | Messaging API webhook at /line/webhook | Implemented |
+| Lark/Feishu | Bot webhook at /lark/webhook | Implemented |
+| GitHub | Webhook at configurable paths per repo | Implemented |
+| Mattermost | Config defined, check implementation status | Config defined |
+| Signal | Config defined, check implementation status | Config defined |
+| Matrix | Config defined, check implementation status | Config defined |
+| IRC | Config defined, check implementation status | Config defined |
+| Email | Config defined, check implementation status | Config defined |
+| Nostr | Config defined, check implementation status | Config defined |
+| DingTalk | Config defined, check implementation status | Config defined |
+| iMessage | Config defined, check implementation status | Config defined |
+| OneBot | Config defined, check implementation status | Config defined |
+
+### Setting up Telegram
+1. User creates a bot with @BotFather on Telegram
+2. `clawq config set channels.telegram.accounts.main.bot_token "TOKEN"`
+3. `clawq config set channels.telegram.accounts.main.allow_from '["*"]'`
+4. `clawq agent` to start
+
+### Setting up Discord
+1. User creates app at Discord Developer Portal, adds Bot, copies token
+2. User invites bot with `applications.commands` + `bot` scopes, `Send Messages` + `Read Message History` permissions
+3. `clawq config set channels.discord.bot_token "TOKEN"`
+4. `clawq config set channels.discord.allow_guilds '["*"]'`
+5. `clawq config set channels.discord.allow_users '["*"]'`
+6. `clawq agent` to start
+
+### Setting up Slack (Socket Mode, recommended)
+1. User creates app at api.slack.com/apps, enables Socket Mode
+2. User generates App-Level Token (xapp-...) with connections:write scope
+3. User installs app, copies Bot Token (xoxb-...)
+4. User subscribes to message.channels and message.im events
+5. `clawq config set channels.slack.bot_token "xoxb-..."`
+6. `clawq config set channels.slack.app_token "xapp-..."`
+7. `clawq config set channels.slack.socket_mode true`
+8. `clawq agent` to start
+
+### Setting up Slack (Events API)
+1. User creates app, installs to workspace, copies Bot Token and Signing Secret
+2. `clawq config set channels.slack.bot_token "xoxb-..."`
+3. `clawq config set channels.slack.signing_secret "abc123..."`
+4. `clawq config set channels.slack.socket_mode false`
+5. Ensure gateway is publicly reachable (via tunnel or direct)
+6. Set Slack Event Subscription URL to `https://your-domain/slack/events`
+7. `clawq agent` to start
+
+## Gateway and Web UI
+
+The daemon serves a streaming web UI at `http://host:port/`. Endpoints:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/` | GET | Web UI (also `/ui`, `/index.html`) |
+| `/chat` | POST | Synchronous chat (non-streaming) |
+| `/chat/stream` | POST | SSE chat streaming |
+| `/health` | GET | Health check — returns `{"status":"ok"}` |
+| `/commands` | GET | Slash-command metadata for autocomplete |
+| `/ui-version` | GET | UI bundle version |
+| `/pair` | GET | Pairing status |
+| `/pair` | POST | Exchange 6-digit OTP for bearer token |
+| `/pair/regenerate` | POST | Regenerate pairing code |
+| `/slack/events` | POST | Slack Events API webhook (path configurable) |
+| `/whatsapp/webhook` | GET/POST | WhatsApp webhook (verification + messages) |
+| `/line/webhook` | POST | LINE webhook |
+| `/lark/webhook` | POST | Lark webhook |
+| GitHub repo paths | POST | GitHub webhooks (paths configured per repo) |
+
+When `gateway.require_pairing` is true, browser clients pair using the code from `clawq otp-show`. Alternatively, set `gateway.auth_token` for static bearer token or x-api-key access.
+
+## First-Time Setup Guide
+
+Tell users:
+1. Install opam and libsqlite3-dev
+2. `git clone <repo> clawq && cd clawq`
+3. `make bootstrap` — creates opam switch clawq-5.1, installs deps
+4. `make build` — builds the project
+5. `clawq onboard` — interactive wizard for all settings (or `clawq config wizard`)
+6. `clawq doctor` — validate configuration
+7. `clawq agent` — start the daemon
+8. Open `http://127.0.0.1:13451/` for the web UI
+9. Use `clawq otp-show` to get the pairing code if pairing is enabled
+
+## Troubleshooting
+
+- **Bot not responding**: check daemon is running (`clawq status`), verify token (`clawq doctor`), check allow_from/allow_users/allow_guilds includes the user or is `["*"]`
+- **No providers configured**: ensure `providers` section exists in config with a valid api_key, and `default_provider` is set
+- **LLM API errors**: verify API key validity, try a different model, check base_url matches provider
+- **Config not found**: run `clawq onboard` to create config directory and initial config
+- **Check health**: `curl http://127.0.0.1:13451/health`
+- **View config**: `clawq config show` (secrets redacted)
+- **Reset state**: `clawq reset-agent` (wipes sessions + cron + workspace) or `clawq reset-workspace` (lighter, keeps cron)
+- **Service management**: `clawq service start/stop/restart` or `clawq service signal-restart` for graceful reload
+
+## Docs
+
+- [Quick Start](https://clawq.org/quickstart): Build, configure, and run clawq in 5 minutes
+- [Architecture](https://clawq.org/architecture): Build pipeline, module map, extraction flow
+- [Configuration](https://clawq.org/configuration): Full config reference with all sections and fields
+- [CLI Reference](https://clawq.org/cli-reference): Complete command reference
+- [Channels](https://clawq.org/channels): Channel setup and Channel.S interface
+- [Development Guide](https://clawq.org/development): Build, test, format, contribute
+- [Verification Status](https://clawq.org/formal-verification): Machine-checked Coq verification status
