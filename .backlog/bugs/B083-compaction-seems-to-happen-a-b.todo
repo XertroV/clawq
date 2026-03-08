@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B083
+priority: high
+status: pending
+tags: []
+title: Compaction seems to happen a bit too early (gpt-5.4; context limit is 272k so should compact at 75% of that, but compacted at like 120k.) Also should put a message in chat/telegram when compacting
+---
+
+Compaction seems to happen a bit too early (gpt-5.4; context limit is 272k so should compact at 75% of that, but compacted at like 120k.) Also should put a message in chat/telegram when compacting
