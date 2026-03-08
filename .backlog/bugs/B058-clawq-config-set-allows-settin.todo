@@ -1,10 +1,15 @@
 ---
+claimed_at: "2026-03-08T09:39:34Z"
+claimed_by: cli-user
+completed_at: "2026-03-08T09:45:21Z"
 complexity: medium
 depends_on: []
+duration_minutes: 5.79483842935
 estimate_hours: 1
 id: B058
 priority: high
-status: pending
+started_at: "2026-03-08T09:39:34Z"
+status: done
 tags: []
 title: clawq config set allows setting nonexistant config entries.
 ---

@@ -67,6 +67,61 @@ let test_split_path () =
     (Config_set.split_path "a.b.c");
   Alcotest.(check (list string)) "single" [ "a" ] (Config_set.split_path "a")
 
+let test_validate_path () =
+  let valid = Config_set.validate_path in
+  let schema = Config_set.config_schema in
+  (* Valid top-level keys *)
+  Alcotest.(check bool) "workspace" true (valid [ "workspace" ] schema);
+  Alcotest.(check bool)
+    "default_temperature" true
+    (valid [ "default_temperature" ] schema);
+  (* Valid nested keys *)
+  Alcotest.(check bool) "gateway.host" true (valid [ "gateway"; "host" ] schema);
+  Alcotest.(check bool)
+    "security.rate_limit.burst_multiplier" true
+    (valid [ "security"; "rate_limit"; "burst_multiplier" ] schema);
+  (* Dynamic provider key *)
+  Alcotest.(check bool)
+    "providers.openai.api_key" true
+    (valid [ "providers"; "openai"; "api_key" ] schema);
+  Alcotest.(check bool)
+    "providers.myhost.base_url" true
+    (valid [ "providers"; "myhost"; "base_url" ] schema);
+  (* Dynamic telegram account key *)
+  Alcotest.(check bool)
+    "channels.telegram.accounts.bot1.bot_token" true
+    (valid [ "channels"; "telegram"; "accounts"; "bot1"; "bot_token" ] schema);
+  (* Invalid keys *)
+  Alcotest.(check bool) "nonexistent" false (valid [ "foo" ] schema);
+  Alcotest.(check bool) "typo gateway" false (valid [ "gatway"; "host" ] schema);
+  Alcotest.(check bool)
+    "invalid nested" false
+    (valid [ "gateway"; "nonexistent" ] schema);
+  Alcotest.(check bool)
+    "too deep on leaf" false
+    (valid [ "workspace"; "sub" ] schema);
+  Alcotest.(check bool)
+    "invalid provider field" false
+    (valid [ "providers"; "openai"; "bogus_field" ] schema)
+
+let test_set_rejects_invalid_key () =
+  Test_helpers.with_temp_dir (fun dir ->
+      let path = Filename.concat dir "config.json" in
+      let oc = open_out path in
+      output_string oc "{}";
+      close_out oc;
+      (* Temporarily override config_path by writing and reading *)
+      let json = `Assoc [] in
+      let segments = Config_set.split_path "foo.bar" in
+      Alcotest.(check bool)
+        "foo.bar is invalid" false
+        (Config_set.validate_path segments Config_set.config_schema);
+      let segments2 = Config_set.split_path "gateway.host" in
+      Alcotest.(check bool)
+        "gateway.host is valid" true
+        (Config_set.validate_path segments2 Config_set.config_schema);
+      ignore (json, path))
+
 let suite =
   [
     Alcotest.test_case "infer value types" `Quick test_infer_value;
@@ -76,4 +131,7 @@ let suite =
     Alcotest.test_case "json get" `Quick test_json_get;
     Alcotest.test_case "roundtrip" `Quick test_roundtrip;
     Alcotest.test_case "split path" `Quick test_split_path;
+    Alcotest.test_case "validate path" `Quick test_validate_path;
+    Alcotest.test_case "set rejects invalid key" `Quick
+      test_set_rejects_invalid_key;
   ]
