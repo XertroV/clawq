@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B063
+priority: high
+status: pending
+tags: []
+title: implement `/thinking [level]`. if level is omitted, show the current thinking level. if level is provided, set it and confirm.
+---
+
+implement `/thinking [level]`. if level is omitted, show the current thinking level. if level is provided, set it and confirm.
