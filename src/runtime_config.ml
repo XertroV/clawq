@@ -49,6 +49,7 @@ type agent_defaults = {
   show_tool_calls : bool;
   tool_status_mode : string;
   send_continuation_checkin : bool;
+  autonomous_continuation_delay : float;
   autonomous_continuation_enabled : bool;
   task_tree_notifications : bool;
 }
@@ -434,6 +435,7 @@ let default =
         show_tool_calls = true;
         tool_status_mode = "consolidated";
         send_continuation_checkin = false;
+        autonomous_continuation_delay = 90.0;
         autonomous_continuation_enabled = true;
         task_tree_notifications = true;
       };
@@ -881,6 +883,8 @@ let to_json (cfg : t) : Yojson.Safe.t =
                ("show_tool_calls", `Bool ad.show_tool_calls);
                ("tool_status_mode", `String ad.tool_status_mode);
                ("send_continuation_checkin", `Bool ad.send_continuation_checkin);
+               ( "autonomous_continuation_delay",
+                 `Float ad.autonomous_continuation_delay );
                ( "autonomous_continuation_enabled",
                  `Bool ad.autonomous_continuation_enabled );
              ]

@@ -2560,6 +2560,29 @@ let test_autonomous_continuation_disabled_by_config () =
         (not (Hashtbl.mem mgr.Session.continuation_checks key))
         true)
 
+let test_autonomous_continuation_uses_config_delay () =
+  let continuation_calls = ref 0 in
+  let response_for_user message =
+    if String.starts_with ~prefix:Session.autonomous_continuation_prompt message
+    then (
+      incr continuation_calls;
+      "STAY_IDLE")
+    else "reply:" ^ message
+  in
+  with_fake_chat_provider ~response_for_user (fun config ->
+      let config =
+        {
+          config with
+          agent_defaults =
+            { config.agent_defaults with autonomous_continuation_delay = 0.02 };
+        }
+      in
+      let mgr = Session.create ~config () in
+      let key = "telegram:42:delay_cfg" in
+      Lwt_main.run (Session.schedule_autonomous_continuation mgr ~key);
+      Alcotest.(check int)
+        "continuation prompt fired using config delay" 1 !continuation_calls)
+
 let test_drain_queued_messages_drains_all_pending_without_relock () =
   let db = Memory.init ~db_path:":memory:" () in
   let config = Runtime_config.default in
@@ -2969,6 +2992,8 @@ let suite =
     Alcotest.test_case
       "autonomous continuation disabled by config returns immediately" `Quick
       test_autonomous_continuation_disabled_by_config;
+    Alcotest.test_case "autonomous continuation uses config delay" `Quick
+      test_autonomous_continuation_uses_config_delay;
     Alcotest.test_case "bang message interrupts before lock and turns normally"
       `Quick test_bang_message_interrupts_before_lock_and_turns_normally;
     Alcotest.test_case "bang message turn stream processes normally" `Quick

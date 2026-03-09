@@ -93,7 +93,7 @@ let compaction_suggestion_for_prompt mgr ~key =
         percent estimated_tokens context_window key
   | _ -> ""
 
-let default_autonomous_continuation_delay = 10.0
+let default_autonomous_continuation_delay = 90.0
 
 let create_live_activity_state () =
   let changed, wake_changed = Lwt.wait () in
@@ -1458,10 +1458,13 @@ let compact mgr ~key =
           Lwt.return (Ok true)
       | None -> Lwt.return (Ok false))
 
-let rec schedule_autonomous_continuation
-    ?(delay = default_autonomous_continuation_delay)
-    ?(around_turn = fun f -> f ())
+let rec schedule_autonomous_continuation ?delay ?(around_turn = fun f -> f ())
     ?(on_response = fun _response -> Lwt.return_unit) mgr ~key =
+  let delay =
+    match delay with
+    | Some d -> d
+    | None -> mgr.config.agent_defaults.autonomous_continuation_delay
+  in
   let open Lwt.Syntax in
   if not mgr.config.agent_defaults.autonomous_continuation_enabled then
     Lwt.return_unit
@@ -1548,10 +1551,13 @@ let rec schedule_autonomous_continuation
               mgr ~key
           end
 
-let process_autonomous_turn_result
-    ?(delay = default_autonomous_continuation_delay)
-    ?(around_turn = fun f -> f ())
+let process_autonomous_turn_result ?delay ?(around_turn = fun f -> f ())
     ?(on_response = fun _response -> Lwt.return_unit) mgr ~key ~response =
+  let delay =
+    match delay with
+    | Some d -> d
+    | None -> mgr.config.agent_defaults.autonomous_continuation_delay
+  in
   let trimmed = String.trim response in
   if trimmed = "" || trimmed = "HEARTBEAT_OK" then Lwt.return_unit
   else if trimmed = autonomous_stay_idle_message then

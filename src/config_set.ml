@@ -192,6 +192,7 @@ let config_schema =
             ("show_tool_calls", L);
             ("tool_status_mode", L);
             ("send_continuation_checkin", L);
+            ("autonomous_continuation_delay", L);
             ("autonomous_continuation_enabled", L);
           ] );
       ( "prompt",
