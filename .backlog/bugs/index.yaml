@@ -186,3 +186,10 @@ bugs:
     - file: B185-telegram-typing-indicator-can.todo
     - file: B186-workspace-prompt-file-updates.todo
     - file: B187-telegram-reaction-emojis-for-s.todo
+    - file: B188-f14-config-merge-semantics-con.todo
+    - file: B189-f10-extract-agentloop-history-h.todo
+    - file: B190-f15-mcp-protocol-framing-mcpfr.todo
+    - file: B191-f4-ratelimiter-integer-rewrite.todo
+    - file: B192-discharge-5-string-operation-a.todo
+    - file: B193-document-remaining-secretstore.todo
+    - file: B194-f13-tool-invocation-safety-too.todo
