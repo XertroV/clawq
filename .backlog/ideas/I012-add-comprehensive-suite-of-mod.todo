@@ -1,0 +1,38 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 10
+id: I012
+priority: medium
+status: pending
+tags:
+    - idea
+    - planning
+title: 'Add comprehensive suite of models commands. Add /model slash command to list and set models via telegram etc. Add a `clawq models` cli command that works like `opencode models` and other coding CLIs. Add a `models` tool call with actions `set`, `list`, and `get`. Also add a `provider_usage` tool call that gives access to the cached quoats we have access to for the vairious providers. We also want a `clawq usage` command to print out all the usage to stdout. We can add URL routes for all these too via the gateway. you might want to brainstorm to fill in any gaps. Also: IMPORTANT: use your /super-plan skill to aid in planning and research.'
+---
+
+# Original Idea
+
+Add comprehensive suite of models commands. Add /model slash command to list and set models via telegram etc. Add a `clawq models` cli command that works like `opencode models` and other coding CLIs. Add a `models` tool call with actions `set`, `list`, and `get`. Also add a `provider_usage` tool call that gives access to the cached quoats we have access to for the vairious providers. We also want a `clawq usage` command to print out all the usage to stdout. We can add URL routes for all these too via the gateway. you might want to brainstorm to fill in any gaps. Also: IMPORTANT: use your /super-plan skill to aid in planning and research.
+
+## Planning Task (Equivalent of /plan-task)
+
+- Run `/plan-task I012` to decompose this idea into actionable work.
+- Confirm placement in the current backlog hierarchy before creating work items.
+
+## Ingest Plan Into backlog
+
+- Create implementation items with `backlog add` and related hierarchy commands (`backlog add-epic`, `backlog add-milestone`, `backlog add-phase`) as needed.
+- Create follow-up defects with `backlog bug` when bug-style work is identified.
+- Record all created IDs below and wire dependencies.
+
+## Created Work Items
+
+- Add created task IDs
+- Add created bug IDs (if any)
+
+## Completion Criteria
+
+- Idea has been decomposed into concrete backlog work items.
+- New items include clear acceptance criteria and dependencies.
+- This idea intake is updated with created IDs and marked done.
