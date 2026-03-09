@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B214
+priority: high
+status: pending
+tags: []
+title: "Telegram reports tool loading like '✓ \U0001F527 review-and-fix → 2120 chars 1.4s' -- that's okay, but we should prefer to show tokens rather than characters."
+---
+
+Telegram reports tool loading like '✓ 🔧 review-and-fix → 2120 chars 1.4s' -- that's okay, but we should prefer to show tokens rather than characters.
