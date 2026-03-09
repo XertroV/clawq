@@ -1,0 +1,11 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B221
+priority: medium
+status: pending
+tags: []
+title: CLI inspection surfaces need deterministic paging/truncation control and better continuation affordances
+---
+Quick hands-on audit of `clawq background *`, `session *`, and adjacent inspection surfaces shows several UX/operability gaps beyond B220. `background logs` is tail-only (captured separately in B220), `session show` produces huge JSON dumps with no built-in paging/section selection, and long structured outputs make it awkward to continue from where a prior read stopped. Investigate a coherent UX for deterministic paging/continuation across CLI inspection commands: long structured outputs should support offsets, ranges, or focused views rather than forcing external piping/truncation. Acceptance criteria: (1) audit major inspection commands (`session show`, background/task inspection, other long-read surfaces) for paging/continuation ergonomics; (2) improve at least the highest-value commands with backward-compatible focused/paged access; (3) preserve simple default behavior for small outputs; (4) document the intended inspection pattern so agents and users can continue long reads predictably.
