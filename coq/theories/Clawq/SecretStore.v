@@ -1,4 +1,4 @@
-From Coq Require Import String List Bool Lia Nat.
+From Coq Require Import String List Bool Lia Nat PeanoNat Ascii.
 Require Import Coq.Arith.PeanoNat.
 Import ListNotations.
 Open Scope string_scope.
@@ -87,45 +87,213 @@ Axiom split_concat_inverse : forall n ct,
   split_nonce_ciphertext (nonce_ciphertext_concat n ct) = Some (n, ct).
 
 (* ----------------------------------------------------------------
-   Abstract string operations (Coq stdlib lacks these).
-   ---------------------------------------------------------------- *)
+    String operations (Coq stdlib implementations).
+    ---------------------------------------------------------------- *)
 
-(* String prefix check *)
-Parameter has_prefix : string -> string -> bool.
+Fixpoint has_prefix_aux (i : nat) (prefix s : string) : bool :=
+  match prefix with
+  | EmptyString => true
+  | String c prefix' =>
+      match get i s with
+      | None => false
+      | Some c' => if ascii_dec c c' then has_prefix_aux (S i) prefix' s else false
+      end
+  end.
 
-(* String length *)
-Parameter string_length : string -> nat.
+Definition has_prefix (prefix s : string) : bool := has_prefix_aux 0 prefix s.
 
-(* Strip prefix from string *)
-Parameter strip_prefix : string -> string -> option string.
+Definition string_length (s : string) : nat := String.length s.
 
-(* Axioms for prefix operations *)
-Axiom has_prefix_app : forall prefix suffix,
-  has_prefix prefix (prefix ++ suffix) = true.
+Fixpoint drop_first_n (n : nat) (s : string) : string :=
+  match n with
+  | O => s
+  | S n' =>
+      match s with
+      | EmptyString => EmptyString
+      | String _ s' => drop_first_n n' s'
+      end
+  end.
 
-Axiom strip_prefix_app : forall prefix suffix,
-  strip_prefix prefix (prefix ++ suffix) = Some suffix.
+Definition strip_prefix (prefix s : string) : option string :=
+  if has_prefix prefix s then
+    Some (drop_first_n (String.length prefix) s)
+  else None.
 
-Axiom has_prefix_strip_prefix : forall prefix s,
+(* Helper lemmas for prefix proofs *)
+Fixpoint take (n : nat) (s : string) : string :=
+  match n with
+  | O => EmptyString
+  | S n' =>
+      match s with
+      | EmptyString => EmptyString
+      | String c s' => String c (take n' s')
+      end
+  end.
+
+Lemma take_drop_first_n : forall n s, take n s ++ drop_first_n n s = s.
+Proof.
+  intros n s.
+  generalize dependent s.
+  induction n as [|n' IH].
+  - intros s. simpl. reflexivity.
+  - intros s. destruct s as [|c s'].
+    + simpl. reflexivity.
+    + simpl. rewrite IH. reflexivity.
+Qed.
+
+Lemma string_app_empty_r : forall s, s ++ EmptyString = s.
+Proof.
+  induction s as [|c s' IH].
+  - reflexivity.
+  - simpl. rewrite IH. reflexivity.
+Qed.
+
+Lemma string_app_assoc : forall s1 s2 s3, (s1 ++ s2) ++ s3 = s1 ++ (s2 ++ s3).
+Proof.
+  induction s1 as [|c s1' IH].
+  - reflexivity.
+  - intros s2 s3. simpl. rewrite IH. reflexivity.
+Qed.
+
+Lemma S_i_plus_len : forall i n, S i + n = S (i + n).
+Proof. intros. lia. Qed.
+
+Lemma take_succ_get : forall i s c,
+  get i s = Some c ->
+  take (S i) s = take i s ++ String c EmptyString.
+Proof.
+  intros n s c Hget.
+  revert n c Hget.
+  induction s as [|c' s' IH].
+  - intros i c Hget. simpl in Hget. discriminate.
+  - intros i c Hget. destruct i as [|i'].
+    + simpl in Hget. injection Hget as ->. simpl. reflexivity.
+    + simpl in Hget. simpl.
+      specialize (IH i' c Hget).
+      rewrite <- IH.
+      reflexivity.
+Qed.
+
+Lemma has_prefix_aux_step : forall c i prefix s,
+  has_prefix_aux (S i) prefix (String c s) = has_prefix_aux i prefix s.
+Proof.
+  intros c i prefix s.
+  revert i.
+  induction prefix as [|c' prefix' IH].
+  - intros i. reflexivity.
+  - intros i. simpl.
+    destruct (get i s) eqn:Hget.
+    + simpl. destruct (ascii_dec c' a).
+      * specialize (IH (S i)). rewrite IH. reflexivity.
+      * reflexivity.
+    + reflexivity.
+Qed.
+
+Lemma has_prefix_aux_take : forall i prefix s,
+  has_prefix_aux i prefix s = true ->
+  take (i + String.length prefix) s = take i s ++ prefix.
+Proof.
+  intros i prefix s H.
+  generalize dependent i.
+  induction prefix as [|c prefix' IH].
+  - intros i _. simpl. rewrite Nat.add_0_r. rewrite string_app_empty_r. reflexivity.
+  - intros i H. simpl in H.
+    destruct (get i s) as [c'|] eqn:Hget.
+    + destruct (ascii_dec c c') eqn:Heq.
+      * subst c'.
+        assert (Htake : take (S i) s = take i s ++ String c EmptyString).
+        { apply take_succ_get. exact Hget. }
+        specialize (IH (S i) H).
+        simpl.
+        rewrite Nat.add_succ_r.
+        rewrite <- (S_i_plus_len i (String.length prefix')).
+        rewrite IH.
+        rewrite Htake.
+        rewrite string_app_assoc.
+        simpl.
+        reflexivity.
+      * discriminate.
+    + discriminate.
+Qed.
+
+Lemma has_prefix_take : forall prefix s,
   has_prefix prefix s = true ->
-  exists suffix, s = prefix ++ suffix /\ strip_prefix prefix s = Some suffix.
+  take (String.length prefix) s = prefix.
+Proof.
+  intros prefix s H.
+  unfold has_prefix in H.
+  specialize (has_prefix_aux_take 0 prefix s H).
+  intros Htake.
+  simpl in Htake.
+  exact Htake.
+Qed.
 
-Axiom string_length_dollar_app_gt1 : forall var_name,
-  1 <= string_length var_name ->
-  1 <? string_length ("$" ++ var_name) = true.
+(* Main theorems for prefix operations *)
+Lemma has_prefix_app : forall prefix suffix,
+  has_prefix prefix (prefix ++ suffix) = true.
+Proof.
+  intros prefix suffix.
+  induction prefix as [|c prefix' IH].
+  - reflexivity.
+  - unfold has_prefix. simpl.
+    rewrite (has_prefix_aux_step c 0 prefix' (prefix' ++ suffix)).
+    simpl.
+    destruct (ascii_dec c c) as [_ | H].
+    + exact IH.
+    + exfalso. apply H. reflexivity.
+Qed.
 
-(* ----------------------------------------------------------------
-   Secret store operations.
-   ---------------------------------------------------------------- *)
+Lemma strip_prefix_app : forall prefix suffix,
+  strip_prefix prefix (prefix ++ suffix) = Some suffix.
+Proof.
+  intros prefix suffix.
+  unfold strip_prefix.
+  rewrite has_prefix_app.
+  induction prefix as [|c prefix' IH].
+  - reflexivity.
+  - simpl. rewrite IH. reflexivity.
+Qed.
+
+Lemma has_prefix_strip_prefix : forall prefix s,
+  has_prefix prefix s = true ->
+  exists suffix : string, s = prefix ++ suffix /\ strip_prefix prefix s = Some suffix.
+Proof.
+  intros prefix s H.
+  exists (drop_first_n (String.length prefix) s).
+  split.
+  - transitivity (take (String.length prefix) s ++ drop_first_n (String.length prefix) s).
+    + symmetry. apply take_drop_first_n.
+    + rewrite (has_prefix_take prefix s H). reflexivity.
+  - unfold strip_prefix. rewrite H. reflexivity.
+Qed.
+
+Lemma string_length_dollar_app_gt1 : forall var_name,
+  (1 <= String.length var_name)%nat ->
+  (1 <? String.length ("$" ++ var_name))%nat = true.
+Proof.
+  intros var_name Hlen.
+  simpl.
+  apply Nat.ltb_lt.
+  lia.
+Qed.
 
 Definition encrypted_prefix : string := "$ENC:".
 
-(* Check if a value is an encrypted secret (has $ENC: prefix) *)
 Definition is_encrypted (value : string) : bool :=
   (5 <? string_length value) && has_prefix encrypted_prefix value.
 
-Axiom is_encrypted_implies_secret_prefix : forall value,
+Lemma is_encrypted_implies_secret_prefix : forall value,
   is_encrypted value = true -> has_prefix "$" value = true.
+Proof.
+  intros value H.
+  unfold is_encrypted in H.
+  apply andb_prop in H. destruct H as [_ H].
+  pose proof (has_prefix_strip_prefix "$ENC:" value H) as [suffix [Heq _]].
+  subst value.
+  replace ("$ENC:" ++ suffix) with ("$" ++ "ENC:" ++ suffix) by reflexivity.
+  rewrite has_prefix_app.
+  reflexivity.
+Qed.
 
 (* Encrypt a plaintext and return with $ENC: prefix.
    Model: generate nonce, encrypt, concat nonce+ct, base64 encode, prepend prefix. *)
