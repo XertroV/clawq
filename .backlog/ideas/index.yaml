@@ -95,3 +95,5 @@ ideas:
       id: I012
     - file: I013-we-should-add-support-for-a-pl.todo
       id: I013
+    - file: I014-add-tab-completions-for-bash-z.todo
+      id: I014
