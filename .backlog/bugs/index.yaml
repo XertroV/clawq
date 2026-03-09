@@ -184,3 +184,4 @@ bugs:
     - file: B183-restart-resume-prompt-too-read.todo
     - file: B184-config-show-should-preserve-sc.todo
     - file: B185-telegram-typing-indicator-can.todo
+    - file: B186-workspace-prompt-file-updates.todo

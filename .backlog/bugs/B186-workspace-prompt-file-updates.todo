@@ -1,0 +1,11 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B186
+priority: medium
+status: pending
+tags: []
+title: Workspace prompt-file updates should emit explicit system/session refresh event
+---
+Observed via `./clawq session show telegram:58495225:58495225`: writing active workspace files with `doc_write` (for example `EGO.md`, `AGENTS.md`) records the tool call and tool result, including the note `active workspace file — will appear in system prompt`, but there is no distinct persisted system/session event indicating that prompt-relevant workspace context was refreshed or updated. There may already be internal code awareness of active workspace files, but the refresh is not legible as a first-class session/system event. Goal: when an active workspace file is updated, emit an explicit system/session log entry (or equivalent clearly inspectable event) indicating prompt-relevant workspace context changed/refreshed, without dumping the full prompt. Acceptance criteria: (1) active workspace-file updates produce a distinct inspectable event beyond the tool result string; (2) the event indicates which file(s) triggered the refresh or equivalent bounded detail; (3) no prompt/secrets are leaked; (4) `session show` or comparable inspection makes the refresh legible; (5) if equivalent behavior already exists elsewhere, reconcile and make it visible/consistent.
