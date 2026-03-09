@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B213
+priority: high
+status: pending
+tags: []
+title: Add a tool call benchmark -- sometimes it seems like tool calls never run faster than 2s, which shouldn't be the case. We should have a tool call benchmark for bash commands and some other common tool calls.
+---
+
+Add a tool call benchmark -- sometimes it seems like tool calls never run faster than 2s, which shouldn't be the case. We should have a tool call benchmark for bash commands and some other common tool calls.
