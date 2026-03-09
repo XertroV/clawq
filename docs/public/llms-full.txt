@@ -99,6 +99,7 @@ Available in chat-integrated channels that support slash commands.
 - `/thinking [low|medium|high|off|xhigh|max]` — show or set the current thinking level; `off` clears `agent_defaults.reasoning_effort`
 - `/delegate <prompt>` — delegate a prompt to a temporary subagent session; the subagent runs the prompt, returns the result, and is discarded; the caller's main session history is not affected
 - `/fork_and <prompt>` — fork the current session's history into an ephemeral subagent and run the prompt there; the result is sent back to the channel but the parent session is not modified; useful for exploring side-tasks without polluting the main conversation
+- `/tasks` — display the agent's current task tree for this session (user-facing visibility into what the agent is tracking)
 
 ## `!` Messages
 
@@ -260,7 +261,7 @@ To encrypt API keys at rest: set `security.encrypt_secrets` to true, set `CLAWQ_
 
 ## Your Tools
 
-You have up to 28 built-in tools. 14 are always registered; `web_search`, `send_message`, `transcribe`, the four memory tools, `history_search`, and the six background/delegation tools are conditional on runtime configuration/wiring.
+You have up to 29 built-in tools. 14 are always registered; `web_search`, `send_message`, `transcribe`, the four memory tools, `history_search`, `task_tree`, and the six background/delegation tools are conditional on runtime configuration/wiring.
 
 | Tool | Description |
 |------|-------------|
@@ -292,6 +293,7 @@ You have up to 28 built-in tools. 14 are always registered; `web_search`, `send_
 | `background_task_logs` | Read the latest lines from a background task log file |
 | `delegate` | Delegate a coding task to a background subagent (Codex/Claude) in a git worktree. Use for 'spawn subagent'/'use haiku to ...' requests |
 | `background_task_cancel` | Cancel a queued or running background task |
+| `task_tree` | Track and organize work using a persistent hierarchical task tree. Survives context compaction, visible every turn. Operations: add, update, remove, clear, archive. Statuses: pending, in_progress, done, error, cancelled. Supports depth-based auto-nesting, lifecycle enforcement (parent can't be done until children are), and archiving completed subtrees |
 
 Background delegation notes:
 - `delegate` is the high-level user-facing entry point for handing off repository work asynchronously.

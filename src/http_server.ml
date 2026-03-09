@@ -622,6 +622,16 @@ let handler ~session_manager ~require_pairing ~auth_token
                       | None -> "Tools are not enabled."
                     in
                     sse_reply text
+                | Slash_commands.Tasks ->
+                    let key = "web:" ^ session_id in
+                    let text =
+                      match Session.get_db session_manager with
+                      | Some db ->
+                          Task_tree.init_schema db;
+                          Task_tree.render_tree_with_legend ~db ~session_key:key
+                      | None -> "Tasks are not available (no database)."
+                    in
+                    sse_reply text
                 | Slash_commands.Delegate prompt ->
                     let stream, push = Lwt_stream.create () in
                     let push_sse text =

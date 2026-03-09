@@ -422,6 +422,18 @@ let handle_event ~(config : Runtime_config.slack_config)
                   send_message_fn ~bot_token:config.bot_token ~channel_id ~text
                 in
                 Lwt.return "ok"
+            | Tasks ->
+                let text =
+                  match Session.get_db session_manager with
+                  | Some db ->
+                      Task_tree.init_schema db;
+                      Task_tree.render_tree_with_legend ~db ~session_key:key
+                  | None -> "Tasks are not available (no database)."
+                in
+                let* () =
+                  send_message_fn ~bot_token:config.bot_token ~channel_id ~text
+                in
+                Lwt.return "ok"
             | ForkAnd prompt ->
                 Lwt.async (fun () ->
                     send_message_fn ~bot_token:config.bot_token ~channel_id

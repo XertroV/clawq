@@ -1,0 +1,994 @@
+type status = Pending | In_progress | Done | Task_error | Cancelled
+
+let string_of_status = function
+  | Pending -> "pending"
+  | In_progress -> "in_progress"
+  | Done -> "done"
+  | Task_error -> "error"
+  | Cancelled -> "cancelled"
+
+let status_of_string s =
+  match String.lowercase_ascii (String.trim s) with
+  | "pending" -> Some Pending
+  | "in_progress" -> Some In_progress
+  | "done" -> Some Done
+  | "error" -> Some Task_error
+  | "cancelled" -> Some Cancelled
+  | _ -> None
+
+let is_terminal = function Done | Cancelled -> true | _ -> false
+
+type task = {
+  id : string;
+  session_key : string;
+  parent_id : string option;
+  title : string;
+  status : status;
+  note : string option;
+  sort_order : int;
+}
+
+let max_active_tasks = 50
+let max_depth = 5
+let max_concurrent_in_progress = 3
+let max_batch_size = 20
+let max_title_length = 200
+
+let init_schema db =
+  Memory.exec_exn db
+    "CREATE TABLE IF NOT EXISTS task_tree (\n\
+    \  id TEXT NOT NULL,\n\
+    \  session_key TEXT NOT NULL,\n\
+    \  parent_id TEXT,\n\
+    \  title TEXT NOT NULL,\n\
+    \  status TEXT NOT NULL DEFAULT 'pending',\n\
+    \  note TEXT,\n\
+    \  sort_order INTEGER NOT NULL DEFAULT 0,\n\
+    \  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n\
+    \  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n\
+    \  PRIMARY KEY (session_key, id)\n\
+     )";
+  Memory.exec_exn db
+    "CREATE INDEX IF NOT EXISTS idx_task_tree_session ON task_tree \
+     (session_key)";
+  Memory.exec_exn db
+    "CREATE TABLE IF NOT EXISTS task_tree_archive (\n\
+    \  id TEXT NOT NULL,\n\
+    \  session_key TEXT NOT NULL,\n\
+    \  parent_id TEXT,\n\
+    \  title TEXT NOT NULL,\n\
+    \  status TEXT NOT NULL,\n\
+    \  note TEXT,\n\
+    \  sort_order INTEGER NOT NULL DEFAULT 0,\n\
+    \  created_at TEXT NOT NULL,\n\
+    \  completed_at TEXT NOT NULL,\n\
+    \  archived_at TEXT NOT NULL DEFAULT (datetime('now')),\n\
+    \  archive_group INTEGER NOT NULL\n\
+     )";
+  Memory.exec_exn db
+    "CREATE INDEX IF NOT EXISTS idx_task_tree_archive_session ON \
+     task_tree_archive (session_key)"
+
+let load_tasks ~db ~session_key =
+  let sql =
+    "SELECT id, session_key, parent_id, title, status, note, sort_order FROM \
+     task_tree WHERE session_key = ? ORDER BY sort_order ASC, id ASC"
+  in
+  let stmt = Sqlite3.prepare db sql in
+  Fun.protect
+    ~finally:(fun () -> ignore (Sqlite3.finalize stmt))
+    (fun () ->
+      ignore
+        (Sqlite3.bind stmt 1 (Sqlite3.Data.TEXT session_key) : Sqlite3.Rc.t);
+      let results = ref [] in
+      while Sqlite3.step stmt = Sqlite3.Rc.ROW do
+        let id =
+          match Sqlite3.column stmt 0 with Sqlite3.Data.TEXT s -> s | _ -> ""
+        in
+        let sk =
+          match Sqlite3.column stmt 1 with Sqlite3.Data.TEXT s -> s | _ -> ""
+        in
+        let parent_id =
+          match Sqlite3.column stmt 2 with
+          | Sqlite3.Data.TEXT s -> Some s
+          | _ -> None
+        in
+        let title =
+          match Sqlite3.column stmt 3 with Sqlite3.Data.TEXT s -> s | _ -> ""
+        in
+        let status =
+          match Sqlite3.column stmt 4 with
+          | Sqlite3.Data.TEXT s -> (
+              match status_of_string s with Some st -> st | None -> Pending)
+          | _ -> Pending
+        in
+        let note =
+          match Sqlite3.column stmt 5 with
+          | Sqlite3.Data.TEXT s -> Some s
+          | _ -> None
+        in
+        let sort_order =
+          match Sqlite3.column stmt 6 with
+          | Sqlite3.Data.INT n -> Int64.to_int n
+          | _ -> 0
+        in
+        results :=
+          { id; session_key = sk; parent_id; title; status; note; sort_order }
+          :: !results
+      done;
+      List.rev !results)
+
+let count_tasks ~db ~session_key =
+  Memory.query_single_int db
+    (Printf.sprintf "SELECT COUNT(*) FROM task_tree WHERE session_key = '%s'"
+       (String.concat "''" (String.split_on_char '\'' session_key)))
+
+let next_auto_id ~db ~session_key =
+  let sql =
+    "SELECT MAX(CAST(id AS INTEGER)) FROM task_tree WHERE session_key = ? AND \
+     id GLOB '[0-9]*'"
+  in
+  let stmt = Sqlite3.prepare db sql in
+  Fun.protect
+    ~finally:(fun () -> ignore (Sqlite3.finalize stmt))
+    (fun () ->
+      ignore
+        (Sqlite3.bind stmt 1 (Sqlite3.Data.TEXT session_key) : Sqlite3.Rc.t);
+      match Sqlite3.step stmt with
+      | Sqlite3.Rc.ROW -> (
+          match Sqlite3.column stmt 0 with
+          | Sqlite3.Data.INT n -> string_of_int (Int64.to_int n + 1)
+          | _ -> "1")
+      | _ -> "1")
+
+let id_exists ~db ~session_key ~id =
+  let sql = "SELECT COUNT(*) FROM task_tree WHERE session_key = ? AND id = ?" in
+  let stmt = Sqlite3.prepare db sql in
+  Fun.protect
+    ~finally:(fun () -> ignore (Sqlite3.finalize stmt))
+    (fun () ->
+      ignore
+        (Sqlite3.bind stmt 1 (Sqlite3.Data.TEXT session_key) : Sqlite3.Rc.t);
+      ignore (Sqlite3.bind stmt 2 (Sqlite3.Data.TEXT id) : Sqlite3.Rc.t);
+      match Sqlite3.step stmt with
+      | Sqlite3.Rc.ROW -> (
+          match Sqlite3.column stmt 0 with
+          | Sqlite3.Data.INT n -> Int64.to_int n > 0
+          | _ -> false)
+      | _ -> false)
+
+let task_depth ~tasks ~id =
+  let rec go current_id depth =
+    if depth > max_depth then depth
+    else
+      match List.find_opt (fun t -> t.id = current_id) tasks with
+      | Some t -> (
+          match t.parent_id with
+          | Some pid -> go pid (depth + 1)
+          | None -> depth)
+      | None -> depth
+  in
+  go id 0
+
+let get_children ~tasks ~id = List.filter (fun t -> t.parent_id = Some id) tasks
+
+let rec get_subtree_ids ~tasks ~id =
+  let children = get_children ~tasks ~id in
+  id :: List.concat_map (fun c -> get_subtree_ids ~tasks ~id:c.id) children
+
+let count_in_progress ~db ~session_key =
+  Memory.query_single_int db
+    (Printf.sprintf
+       "SELECT COUNT(*) FROM task_tree WHERE session_key = '%s' AND status = \
+        'in_progress'"
+       (String.concat "''" (String.split_on_char '\'' session_key)))
+
+let get_ancestors ~tasks ~id =
+  let rec go current_id acc =
+    match List.find_opt (fun t -> t.id = current_id) tasks with
+    | Some t -> (
+        match t.parent_id with
+        | Some pid -> go pid (t :: acc)
+        | None -> t :: acc)
+    | None -> acc
+  in
+  go id []
+
+let next_sort_order ~db ~session_key =
+  Memory.query_single_int db
+    (Printf.sprintf
+       "SELECT COALESCE(MAX(sort_order), 0) + 1 FROM task_tree WHERE \
+        session_key = '%s'"
+       (String.concat "''" (String.split_on_char '\'' session_key)))
+
+let insert_task ~db ~session_key ~id ~parent_id ~title ~status ~note =
+  let sort_order = next_sort_order ~db ~session_key in
+  let sql =
+    "INSERT INTO task_tree (id, session_key, parent_id, title, status, note, \
+     sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)"
+  in
+  let stmt = Sqlite3.prepare db sql in
+  Fun.protect
+    ~finally:(fun () -> ignore (Sqlite3.finalize stmt))
+    (fun () ->
+      ignore (Sqlite3.bind stmt 1 (Sqlite3.Data.TEXT id) : Sqlite3.Rc.t);
+      ignore
+        (Sqlite3.bind stmt 2 (Sqlite3.Data.TEXT session_key) : Sqlite3.Rc.t);
+      ignore
+        (Sqlite3.bind stmt 3
+           (match parent_id with
+           | Some p -> Sqlite3.Data.TEXT p
+           | None -> Sqlite3.Data.NULL)
+          : Sqlite3.Rc.t);
+      ignore (Sqlite3.bind stmt 4 (Sqlite3.Data.TEXT title) : Sqlite3.Rc.t);
+      ignore
+        (Sqlite3.bind stmt 5 (Sqlite3.Data.TEXT (string_of_status status))
+          : Sqlite3.Rc.t);
+      ignore
+        (Sqlite3.bind stmt 6
+           (match note with
+           | Some n -> Sqlite3.Data.TEXT n
+           | None -> Sqlite3.Data.NULL)
+          : Sqlite3.Rc.t);
+      ignore
+        (Sqlite3.bind stmt 7 (Sqlite3.Data.INT (Int64.of_int sort_order))
+          : Sqlite3.Rc.t);
+      match Sqlite3.step stmt with
+      | Sqlite3.Rc.DONE -> Ok ()
+      | rc ->
+          Error
+            (Printf.sprintf "SQLite error inserting task: %s"
+               (Sqlite3.Rc.to_string rc)))
+
+let update_task_status ~db ~session_key ~id ~status =
+  let sql =
+    "UPDATE task_tree SET status = ?, updated_at = datetime('now') WHERE \
+     session_key = ? AND id = ?"
+  in
+  let stmt = Sqlite3.prepare db sql in
+  Fun.protect
+    ~finally:(fun () -> ignore (Sqlite3.finalize stmt))
+    (fun () ->
+      ignore
+        (Sqlite3.bind stmt 1 (Sqlite3.Data.TEXT (string_of_status status))
+          : Sqlite3.Rc.t);
+      ignore
+        (Sqlite3.bind stmt 2 (Sqlite3.Data.TEXT session_key) : Sqlite3.Rc.t);
+      ignore (Sqlite3.bind stmt 3 (Sqlite3.Data.TEXT id) : Sqlite3.Rc.t);
+      match Sqlite3.step stmt with
+      | Sqlite3.Rc.DONE -> Ok ()
+      | rc ->
+          Error
+            (Printf.sprintf "SQLite error updating task: %s"
+               (Sqlite3.Rc.to_string rc)))
+
+let update_task_note ~db ~session_key ~id ~note =
+  let sql =
+    "UPDATE task_tree SET note = ?, updated_at = datetime('now') WHERE \
+     session_key = ? AND id = ?"
+  in
+  let stmt = Sqlite3.prepare db sql in
+  Fun.protect
+    ~finally:(fun () -> ignore (Sqlite3.finalize stmt))
+    (fun () ->
+      ignore
+        (Sqlite3.bind stmt 1
+           (match note with
+           | Some n -> Sqlite3.Data.TEXT n
+           | None -> Sqlite3.Data.NULL)
+          : Sqlite3.Rc.t);
+      ignore
+        (Sqlite3.bind stmt 2 (Sqlite3.Data.TEXT session_key) : Sqlite3.Rc.t);
+      ignore (Sqlite3.bind stmt 3 (Sqlite3.Data.TEXT id) : Sqlite3.Rc.t);
+      match Sqlite3.step stmt with
+      | Sqlite3.Rc.DONE -> Ok ()
+      | rc ->
+          Error
+            (Printf.sprintf "SQLite error updating note: %s"
+               (Sqlite3.Rc.to_string rc)))
+
+let delete_task ~db ~session_key ~id =
+  let sql = "DELETE FROM task_tree WHERE session_key = ? AND id = ?" in
+  let stmt = Sqlite3.prepare db sql in
+  Fun.protect
+    ~finally:(fun () -> ignore (Sqlite3.finalize stmt))
+    (fun () ->
+      ignore
+        (Sqlite3.bind stmt 1 (Sqlite3.Data.TEXT session_key) : Sqlite3.Rc.t);
+      ignore (Sqlite3.bind stmt 2 (Sqlite3.Data.TEXT id) : Sqlite3.Rc.t);
+      match Sqlite3.step stmt with
+      | Sqlite3.Rc.DONE -> Ok ()
+      | rc ->
+          Error
+            (Printf.sprintf "SQLite error deleting task: %s"
+               (Sqlite3.Rc.to_string rc)))
+
+let status_icon = function
+  | Pending -> "[ ]"
+  | In_progress -> "[>]"
+  | Done -> "[x]"
+  | Task_error -> "[!]"
+  | Cancelled -> "[-]"
+
+let render_tree ~db ~session_key =
+  let tasks = load_tasks ~db ~session_key in
+  if tasks = [] then
+    "No tasks tracked. Use the task_tree tool to plan and track your work.\n\
+     Breaking complex goals into subtasks helps maintain focus across long \
+     sessions."
+  else
+    let buf = Buffer.create 512 in
+    let rec render_children ~parent_id ~prefix =
+      let children =
+        List.filter (fun t -> t.parent_id = parent_id) tasks
+        |> List.sort (fun a b -> compare a.sort_order b.sort_order)
+      in
+      let n = ref 0 in
+      List.iter
+        (fun t ->
+          incr n;
+          let number =
+            match prefix with
+            | "" -> string_of_int !n
+            | p -> p ^ "." ^ string_of_int !n
+          in
+          let note_str =
+            match t.note with Some n -> " (" ^ n ^ ")" | None -> ""
+          in
+          Buffer.add_string buf
+            (Printf.sprintf "%s. %s %s%s\n" number (status_icon t.status)
+               t.title note_str);
+          render_children ~parent_id:(Some t.id) ~prefix:number)
+        children
+    in
+    render_children ~parent_id:None ~prefix:"";
+    let result = Buffer.contents buf in
+    if String.length result > 0 && result.[String.length result - 1] = '\n' then
+      String.sub result 0 (String.length result - 1)
+    else result
+
+let render_tree_with_legend ~db ~session_key =
+  let tree = render_tree ~db ~session_key in
+  if count_tasks ~db ~session_key = 0 then tree
+  else
+    tree
+    ^ "\n\n\
+       Legend: [ ] pending  [>] in_progress  [x] done  [!] error  [-] cancelled"
+
+(* Validate and execute add operation *)
+let do_add ~db ~session_key ~id ~parent_id ~title ~status ~note =
+  if String.length title > max_title_length then
+    Error
+      (Printf.sprintf "Title too long (%d chars, max %d)" (String.length title)
+         max_title_length)
+  else if String.length title = 0 then Error "Title is required for add"
+  else if count_tasks ~db ~session_key >= max_active_tasks then
+    Error
+      (Printf.sprintf "Too many active tasks (max %d). Archive or clear first."
+         max_active_tasks)
+  else begin
+    let actual_id =
+      match id with Some i -> i | None -> next_auto_id ~db ~session_key
+    in
+    if id_exists ~db ~session_key ~id:actual_id then
+      Error (Printf.sprintf "Task ID '%s' already exists" actual_id)
+    else
+      let tasks = load_tasks ~db ~session_key in
+      let parent_depth =
+        match parent_id with
+        | None -> 0
+        | Some pid -> task_depth ~tasks ~id:pid + 1
+      in
+      if parent_depth >= max_depth then
+        Error
+          (Printf.sprintf "Max nesting depth exceeded (max %d levels)" max_depth)
+      else
+        let parent_valid =
+          match parent_id with
+          | Some pid -> id_exists ~db ~session_key ~id:pid
+          | None -> true
+        in
+        if not parent_valid then
+          Error
+            (Printf.sprintf "Parent task '%s' not found" (Option.get parent_id))
+        else begin
+          let actual_status =
+            match status with Some s -> s | None -> Pending
+          in
+          if actual_status = In_progress then begin
+            let current_ip = count_in_progress ~db ~session_key in
+            if current_ip >= max_concurrent_in_progress then
+              Error
+                (Printf.sprintf
+                   "Too many concurrent in_progress tasks (max %d). Complete \
+                    or cancel existing work first."
+                   max_concurrent_in_progress)
+            else
+              match
+                insert_task ~db ~session_key ~id:actual_id ~parent_id ~title
+                  ~status:actual_status ~note
+              with
+              | Ok () -> Ok actual_id
+              | Error e -> Error e
+          end
+          else
+            match
+              insert_task ~db ~session_key ~id:actual_id ~parent_id ~title
+                ~status:actual_status ~note
+            with
+            | Ok () -> Ok actual_id
+            | Error e -> Error e
+        end
+  end
+
+(* Validate and execute update operation *)
+let do_update ~db ~session_key ~id ~status ~note =
+  let tasks = load_tasks ~db ~session_key in
+  match List.find_opt (fun t -> t.id = id) tasks with
+  | None -> Error (Printf.sprintf "Task '%s' not found" id)
+  | Some task -> (
+      match (status, note) with
+      | None, None -> Error "Update requires at least status or note"
+      | _ ->
+          let result = ref (Ok ()) in
+          (match status with
+          | Some new_status -> (
+              (* Lifecycle validation *)
+              (match new_status with
+              | Done ->
+                  let children = get_children ~tasks ~id in
+                  let incomplete =
+                    List.filter (fun c -> not (is_terminal c.status)) children
+                  in
+                  if incomplete <> [] then begin
+                    let child_ids =
+                      String.concat ", "
+                        (List.map (fun c -> "#" ^ c.id) incomplete)
+                    in
+                    result :=
+                      Error
+                        (Printf.sprintf
+                           "Cannot mark #%s done — children still incomplete: \
+                            %s"
+                           id child_ids)
+                  end
+              | In_progress ->
+                  let current_ip = count_in_progress ~db ~session_key in
+                  let already_ip = task.status = In_progress in
+                  if
+                    (not already_ip) && current_ip >= max_concurrent_in_progress
+                  then
+                    result :=
+                      Error
+                        (Printf.sprintf
+                           "Too many concurrent in_progress tasks (max %d). \
+                            Complete or cancel existing work first."
+                           max_concurrent_in_progress)
+              | _ -> ());
+              match !result with
+              | Error _ -> ()
+              | Ok () -> (
+                  match
+                    update_task_status ~db ~session_key ~id ~status:new_status
+                  with
+                  | Error e -> result := Error e
+                  | Ok () ->
+                      (* in_progress propagation: promote pending ancestors *)
+                      if new_status = In_progress then begin
+                        let ancestors = get_ancestors ~tasks ~id in
+                        List.iter
+                          (fun anc ->
+                            if anc.status = Pending && anc.id <> id then
+                              ignore
+                                (update_task_status ~db ~session_key ~id:anc.id
+                                   ~status:In_progress))
+                          ancestors
+                      end))
+          | None -> ());
+          (match (!result, note) with
+          | Ok (), Some n -> (
+              match update_task_note ~db ~session_key ~id ~note:(Some n) with
+              | Error e -> result := Error e
+              | Ok () -> ())
+          | Ok (), None -> ()
+          | Error _, _ -> ());
+          !result)
+
+(* Validate and execute remove operation *)
+let do_remove ~db ~session_key ~id =
+  let tasks = load_tasks ~db ~session_key in
+  match List.find_opt (fun t -> t.id = id) tasks with
+  | None -> Error (Printf.sprintf "Task '%s' not found" id)
+  | Some _ ->
+      let subtree_ids = get_subtree_ids ~tasks ~id in
+      let has_in_progress =
+        List.exists
+          (fun sid ->
+            match List.find_opt (fun t -> t.id = sid) tasks with
+            | Some t -> t.status = In_progress
+            | None -> false)
+          subtree_ids
+      in
+      if has_in_progress then
+        Error
+          (Printf.sprintf
+             "Cannot remove #%s — subtree contains in_progress tasks" id)
+      else begin
+        (* Delete in reverse order (children first) *)
+        let ids_reversed = List.rev subtree_ids in
+        List.iter
+          (fun sid -> ignore (delete_task ~db ~session_key ~id:sid))
+          ids_reversed;
+        Ok ()
+      end
+
+(* Clear all done/cancelled tasks *)
+let do_clear ~db ~session_key =
+  Memory.exec_exn db
+    (Printf.sprintf
+       "DELETE FROM task_tree WHERE session_key = '%s' AND status IN ('done', \
+        'cancelled')"
+       (String.concat "''" (String.split_on_char '\'' session_key)));
+  Ok ()
+
+(* Archive completed subtrees *)
+let do_archive ~db ~session_key ~id =
+  let tasks = load_tasks ~db ~session_key in
+  let next_archive_group () =
+    Memory.query_single_int db
+      (Printf.sprintf
+         "SELECT COALESCE(MAX(archive_group), 0) + 1 FROM task_tree_archive \
+          WHERE session_key = '%s'"
+         (String.concat "''" (String.split_on_char '\'' session_key)))
+  in
+  let archive_subtree root_id =
+    let subtree_ids = get_subtree_ids ~tasks ~id:root_id in
+    let all_terminal =
+      List.for_all
+        (fun sid ->
+          match List.find_opt (fun t -> t.id = sid) tasks with
+          | Some t -> is_terminal t.status
+          | None -> true)
+        subtree_ids
+    in
+    if not all_terminal then
+      Error
+        (Printf.sprintf
+           "Cannot archive #%s — subtree contains non-terminal tasks" root_id)
+    else begin
+      let group = next_archive_group () in
+      List.iter
+        (fun sid ->
+          match List.find_opt (fun t -> t.id = sid) tasks with
+          | Some t ->
+              let sql =
+                "INSERT INTO task_tree_archive (id, session_key, parent_id, \
+                 title, status, note, sort_order, created_at, completed_at, \
+                 archived_at, archive_group) VALUES (?, ?, ?, ?, ?, ?, ?, \
+                 datetime('now'), datetime('now'), datetime('now'), ?)"
+              in
+              let stmt = Sqlite3.prepare db sql in
+              Fun.protect
+                ~finally:(fun () -> ignore (Sqlite3.finalize stmt))
+                (fun () ->
+                  ignore
+                    (Sqlite3.bind stmt 1 (Sqlite3.Data.TEXT t.id)
+                      : Sqlite3.Rc.t);
+                  ignore
+                    (Sqlite3.bind stmt 2 (Sqlite3.Data.TEXT t.session_key)
+                      : Sqlite3.Rc.t);
+                  ignore
+                    (Sqlite3.bind stmt 3
+                       (match t.parent_id with
+                       | Some p -> Sqlite3.Data.TEXT p
+                       | None -> Sqlite3.Data.NULL)
+                      : Sqlite3.Rc.t);
+                  ignore
+                    (Sqlite3.bind stmt 4 (Sqlite3.Data.TEXT t.title)
+                      : Sqlite3.Rc.t);
+                  ignore
+                    (Sqlite3.bind stmt 5
+                       (Sqlite3.Data.TEXT (string_of_status t.status))
+                      : Sqlite3.Rc.t);
+                  ignore
+                    (Sqlite3.bind stmt 6
+                       (match t.note with
+                       | Some n -> Sqlite3.Data.TEXT n
+                       | None -> Sqlite3.Data.NULL)
+                      : Sqlite3.Rc.t);
+                  ignore
+                    (Sqlite3.bind stmt 7
+                       (Sqlite3.Data.INT (Int64.of_int t.sort_order))
+                      : Sqlite3.Rc.t);
+                  ignore
+                    (Sqlite3.bind stmt 8 (Sqlite3.Data.INT (Int64.of_int group))
+                      : Sqlite3.Rc.t);
+                  ignore (Sqlite3.step stmt : Sqlite3.Rc.t));
+              ignore (delete_task ~db ~session_key ~id:sid)
+          | None -> ())
+        subtree_ids;
+      Ok ()
+    end
+  in
+  match id with
+  | Some root_id -> (
+      match List.find_opt (fun t -> t.id = root_id) tasks with
+      | None -> Error (Printf.sprintf "Task '%s' not found" root_id)
+      | Some _ -> archive_subtree root_id)
+  | None ->
+      (* Archive all fully-completed root trees *)
+      let roots = List.filter (fun t -> t.parent_id = None) tasks in
+      let completed_roots =
+        List.filter
+          (fun root ->
+            let subtree_ids = get_subtree_ids ~tasks ~id:root.id in
+            List.for_all
+              (fun sid ->
+                match List.find_opt (fun t -> t.id = sid) tasks with
+                | Some t -> is_terminal t.status
+                | None -> true)
+              subtree_ids)
+          roots
+      in
+      if completed_roots = [] then
+        Error "No fully completed root trees to archive"
+      else begin
+        List.iter (fun root -> ignore (archive_subtree root.id)) completed_roots;
+        Ok ()
+      end
+
+(* Process a batch of operations *)
+let process_operations ~db ~session_key (ops : Yojson.Safe.t list) =
+  let open Yojson.Safe.Util in
+  let n = List.length ops in
+  if n = 0 then Error "No operations provided"
+  else if n > max_batch_size then
+    Error (Printf.sprintf "Too many operations (%d, max %d)" n max_batch_size)
+  else begin
+    (* Wrap in transaction *)
+    Memory.exec_exn db "BEGIN IMMEDIATE";
+    let depth_stack : (int * string) list ref = ref [] in
+    let results = Buffer.create 256 in
+    let error = ref None in
+    let op_idx = ref 0 in
+    List.iter
+      (fun op_json ->
+        if !error = None then begin
+          incr op_idx;
+          let op_name =
+            try op_json |> member "op" |> to_string with _ -> ""
+          in
+          let result =
+            try
+              match op_name with
+              | "add" -> (
+                  let title =
+                    try Some (op_json |> member "title" |> to_string)
+                    with _ -> None
+                  in
+                  let custom_id =
+                    try Some (op_json |> member "id" |> to_string)
+                    with _ -> None
+                  in
+                  let explicit_parent =
+                    try Some (op_json |> member "parent" |> to_string)
+                    with _ -> None
+                  in
+                  let depth =
+                    try Some (op_json |> member "depth" |> to_int)
+                    with _ -> None
+                  in
+                  let status =
+                    try
+                      Some
+                        ( op_json |> member "status" |> to_string |> fun s ->
+                          match status_of_string s with
+                          | Some st -> st
+                          | None -> Pending )
+                    with _ -> None
+                  in
+                  let note =
+                    try Some (op_json |> member "note" |> to_string)
+                    with _ -> None
+                  in
+                  match title with
+                  | None -> Error "Title is required for add"
+                  | Some title -> (
+                      let parent_id =
+                        match explicit_parent with
+                        | Some p -> Some p
+                        | None -> (
+                            match depth with
+                            | None | Some 0 -> None
+                            | Some d ->
+                                if d < 0 then None
+                                else
+                                  (* Check depth jump *)
+                                  let max_depth_in_stack =
+                                    match !depth_stack with
+                                    | [] -> -1
+                                    | _ ->
+                                        List.fold_left
+                                          (fun acc (lvl, _) -> max acc lvl)
+                                          (-1) !depth_stack
+                                  in
+                                  if d > max_depth_in_stack + 1 + 1 then
+                                    failwith
+                                      (Printf.sprintf
+                                         "depth %d skips levels — use depth %d \
+                                          first or set parent explicitly"
+                                         d
+                                         (max_depth_in_stack + 1 + 1))
+                                  else
+                                    (* Find parent at depth d-1 *)
+                                    let parent =
+                                      List.find_opt
+                                        (fun (lvl, _) -> lvl = d - 1)
+                                        !depth_stack
+                                    in
+                                    Option.map snd parent)
+                      in
+                      let add_result =
+                        do_add ~db ~session_key ~id:custom_id ~parent_id ~title
+                          ~status ~note
+                      in
+                      match add_result with
+                      | Ok actual_id ->
+                          let d =
+                            match depth with
+                            | Some d -> d
+                            | None ->
+                                if explicit_parent = None then 0
+                                else
+                                  let tasks = load_tasks ~db ~session_key in
+                                  task_depth ~tasks ~id:actual_id
+                          in
+                          (* Update depth stack: truncate to depth d, push new *)
+                          depth_stack :=
+                            (d, actual_id)
+                            :: List.filter
+                                 (fun (lvl, _) -> lvl < d)
+                                 !depth_stack;
+                          let parent_note =
+                            match parent_id with
+                            | Some pid -> Printf.sprintf " (child of %s)" pid
+                            | None -> ""
+                          in
+                          Buffer.add_string results
+                            (Printf.sprintf "Added %s: %s [%s]%s\n" actual_id
+                               title
+                               (string_of_status
+                                  (match status with
+                                  | Some s -> s
+                                  | None -> Pending))
+                               parent_note);
+                          Ok ()
+                      | Error e -> Error e))
+              | "update" -> (
+                  let id_str =
+                    try Some (op_json |> member "id" |> to_string)
+                    with _ -> None
+                  in
+                  let status =
+                    try
+                      Some
+                        ( op_json |> member "status" |> to_string |> fun s ->
+                          match status_of_string s with
+                          | Some st -> st
+                          | None ->
+                              failwith (Printf.sprintf "Invalid status '%s'" s)
+                        )
+                    with
+                    | Failure msg -> failwith msg
+                    | _ -> None
+                  in
+                  let note =
+                    try Some (op_json |> member "note" |> to_string)
+                    with _ -> None
+                  in
+                  match id_str with
+                  | None -> Error "ID is required for update"
+                  | Some id_str -> (
+                      (* Support comma-separated IDs *)
+                      let ids =
+                        String.split_on_char ',' id_str
+                        |> List.map String.trim
+                        |> List.filter (fun s -> s <> "")
+                      in
+                      let err = ref None in
+                      List.iter
+                        (fun single_id ->
+                          if !err = None then
+                            match
+                              do_update ~db ~session_key ~id:single_id ~status
+                                ~note
+                            with
+                            | Ok () ->
+                                let parts = ref [] in
+                                (match status with
+                                | Some s ->
+                                    parts :=
+                                      Printf.sprintf "status=%s"
+                                        (string_of_status s)
+                                      :: !parts
+                                | None -> ());
+                                (match note with
+                                | Some n ->
+                                    parts :=
+                                      Printf.sprintf "note=%s" n :: !parts
+                                | None -> ());
+                                Buffer.add_string results
+                                  (Printf.sprintf "Updated #%s: %s\n" single_id
+                                     (String.concat ", " (List.rev !parts)))
+                            | Error e -> err := Some e)
+                        ids;
+                      match !err with Some e -> Error e | None -> Ok ()))
+              | "remove" -> (
+                  let id =
+                    try Some (op_json |> member "id" |> to_string)
+                    with _ -> None
+                  in
+                  match id with
+                  | None -> Error "ID is required for remove"
+                  | Some id -> (
+                      match do_remove ~db ~session_key ~id with
+                      | Ok () ->
+                          Buffer.add_string results
+                            (Printf.sprintf "Removed #%s and descendants\n" id);
+                          Ok ()
+                      | Error e -> Error e))
+              | "clear" -> (
+                  match do_clear ~db ~session_key with
+                  | Ok () ->
+                      Buffer.add_string results
+                        "Cleared all done/cancelled tasks\n";
+                      Ok ()
+                  | Error e -> Error e)
+              | "archive" -> (
+                  let id =
+                    try Some (op_json |> member "id" |> to_string)
+                    with _ -> None
+                  in
+                  match do_archive ~db ~session_key ~id with
+                  | Ok () ->
+                      Buffer.add_string results
+                        (match id with
+                        | Some id -> Printf.sprintf "Archived subtree #%s\n" id
+                        | None -> "Archived all completed root trees\n");
+                      Ok ()
+                  | Error e -> Error e)
+              | "" -> Error "Operation 'op' field is required"
+              | other -> Error (Printf.sprintf "Unknown operation '%s'" other)
+            with Failure msg -> Error msg
+          in
+          match result with
+          | Ok () -> ()
+          | Error msg ->
+              error :=
+                Some
+                  (Printf.sprintf "Batch failed at operation %d/%d: %s" !op_idx
+                     n msg)
+        end)
+      ops;
+    match !error with
+    | Some msg ->
+        Memory.exec_exn db "ROLLBACK";
+        Error (msg ^ ". No operations were applied.")
+    | None ->
+        Memory.exec_exn db "COMMIT";
+        let tree = render_tree ~db ~session_key in
+        let output = Buffer.contents results in
+        Ok
+          (output ^ "\n## Task Tree\n" ^ tree
+         ^ "\n\n\
+            Legend: [ ] pending  [>] in_progress  [x] done  [!] error  [-] \
+            cancelled")
+  end
+
+let tool ~db : Tool.t =
+  {
+    name = "task_tree";
+    description =
+      "Track and organize your work using a persistent hierarchical task tree. \
+       Use this proactively at the start of any non-trivial task to plan your \
+       approach, and update it as you work. The task tree survives context \
+       compaction and is visible every turn.\n\n\
+       Operations: add, update, remove, clear, archive.\n\n\
+       Statuses: pending (not started), in_progress (actively working), done \
+       (completed), error (blocked/failed), cancelled (abandoned).\n\n\
+       Adding tasks: Use 'depth' for easy tree building in a batch — depth 0 \
+       is root, depth 1 nests under the last root, depth 2 under the last \
+       depth-1, etc. Or use 'parent' for explicit placement. Set 'id' for a \
+       memorable name, or let it auto-assign.\n\n\
+       Updating: Set 'id' to a task ID and provide 'status' and/or 'note'. For \
+       batch status updates, use comma-separated IDs.\n\n\
+       Archiving: Use 'archive' to move fully completed subtrees to the \
+       archive. This cleans up the active tree and resets ID numbering.\n\n\
+       Lifecycle rules (enforced automatically):\n\
+       - A parent cannot be marked done until all children are done or \
+       cancelled.\n\
+       - In-progress tasks cannot be removed.\n\
+       - Setting in_progress automatically promotes pending ancestors.\n\n\
+       Best practices:\n\
+       - Break complex work into 3-7 subtasks before starting.\n\
+       - Mark each task in_progress as you begin, done when complete.\n\
+       - Use error + note when blocked. Archive completed work to keep the \
+       tree focused.";
+    parameters_schema =
+      `Assoc
+        [
+          ("type", `String "object");
+          ( "properties",
+            `Assoc
+              [
+                ( "operations",
+                  `Assoc
+                    [
+                      ("type", `String "array");
+                      ( "items",
+                        `Assoc
+                          [
+                            ("type", `String "object");
+                            ( "properties",
+                              `Assoc
+                                [
+                                  ( "op",
+                                    `Assoc
+                                      [
+                                        ("type", `String "string");
+                                        ( "enum",
+                                          `List
+                                            [
+                                              `String "add";
+                                              `String "update";
+                                              `String "remove";
+                                              `String "clear";
+                                              `String "archive";
+                                            ] );
+                                      ] );
+                                  ("id", `Assoc [ ("type", `String "string") ]);
+                                  ( "parent",
+                                    `Assoc [ ("type", `String "string") ] );
+                                  ( "depth",
+                                    `Assoc [ ("type", `String "integer") ] );
+                                  ( "title",
+                                    `Assoc [ ("type", `String "string") ] );
+                                  ( "status",
+                                    `Assoc
+                                      [
+                                        ("type", `String "string");
+                                        ( "enum",
+                                          `List
+                                            [
+                                              `String "pending";
+                                              `String "in_progress";
+                                              `String "done";
+                                              `String "error";
+                                              `String "cancelled";
+                                            ] );
+                                      ] );
+                                  ("note", `Assoc [ ("type", `String "string") ]);
+                                ] );
+                            ("required", `List [ `String "op" ]);
+                          ] );
+                    ] );
+              ] );
+          ("required", `List [ `String "operations" ]);
+        ];
+    invoke =
+      (fun ?context args ->
+        let session_key =
+          match context with
+          | Some ctx -> (
+              match ctx.Tool.session_key with Some k -> k | None -> "default")
+          | None -> "default"
+        in
+        let open Yojson.Safe.Util in
+        let ops = try args |> member "operations" |> to_list with _ -> [] in
+        match process_operations ~db ~session_key ops with
+        | Ok result -> Lwt.return result
+        | Error msg -> Lwt.return ("Error: " ^ msg));
+    invoke_stream = None;
+    risk_level = Low;
+    deferred = false;
+  }

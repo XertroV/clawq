@@ -325,6 +325,7 @@ let cmd_debug_prompt args =
                 Some
                   (Agent.runtime_context_usage agent
                      ~compacted_before_turn:compacted);
+              task_tree_summary = None;
             }
           ()
       in

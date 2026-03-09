@@ -14,6 +14,7 @@ let result_to_string = function
   | Slash_commands.Delegate s -> "Delegate(" ^ s ^ ")"
   | Slash_commands.ForkAnd s -> "ForkAnd(" ^ s ^ ")"
   | Slash_commands.Tools -> "Tools"
+  | Slash_commands.Tasks -> "Tasks"
   | Slash_commands.NotACommand -> "NotACommand"
 
 let result_eq a b =
@@ -31,6 +32,7 @@ let result_eq a b =
   | Slash_commands.Delegate a, Slash_commands.Delegate b -> a = b
   | Slash_commands.ForkAnd a, Slash_commands.ForkAnd b -> a = b
   | Slash_commands.Tools, Slash_commands.Tools -> true
+  | Slash_commands.Tasks, Slash_commands.Tasks -> true
   | Slash_commands.NotACommand, Slash_commands.NotACommand -> true
   | _ -> false
 
@@ -161,7 +163,8 @@ let test_commands_list () =
     (List.mem "show_thinking" names);
   Alcotest.(check bool) "has config" true (List.mem "config" names);
   Alcotest.(check bool) "has fork_and" true (List.mem "fork_and" names);
-  Alcotest.(check bool) "has tools" true (List.mem "tools" names)
+  Alcotest.(check bool) "has tools" true (List.mem "tools" names);
+  Alcotest.(check bool) "has tasks" true (List.mem "tasks" names)
 
 let test_case_insensitive () =
   (match Slash_commands.handle "/HELP" with
@@ -369,6 +372,10 @@ let test_tools_command () =
   Alcotest.check result_testable "/tools returns Tools" Slash_commands.Tools
     (Slash_commands.handle "/tools")
 
+let test_tasks_command () =
+  Alcotest.check result_testable "/tasks returns Tasks" Slash_commands.Tasks
+    (Slash_commands.handle "/tasks")
+
 let test_format_tools_plain () =
   let tools =
     [
@@ -543,6 +550,7 @@ let suite =
     Alcotest.test_case "/config set invalid path" `Quick
       test_config_set_invalid_path;
     Alcotest.test_case "/tools returns Tools" `Quick test_tools_command;
+    Alcotest.test_case "/tasks returns Tasks" `Quick test_tasks_command;
     Alcotest.test_case "format_tools_plain" `Quick test_format_tools_plain;
     Alcotest.test_case "format_tools_telegram" `Quick test_format_tools_telegram;
   ]

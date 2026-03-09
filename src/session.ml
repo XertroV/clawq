@@ -551,6 +551,15 @@ let runtime_context_details mgr ~agent ~key ~compacted_before_turn =
     background_tasks = active_background_task_summaries mgr;
     context_usage =
       Some (Agent.runtime_context_usage agent ~compacted_before_turn);
+    task_tree_summary =
+      (match mgr.db with
+      | Some db ->
+          Task_tree.init_schema db;
+          let summary =
+            Task_tree.render_tree_with_legend ~db ~session_key:key
+          in
+          Some summary
+      | None -> None);
   }
 
 let format_context_block ?channel_name ?channel_type ?sender_id ?sender_name ()
@@ -1049,6 +1058,7 @@ let fork_and_run mgr ~parent_key ~prompt ~send_reply =
 
 let get_config mgr = mgr.config
 let get_tool_registry mgr = mgr.tool_registry
+let get_db mgr = mgr.db
 
 let update_config mgr config =
   mgr.config <- config;

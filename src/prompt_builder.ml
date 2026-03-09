@@ -114,6 +114,7 @@ type runtime_context_details = {
   shell_visible_roots_summary : string;
   background_tasks : background_task_summary list;
   context_usage : context_usage option;
+  task_tree_summary : string option;
 }
 
 let yes_no b = if b then "yes" else "no"
@@ -147,7 +148,7 @@ let add_runtime_details lines (details : runtime_context_details) =
                    task.runner task.status task.elapsed task.repo_label
                    task.branch)
                tasks)));
-  match details.context_usage with
+  (match details.context_usage with
   | None -> ()
   | Some usage ->
       add
@@ -159,7 +160,25 @@ let add_runtime_details lines (details : runtime_context_details) =
            "- Compaction: before a turn when history > %d messages or est \
             tokens > %d; compacted before this turn: %s"
            usage.max_messages_per_session usage.compaction_threshold_tokens
-           (yes_no usage.compacted_before_turn))
+           (yes_no usage.compacted_before_turn)));
+  match details.task_tree_summary with
+  | None -> ()
+  | Some summary ->
+      let compacted =
+        match details.context_usage with
+        | Some u -> u.compacted_before_turn
+        | None -> false
+      in
+      if compacted then begin
+        add "";
+        add "## Post-Compaction Orientation";
+        add
+          "Your conversation history was compacted. Your task tree (below) \
+           reflects your current work plan."
+      end;
+      add "";
+      add "## Current Tasks";
+      add summary
 
 let build_runtime_context ~(config : Runtime_config.t) ?details () =
   if not config.prompt.dynamic_enabled then None

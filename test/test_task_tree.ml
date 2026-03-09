@@ -1,0 +1,984 @@
+let fresh_db () =
+  let db = Sqlite3.db_open ":memory:" in
+  Task_tree.init_schema db;
+  db
+
+let test_init_schema_idempotent () =
+  let db = fresh_db () in
+  Task_tree.init_schema db;
+  Task_tree.init_schema db;
+  let count = Task_tree.count_tasks ~db ~session_key:"s1" in
+  Alcotest.(check int) "empty after init" 0 count
+
+let test_add_root_task () =
+  let db = fresh_db () in
+  let result =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [ `Assoc [ ("op", `String "add"); ("title", `String "Root task") ] ]
+  in
+  (match result with
+  | Ok output ->
+      Alcotest.(check bool)
+        "contains Added" true
+        (try
+           ignore (Str.search_forward (Str.regexp_string "Added") output 0);
+           true
+         with Not_found -> false)
+  | Error e -> Alcotest.fail ("Expected Ok, got Error: " ^ e));
+  let tasks = Task_tree.load_tasks ~db ~session_key:"s1" in
+  Alcotest.(check int) "one task" 1 (List.length tasks);
+  Alcotest.(check string) "id is 1" "1" (List.hd tasks).id;
+  Alcotest.(check string) "title" "Root task" (List.hd tasks).title
+
+let test_add_custom_string_id () =
+  let db = fresh_db () in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [
+            ("op", `String "add");
+            ("id", `String "auth");
+            ("title", `String "Implement auth");
+          ];
+      ]
+  in
+  let tasks = Task_tree.load_tasks ~db ~session_key:"s1" in
+  Alcotest.(check int) "one task" 1 (List.length tasks);
+  Alcotest.(check string) "custom id" "auth" (List.hd tasks).id
+
+let test_add_depth_auto_nesting () =
+  let db = fresh_db () in
+  let result =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [
+            ("op", `String "add"); ("title", `String "Parent"); ("depth", `Int 0);
+          ];
+        `Assoc
+          [
+            ("op", `String "add"); ("title", `String "Child"); ("depth", `Int 1);
+          ];
+        `Assoc
+          [
+            ("op", `String "add");
+            ("title", `String "Grandchild");
+            ("depth", `Int 2);
+          ];
+      ]
+  in
+  (match result with Ok _ -> () | Error e -> Alcotest.fail e);
+  let tasks = Task_tree.load_tasks ~db ~session_key:"s1" in
+  Alcotest.(check int) "three tasks" 3 (List.length tasks);
+  let child = List.find (fun t -> t.Task_tree.title = "Child") tasks in
+  Alcotest.(check (option string)) "child parent" (Some "1") child.parent_id;
+  let gc = List.find (fun t -> t.Task_tree.title = "Grandchild") tasks in
+  Alcotest.(check (option string)) "grandchild parent" (Some "2") gc.parent_id
+
+let test_add_explicit_parent () =
+  let db = fresh_db () in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [
+            ("op", `String "add");
+            ("id", `String "root");
+            ("title", `String "Root");
+          ];
+        `Assoc
+          [
+            ("op", `String "add");
+            ("title", `String "Child");
+            ("parent", `String "root");
+          ];
+      ]
+  in
+  let tasks = Task_tree.load_tasks ~db ~session_key:"s1" in
+  let child = List.find (fun t -> t.Task_tree.title = "Child") tasks in
+  Alcotest.(check (option string))
+    "explicit parent" (Some "root") child.parent_id
+
+let test_depth_jump_validation () =
+  let db = fresh_db () in
+  let result =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [
+            ("op", `String "add"); ("title", `String "Root"); ("depth", `Int 0);
+          ];
+        `Assoc
+          [
+            ("op", `String "add");
+            ("title", `String "Bad jump");
+            ("depth", `Int 3);
+          ];
+      ]
+  in
+  match result with
+  | Error msg ->
+      Alcotest.(check bool)
+        "mentions skips" true
+        (try
+           ignore (Str.search_forward (Str.regexp_string "skips") msg 0);
+           true
+         with Not_found -> false)
+  | Ok _ -> Alcotest.fail "Expected error for depth jump"
+
+let test_update_status_lifecycle () =
+  let db = fresh_db () in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [ `Assoc [ ("op", `String "add"); ("title", `String "Task") ] ]
+  in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [
+            ("op", `String "update");
+            ("id", `String "1");
+            ("status", `String "in_progress");
+          ];
+      ]
+  in
+  let tasks = Task_tree.load_tasks ~db ~session_key:"s1" in
+  Alcotest.(check string)
+    "in_progress" "in_progress"
+    (Task_tree.string_of_status (List.hd tasks).status);
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [
+            ("op", `String "update");
+            ("id", `String "1");
+            ("status", `String "done");
+          ];
+      ]
+  in
+  let tasks = Task_tree.load_tasks ~db ~session_key:"s1" in
+  Alcotest.(check string)
+    "done" "done"
+    (Task_tree.string_of_status (List.hd tasks).status)
+
+let test_update_done_with_incomplete_children () =
+  let db = fresh_db () in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [
+            ("op", `String "add"); ("title", `String "Parent"); ("depth", `Int 0);
+          ];
+        `Assoc
+          [
+            ("op", `String "add"); ("title", `String "Child"); ("depth", `Int 1);
+          ];
+      ]
+  in
+  let result =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [
+            ("op", `String "update");
+            ("id", `String "1");
+            ("status", `String "done");
+          ];
+      ]
+  in
+  match result with
+  | Error msg ->
+      Alcotest.(check bool)
+        "mentions incomplete" true
+        (try
+           ignore (Str.search_forward (Str.regexp_string "incomplete") msg 0);
+           true
+         with Not_found -> false)
+  | Ok _ -> Alcotest.fail "Expected error for incomplete children"
+
+let test_update_done_after_completing_children () =
+  let db = fresh_db () in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [
+            ("op", `String "add"); ("title", `String "Parent"); ("depth", `Int 0);
+          ];
+        `Assoc
+          [
+            ("op", `String "add"); ("title", `String "Child"); ("depth", `Int 1);
+          ];
+      ]
+  in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [
+            ("op", `String "update");
+            ("id", `String "2");
+            ("status", `String "done");
+          ];
+      ]
+  in
+  let result =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [
+            ("op", `String "update");
+            ("id", `String "1");
+            ("status", `String "done");
+          ];
+      ]
+  in
+  match result with
+  | Ok _ -> ()
+  | Error e -> Alcotest.fail ("Expected Ok, got Error: " ^ e)
+
+let test_in_progress_propagation () =
+  let db = fresh_db () in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [
+            ("op", `String "add"); ("title", `String "Root"); ("depth", `Int 0);
+          ];
+        `Assoc
+          [
+            ("op", `String "add"); ("title", `String "Child"); ("depth", `Int 1);
+          ];
+      ]
+  in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [
+            ("op", `String "update");
+            ("id", `String "2");
+            ("status", `String "in_progress");
+          ];
+      ]
+  in
+  let tasks = Task_tree.load_tasks ~db ~session_key:"s1" in
+  let root = List.find (fun t -> t.Task_tree.id = "1") tasks in
+  Alcotest.(check string)
+    "root promoted to in_progress" "in_progress"
+    (Task_tree.string_of_status root.status)
+
+let test_remove_task_and_subtree () =
+  let db = fresh_db () in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [
+            ("op", `String "add"); ("title", `String "Root"); ("depth", `Int 0);
+          ];
+        `Assoc
+          [
+            ("op", `String "add"); ("title", `String "Child"); ("depth", `Int 1);
+          ];
+        `Assoc
+          [
+            ("op", `String "add"); ("title", `String "Other"); ("depth", `Int 0);
+          ];
+      ]
+  in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [ `Assoc [ ("op", `String "remove"); ("id", `String "1") ] ]
+  in
+  let tasks = Task_tree.load_tasks ~db ~session_key:"s1" in
+  Alcotest.(check int) "only Other remains" 1 (List.length tasks);
+  Alcotest.(check string) "remaining is Other" "Other" (List.hd tasks).title
+
+let test_remove_blocked_by_in_progress () =
+  let db = fresh_db () in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [
+            ("op", `String "add");
+            ("title", `String "Root");
+            ("status", `String "in_progress");
+          ];
+      ]
+  in
+  let result =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [ `Assoc [ ("op", `String "remove"); ("id", `String "1") ] ]
+  in
+  match result with
+  | Error msg ->
+      Alcotest.(check bool)
+        "mentions in_progress" true
+        (try
+           ignore (Str.search_forward (Str.regexp_string "in_progress") msg 0);
+           true
+         with Not_found -> false)
+  | Ok _ -> Alcotest.fail "Expected error for in_progress removal"
+
+let test_clear_only_done_cancelled () =
+  let db = fresh_db () in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [
+            ("op", `String "add");
+            ("title", `String "Done");
+            ("status", `String "done");
+          ];
+        `Assoc
+          [
+            ("op", `String "add");
+            ("title", `String "Cancelled");
+            ("status", `String "cancelled");
+          ];
+        `Assoc
+          [
+            ("op", `String "add");
+            ("title", `String "Pending");
+            ("status", `String "pending");
+          ];
+        `Assoc
+          [
+            ("op", `String "add");
+            ("title", `String "Error");
+            ("status", `String "error");
+          ];
+      ]
+  in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [ `Assoc [ ("op", `String "clear") ] ]
+  in
+  let tasks = Task_tree.load_tasks ~db ~session_key:"s1" in
+  Alcotest.(check int) "pending + error remain" 2 (List.length tasks);
+  let titles = List.map (fun t -> t.Task_tree.title) tasks in
+  Alcotest.(check bool) "has Pending" true (List.mem "Pending" titles);
+  Alcotest.(check bool) "has Error" true (List.mem "Error" titles)
+
+let test_archive_completed_subtree () =
+  let db = fresh_db () in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [
+            ("op", `String "add");
+            ("title", `String "Done root");
+            ("status", `String "done");
+          ];
+        `Assoc [ ("op", `String "add"); ("title", `String "Still pending") ];
+      ]
+  in
+  let result =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [ `Assoc [ ("op", `String "archive"); ("id", `String "1") ] ]
+  in
+  (match result with Ok _ -> () | Error e -> Alcotest.fail e);
+  let tasks = Task_tree.load_tasks ~db ~session_key:"s1" in
+  Alcotest.(check int) "only pending remains" 1 (List.length tasks);
+  Alcotest.(check string)
+    "remaining is pending" "Still pending" (List.hd tasks).title;
+  let archived =
+    Memory.query_single_int db
+      "SELECT COUNT(*) FROM task_tree_archive WHERE session_key = 's1'"
+  in
+  Alcotest.(check int) "one archived" 1 archived
+
+let test_archive_resets_auto_id () =
+  let db = fresh_db () in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [
+            ("op", `String "add");
+            ("title", `String "Task");
+            ("status", `String "done");
+          ];
+      ]
+  in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [ `Assoc [ ("op", `String "archive") ] ]
+  in
+  let tasks = Task_tree.load_tasks ~db ~session_key:"s1" in
+  Alcotest.(check int) "empty after archive" 0 (List.length tasks);
+  let next_id = Task_tree.next_auto_id ~db ~session_key:"s1" in
+  Alcotest.(check string) "reset to 1" "1" next_id
+
+let test_archive_blocked_by_incomplete () =
+  let db = fresh_db () in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [
+            ("op", `String "add"); ("title", `String "Root"); ("depth", `Int 0);
+          ];
+        `Assoc
+          [
+            ("op", `String "add"); ("title", `String "Child"); ("depth", `Int 1);
+          ];
+      ]
+  in
+  let result =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [ `Assoc [ ("op", `String "archive"); ("id", `String "1") ] ]
+  in
+  match result with
+  | Error msg ->
+      Alcotest.(check bool)
+        "mentions non-terminal" true
+        (try
+           ignore (Str.search_forward (Str.regexp_string "non-terminal") msg 0);
+           true
+         with Not_found -> false)
+  | Ok _ -> Alcotest.fail "Expected error for incomplete archive"
+
+let test_session_isolation () =
+  let db = fresh_db () in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [ `Assoc [ ("op", `String "add"); ("title", `String "Session 1") ] ]
+  in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s2"
+      [ `Assoc [ ("op", `String "add"); ("title", `String "Session 2") ] ]
+  in
+  let s1_tasks = Task_tree.load_tasks ~db ~session_key:"s1" in
+  let s2_tasks = Task_tree.load_tasks ~db ~session_key:"s2" in
+  Alcotest.(check int) "s1 has one" 1 (List.length s1_tasks);
+  Alcotest.(check int) "s2 has one" 1 (List.length s2_tasks);
+  Alcotest.(check string) "s1 title" "Session 1" (List.hd s1_tasks).title;
+  Alcotest.(check string) "s2 title" "Session 2" (List.hd s2_tasks).title
+
+let test_render_empty_tree () =
+  let db = fresh_db () in
+  let output = Task_tree.render_tree ~db ~session_key:"s1" in
+  Alcotest.(check bool)
+    "contains encouragement" true
+    (try
+       ignore
+         (Str.search_forward (Str.regexp_string "No tasks tracked") output 0);
+       true
+     with Not_found -> false)
+
+let test_render_populated_tree () =
+  let db = fresh_db () in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [
+            ("op", `String "add");
+            ("title", `String "First");
+            ("status", `String "in_progress");
+            ("depth", `Int 0);
+          ];
+        `Assoc
+          [
+            ("op", `String "add");
+            ("title", `String "Sub");
+            ("status", `String "done");
+            ("depth", `Int 1);
+          ];
+        `Assoc
+          [
+            ("op", `String "add"); ("title", `String "Second"); ("depth", `Int 0);
+          ];
+      ]
+  in
+  let output = Task_tree.render_tree ~db ~session_key:"s1" in
+  Alcotest.(check bool)
+    "contains [>]" true
+    (try
+       ignore (Str.search_forward (Str.regexp_string "[>]") output 0);
+       true
+     with Not_found -> false);
+  Alcotest.(check bool)
+    "contains [x]" true
+    (try
+       ignore (Str.search_forward (Str.regexp_string "[x]") output 0);
+       true
+     with Not_found -> false);
+  Alcotest.(check bool)
+    "contains hierarchy" true
+    (try
+       ignore (Str.search_forward (Str.regexp_string "1.1") output 0);
+       true
+     with Not_found -> false)
+
+let test_batch_operations () =
+  let db = fresh_db () in
+  let result =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc [ ("op", `String "add"); ("title", `String "A") ];
+        `Assoc [ ("op", `String "add"); ("title", `String "B") ];
+        `Assoc
+          [
+            ("op", `String "update");
+            ("id", `String "1");
+            ("status", `String "done");
+          ];
+      ]
+  in
+  (match result with Ok _ -> () | Error e -> Alcotest.fail e);
+  let tasks = Task_tree.load_tasks ~db ~session_key:"s1" in
+  Alcotest.(check int) "two tasks" 2 (List.length tasks);
+  let t1 = List.find (fun t -> t.Task_tree.id = "1") tasks in
+  Alcotest.(check string)
+    "t1 done" "done"
+    (Task_tree.string_of_status t1.status)
+
+let test_tool_invoke_round_trip () =
+  let db = fresh_db () in
+  let tool_t = Task_tree.tool ~db in
+  let args =
+    `Assoc
+      [
+        ( "operations",
+          `List
+            [ `Assoc [ ("op", `String "add"); ("title", `String "Test task") ] ]
+        );
+      ]
+  in
+  let ctx =
+    {
+      Tool.session_key = Some "s1";
+      send_progress = None;
+      interrupt_check = None;
+    }
+  in
+  let result = Lwt_main.run (tool_t.invoke ~context:ctx args) in
+  Alcotest.(check bool)
+    "contains Added" true
+    (try
+       ignore (Str.search_forward (Str.regexp_string "Added") result 0);
+       true
+     with Not_found -> false);
+  Alcotest.(check bool)
+    "contains Task Tree" true
+    (try
+       ignore (Str.search_forward (Str.regexp_string "Task Tree") result 0);
+       true
+     with Not_found -> false)
+
+let test_id_collision_rejected () =
+  let db = fresh_db () in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [
+            ("op", `String "add");
+            ("id", `String "myid");
+            ("title", `String "First");
+          ];
+      ]
+  in
+  let result =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [
+            ("op", `String "add");
+            ("id", `String "myid");
+            ("title", `String "Duplicate");
+          ];
+      ]
+  in
+  match result with
+  | Error msg ->
+      Alcotest.(check bool)
+        "mentions already exists" true
+        (try
+           ignore
+             (Str.search_forward (Str.regexp_string "already exists") msg 0);
+           true
+         with Not_found -> false)
+  | Ok _ -> Alcotest.fail "Expected error for duplicate ID"
+
+let test_auto_id_skips_agent_chosen () =
+  let db = fresh_db () in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc [ ("op", `String "add"); ("title", `String "Auto 1") ];
+        `Assoc [ ("op", `String "add"); ("title", `String "Auto 2") ];
+      ]
+  in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [
+            ("op", `String "add");
+            ("id", `String "3");
+            ("title", `String "Manual 3");
+          ];
+      ]
+  in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [ `Assoc [ ("op", `String "add"); ("title", `String "Auto next") ] ]
+  in
+  let tasks = Task_tree.load_tasks ~db ~session_key:"s1" in
+  let last = List.find (fun t -> t.Task_tree.title = "Auto next") tasks in
+  Alcotest.(check string) "auto-id skipped to 4" "4" last.id
+
+let test_reopen_task () =
+  let db = fresh_db () in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [
+            ("op", `String "add");
+            ("title", `String "Task");
+            ("status", `String "done");
+          ];
+      ]
+  in
+  let result =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [
+            ("op", `String "update");
+            ("id", `String "1");
+            ("status", `String "pending");
+          ];
+      ]
+  in
+  (match result with Ok _ -> () | Error e -> Alcotest.fail e);
+  let tasks = Task_tree.load_tasks ~db ~session_key:"s1" in
+  Alcotest.(check string)
+    "reopened to pending" "pending"
+    (Task_tree.string_of_status (List.hd tasks).status)
+
+let test_max_tasks_guardrail () =
+  let db = fresh_db () in
+  for i = 1 to 50 do
+    ignore
+      (Task_tree.process_operations ~db ~session_key:"s1"
+         [
+           `Assoc
+             [
+               ("op", `String "add");
+               ("title", `String (Printf.sprintf "Task %d" i));
+             ];
+         ])
+  done;
+  let result =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [ `Assoc [ ("op", `String "add"); ("title", `String "Task 51") ] ]
+  in
+  match result with
+  | Error msg ->
+      Alcotest.(check bool)
+        "mentions max" true
+        (try
+           ignore (Str.search_forward (Str.regexp_string "max") msg 0);
+           true
+         with Not_found -> false)
+  | Ok _ -> Alcotest.fail "Expected error for exceeding max tasks"
+
+let test_max_depth_guardrail () =
+  let db = fresh_db () in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [ ("op", `String "add"); ("title", `String "L0"); ("depth", `Int 0) ];
+        `Assoc
+          [ ("op", `String "add"); ("title", `String "L1"); ("depth", `Int 1) ];
+        `Assoc
+          [ ("op", `String "add"); ("title", `String "L2"); ("depth", `Int 2) ];
+        `Assoc
+          [ ("op", `String "add"); ("title", `String "L3"); ("depth", `Int 3) ];
+        `Assoc
+          [ ("op", `String "add"); ("title", `String "L4"); ("depth", `Int 4) ];
+      ]
+  in
+  let result =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [
+            ("op", `String "add");
+            ("title", `String "L5");
+            ("parent", `String "5");
+          ];
+      ]
+  in
+  match result with
+  | Error msg ->
+      Alcotest.(check bool)
+        "mentions max" true
+        (try
+           ignore (Str.search_forward (Str.regexp_string "Max nesting") msg 0);
+           true
+         with Not_found -> false)
+  | Ok _ -> Alcotest.fail "Expected error for exceeding max depth"
+
+let test_max_concurrent_in_progress () =
+  let db = fresh_db () in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [
+            ("op", `String "add");
+            ("title", `String "T1");
+            ("status", `String "in_progress");
+          ];
+        `Assoc
+          [
+            ("op", `String "add");
+            ("title", `String "T2");
+            ("status", `String "in_progress");
+          ];
+        `Assoc
+          [
+            ("op", `String "add");
+            ("title", `String "T3");
+            ("status", `String "in_progress");
+          ];
+      ]
+  in
+  let result =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [
+            ("op", `String "add");
+            ("title", `String "T4");
+            ("status", `String "in_progress");
+          ];
+      ]
+  in
+  match result with
+  | Error msg ->
+      Alcotest.(check bool)
+        "mentions max" true
+        (try
+           ignore
+             (Str.search_forward
+                (Str.regexp_string "Too many concurrent")
+                msg 0);
+           true
+         with Not_found -> false)
+  | Ok _ -> Alcotest.fail "Expected error for 4th in_progress"
+
+let test_batch_transaction_rollback () =
+  let db = fresh_db () in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [
+            ("op", `String "add");
+            ("title", `String "Existing");
+            ("depth", `Int 0);
+          ];
+        `Assoc
+          [
+            ("op", `String "add"); ("title", `String "Child"); ("depth", `Int 1);
+          ];
+      ]
+  in
+  let result =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc [ ("op", `String "add"); ("title", `String "New") ];
+        `Assoc
+          [
+            ("op", `String "update");
+            ("id", `String "1");
+            ("status", `String "done");
+          ];
+      ]
+  in
+  (* op 2 should fail because child #2 is still pending *)
+  (match result with
+  | Error msg ->
+      Alcotest.(check bool)
+        "mentions batch failed" true
+        (try
+           ignore (Str.search_forward (Str.regexp_string "Batch failed") msg 0);
+           true
+         with Not_found -> false)
+  | Ok _ -> Alcotest.fail "Expected batch error");
+  (* Verify rollback: New task should NOT exist *)
+  let tasks = Task_tree.load_tasks ~db ~session_key:"s1" in
+  Alcotest.(check int) "still 2 tasks (rollback)" 2 (List.length tasks)
+
+let test_render_with_legend () =
+  let db = fresh_db () in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [ `Assoc [ ("op", `String "add"); ("title", `String "Task") ] ]
+  in
+  let output = Task_tree.render_tree_with_legend ~db ~session_key:"s1" in
+  Alcotest.(check bool)
+    "contains Legend" true
+    (try
+       ignore (Str.search_forward (Str.regexp_string "Legend") output 0);
+       true
+     with Not_found -> false)
+
+let test_note_only_update () =
+  let db = fresh_db () in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [ `Assoc [ ("op", `String "add"); ("title", `String "Task") ] ]
+  in
+  let result =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [
+            ("op", `String "update");
+            ("id", `String "1");
+            ("note", `String "my note");
+          ];
+      ]
+  in
+  (match result with Ok _ -> () | Error e -> Alcotest.fail e);
+  let tasks = Task_tree.load_tasks ~db ~session_key:"s1" in
+  let t = List.hd tasks in
+  Alcotest.(check (option string)) "note persisted" (Some "my note") t.note;
+  Alcotest.(check string)
+    "status unchanged" "pending"
+    (Task_tree.string_of_status t.status)
+
+let test_comma_separated_id_update () =
+  let db = fresh_db () in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc [ ("op", `String "add"); ("title", `String "A") ];
+        `Assoc [ ("op", `String "add"); ("title", `String "B") ];
+        `Assoc [ ("op", `String "add"); ("title", `String "C") ];
+      ]
+  in
+  let result =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [
+            ("op", `String "update");
+            ("id", `String "1,2,3");
+            ("status", `String "done");
+          ];
+      ]
+  in
+  (match result with Ok _ -> () | Error e -> Alcotest.fail e);
+  let tasks = Task_tree.load_tasks ~db ~session_key:"s1" in
+  List.iter
+    (fun t ->
+      Alcotest.(check string)
+        (Printf.sprintf "#%s is done" t.Task_tree.id)
+        "done"
+        (Task_tree.string_of_status t.status))
+    tasks
+
+let test_archive_all_completed_roots () =
+  let db = fresh_db () in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [
+            ("op", `String "add");
+            ("title", `String "Root A");
+            ("status", `String "done");
+          ];
+        `Assoc
+          [
+            ("op", `String "add");
+            ("title", `String "Root B");
+            ("status", `String "done");
+          ];
+      ]
+  in
+  let result =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [ `Assoc [ ("op", `String "archive") ] ]
+  in
+  (match result with Ok _ -> () | Error e -> Alcotest.fail e);
+  let tasks = Task_tree.load_tasks ~db ~session_key:"s1" in
+  Alcotest.(check int) "no active tasks" 0 (List.length tasks);
+  let archived =
+    Memory.query_single_int db
+      "SELECT COUNT(*) FROM task_tree_archive WHERE session_key = 's1'"
+  in
+  Alcotest.(check int) "both archived" 2 archived
+
+let suite =
+  [
+    Alcotest.test_case "init_schema idempotent" `Quick
+      test_init_schema_idempotent;
+    Alcotest.test_case "add root task" `Quick test_add_root_task;
+    Alcotest.test_case "add custom string ID" `Quick test_add_custom_string_id;
+    Alcotest.test_case "add depth auto-nesting" `Quick
+      test_add_depth_auto_nesting;
+    Alcotest.test_case "add explicit parent" `Quick test_add_explicit_parent;
+    Alcotest.test_case "depth jump validation" `Quick test_depth_jump_validation;
+    Alcotest.test_case "update status lifecycle" `Quick
+      test_update_status_lifecycle;
+    Alcotest.test_case "update done with incomplete children" `Quick
+      test_update_done_with_incomplete_children;
+    Alcotest.test_case "update done after completing children" `Quick
+      test_update_done_after_completing_children;
+    Alcotest.test_case "in_progress propagation" `Quick
+      test_in_progress_propagation;
+    Alcotest.test_case "remove task and subtree" `Quick
+      test_remove_task_and_subtree;
+    Alcotest.test_case "remove blocked by in_progress" `Quick
+      test_remove_blocked_by_in_progress;
+    Alcotest.test_case "clear only done/cancelled" `Quick
+      test_clear_only_done_cancelled;
+    Alcotest.test_case "archive completed subtree" `Quick
+      test_archive_completed_subtree;
+    Alcotest.test_case "archive resets auto-ID" `Quick
+      test_archive_resets_auto_id;
+    Alcotest.test_case "archive blocked by incomplete" `Quick
+      test_archive_blocked_by_incomplete;
+    Alcotest.test_case "session isolation" `Quick test_session_isolation;
+    Alcotest.test_case "render empty tree" `Quick test_render_empty_tree;
+    Alcotest.test_case "render populated tree" `Quick test_render_populated_tree;
+    Alcotest.test_case "batch operations" `Quick test_batch_operations;
+    Alcotest.test_case "tool invoke round-trip" `Quick
+      test_tool_invoke_round_trip;
+    Alcotest.test_case "ID collision rejected" `Quick test_id_collision_rejected;
+    Alcotest.test_case "auto-ID skips agent-chosen" `Quick
+      test_auto_id_skips_agent_chosen;
+    Alcotest.test_case "re-open task" `Quick test_reopen_task;
+    Alcotest.test_case "max tasks guardrail" `Quick test_max_tasks_guardrail;
+    Alcotest.test_case "max depth guardrail" `Quick test_max_depth_guardrail;
+    Alcotest.test_case "max concurrent in_progress" `Quick
+      test_max_concurrent_in_progress;
+    Alcotest.test_case "batch transaction rollback" `Quick
+      test_batch_transaction_rollback;
+    Alcotest.test_case "render with legend" `Quick test_render_with_legend;
+    Alcotest.test_case "note-only update" `Quick test_note_only_update;
+    Alcotest.test_case "comma-separated ID update" `Quick
+      test_comma_separated_id_update;
+    Alcotest.test_case "archive all completed roots" `Quick
+      test_archive_all_completed_roots;
+  ]

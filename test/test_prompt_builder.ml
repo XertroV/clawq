@@ -160,6 +160,7 @@ let test_runtime_context_includes_session_details () =
                     max_messages_per_session = 500;
                     compacted_before_turn = true;
                   };
+              task_tree_summary = None;
             }
           ()
         |> Option.value ~default:""

@@ -32,6 +32,7 @@
   rate_limiter
   scheduler
   background_task
+  task_tree
   migrate
   audit
   skills

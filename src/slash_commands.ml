@@ -11,6 +11,7 @@ type result =
   | Delegate of string
   | ForkAnd of string
   | Tools
+  | Tasks
   | NotACommand
 
 let allowed_thinking_levels = [ "low"; "medium"; "high"; "off"; "xhigh"; "max" ]
@@ -72,6 +73,7 @@ let commands =
         "Fork the current session and run a prompt: /fork_and <prompt>";
     };
     { name = "tools"; description = "List all available tools" };
+    { name = "tasks"; description = "Show the agent's current task tree" };
   ]
 
 let help_text =
@@ -215,6 +217,7 @@ let handle text =
             | [] -> Reply "Usage: /fork_and <prompt>"
             | _ -> ForkAnd (String.concat " " args))
         | "tools" -> Tools
+        | "tasks" -> Tasks
         | "" -> NotACommand
         | _ -> NotACommand)
 

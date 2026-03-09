@@ -1429,6 +1429,15 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
             in
             send_message ~bot_token ~chat_id:update.chat_id ~text
               ~parse_mode:"HTML" ()
+        | Tasks ->
+            let text =
+              match Session.get_db session_mgr with
+              | Some db ->
+                  Task_tree.init_schema db;
+                  Task_tree.render_tree_with_legend ~db ~session_key:key
+              | None -> "Tasks are not available (no database)."
+            in
+            send_message ~bot_token ~chat_id:update.chat_id ~text ()
         | ForkAnd prompt ->
             let* () =
               send_message ~bot_token ~chat_id:update.chat_id
