@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B158
+priority: high
+status: pending
+tags: []
+title: Research what cool things are possible for telegram bots (like question forms?), then Enhance send_message tool so the agent can use these more interesting ways of interacting with the user.
+---
+
+Research what cool things are possible for telegram bots (like question forms?), then Enhance send_message tool so the agent can use these more interesting ways of interacting with the user.
