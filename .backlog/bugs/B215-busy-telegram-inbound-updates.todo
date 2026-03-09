@@ -1,0 +1,11 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B215
+priority: medium
+status: pending
+tags: []
+title: Busy Telegram inbound updates can spend noticeable time between poll receipt and queue insertion
+---
+Observed in live Telegram DM at 04:43 local. Daemon log shows: `[04:43:13.656] INFO Telegram poll #3 for default: 19988ms elapsed, 1 update(s) received` followed by `[04:43:15.236] INFO Queued inbound message for busy session telegram:58495225:58495225 (queue depth: 1)`. There is roughly 1.58s between update receipt and queue insertion for a busy session. Investigate where that latency is spent: Telegram update handling, message normalization, attachment/media fetch, session lookup/locking, or logging/order artifacts. Acceptance criteria: (1) characterize the path from Telegram poll receipt to busy-session queue insertion; (2) identify whether the delay is expected, avoidable, or a logging artifact; (3) if avoidable, reduce it or improve ordering/observability; (4) keep this distinct from general long-poll timing and from downstream response ordering bugs unless root cause overlaps.

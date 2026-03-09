@@ -213,3 +213,4 @@ bugs:
     - file: B212-stay-idle-should-be-hidden-whe.todo
     - file: B213-add-a-tool-call-benchmark-some.todo
     - file: B214-telegram-reports-tool-loading.todo
+    - file: B215-busy-telegram-inbound-updates.todo
