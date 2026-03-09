@@ -35,6 +35,10 @@ let test_summarize_tool_arguments_uses_key_context () =
     (Stream_visibility.summarize_tool_arguments ~name:"shell_exec"
        {|{"command":"git status","cwd":"/tmp/wt"}|});
   Alcotest.(check (option string))
+    "shell_exec shows command head and tail" (Some "git status head 5 tail 10")
+    (Stream_visibility.summarize_tool_arguments ~name:"shell_exec"
+       {|{"command":"git status","head":5,"tail":10}|});
+  Alcotest.(check (option string))
     "generic tool shows labeled summary" (Some "query=status")
     (Stream_visibility.summarize_tool_arguments ~name:"search"
        {|{"query":"status","limit":5}|})

@@ -260,7 +260,7 @@ You have up to 27 built-in tools. 14 are always registered; `web_search`, `send_
 
 | Tool | Description |
 |------|-------------|
-| `shell_exec` | Execute a shell command (37-command allowlist when workspace_only, no pipes/semicolons/redirects/subshells; timeout 30s default, 600s max) |
+| `shell_exec` | Execute a shell command (37-command allowlist when workspace_only, no pipes/semicolons/redirects/subshells; optional `head`/`tail` line windows on final stdout/stderr result; timeout 30s default, 600s max) |
 | `file_read` | Read a file's text content (50K char limit; use offset/limit for larger files) |
 | `file_write` | Create or overwrite a file with the given content |
 | `file_append` | Append content to the end of a file, creating it if it does not exist |
@@ -311,6 +311,7 @@ You also support MCP (Model Context Protocol) for exposing and consuming externa
 
 - Default cwd is the configured workspace directory (`clawq workspace`; usually `~/.clawq/workspace/`), not the repo you happen to be asking about.
 - The tool accepts an optional `cwd` parameter. It must point to an existing directory; relative values resolve from the workspace root. In `workspace_only = true`, `cwd` must stay under the workspace or `security.extra_allowed_paths`.
+- The tool also accepts optional `head` and `tail` integer parameters. They affect only the final returned `stdout`/`stderr` text, not live streamed output chunks. If either causes lines to be omitted, clawq shows a head/tail window with an omission marker and saves the full stream to `~/.clawq/tool-output/` for later inspection.
 - The command is validated before execution: unsafe shell syntax is rejected, the first token must be an allowed command, and absolute/`~` path arguments must stay under the workspace or `security.extra_allowed_paths`.
 - Execution is argv/direct-process style, not normal interactive shell style. In practice this means shell builtins such as `cd` and `command` are not available as standalone commands.
 - `&&`, `||`, pipes, redirects, subshells, glob expansion by the shell, and similar compound shell syntax are rejected in `workspace_only` mode.
@@ -322,6 +323,7 @@ You also support MCP (Model Context Protocol) for exposing and consuming externa
 - Commands are executed via `Lwt_process.shell`, so normal `/bin/sh -c`-style shell semantics apply.
 - Shell builtins and compound syntax generally work here.
 - Optional `cwd` still works here and can be used to make worktree-targeting explicit instead of relying on persistent shell state.
+- Optional `head` and `tail` still apply to the final returned `stdout`/`stderr` text here, and omitted full streams are saved under `~/.clawq/tool-output/`.
 - Filesystem isolation is not applied in this mode; shell sees the host filesystem like the file tools do.
 
 ### Sandbox backend and visible filesystem

@@ -156,6 +156,54 @@ let test_shell_exec_has_cwd_param () =
       Alcotest.(check bool) "shell_exec has cwd param" true has_cwd
   | _ -> Alcotest.fail "schema not an object"
 
+let test_shell_exec_has_head_param () =
+  let tool =
+    Tools_builtin.shell_exec ~workspace:"/tmp" ~workspace_only:true
+      ~allowed_commands:[ "ls" ] ~extra_allowed_paths:[]
+      ~sandbox:
+        {
+          Sandbox.backend = Sandbox.None;
+          workspace = "/tmp";
+          extra_allowed_paths = [];
+          isolate_filesystem = true;
+        }
+  in
+  let open Yojson.Safe.Util in
+  match tool.parameters_schema with
+  | `Assoc fields ->
+      let props =
+        try List.assoc "properties" fields with Not_found -> `Null
+      in
+      let has_head =
+        match props with `Assoc ps -> List.mem_assoc "head" ps | _ -> false
+      in
+      Alcotest.(check bool) "shell_exec has head param" true has_head
+  | _ -> Alcotest.fail "schema not an object"
+
+let test_shell_exec_has_tail_param () =
+  let tool =
+    Tools_builtin.shell_exec ~workspace:"/tmp" ~workspace_only:true
+      ~allowed_commands:[ "ls" ] ~extra_allowed_paths:[]
+      ~sandbox:
+        {
+          Sandbox.backend = Sandbox.None;
+          workspace = "/tmp";
+          extra_allowed_paths = [];
+          isolate_filesystem = true;
+        }
+  in
+  let open Yojson.Safe.Util in
+  match tool.parameters_schema with
+  | `Assoc fields ->
+      let props =
+        try List.assoc "properties" fields with Not_found -> `Null
+      in
+      let has_tail =
+        match props with `Assoc ps -> List.mem_assoc "tail" ps | _ -> false
+      in
+      Alcotest.(check bool) "shell_exec has tail param" true has_tail
+  | _ -> Alcotest.fail "schema not an object"
+
 let test_file_read_has_path_param () =
   let tool =
     Tools_builtin.file_read ~workspace:"/tmp" ~workspace_only:true
@@ -364,6 +412,10 @@ let suite =
       test_shell_exec_has_command_param;
     Alcotest.test_case "shell_exec has cwd param" `Quick
       test_shell_exec_has_cwd_param;
+    Alcotest.test_case "shell_exec has head param" `Quick
+      test_shell_exec_has_head_param;
+    Alcotest.test_case "shell_exec has tail param" `Quick
+      test_shell_exec_has_tail_param;
     Alcotest.test_case "file_read has path param" `Quick
       test_file_read_has_path_param;
     Alcotest.test_case "shell_exec required fields" `Quick

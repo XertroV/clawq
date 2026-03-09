@@ -110,7 +110,19 @@ let summarize_tool_assoc ~name fields =
             | Some cwd -> "in " ^ cwd
             | None -> ""
           in
-          Some (join_summary_parts [ shorten_for_summary command; cwd ]))
+          let head =
+            match get_int_field fields "head" with
+            | Some n -> Printf.sprintf "head %d" n
+            | None -> ""
+          in
+          let tail =
+            match get_int_field fields "tail" with
+            | Some n -> Printf.sprintf "tail %d" n
+            | None -> ""
+          in
+          Some
+            (join_summary_parts
+               [ shorten_for_summary command; cwd; head; tail ]))
   | "file_edit" -> summarize_file_edit fields
   | "file_edit_lines" -> summarize_file_edit_lines fields
   | "file_write" ->

@@ -16,6 +16,21 @@ let process_exists pid =
     true
   with Unix.Unix_error _ -> false
 
+let contains hay needle =
+  try
+    ignore (Str.search_forward (Str.regexp_string needle) hay 0);
+    true
+  with Not_found -> false
+
+let extract_saved_output_path result =
+  try
+    ignore
+      (Str.search_forward
+         (Str.regexp "full stdout saved to \\([^ ]+\\)")
+         result 0);
+    Some (Str.matched_group 1 result)
+  with Not_found -> None
+
 let random_segment state =
   match Random.State.int state 10 with
   | 0 -> ""
@@ -648,14 +663,8 @@ let test_shell_exec_saves_full_output_when_truncated () =
       in
       Alcotest.(check bool)
         "mentions saved stdout path" true
-        (try
-           ignore
-             (Str.search_forward
-                (Str.regexp "full stdout saved to \\([^ ]+\\)")
-                result 0);
-           true
-         with Not_found -> false);
-      let path = Str.matched_group 1 result in
+        (Option.is_some (extract_saved_output_path result));
+      let path = Option.get (extract_saved_output_path result) in
       let ic = open_in path in
       let saved = really_input_string ic (in_channel_length ic) in
       close_in ic;
@@ -664,6 +673,182 @@ let test_shell_exec_saves_full_output_when_truncated () =
         (String.length long_text + 1)
         (String.length saved);
       Sys.remove path)
+
+let test_shell_exec_head_and_tail_window_output () =
+  with_temp_workspace (fun workspace ->
+      let sandbox =
+        Sandbox.create ~backend:Sandbox.None ~workspace ~extra_allowed_paths:[]
+          ~workspace_only:false ()
+      in
+      let tool =
+        Tools_builtin.shell_exec ~workspace ~workspace_only:false
+          ~allowed_commands:[] ~extra_allowed_paths:[] ~sandbox
+      in
+      let command =
+        "printf 'o1\no2\no3\no4\no5' && printf 'e1\ne2\ne3\ne4\ne5' 1>&2"
+      in
+      let result =
+        Lwt_main.run
+          (tool.Tool.invoke
+             (`Assoc
+                [
+                  ("command", `String command);
+                  ("head", `Int 2);
+                  ("tail", `Int 2);
+                ]))
+      in
+      Alcotest.(check bool)
+        "stdout head visible" true (contains result "o1\no2");
+      Alcotest.(check bool)
+        "stdout tail visible" true (contains result "o4\no5");
+      Alcotest.(check bool) "stdout middle omitted" false (contains result "o3");
+      Alcotest.(check bool)
+        "stderr head visible" true (contains result "e1\ne2");
+      Alcotest.(check bool)
+        "stderr tail visible" true (contains result "e4\ne5");
+      Alcotest.(check bool) "stderr middle omitted" false (contains result "e3");
+      Alcotest.(check bool)
+        "window marker visible" true
+        (contains result "showing first 2 and last 2 of 5"))
+
+let test_shell_exec_head_tail_window_handles_trailing_newline () =
+  with_temp_workspace (fun workspace ->
+      let sandbox =
+        Sandbox.create ~backend:Sandbox.None ~workspace ~extra_allowed_paths:[]
+          ~workspace_only:false ()
+      in
+      let tool =
+        Tools_builtin.shell_exec ~workspace ~workspace_only:false
+          ~allowed_commands:[] ~extra_allowed_paths:[] ~sandbox
+      in
+      let command =
+        "printf 'o1\no2\no3\no4\no5\n' && printf 'e1\ne2\ne3\ne4\ne5\n' 1>&2"
+      in
+      let result =
+        Lwt_main.run
+          (tool.Tool.invoke
+             (`Assoc
+                [
+                  ("command", `String command);
+                  ("head", `Int 2);
+                  ("tail", `Int 2);
+                ]))
+      in
+      Alcotest.(check bool)
+        "stdout trailing newline tail visible" true (contains result "o4\no5");
+      Alcotest.(check bool)
+        "stderr trailing newline tail visible" true (contains result "e4\ne5");
+      Alcotest.(check bool)
+        "no blank tail line" false
+        (contains result "o5\n\n[full stdout saved"
+        || contains result "e5\n\n[full stderr saved");
+      Alcotest.(check bool)
+        "window marker counts logical lines" true
+        (contains result "showing first 2 and last 2 of 5"))
+
+let test_shell_exec_head_or_tail_only_window_output () =
+  with_temp_workspace (fun workspace ->
+      let sandbox =
+        Sandbox.create ~backend:Sandbox.None ~workspace ~extra_allowed_paths:[]
+          ~workspace_only:false ()
+      in
+      let tool =
+        Tools_builtin.shell_exec ~workspace ~workspace_only:false
+          ~allowed_commands:[] ~extra_allowed_paths:[] ~sandbox
+      in
+      let head_result =
+        Lwt_main.run
+          (tool.Tool.invoke
+             (`Assoc
+                [
+                  ("command", `String "printf 'a1\na2\na3\na4\n'");
+                  ("head", `Int 2);
+                ]))
+      in
+      let tail_result =
+        Lwt_main.run
+          (tool.Tool.invoke
+             (`Assoc
+                [
+                  ("command", `String "printf 'b1\nb2\nb3\nb4\n'");
+                  ("tail", `Int 2);
+                ]))
+      in
+      Alcotest.(check bool)
+        "head-only keeps first line" true
+        (contains head_result "a1\na2");
+      Alcotest.(check bool)
+        "head-only omits trailing line" false
+        (contains head_result "a4");
+      Alcotest.(check bool)
+        "head-only marker visible" true
+        (contains head_result "omitted 2 trailing lines; showing first 2 of 4");
+      Alcotest.(check bool)
+        "tail-only keeps last line" true
+        (contains tail_result "b3\nb4");
+      Alcotest.(check bool)
+        "tail-only omits leading line" false
+        (contains tail_result "b1");
+      Alcotest.(check bool)
+        "tail-only marker visible" true
+        (contains tail_result "omitted 2 leading lines; showing last 2 of 4"))
+
+let test_shell_exec_saves_full_output_when_windowed () =
+  with_temp_workspace (fun workspace ->
+      let sandbox =
+        Sandbox.create ~backend:Sandbox.None ~workspace ~extra_allowed_paths:[]
+          ~workspace_only:false ()
+      in
+      let tool =
+        Tools_builtin.shell_exec ~workspace ~workspace_only:false
+          ~allowed_commands:[] ~extra_allowed_paths:[] ~sandbox
+      in
+      let command = "printf 'x1\nx2\nx3\nx4\nx5\n'" in
+      let result =
+        Lwt_main.run
+          (tool.Tool.invoke
+             (`Assoc
+                [
+                  ("command", `String command);
+                  ("head", `Int 2);
+                  ("tail", `Int 2);
+                ]))
+      in
+      Alcotest.(check bool)
+        "windowed output mentions saved stdout path" true
+        (Option.is_some (extract_saved_output_path result));
+      let path = Option.get (extract_saved_output_path result) in
+      let ic = open_in path in
+      let saved = really_input_string ic (in_channel_length ic) in
+      close_in ic;
+      Alcotest.(check string)
+        "saved output preserves omitted lines" "x1\nx2\nx3\nx4\nx5\n" saved;
+      Sys.remove path)
+
+let test_shell_exec_rejects_non_positive_head_or_tail () =
+  with_temp_workspace (fun workspace ->
+      let sandbox =
+        Sandbox.create ~backend:Sandbox.None ~workspace ~extra_allowed_paths:[]
+          ~workspace_only:false ()
+      in
+      let tool =
+        Tools_builtin.shell_exec ~workspace ~workspace_only:false
+          ~allowed_commands:[] ~extra_allowed_paths:[] ~sandbox
+      in
+      let result_head =
+        Lwt_main.run
+          (tool.Tool.invoke
+             (`Assoc [ ("command", `String "printf 'ok'"); ("head", `Int 0) ]))
+      in
+      let result_tail =
+        Lwt_main.run
+          (tool.Tool.invoke
+             (`Assoc [ ("command", `String "printf 'ok'"); ("tail", `Int (-1)) ]))
+      in
+      Alcotest.(check string)
+        "head validation" "Error: head must be >= 1" result_head;
+      Alcotest.(check string)
+        "tail validation" "Error: tail must be >= 1" result_tail)
 
 let test_shell_exec_interrupts_running_process () =
   with_temp_workspace (fun workspace ->
@@ -955,6 +1140,16 @@ let suite =
       test_doc_write_known_file;
     Alcotest.test_case "shell_exec saves full output when truncated" `Quick
       test_shell_exec_saves_full_output_when_truncated;
+    Alcotest.test_case "shell_exec head and tail window output" `Quick
+      test_shell_exec_head_and_tail_window_output;
+    Alcotest.test_case "shell_exec window handles trailing newline" `Quick
+      test_shell_exec_head_tail_window_handles_trailing_newline;
+    Alcotest.test_case "shell_exec head or tail only window output" `Quick
+      test_shell_exec_head_or_tail_only_window_output;
+    Alcotest.test_case "shell_exec saves full output when windowed" `Quick
+      test_shell_exec_saves_full_output_when_windowed;
+    Alcotest.test_case "shell_exec validates head and tail" `Quick
+      test_shell_exec_rejects_non_positive_head_or_tail;
     Alcotest.test_case "shell_exec interrupts running process" `Quick
       test_shell_exec_interrupts_running_process;
     Alcotest.test_case "shell_exec interrupt kills descendants" `Quick

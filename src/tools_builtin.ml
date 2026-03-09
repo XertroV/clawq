@@ -373,6 +373,11 @@ let parse_optional_int_field args field_name =
       with _ ->
         Error (Printf.sprintf "Error: %s must be an integer" field_name))
 
+let validate_positive_optional_int ~field_name = function
+  | None -> Ok ()
+  | Some n when n >= 1 -> Ok ()
+  | Some _ -> Error (Printf.sprintf "Error: %s must be >= 1" field_name)
+
 let validate_file_read_window ~offset ~limit =
   if offset < 1 then Error "Error: offset must be >= 1"
   else if limit < 1 then Error "Error: limit must be >= 1"
@@ -432,6 +437,70 @@ let format_lines_window ~content ~offset ~limit =
     in
     rendered ^ suffix ^ trunc_suffix
 
+let logical_lines text =
+  let lines = String.split_on_char '\n' text in
+  match List.rev lines with
+  | [] -> []
+  | [ "" ] -> []
+  | "" :: rest -> List.rev rest
+  | _ -> lines
+
+let last_n_lines ~n lines =
+  let len = List.length lines in
+  if len <= n then lines
+  else
+    let to_drop = len - n in
+    let rec drop k = function
+      | [] -> []
+      | _ :: rest when k > 0 -> drop (k - 1) rest
+      | l -> l
+    in
+    drop to_drop lines
+
+let take_n_lines ~n lines =
+  let rec loop acc remaining = function
+    | _ when remaining <= 0 -> List.rev acc
+    | [] -> List.rev acc
+    | line :: rest -> loop (line :: acc) (remaining - 1) rest
+  in
+  loop [] n lines
+
+let apply_shell_output_window ~head_lines ~tail_lines text =
+  match (head_lines, tail_lines) with
+  | None, None -> (text, false)
+  | _ ->
+      let lines = logical_lines text in
+      let total = List.length lines in
+      let head_count = Option.value head_lines ~default:0 in
+      let tail_count = Option.value tail_lines ~default:0 in
+      if total <= head_count + tail_count then (text, false)
+      else
+        let head =
+          if head_count > 0 then take_n_lines ~n:head_count lines else []
+        in
+        let tail =
+          if tail_count > 0 then last_n_lines ~n:tail_count lines else []
+        in
+        let omitted = total - List.length head - List.length tail in
+        let marker =
+          match (head_lines, tail_lines) with
+          | Some h, Some t ->
+              Printf.sprintf
+                "... (omitted %d middle lines; showing first %d and last %d of \
+                 %d)"
+                omitted h t total
+          | Some h, None ->
+              Printf.sprintf
+                "... (omitted %d trailing lines; showing first %d of %d)"
+                omitted h total
+          | None, Some t ->
+              Printf.sprintf
+                "... (omitted %d leading lines; showing last %d of %d)" omitted
+                t total
+          | None, None -> assert false
+        in
+        (String.concat "\n" (head @ [ marker ] @ tail), true)
+
 let shell_exec ~workspace ~workspace_only ~allowed_commands ~extra_allowed_paths
     ~sandbox =
   let description =
@@ -480,9 +549,9 @@ let shell_exec ~workspace ~workspace_only ~allowed_commands ~extra_allowed_paths
     in
     loop path
   in
-  let write_tool_output_if_truncated text =
+  let write_tool_output_if_needed ~save_full text =
     let max_chars = 20000 in
-    if String.length text <= max_chars then None
+    if (not save_full) && String.length text <= max_chars then None
     else
       let dir = shell_output_dir () in
       (try
@@ -505,28 +574,40 @@ let shell_exec ~workspace ~workspace_only ~allowed_commands ~extra_allowed_paths
         Some path
       with _ -> None
   in
-  let render_command_result ~exit_code ~stdout ~stderr =
-    let stdout_note, stdout_rendered =
-      match write_tool_output_if_truncated stdout with
-      | Some path ->
-          let head = String.sub stdout 0 20000 in
-          ( Printf.sprintf
-              "\n\
-               [stdout truncated; full stdout saved to %s for later inspection]"
-              path,
-            head ^ "\n... (truncated)" )
-      | None -> ("", stdout)
+  let render_output_stream ~label ~text ~head_lines ~tail_lines =
+    let max_chars = 20000 in
+    let windowed, omitted_by_window =
+      apply_shell_output_window ~head_lines ~tail_lines text
     in
-    let stderr_note, stderr_rendered =
-      match write_tool_output_if_truncated stderr with
-      | Some path ->
-          let head = String.sub stderr 0 20000 in
-          ( Printf.sprintf
-              "\n\
-               [stderr truncated; full stderr saved to %s for later inspection]"
-              path,
-            head ^ "\n... (truncated)" )
-      | None -> ("", stderr)
+    let full_output_path =
+      write_tool_output_if_needed
+        ~save_full:(omitted_by_window || String.length text > max_chars)
+        text
+    in
+    let rendered, truncated_for_chars =
+      if String.length windowed <= max_chars then (windowed, false)
+      else (String.sub windowed 0 max_chars ^ "\n... (truncated)", true)
+    in
+    let note =
+      match (truncated_for_chars, full_output_path) with
+      | true, Some path ->
+          Printf.sprintf
+            "\n[%s truncated; full %s saved to %s for later inspection]" label
+            label path
+      | false, Some path ->
+          Printf.sprintf "\n[full %s saved to %s for later inspection]" label
+            path
+      | true, None -> Printf.sprintf "\n[%s truncated]" label
+      | false, None -> ""
+    in
+    (rendered, note)
+  in
+  let render_command_result ~exit_code ~stdout ~stderr ~head_lines ~tail_lines =
+    let stdout_rendered, stdout_note =
+      render_output_stream ~label:"stdout" ~text:stdout ~head_lines ~tail_lines
+    in
+    let stderr_rendered, stderr_note =
+      render_output_stream ~label:"stderr" ~text:stderr ~head_lines ~tail_lines
     in
     Printf.sprintf "exit_code: %d\nstdout:\n%s%s\nstderr:\n%s%s" exit_code
       stdout_rendered stdout_note stderr_rendered stderr_note
@@ -551,7 +632,7 @@ let shell_exec ~workspace ~workspace_only ~allowed_commands ~extra_allowed_paths
     loop ()
   in
   let run_process_with_timeout ?interrupt_check ?on_output_chunk ~cwd ~env ~cmd
-      ~timeout_secs () =
+      ~timeout_secs ~head_lines ~tail_lines () =
     let open Lwt.Syntax in
     let proc =
       match cmd with
@@ -593,7 +674,8 @@ let shell_exec ~workspace ~workspace_only ~allowed_commands ~extra_allowed_paths
                   (Ok
                      (render_command_result ~exit_code
                         ~stdout:(Buffer.contents stdout_buf)
-                        ~stderr:(Buffer.contents stderr_buf)));
+                        ~stderr:(Buffer.contents stderr_buf)
+                        ~head_lines ~tail_lines));
                 Lwt.return_unit)
               (fun () -> Process_group.close proc))
           (fun exn ->
@@ -655,73 +737,92 @@ let shell_exec ~workspace ~workspace_only ~allowed_commands ~extra_allowed_paths
         if v <= 0.0 then default_timeout else Float.min v max_timeout
       with _ -> default_timeout
     in
-    if command = "" then Lwt.return "Error: command is required"
-    else if workspace_only && has_unsafe_shell_syntax command then
-      Lwt.return
-        "Error: command contains unsafe shell syntax in workspace_only mode"
-    else if workspace_only && not (is_command_allowed ~allowed_commands command)
-    then
-      Lwt.return
-        (Printf.sprintf
-           "Error: command '%s' is not in the allowlist. Allowed: %s"
-           (extract_command command)
-           (String.concat ", " allowed_commands))
-    else
-      let open Lwt.Syntax in
-      let cwd_result =
-        match cwd_arg with
-        | None -> Ok (if workspace_only then Some workspace else None)
-        | Some cwd ->
-            Result.map
-              (fun resolved -> Some resolved)
-              (resolve_shell_cwd ~workspace ~workspace_only ~extra_allowed_paths
-                 cwd)
-      in
-      match cwd_result with
-      | Error msg -> Lwt.return msg
-      | Ok cwd -> (
-          let env =
-            if workspace_only then
-              [|
-                ("HOME=" ^ try Sys.getenv "HOME" with Not_found -> "/tmp");
-                ("PATH="
-                ^ try Sys.getenv "PATH" with Not_found -> "/usr/bin:/bin");
-              |]
-            else Unix.environment ()
-          in
-          let command = Sandbox.wrap_command sandbox command in
-          let run_proc cmd =
-            run_process_with_timeout ?interrupt_check ?on_output_chunk ~cwd ~env
-              ~cmd ~timeout_secs ()
-          in
-          if workspace_only then
-            match split_command_words command with
-            | Error msg -> Lwt.return ("Error: " ^ msg)
-            | Ok argv -> (
-                let argv = List.map expand_home_in_arg argv in
-                match argv with
-                | [] -> Lwt.return "Error: command is required"
-                | cmd :: _ when not (is_workspace_safe_command_token cmd) ->
-                    Lwt.return
-                      "Error: command binary path is disallowed in \
-                       workspace_only mode"
-                | _
-                  when has_workspace_unsafe_args ~workspace ~extra_allowed_paths
-                         argv ->
-                    Lwt.return
-                      "Error: command contains paths/targets disallowed in \
-                       workspace_only mode"
-                | _ -> run_proc ("", Array.of_list argv))
-          else
-            match extract_cd_prefix command with
-            | Some (dir, rest) when Sys.file_exists dir && Sys.is_directory dir
-              ->
-                let cwd = Some dir in
-                run_process_with_timeout ?interrupt_check ?on_output_chunk ~cwd
-                  ~env
-                  ~cmd:("", [| "/bin/sh"; "-c"; rest |])
-                  ~timeout_secs ()
-            | _ -> run_proc ("", [| "/bin/sh"; "-c"; command |]))
+    match
+      ( parse_optional_int_field args "head",
+        parse_optional_int_field args "tail" )
+    with
+    | Error msg, _ | _, Error msg -> Lwt.return msg
+    | Ok head_lines, Ok tail_lines -> (
+        match
+          ( validate_positive_optional_int ~field_name:"head" head_lines,
+            validate_positive_optional_int ~field_name:"tail" tail_lines )
+        with
+        | Error msg, _ | _, Error msg -> Lwt.return msg
+        | Ok (), Ok () -> (
+            if command = "" then Lwt.return "Error: command is required"
+            else if workspace_only && has_unsafe_shell_syntax command then
+              Lwt.return
+                "Error: command contains unsafe shell syntax in workspace_only \
+                 mode"
+            else if
+              workspace_only
+              && not (is_command_allowed ~allowed_commands command)
+            then
+              Lwt.return
+                (Printf.sprintf
+                   "Error: command '%s' is not in the allowlist. Allowed: %s"
+                   (extract_command command)
+                   (String.concat ", " allowed_commands))
+            else
+              let open Lwt.Syntax in
+              let cwd_result =
+                match cwd_arg with
+                | None -> Ok (if workspace_only then Some workspace else None)
+                | Some cwd ->
+                    Result.map
+                      (fun resolved -> Some resolved)
+                      (resolve_shell_cwd ~workspace ~workspace_only
+                         ~extra_allowed_paths cwd)
+              in
+              match cwd_result with
+              | Error msg -> Lwt.return msg
+              | Ok cwd -> (
+                  let env =
+                    if workspace_only then
+                      [|
+                        ("HOME="
+                        ^ try Sys.getenv "HOME" with Not_found -> "/tmp");
+                        ("PATH="
+                        ^
+                          try Sys.getenv "PATH"
+                          with Not_found -> "/usr/bin:/bin");
+                      |]
+                    else Unix.environment ()
+                  in
+                  let command = Sandbox.wrap_command sandbox command in
+                  let run_proc cmd =
+                    run_process_with_timeout ?interrupt_check ?on_output_chunk
+                      ~cwd ~env ~cmd ~timeout_secs ~head_lines ~tail_lines ()
+                  in
+                  if workspace_only then
+                    match split_command_words command with
+                    | Error msg -> Lwt.return ("Error: " ^ msg)
+                    | Ok argv -> (
+                        let argv = List.map expand_home_in_arg argv in
+                        match argv with
+                        | [] -> Lwt.return "Error: command is required"
+                        | cmd :: _
+                          when not (is_workspace_safe_command_token cmd) ->
+                            Lwt.return
+                              "Error: command binary path is disallowed in \
+                               workspace_only mode"
+                        | _
+                          when has_workspace_unsafe_args ~workspace
+                                 ~extra_allowed_paths argv ->
+                            Lwt.return
+                              "Error: command contains paths/targets \
+                               disallowed in workspace_only mode"
+                        | _ -> run_proc ("", Array.of_list argv))
+                  else
+                    match extract_cd_prefix command with
+                    | Some (dir, rest)
+                      when Sys.file_exists dir && Sys.is_directory dir ->
+                        let cwd = Some dir in
+                        run_process_with_timeout ?interrupt_check
+                          ?on_output_chunk ~cwd ~env
+                          ~cmd:("", [| "/bin/sh"; "-c"; rest |])
+                          ~timeout_secs ~head_lines ~tail_lines ()
+                    | _ -> run_proc ("", [| "/bin/sh"; "-c"; command |]))))
   in
   {
     Tool.name = "shell_exec";
@@ -754,6 +855,24 @@ let shell_exec ~workspace ~workspace_only ~allowed_commands ~extra_allowed_paths
                       ("type", `String "number");
                       ( "description",
                         `String "Timeout in seconds (default 30, max 600)" );
+                    ] );
+                ( "head",
+                  `Assoc
+                    [
+                      ("type", `String "integer");
+                      ( "description",
+                        `String
+                          "Optional number of first lines to show for stdout \
+                           and stderr" );
+                    ] );
+                ( "tail",
+                  `Assoc
+                    [
+                      ("type", `String "integer");
+                      ( "description",
+                        `String
+                          "Optional number of last lines to show for stdout \
+                           and stderr" );
                     ] );
               ] );
           ("required", `List [ `String "command" ]);
