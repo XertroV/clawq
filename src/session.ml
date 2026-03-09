@@ -1447,6 +1447,8 @@ let reset mgr ~key =
 
 let compact mgr ~key =
   let open Lwt.Syntax in
+  Logs.info (fun m ->
+      m "/compact requested for session %s — starting compaction" key);
   (* Use with_session_lock which calls get_or_create_locked, ensuring the
      session is loaded from DB if it exists but isn't in memory yet (e.g.
      after daemon restart). *)

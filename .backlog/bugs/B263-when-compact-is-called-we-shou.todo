@@ -1,10 +1,15 @@
 ---
+claimed_at: "2026-03-09T22:38:03Z"
+claimed_by: cli-user
+completed_at: "2026-03-09T22:39:43Z"
 complexity: medium
 depends_on: []
+duration_minutes: 1.6808733744166666
 estimate_hours: 1
 id: B263
 priority: high
-status: pending
+started_at: "2026-03-09T22:38:03Z"
+status: done
 tags: []
 title: when /compact is called, we should add a log message saying it's been called and we're about to start.
 ---
