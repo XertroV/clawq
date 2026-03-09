@@ -962,7 +962,39 @@ let run ~(config : Runtime_config.t) =
                 let text = Rich_message.to_fallback_text content in
                 let* () = text_notify text in
                 Lwt.return Rich_message.{ message_id = "0"; callback_ids = [] }
-            | None -> Lwt.fail_with "No notifier registered for session"))
+            | None -> (
+                (* Fallback: direct channel dispatch when notifier not yet
+                   registered (e.g., post-restart before first inbound message) *)
+                match Restart_notify.parse_channel_from_key session_key with
+                | Some (channel, channel_id) -> (
+                    let text = Rich_message.to_fallback_text content in
+                    let config = !current_config in
+                    let open Lwt.Syntax in
+                    let* result =
+                      dispatch_resumed_message ~config ~channel ~channel_id
+                        ~text ()
+                    in
+                    match result with
+                    | Ok () ->
+                        Logs.info (fun m ->
+                            m
+                              "rich_send_fn: delivered via direct %s dispatch \
+                               (no notifier registered) session=%s"
+                              channel session_key);
+                        Lwt.return
+                          Rich_message.{ message_id = "0"; callback_ids = [] }
+                    | Error err ->
+                        Lwt.fail_with
+                          (Printf.sprintf
+                             "No notifier registered for session %s and direct \
+                              %s dispatch failed: %s"
+                             session_key channel err))
+                | None ->
+                    Lwt.fail_with
+                      (Printf.sprintf
+                         "No notifier registered for session %s and cannot \
+                          parse channel from key"
+                         session_key))))
   in
   (match tool_registry with
   | Some registry ->
@@ -1033,12 +1065,15 @@ let run ~(config : Runtime_config.t) =
           run_update ~prepare_restart ~send_progress ~interrupt_check ()
         in
         Lwt.return_some response);
-  Logs.info (fun m ->
-      m
-        "Boot: resuming pending routed sessions before channel listeners \
-         start; outbound resume delivery uses direct Telegram/Discord/Slack \
-         send APIs and does not wait for polling or gateway readiness");
-  let* () = resume_pending_agent_sessions ~session_manager ~config () in
+  let resume_sessions_after_channels () =
+    Logs.info (fun m ->
+        m
+          "Boot: resuming pending routed sessions after channel listeners \
+           spawned; outbound resume delivery uses direct \
+           Telegram/Discord/Slack send APIs and does not wait for polling or \
+           gateway readiness");
+    resume_pending_agent_sessions ~session_manager ~config ()
+  in
   let* () =
     Lwt.catch
       (fun () ->
@@ -1422,6 +1457,7 @@ let run ~(config : Runtime_config.t) =
                   m "Lark channel error: %s" (Printexc.to_string exn));
               Lwt.return_unit))
   | Some _ | None -> ());
+  let* () = resume_sessions_after_channels () in
   (* Config file watcher: stat every 10s, reload on mtime change *)
   let last_config_mtime = ref 0.0 in
   let config_watch_path = Config_loader.default_path () in

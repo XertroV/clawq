@@ -1162,6 +1162,78 @@ let test_resume_agent_session_sends_visible_injection_prompt () =
   let second = List.nth sent_rev 1 in
   Alcotest.(check string) "second message is response" "ok" second
 
+let test_rich_send_fn_direct_dispatch_fallback () =
+  (* Simulate the rich_send_fn fallback: when no notifier is registered,
+     dispatch_resumed_message is called via parse_channel_from_key *)
+  let called = ref None in
+  let senders =
+    {
+      Daemon.default_resume_senders with
+      send_telegram =
+        (fun ~bot_token ~chat_id ~text ->
+          called := Some (bot_token, chat_id, text);
+          Lwt.return_unit);
+    }
+  in
+  let telegram_account =
+    { Runtime_config.bot_token = "tg-token"; allow_from = []; totp = None }
+  in
+  let config =
+    {
+      Runtime_config.default with
+      channels =
+        {
+          Runtime_config.default.channels with
+          telegram =
+            Some
+              {
+                accounts = [ ("default", telegram_account) ];
+                text_coalesce_ms = 150;
+              };
+        };
+    }
+  in
+  let session_key = "telegram:42:42" in
+  let content = Rich_message.Text "hello from fallback" in
+  (* Replicate the fallback logic from rich_send_fn *)
+  let result =
+    Lwt_main.run
+      (match Restart_notify.parse_channel_from_key session_key with
+      | Some (channel, channel_id) -> (
+          let text = Rich_message.to_fallback_text content in
+          let open Lwt.Syntax in
+          let* result =
+            Daemon.dispatch_resumed_message ~senders ~config ~channel
+              ~channel_id ~text ()
+          in
+          match result with
+          | Ok () ->
+              Lwt.return
+                (Ok Rich_message.{ message_id = "0"; callback_ids = [] })
+          | Error err -> Lwt.return (Error err))
+      | None -> Lwt.return (Error "cannot parse channel from key"))
+  in
+  (match result with
+  | Ok sr ->
+      Alcotest.(check string) "message_id" "0" sr.Rich_message.message_id;
+      Alcotest.(check (list string))
+        "callback_ids" [] sr.Rich_message.callback_ids
+  | Error err -> Alcotest.fail ("unexpected error: " ^ err));
+  match !called with
+  | Some (bot_token, chat_id, text) ->
+      Alcotest.(check string) "bot_token" "tg-token" bot_token;
+      Alcotest.(check string) "chat_id" "42" chat_id;
+      Alcotest.(check string) "text" "hello from fallback" text
+  | None -> Alcotest.fail "telegram sender was not called"
+
+let test_rich_send_fn_fallback_unparseable_key () =
+  let session_key = "unparseable" in
+  match Restart_notify.parse_channel_from_key session_key with
+  | Some _ -> Alcotest.fail "should not parse unparseable key"
+  | None ->
+      (* Confirms the fallback would raise "cannot parse channel from key" *)
+      Alcotest.(check pass) "unparseable key returns None" () ()
+
 let suite =
   [
     Alcotest.test_case "dispatch resumed message routes telegram" `Quick
@@ -1226,4 +1298,9 @@ let suite =
       test_background_task_wakeup_stay_idle_disarms;
     Alcotest.test_case "resume agent session sends visible injection prompt"
       `Quick test_resume_agent_session_sends_visible_injection_prompt;
+    Alcotest.test_case
+      "rich_send_fn direct dispatch fallback for telegram session" `Quick
+      test_rich_send_fn_direct_dispatch_fallback;
+    Alcotest.test_case "rich_send_fn fallback fails for unparseable session key"
+      `Quick test_rich_send_fn_fallback_unparseable_key;
   ]

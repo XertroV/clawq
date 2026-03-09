@@ -1,10 +1,14 @@
 ---
+claimed_at: "2026-03-09T16:29:16Z"
+claimed_by: cli-user
+completed_at: "2026-03-10T00:00:00Z"
 complexity: medium
 depends_on: []
 estimate_hours: 1
 id: B201
 priority: high
-status: pending
+started_at: "2026-03-09T16:29:16Z"
+status: done
 tags: []
 title: Post-restart send_message can fail before resumed session notifier registration
 ---
