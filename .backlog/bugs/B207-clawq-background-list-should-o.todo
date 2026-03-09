@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B207
+priority: high
+status: pending
+tags: []
+title: clawq background [list] should only list active bg tasks and the last few inactive ones. Right now it lists like 18 but only 1 is active.
+---
+
+clawq background [list] should only list active bg tasks and the last few inactive ones. Right now it lists like 18 but only 1 is active.
