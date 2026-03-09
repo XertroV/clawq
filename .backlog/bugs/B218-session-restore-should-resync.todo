@@ -1,0 +1,11 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B218
+priority: medium
+status: pending
+tags: []
+title: Session restore should resync observed active workspace-file digests after loading history
+---
+Review of the bg19 B204/B205 patch found a likely correctness gap: Agent.create captures observed active workspace-file digests at creation time, but Session.get_or_create_locked restores persisted history afterward without explicitly resyncing the observed digest baseline. On restore/restart paths this can cause external-workspace refresh detection to compare against a stale creation-time snapshot instead of the post-restore baseline. Investigate whether this causes false refresh notices or missed detection on restored sessions, and fix by resyncing observed active workspace state after restore if needed. Acceptance criteria: (1) restored sessions have a correct active-workspace digest baseline before next-turn external-edit detection; (2) no false positive refresh event is emitted merely because a restored session was loaded; (3) real external edits after restore are still detected on the next relevant turn; (4) tests cover restore/session-loading behavior.
