@@ -1,0 +1,11 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B171
+priority: high
+status: pending
+tags: []
+title: Post-restart resumed sessions should use explicit automatic resume prompt, not empty turn
+---
+Postmortem from successful live restart on commit `74e86a1a`: the daemon restarted into the correct build, resumed the correct Telegram session, dispatched the resumed response, and ran continuation evaluation. Logs showed `response_len=0` and `Resume continuation stayed idle ... reason=no-follow-up-response`. Root cause: `default_resume_turn` currently resumes with `Agent.turn agent ~user_message:""`, i.e. an empty resumed turn. That is too weak and can yield an empty/trivial completion even when meaningful autonomous work remains. Goal: replace the empty resumed turn with an explicit automatic resume prompt that tells the assistant the daemon restarted while work was in progress and that it should continue the interrupted work in the same session, or reply exactly `STAY_IDLE` if nothing remains. Acceptance criteria: (1) resumed post-restart Telegram/channel sessions receive a clear automatic resume prompt instead of an empty turn; (2) prompt is internal/automatic, not impersonating the user; (3) resumed turn reliably either continues useful work or returns `STAY_IDLE`; (4) logs indicate the resume prompt path used and resulting decision; (5) targeted tests cover the resumed-turn prompt behavior where practical.

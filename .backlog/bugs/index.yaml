@@ -169,3 +169,4 @@ bugs:
     - file: B168-update-claw-tool-should-have-p.todo
     - file: B169-post-restart-resumed-telegram.todo
     - file: B170-add-slash-command-tools-which.todo
+    - file: B171-post-restart-resumed-sessions.todo
