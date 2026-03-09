@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B239
+priority: high
+status: pending
+tags: []
+title: '''clawq background [list]'' (and the corresponding tool call) should return the runtime of the background tasks along with the other stuff they already return'
+---
+
+'clawq background [list]' (and the corresponding tool call) should return the runtime of the background tasks along with the other stuff they already return
