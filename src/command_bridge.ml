@@ -1468,10 +1468,31 @@ let cmd_cron args =
 
 let cmd_background args =
   match args with
-  | [ "list" ] | [] ->
+  | [ "list" ] ->
       let db = get_db () in
       Background_task.init_schema db;
       Background_task.format_task_list (Background_task.list_tasks ~db)
+  | [] ->
+      let db = get_db () in
+      Background_task.init_schema db;
+      let list_output =
+        Background_task.format_task_list (Background_task.list_tasks ~db)
+      in
+      list_output
+      ^ "\n\n\
+         Commands:\n\
+        \  background list                                         - List all \
+         tasks\n\
+        \  background show <id>                                    - Show task \
+         details\n\
+        \  background add <codex|claude> <repo> [--branch <name>] <prompt> - \
+         Queue a task\n\
+        \  background wait <id> [--timeout <seconds>]              - Wait for \
+         completion\n\
+        \  background logs <id> [--lines <count>]                  - Show task \
+         logs\n\
+        \  background cancel <id>                                  - Cancel a \
+         task"
   | [ "show"; id_s ] -> (
       let db = get_db () in
       Background_task.init_schema db;

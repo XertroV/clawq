@@ -253,7 +253,7 @@ let background_cancel_cmd =
 
 let background_cmd =
   Cmd.group
-    ~default:Term.(ret (const (run "background") $ const [ "list" ]))
+    ~default:Term.(ret (const (run "background") $ const []))
     (Cmd.info "background"
        ~doc:
          "Manage background coding tasks that run Codex or Claude in git \

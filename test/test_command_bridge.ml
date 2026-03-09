@@ -435,6 +435,30 @@ let test_handle_background_list () =
     "background list returns output" true
     (String.length result > 0)
 
+let test_handle_background_bare_shows_commands () =
+  let contains s sub =
+    try
+      ignore (Str.search_forward (Str.regexp_string sub) s 0);
+      true
+    with Not_found -> false
+  in
+  let result = Command_bridge.handle [ "background" ] in
+  Alcotest.(check bool)
+    "bare background includes task list" true
+    (String.length result > 0);
+  Alcotest.(check bool)
+    "bare background includes commands section" true
+    (contains result "Commands:");
+  Alcotest.(check bool)
+    "bare background mentions show" true
+    (contains result "background show");
+  Alcotest.(check bool)
+    "bare background mentions add" true
+    (contains result "background add");
+  Alcotest.(check bool)
+    "bare background mentions cancel" true
+    (contains result "background cancel")
+
 let test_handle_background_add_show_cancel () =
   with_temp_home (fun home ->
       let repo = Filename.concat home "repo" in
@@ -1266,6 +1290,8 @@ let suite =
     Alcotest.test_case "handle cron list" `Quick test_handle_cron_list;
     Alcotest.test_case "handle background list" `Quick
       test_handle_background_list;
+    Alcotest.test_case "handle background bare shows commands" `Quick
+      test_handle_background_bare_shows_commands;
     Alcotest.test_case "handle background add show cancel" `Quick
       test_handle_background_add_show_cancel;
     Alcotest.test_case "handle background add rejects non-git repo" `Quick
