@@ -89,6 +89,10 @@ let recently_seen_updates : (string, float) Hashtbl.t = Hashtbl.create 256
 let pending_text_updates : (string, pending_text_update) Hashtbl.t =
   Hashtbl.create 64
 
+type typing_watcher = { refresh : unit -> unit }
+
+let typing_watchers : (string, typing_watcher) Hashtbl.t = Hashtbl.create 64
+
 let duplicate_update_ttl_seconds = 600.0
 let text_coalesce_window_seconds = ref 0.15
 
@@ -532,6 +536,79 @@ let with_typing_deferred ~bot_token ~chat_id ~grace p =
     ~send_action:(fun () ->
       send_chat_action ~bot_token ~chat_id ~action:"typing")
     ~interval:4.0 ~grace p
+
+let rec typing_loop_live_activity ~current_activity ~wait_for_change
+    ~wait_for_refresh ~send_action ~interval ~idle_timeout () =
+  let open Lwt.Syntax in
+  let rec wait_until_active snapshot =
+    if snapshot.Session.active then keep_active snapshot
+    else
+      let* next =
+        Lwt.pick
+          [
+            (let* snapshot =
+               wait_for_change ~after_generation:snapshot.Session.generation
+             in
+             Lwt.return (`Changed snapshot));
+            (let* () = Lwt_unix.sleep idle_timeout in
+             Lwt.return `Idle_timeout);
+          ]
+      in
+      match next with
+      | `Changed snapshot -> wait_until_active snapshot
+      | `Idle_timeout -> Lwt.return_unit
+  and keep_active snapshot =
+    if not snapshot.Session.active then wait_until_active snapshot
+    else
+      let* () =
+        Lwt.catch (fun () -> send_action ()) (fun _exn -> Lwt.return_unit)
+      in
+      let* next =
+        Lwt.pick
+          [
+            (let* snapshot =
+               wait_for_change ~after_generation:snapshot.Session.generation
+             in
+             Lwt.return (`Changed snapshot));
+            (let* () = Lwt.pick [ Lwt_unix.sleep interval; wait_for_refresh () ] in
+             let* snapshot = current_activity () in
+             Lwt.return (`Tick snapshot));
+          ]
+      in
+      match next with
+      | `Changed snapshot -> keep_active snapshot
+      | `Tick snapshot -> keep_active snapshot
+  in
+  let* snapshot = current_activity () in
+  wait_until_active snapshot
+
+let ensure_session_typing_watcher ~(session_mgr : Session.t) ~key ~bot_token
+    ~chat_id =
+  match Hashtbl.find_opt typing_watchers key with
+  | Some watcher -> watcher
+  | None ->
+      let refresh_trigger = Lwt_condition.create () in
+      let watcher =
+        { refresh = (fun () -> Lwt_condition.broadcast refresh_trigger ()) }
+      in
+      Hashtbl.replace typing_watchers key watcher;
+      Lwt.async (fun () ->
+          Lwt.finalize
+            (fun () ->
+              typing_loop_live_activity
+                ~current_activity:(fun () ->
+                  Session.current_live_activity session_mgr ~key)
+                ~wait_for_change:(fun ~after_generation ->
+                  Session.wait_for_live_activity_change session_mgr ~key
+                    ~after_generation)
+                ~wait_for_refresh:(fun () -> Lwt_condition.wait refresh_trigger)
+                ~send_action:(fun () ->
+                  send_chat_action ~bot_token ~chat_id ~action:"typing")
+                ~interval:4.0 ~idle_timeout:300.0 ())
+            (fun () ->
+              Hashtbl.remove typing_watchers key;
+              Lwt.return_unit));
+      watcher
 
 let send_message_with_id ?(disable_notification = false) ?parse_mode ~bot_token
     ~chat_id ~text () =
@@ -1015,12 +1092,23 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
     end
     else
       let key = "telegram:" ^ update.chat_id ^ ":" ^ update.user_id in
+      let typing_watcher =
+        ensure_session_typing_watcher ~session_mgr ~key ~bot_token
+          ~chat_id:update.chat_id
+      in
+      let refresh_typing () = typing_watcher.refresh () in
       (* Register a persistent channel notifier so autonomous continuation
          responses can reach the Telegram chat *)
       let send_to_chat text =
-        send_chunked ~parse_mode:"MarkdownV2" ~bot_token ~chat_id:update.chat_id
-          ~text:(Telegram_format.markdown_to_mdv2 text)
-          ()
+        let open Lwt.Syntax in
+        let* () =
+          send_chunked ~parse_mode:"MarkdownV2" ~bot_token
+            ~chat_id:update.chat_id
+            ~text:(Telegram_format.markdown_to_mdv2 text)
+            ()
+        in
+        refresh_typing ();
+        Lwt.return_unit
       in
       if Option.is_none (Session.find_registered_notifier session_mgr ~key) then begin
         Session.register_channel_notifier session_mgr ~key send_to_chat;
@@ -1042,6 +1130,7 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
                     ~text:(Telegram_format.markdown_to_mdv2 text)
                     ()
                 in
+                refresh_typing ();
                 Lwt.return Rich_message.{ message_id = "0"; callback_ids = [] }
             | Rich_message.TextWithButtons { text; button_rows } ->
                 let now = Unix.gettimeofday () in
@@ -1065,6 +1154,7 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
                   send_message_with_keyboard ~bot_token ~chat_id:update.chat_id
                     ~text ~buttons ()
                 in
+                refresh_typing ();
                 Lwt.return Rich_message.{ message_id = msg_id; callback_ids }
             | Rich_message.Poll { question; options; allows_multiple } ->
                 let* msg_id, poll_id =
@@ -1073,6 +1163,7 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
                 in
                 Hashtbl.replace poll_routing poll_id
                   (key, update.chat_id, bot_token, options, Unix.gettimeofday ());
+                refresh_typing ();
                 Lwt.return
                   Rich_message.{ message_id = msg_id; callback_ids = [] });
       let image_content_parts = ref [] in
@@ -1323,13 +1414,9 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
                   (Status_message.create ~notifier:status_notifier
                      ~parse_mode:"HTML" ())
               else None
-            in
-            let visibility = Stream_visibility.create () in
-            (* Refresh callback set when the typing loop starts;
-               called after outbound messages to re-assert the typing
-               indicator (Telegram clears it on every bot message). *)
-            let refresh_typing = ref (fun () -> ()) in
-            let send_expandable ~name ~result ~is_error =
+	            in
+	            let visibility = Stream_visibility.create () in
+	            let send_expandable ~name ~result ~is_error =
               if is_error then
                 let formatted = Telegram_format.format_error_trace result in
                 send_chunked ~disable_notification:true ~parse_mode:"MarkdownV2"
@@ -1377,7 +1464,7 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
                               ~action)
                           (fun _exn -> Lwt.return_unit)
                       in
-                      !refresh_typing ();
+                      refresh_typing ();
                       Lwt.return_unit
                   | Provider.ToolResult { id; name; result; is_error } ->
                       let open Lwt.Syntax in
@@ -1385,7 +1472,7 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
                         Status_message.tool_result sm ~id ~name ~result
                           ~is_error
                       in
-                      !refresh_typing ();
+                      refresh_typing ();
                       (* Cap cache size to prevent unbounded growth *)
                       if Hashtbl.length tool_result_cache > 200 then
                         Hashtbl.clear tool_result_cache;
@@ -1397,7 +1484,7 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
                          output is available via "Show Details" button *)
                       if is_error then (
                         let* () = send_expandable ~name ~result ~is_error in
-                        !refresh_typing ();
+                        refresh_typing ();
                         Lwt.return_unit)
                       else Lwt.return_unit
                   | Provider.ThinkingDelta text ->
@@ -1429,7 +1516,7 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
                                 ~chat_id:update.chat_id ~action)
                             (fun _exn -> Lwt.return_unit)
                         in
-                        !refresh_typing ();
+                        refresh_typing ();
                         Lwt.return_unit
                     | _ -> Lwt.return_unit
                   in
@@ -1451,14 +1538,14 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
                             ~parse_mode:"MarkdownV2" ~bot_token
                             ~chat_id:update.chat_id ~text ()
                         in
-                        !refresh_typing ();
+                        refresh_typing ();
                         Lwt.return_unit)
                       chunk
                   in
                   match chunk with
                   | Provider.ToolResult { name; result; is_error; _ } ->
                       let* () = send_expandable ~name ~result ~is_error in
-                      !refresh_typing ();
+                      refresh_typing ();
                       Lwt.return_unit
                   | _ -> Lwt.return_unit)
             in
@@ -1488,7 +1575,7 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
                         ()
                     in
                     drain_progress_msg_id := Some mid;
-                    !refresh_typing ();
+                    refresh_typing ();
                     Lwt.return_unit);
                 after_all =
                   (fun () ->
@@ -1503,7 +1590,7 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
                                 ~message_id:mid ())
                             (fun _exn -> Lwt.return_unit)
                         in
-                        !refresh_typing ();
+                        refresh_typing ();
                         Lwt.return_unit
                     | None -> Lwt.return_unit);
               }
@@ -1520,7 +1607,7 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
                       ~text:(Telegram_format.markdown_to_mdv2 text)
                       ()
                   in
-                  !refresh_typing ();
+                  refresh_typing ();
                   Lwt.return_unit)
                 (fun () ->
                   Lwt.catch
@@ -1546,6 +1633,7 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
                                   ~buttons:[ ("Show Details", "show_details") ]
                                   ()
                               in
+                              refresh_typing ();
                               Lwt.return_unit
                             else Lwt.return_unit
                           in
@@ -1556,20 +1644,28 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
                           in
                           let* () =
                             if thinking <> "" then
-                              send_chunked ~parse_mode:"MarkdownV2" ~bot_token
-                                ~chat_id:update.chat_id
-                                ~text:
-                                  ("_"
-                                  ^ Telegram_format.escape_mdv2 thinking
-                                  ^ "_")
-                                ()
+                              let* () =
+                                send_chunked ~parse_mode:"MarkdownV2" ~bot_token
+                                  ~chat_id:update.chat_id
+                                  ~text:
+                                    ("_"
+                                    ^ Telegram_format.escape_mdv2 thinking
+                                    ^ "_")
+                                  ()
+                              in
+                              refresh_typing ();
+                              Lwt.return_unit
                             else Lwt.return_unit
                           in
                           let* () =
-                            send_chunked ~parse_mode:"MarkdownV2" ~bot_token
-                              ~chat_id:update.chat_id
-                              ~text:(Telegram_format.markdown_to_mdv2 response)
-                              ()
+                            let* () =
+                              send_chunked ~parse_mode:"MarkdownV2" ~bot_token
+                                ~chat_id:update.chat_id
+                                ~text:(Telegram_format.markdown_to_mdv2 response)
+                                ()
+                            in
+                            refresh_typing ();
+                            Lwt.return_unit
                           in
                           let* () = set_reaction "\xE2\x9C\x85" in
                           if
@@ -1586,13 +1682,7 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
                           ~channel:"telegram" ~channel_id:update.chat_id
                           ~on_drain_progress ~before_drain ~on_chunk ()
                       in
-                      let result_p, refresh =
-                        with_typing_refreshable ~bot_token
-                          ~chat_id:update.chat_id turn_p
-                      in
-                      refresh_typing := refresh;
-                      let* response = result_p in
-                      (refresh_typing := fun () -> ());
+                      let* response = turn_p in
                       Lwt.return (Ok response))
                     (fun exn -> Lwt.return (Error (Printexc.to_string exn))))
             in
@@ -1603,9 +1693,6 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
                 else if !response_sent then begin
                   Lwt.async (fun () ->
                       Session.process_autonomous_turn_result
-                        ~around_turn:(fun f ->
-                          with_typing_deferred ~bot_token
-                            ~chat_id:update.chat_id ~grace:1.5 (f ()))
                         ~on_response:send_to_chat session_mgr ~key ~response);
                   Lwt.return_unit
                 end
@@ -1624,6 +1711,7 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
                           ~buttons:[ ("Show Details", "show_details") ]
                           ()
                       in
+                      refresh_typing ();
                       Lwt.return_unit
                     else Lwt.return_unit
                   in
@@ -1634,10 +1722,14 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
                   in
                   let* () =
                     if thinking <> "" then
-                      send_chunked ~parse_mode:"MarkdownV2" ~bot_token
-                        ~chat_id:update.chat_id
-                        ~text:("_" ^ Telegram_format.escape_mdv2 thinking ^ "_")
-                        ()
+                      let* () =
+                        send_chunked ~parse_mode:"MarkdownV2" ~bot_token
+                          ~chat_id:update.chat_id
+                          ~text:("_" ^ Telegram_format.escape_mdv2 thinking ^ "_")
+                          ()
+                      in
+                      refresh_typing ();
+                      Lwt.return_unit
                     else Lwt.return_unit
                   in
                   let* () =
@@ -1651,9 +1743,6 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
                     Session.mark_response_sent session_mgr ~key;
                   Lwt.async (fun () ->
                       Session.process_autonomous_turn_result
-                        ~around_turn:(fun f ->
-                          with_typing_deferred ~bot_token
-                            ~chat_id:update.chat_id ~grace:1.5 (f ()))
                         ~on_response:send_to_chat session_mgr ~key ~response);
                   Lwt.return_unit
             | Error err ->

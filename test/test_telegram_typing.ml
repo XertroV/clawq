@@ -201,6 +201,47 @@ let test_deferred_typing_starts_for_slow_promise () =
        "typing was sent for slow promise" true (!call_count >= 2);
      Lwt.return_unit)
 
+let test_live_activity_typing_follows_session_state () =
+  let config = Runtime_config.default in
+  let mgr = Session.create ~config () in
+  let key = "telegram:1:u" in
+  let call_count = ref 0 in
+  let refresh_trigger = Lwt_condition.create () in
+  Lwt_main.run
+    (let open Lwt.Syntax in
+     let loop_p =
+       Telegram.typing_loop_live_activity
+         ~current_activity:(fun () -> Session.current_live_activity mgr ~key)
+         ~wait_for_change:(fun ~after_generation ->
+           Session.wait_for_live_activity_change mgr ~key ~after_generation)
+         ~wait_for_refresh:(fun () -> Lwt_condition.wait refresh_trigger)
+         ~send_action:(fun () ->
+           incr call_count;
+           Lwt.return_unit)
+         ~interval:0.01 ~idle_timeout:0.05 ()
+     in
+     let* () = Lwt_unix.sleep 0.02 in
+     Alcotest.(check int) "inactive session sends nothing" 0 !call_count;
+     let* () =
+       Session.with_live_activity mgr ~key (fun () ->
+           let* () = Lwt_unix.sleep 0.04 in
+           Alcotest.(check bool)
+             "active session sends typing" true (!call_count >= 2);
+           let count_before_refresh = !call_count in
+           Lwt_condition.broadcast refresh_trigger ();
+           let* () = Lwt_unix.sleep 0.02 in
+           Alcotest.(check bool)
+             "refresh triggers immediate resend" true
+             (!call_count > count_before_refresh);
+           Lwt.return_unit)
+     in
+     let count_at_stop = !call_count in
+     let* () = Lwt_unix.sleep 0.02 in
+     Alcotest.(check int)
+       "typing stops after activity ends" count_at_stop !call_count;
+     let* () = loop_p in
+     Lwt.return_unit)
+
 let suite =
   [
     Alcotest.test_case "typing loop calls send_action repeatedly" `Quick
@@ -223,4 +264,6 @@ let suite =
       test_deferred_typing_skips_for_fast_promise;
     Alcotest.test_case "deferred typing starts for slow promise" `Quick
       test_deferred_typing_starts_for_slow_promise;
+    Alcotest.test_case "live activity typing follows session state" `Quick
+      test_live_activity_typing_follows_session_state;
   ]

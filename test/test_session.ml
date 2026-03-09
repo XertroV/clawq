@@ -564,6 +564,130 @@ let test_clear_response_deferred_removes_marker () =
     "marker removed" false
     (Session.take_response_deferred mgr ~key:"telegram:2:u")
 
+let test_live_activity_tracks_nested_scopes () =
+  let config = Runtime_config.default in
+  let mgr = Session.create ~config () in
+  let key = "telegram:live:u" in
+  Lwt_main.run
+    (let open Lwt.Syntax in
+     let* initial = Session.current_live_activity mgr ~key in
+     Alcotest.(check bool) "starts inactive" false initial.Session.active;
+     let started_p =
+       Session.wait_for_live_activity_change mgr ~key
+         ~after_generation:initial.generation
+     in
+     let* started_generation =
+       Session.with_live_activity mgr ~key (fun () ->
+           let* started = started_p in
+           Alcotest.(check bool) "becomes active" true started.Session.active;
+           let* outer_snapshot = Session.current_live_activity mgr ~key in
+           Alcotest.(check bool) "outer scope active" true
+             outer_snapshot.active;
+           let nested_change_p =
+             let* _ =
+               Session.wait_for_live_activity_change mgr ~key
+                 ~after_generation:started.generation
+             in
+             Lwt.return_true
+           in
+           let* () =
+             Session.with_live_activity mgr ~key (fun () ->
+                 let* inner_snapshot = Session.current_live_activity mgr ~key in
+                 Alcotest.(check bool) "inner scope active" true
+                   inner_snapshot.active;
+                 let* changed =
+                   Lwt.pick
+                     [
+                       nested_change_p;
+                       (let* () = Lwt_unix.sleep 0.02 in
+                        Lwt.return_false);
+                     ]
+                 in
+                 Alcotest.(check bool)
+                   "nested scope does not emit transition" false changed;
+                 Lwt.return_unit)
+           in
+           let* still_active = Session.current_live_activity mgr ~key in
+           Alcotest.(check bool) "still active after inner scope" true
+             still_active.active;
+           Lwt.return started.generation)
+     in
+     let* stopped =
+       Session.wait_for_live_activity_change mgr ~key
+         ~after_generation:started_generation
+     in
+     Alcotest.(check bool) "inactive after outer scope" false stopped.active;
+     Lwt.return_unit)
+
+let test_turn_marks_special_command_phase_as_live_activity () =
+  let config = Runtime_config.default in
+  let mgr = Session.create ~config () in
+  let active_during_handler = ref false in
+  Session.set_special_command_handler mgr
+    (fun ~key ~message:_ ~send_progress:_ ~interrupt_check:_ ->
+      let open Lwt.Syntax in
+      let* snapshot = Session.current_live_activity mgr ~key in
+      active_during_handler := snapshot.Session.active;
+      Lwt.return_some "Build complete. Sending restart signal...");
+  let response =
+    Lwt_main.run (Session.turn mgr ~key:"web:update" ~message:"/update" ())
+  in
+  Alcotest.(check string)
+    "special command response" "Build complete. Sending restart signal..."
+    response;
+  Alcotest.(check bool) "special handler sees live activity" true
+    !active_during_handler;
+  let final_snapshot =
+    Lwt_main.run (Session.current_live_activity mgr ~key:"web:update")
+  in
+  Alcotest.(check bool) "live activity cleared after turn" false
+    final_snapshot.Session.active
+
+let test_drain_queued_messages_marks_live_activity () =
+  with_fake_chat_provider (fun config ->
+      let mgr = Session.create ~config () in
+      let key = "telegram:1:u" in
+      let active_during_progress = ref false in
+      Session.register_channel_notifier mgr ~key (fun _ -> Lwt.return_unit);
+      Lwt_main.run
+        (Session.with_session_lock mgr ~key (fun agent interrupt ->
+             let open Lwt.Syntax in
+             let* queued =
+               Session.enqueue_message_if_busy mgr ~key
+                 {
+                   Session.message = "queued work";
+                   content_parts = [];
+                   attachments = [];
+                   channel_name = None;
+                   channel_type = None;
+                   sender_id = None;
+                   sender_name = None;
+                   channel = Some "telegram";
+                   channel_id = Some "1";
+                 }
+             in
+             Alcotest.(check bool) "message queued" true queued;
+             let on_drain_progress : Session.drain_progress =
+               {
+                 before_turn =
+                   (fun () ->
+                     let* snapshot = Session.current_live_activity mgr ~key in
+                     active_during_progress := snapshot.Session.active;
+                     Lwt.return_unit);
+                 after_all = (fun () -> Lwt.return_unit);
+               }
+             in
+             let* () =
+               Session.drain_queued_messages mgr ~key agent interrupt
+                 ~on_drain_progress ()
+             in
+             let* final_snapshot = Session.current_live_activity mgr ~key in
+             Alcotest.(check bool) "live activity cleared after drain" false
+               final_snapshot.active;
+             Lwt.return_unit));
+      Alcotest.(check bool) "drain progress sees live activity" true
+        !active_during_progress)
+
 let queued_message ?channel_name ?channel_type ?sender_id ?sender_name ?channel
     ?channel_id message =
   {
@@ -1847,6 +1971,12 @@ let suite =
       test_take_response_deferred_clears_marker;
     Alcotest.test_case "clear response deferred removes marker" `Quick
       test_clear_response_deferred_removes_marker;
+    Alcotest.test_case "live activity tracks nested scopes" `Quick
+      test_live_activity_tracks_nested_scopes;
+    Alcotest.test_case "turn marks special command phase as live activity"
+      `Quick test_turn_marks_special_command_phase_as_live_activity;
+    Alcotest.test_case "drain queued messages marks live activity" `Quick
+      test_drain_queued_messages_marks_live_activity;
     Alcotest.test_case "clear response deferred removes marker" `Quick
       test_clear_response_deferred_removes_marker;
     Alcotest.test_case
