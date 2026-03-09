@@ -41,7 +41,27 @@ let exit_code_of_status = function
   | Unix.WSIGNALED n -> 128 + n
   | Unix.WSTOPPED n -> 128 + n
 
-let stream_process ~cwd ~argv ~send_progress =
+exception Interrupted_by_user
+
+let should_interrupt interrupt_check =
+  match interrupt_check with
+  | Some check -> (
+      match check () with
+      | Some reason when reason <> Agent.queued_message_interrupt_token -> true
+      | _ -> false)
+  | None -> false
+
+let wait_for_interrupt interrupt_check =
+  let open Lwt.Syntax in
+  let rec loop () =
+    if should_interrupt interrupt_check then Lwt.return_unit
+    else
+      let* () = Lwt_unix.sleep 0.05 in
+      loop ()
+  in
+  loop ()
+
+let stream_process ~cwd ~argv ~send_progress ~interrupt_check =
   let proc = Lwt_process.open_process_full ~cwd ("", argv) in
   let read_channel ch =
     let rec loop () =
@@ -56,9 +76,45 @@ let stream_process ~cwd ~argv ~send_progress =
     loop ()
   in
   let open Lwt.Syntax in
-  let* () = Lwt.join [ read_channel proc#stdout; read_channel proc#stderr ] in
-  let* status = proc#close in
-  Lwt.return (exit_code_of_status status)
+  let runner_result, runner_wakener = Lwt.wait () in
+  let finish_runner result =
+    if Lwt.is_sleeping runner_result then Lwt.wakeup_later runner_wakener result
+  in
+  Lwt.async (fun () ->
+      Lwt.catch
+        (fun () ->
+          let* () =
+            Lwt.join [ read_channel proc#stdout; read_channel proc#stderr ]
+          in
+          let* status = proc#close in
+          finish_runner (Ok (exit_code_of_status status));
+          Lwt.return_unit)
+        (fun exn ->
+          finish_runner (Error exn);
+          Lwt.return_unit));
+  match interrupt_check with
+  | None -> (
+      let* result = runner_result in
+      match result with
+      | Ok exit_code -> Lwt.return exit_code
+      | Error exn -> Lwt.fail exn)
+  | Some _ -> (
+      let* outcome =
+        Lwt.pick
+          [
+            (let* result = runner_result in
+             Lwt.return (`Finished result));
+            (let* () = wait_for_interrupt interrupt_check in
+             Lwt.return `Interrupted);
+          ]
+      in
+      match outcome with
+      | `Finished (Ok exit_code) -> Lwt.return exit_code
+      | `Finished (Error exn) -> Lwt.fail exn
+      | `Interrupted ->
+          (try proc#kill Sys.sigkill with _ -> ());
+          let* _ = runner_result in
+          Lwt.fail Interrupted_by_user)
 
 let trim s = String.trim s
 
@@ -220,7 +276,7 @@ let run_update ?(find_repo_root = find_repo_root)
     ?(run_command = stream_process) ?(send_signal = Unix.kill) ?claim_update
     ?(finish_update = fun () -> Lwt.return_unit) ?prepare_restart
     ?(binary_url = binary_url_of_env ()) ?start_path ?(mode = Auto) ~is_draining
-    ~send_progress () =
+    ~send_progress ?(interrupt_check = None) () =
   let open Lwt.Syntax in
   let claim_update =
     match claim_update with
@@ -236,35 +292,46 @@ let run_update ?(find_repo_root = find_repo_root)
   else
     Lwt.finalize
       (fun () ->
-        let repo_root = find_repo_root ?start_path () in
-        let target_path = normalize_executable_path ?start_path () in
-        match (mode, repo_root, binary_url) with
-        | Git, None, _ ->
-            let message =
-              "Cannot find repository root, git update mode is unavailable."
-            in
-            let* () = send_progress message in
-            Lwt.return message
-        | (Auto | Git), Some repo_root, _ ->
-            run_git_update ~repo_root ~run_command ~send_signal ~send_progress
-              ~prepare_restart:(run_prepare_restart prepare_restart)
-        | Binary, _, Some binary_url | Auto, None, Some binary_url ->
-            run_binary_update ~binary_url ~target_path ~run_command ~send_signal
-              ~send_progress
-              ~prepare_restart:(run_prepare_restart prepare_restart)
-        | Binary, _, None ->
-            let message =
-              "Binary update mode requires CLAWQ_UPDATE_BINARY_URL to be set."
-            in
-            let* () = send_progress message in
-            Lwt.return message
-        | Auto, None, None ->
-            let message =
-              "Cannot find repository root, and binary update mode is not \
-               configured."
-            in
-            let* () = send_progress message in
-            Lwt.return message)
+        Lwt.catch
+          (fun () ->
+            let repo_root = find_repo_root ?start_path () in
+            let target_path = normalize_executable_path ?start_path () in
+            match (mode, repo_root, binary_url) with
+            | Git, None, _ ->
+                let message =
+                  "Cannot find repository root, git update mode is unavailable."
+                in
+                let* () = send_progress message in
+                Lwt.return message
+            | (Auto | Git), Some repo_root, _ ->
+                run_git_update ~repo_root
+                  ~run_command:(fun ~cwd ~argv ~send_progress ->
+                    run_command ~cwd ~argv ~send_progress ~interrupt_check)
+                  ~send_signal ~send_progress
+                  ~prepare_restart:(run_prepare_restart prepare_restart)
+            | Binary, _, Some binary_url | Auto, None, Some binary_url ->
+                run_binary_update ~binary_url ~target_path
+                  ~run_command:(fun ~cwd ~argv ~send_progress ->
+                    run_command ~cwd ~argv ~send_progress ~interrupt_check)
+                  ~send_signal ~send_progress
+                  ~prepare_restart:(run_prepare_restart prepare_restart)
+            | Binary, _, None ->
+                let message =
+                  "Binary update mode requires CLAWQ_UPDATE_BINARY_URL to be \
+                   set."
+                in
+                let* () = send_progress message in
+                Lwt.return message
+            | Auto, None, None ->
+                let message =
+                  "Cannot find repository root, and binary update mode is not \
+                   configured."
+                in
+                let* () = send_progress message in
+                Lwt.return message)
+          (function
+            | Interrupted_by_user -> Lwt.return "Update interrupted by user."
+            | exn -> Lwt.fail exn))
       finish_update
 
 let tool ~is_draining ?claim_update ?finish_update ?find_repo_root ?run_command
@@ -299,7 +366,10 @@ let tool ~is_draining ?claim_update ?finish_update ?find_repo_root ?run_command
       | _ -> fun () -> Lwt.return (Ok ())
     in
     run_update ?find_repo_root ?run_command ?send_signal ?claim_update
-      ?finish_update ~mode ~is_draining ~prepare_restart ~send_progress ()
+      ?finish_update ~mode ~is_draining ~prepare_restart ~send_progress
+      ~interrupt_check:
+        (match context with Some c -> c.Tool.interrupt_check | None -> None)
+      ()
   in
   {
     Tool.name = "update_clawq";

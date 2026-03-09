@@ -10,7 +10,7 @@ let test_run_update_continues_after_git_failure () =
   let commands = ref [] in
   let progress = ref [] in
   let signaled = ref None in
-  let run_command ~cwd ~argv ~send_progress =
+  let run_command ~cwd ~argv ~send_progress ~interrupt_check:_ =
     let open Lwt.Syntax in
     commands := (cwd, Array.to_list argv) :: !commands;
     let* () = send_progress (String.concat " " (Array.to_list argv)) in
@@ -52,7 +52,7 @@ let test_run_update_aborts_on_build_failure () =
   let commands = ref [] in
   let progress = ref [] in
   let signaled = ref false in
-  let run_command ~cwd ~argv ~send_progress =
+  let run_command ~cwd ~argv ~send_progress ~interrupt_check:_ =
     let open Lwt.Syntax in
     commands := (cwd, Array.to_list argv) :: !commands;
     let* () = send_progress (String.concat " " (Array.to_list argv)) in
@@ -93,7 +93,7 @@ let test_run_update_reports_dune_lock_detail () =
     Lwt_main.run
       (Update_tool.run_update
          ~find_repo_root:(fun ?start_path:_ ?exists:_ () -> Some "/repo")
-         ~run_command:(fun ~cwd:_ ~argv ~send_progress ->
+         ~run_command:(fun ~cwd:_ ~argv ~send_progress ~interrupt_check:_ ->
            let open Lwt.Syntax in
            match Array.to_list argv with
            | [ "git"; "pull" ] ->
@@ -139,7 +139,7 @@ let test_run_update_rejects_when_draining () =
     Lwt_main.run
       (Update_tool.run_update
          ~find_repo_root:(fun ?start_path:_ ?exists:_ () -> Some "/repo")
-         ~run_command:(fun ~cwd:_ ~argv:_ ~send_progress:_ ->
+         ~run_command:(fun ~cwd:_ ~argv:_ ~send_progress:_ ~interrupt_check:_ ->
            ran := true;
            Lwt.return 0)
          ~is_draining:(fun () -> true)
@@ -163,7 +163,7 @@ let test_run_update_rejects_when_claimed () =
     Lwt_main.run
       (Update_tool.run_update
          ~find_repo_root:(fun ?start_path:_ ?exists:_ () -> Some "/repo")
-         ~run_command:(fun ~cwd:_ ~argv:_ ~send_progress:_ ->
+         ~run_command:(fun ~cwd:_ ~argv:_ ~send_progress:_ ~interrupt_check:_ ->
            ran := true;
            Lwt.return 0)
          ~claim_update:(fun () -> Lwt.return false)
@@ -185,7 +185,7 @@ let test_run_update_uses_binary_mode_when_repo_missing () =
   let commands = ref [] in
   let progress = ref [] in
   let signaled = ref None in
-  let run_command ~cwd ~argv ~send_progress =
+  let run_command ~cwd ~argv ~send_progress ~interrupt_check:_ =
     let open Lwt.Syntax in
     commands := (cwd, Array.to_list argv) :: !commands;
     let* () = send_progress (String.concat " " (Array.to_list argv)) in
@@ -256,12 +256,18 @@ let test_update_tool_writes_restart_marker_from_session_context () =
       ((Update_tool.tool
           ~is_draining:(fun () -> false)
           ~find_repo_root:(fun ?start_path:_ ?exists:_ () -> Some "/repo")
-          ~run_command:(fun ~cwd:_ ~argv:_ ~send_progress:_ -> Lwt.return 0)
+          ~run_command:(fun
+              ~cwd:_ ~argv:_ ~send_progress:_ ~interrupt_check:_ ->
+            Lwt.return 0)
           ~send_signal:(fun pid sig_ -> sent_signal := Some (pid, sig_))
           ())
          .Tool.invoke
          ~context:
-           { Tool.session_key = Some "telegram:123:456"; send_progress = None }
+           {
+             Tool.session_key = Some "telegram:123:456";
+             send_progress = None;
+             interrupt_check = None;
+           }
          (`Assoc [ ("mode", `String "git") ]))
   in
   Alcotest.(check string)
@@ -281,7 +287,8 @@ let test_run_update_prepares_restart_before_signal () =
     Lwt_main.run
       (Update_tool.run_update
          ~find_repo_root:(fun ?start_path:_ ?exists:_ () -> Some "/repo")
-         ~run_command:(fun ~cwd:_ ~argv:_ ~send_progress:_ -> Lwt.return 0)
+         ~run_command:(fun ~cwd:_ ~argv:_ ~send_progress:_ ~interrupt_check:_ ->
+           Lwt.return 0)
          ~prepare_restart:(fun () ->
            prepared := true;
            Lwt.return (Ok ()))
@@ -308,7 +315,8 @@ let test_run_update_aborts_when_prepare_restart_fails () =
     Lwt_main.run
       (Update_tool.run_update
          ~find_repo_root:(fun ?start_path:_ ?exists:_ () -> Some "/repo")
-         ~run_command:(fun ~cwd:_ ~argv:_ ~send_progress:_ -> Lwt.return 0)
+         ~run_command:(fun ~cwd:_ ~argv:_ ~send_progress:_ ~interrupt_check:_ ->
+           Lwt.return 0)
          ~prepare_restart:(fun () ->
            Lwt.return
              (Error
@@ -337,6 +345,59 @@ let test_run_update_aborts_when_prepare_restart_fails () =
         aborted."
        !progress)
 
+let test_run_update_interrupts_running_command () =
+  let interrupted = ref None in
+  let progress = ref [] in
+  let started_at = Unix.gettimeofday () in
+  let result =
+    Lwt_main.run
+      (let open Lwt.Syntax in
+       let trigger =
+         let* () = Lwt_unix.sleep 0.1 in
+         interrupted := Some "stop now";
+         Lwt.return_unit
+       in
+       let run_command ~cwd:_ ~argv:_ ~send_progress ~interrupt_check =
+         let open Lwt.Syntax in
+         let* () = send_progress "simulated long-running command" in
+         let rec loop () =
+           match interrupt_check with
+           | Some check -> (
+               match check () with
+               | Some reason when reason <> Agent.queued_message_interrupt_token
+                 ->
+                   Lwt.fail Update_tool.Interrupted_by_user
+               | _ ->
+                   let* () = Lwt_unix.sleep 0.05 in
+                   loop ())
+           | None ->
+               let* () = Lwt_unix.sleep 10.0 in
+               Lwt.return 0
+         in
+         loop ()
+       in
+       let run =
+         Update_tool.run_update
+           ~find_repo_root:(fun ?start_path:_ ?exists:_ () -> Some "/repo")
+           ~run_command
+           ~is_draining:(fun () -> false)
+           ~send_progress:(fun text ->
+             progress := text :: !progress;
+             Lwt.return_unit)
+           ~interrupt_check:(Some (fun () -> !interrupted))
+           ()
+       in
+       let* result, () = Lwt.both run trigger in
+       Lwt.return result)
+  in
+  let elapsed = Unix.gettimeofday () -. started_at in
+  Alcotest.(check string)
+    "interrupt result" "Update interrupted by user." result;
+  Alcotest.(check bool) "returns promptly" true (elapsed < 2.0);
+  Alcotest.(check bool)
+    "progress started" true
+    (List.mem "Starting update..." !progress)
+
 let suite =
   [
     Alcotest.test_case "find repo root returns none when missing" `Quick
@@ -361,4 +422,6 @@ let suite =
       test_run_update_prepares_restart_before_signal;
     Alcotest.test_case "run update aborts when prepare restart fails" `Quick
       test_run_update_aborts_when_prepare_restart_fails;
+    Alcotest.test_case "run update interrupts running command" `Quick
+      test_run_update_interrupts_running_command;
   ]

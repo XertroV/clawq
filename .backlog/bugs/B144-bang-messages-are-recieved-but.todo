@@ -1,14 +1,15 @@
 ---
-claimed_at: "2026-03-09T05:48:02Z"
+claimed_at: "2026-03-09T05:48:38Z"
 claimed_by: cli-user
-completed_at: null
+completed_at: "2026-03-09T06:42:49Z"
 complexity: medium
 depends_on: []
+duration_minutes: 54.194525888983335
 estimate_hours: 1
 id: B144
 priority: high
-started_at: "2026-03-09T05:48:02Z"
-status: in_progress
+started_at: "2026-03-09T05:48:38Z"
+status: done
 tags: []
 title: Bang messages are recieved, but if the agent is currently running a command it will wait for that command to finish which is not the intended behavior of bang msgs.
 ---

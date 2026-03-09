@@ -239,24 +239,25 @@ let init_schema db =
   exec
     "CREATE INDEX IF NOT EXISTS idx_background_tasks_status ON \
      background_tasks (status)";
-  (match
-     Sqlite3.exec db "ALTER TABLE background_tasks ADD COLUMN model TEXT"
-   with
+  match
+    Sqlite3.exec db "ALTER TABLE background_tasks ADD COLUMN model TEXT"
+  with
   | Sqlite3.Rc.OK -> ()
   | Sqlite3.Rc.ERROR -> ()
   | rc ->
       failwith
         (Printf.sprintf "SQLite error: %s (sql: %s)" (Sqlite3.Rc.to_string rc)
-           "ALTER TABLE background_tasks ADD COLUMN model TEXT"))
+           "ALTER TABLE background_tasks ADD COLUMN model TEXT")
 
-let enqueue ~db ~runner ?model ~repo_path ~prompt ?branch ?session_key
-    ?channel ?channel_id () =
+let enqueue ~db ~runner ?model ~repo_path ~prompt ?branch ?session_key ?channel
+    ?channel_id () =
   match validate_repo_path repo_path with
   | Error _ as err -> err
   | Ok () ->
       let sql =
-        "INSERT INTO background_tasks (runner, model, repo_path, prompt, branch, \
-         session_key, channel, channel_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO background_tasks (runner, model, repo_path, prompt, \
+         branch, session_key, channel, channel_id) VALUES (?, ?, ?, ?, ?, ?, \
+         ?, ?)"
       in
       let stmt = Sqlite3.prepare db sql in
       Fun.protect
@@ -864,8 +865,8 @@ let enqueue_tool_with_notify ~notify_cfg ~db =
               routing_from_context ?context ?notify_cfg ()
             in
             match
-              enqueue ~db ~runner ?model ~repo_path ~prompt ?branch
-                ?session_key ?channel ?channel_id ()
+              enqueue ~db ~runner ?model ~repo_path ~prompt ?branch ?session_key
+                ?channel ?channel_id ()
             with
             | Ok id ->
                 Lwt.return

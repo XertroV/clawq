@@ -512,6 +512,7 @@ let execute_tool_calls_stream agent ~db ~audit_enabled ~session_key
                                       on_chunk
                                         (Provider.ToolOutputDelta
                                            { id = tc.id; chunk = text }));
+                                interrupt_check;
                               }
                             in
                             match tool.invoke_stream with
@@ -667,7 +668,11 @@ let execute_tool_calls agent ~db ~audit_enabled ~session_key ?interrupt_check
                               with _ -> `Assoc []
                             in
                             let context =
-                              { Tool.session_key; send_progress = None }
+                              {
+                                Tool.session_key;
+                                send_progress = None;
+                                interrupt_check;
+                              }
                             in
                             tool.invoke ~context args)
                           (fun exn ->

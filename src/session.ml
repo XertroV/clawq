@@ -2,6 +2,7 @@ type special_command_handler =
   key:string ->
   message:string ->
   send_progress:(string -> unit Lwt.t) option ->
+  interrupt_check:(unit -> string option) option ->
   string option Lwt.t
 
 type queued_message = {
@@ -45,8 +46,8 @@ let draining_message =
 let autonomous_stay_idle_message = "STAY_IDLE"
 
 let autonomous_continuation_prompt =
-  "Autonomous session check-in: continue working if more remains; otherwise reply exactly "
-  ^ autonomous_stay_idle_message
+  "Autonomous session check-in: continue working if more remains; otherwise \
+   reply exactly " ^ autonomous_stay_idle_message
 
 let default_autonomous_continuation_delay = 90.0
 
@@ -66,7 +67,8 @@ let clear_pending_continuation state =
   | None -> ()
 
 let with_continuation_state mgr ~key f =
-  Lwt_mutex.with_lock mgr.sessions_lock (fun () -> f (continuation_state mgr ~key))
+  Lwt_mutex.with_lock mgr.sessions_lock (fun () ->
+      f (continuation_state mgr ~key))
 
 let cancel_autonomous_continuation mgr ~key =
   with_continuation_state mgr ~key (fun state ->
@@ -239,10 +241,11 @@ let notify_compaction_if_needed ?notify compacted =
           Lwt.return_unit)
   | _ -> Lwt.return_unit
 
-let handle_special_command mgr ~key ~message ?send_progress () =
+let handle_special_command mgr ~key ~message ?send_progress ?interrupt_check ()
+    =
   match mgr.special_command_handler with
   | None -> Lwt.return_none
-  | Some handler -> handler ~key ~message ~send_progress
+  | Some handler -> handler ~key ~message ~send_progress ~interrupt_check
 
 let notify_channel_sessions mgr message =
   let notifiers = Hashtbl.to_seq_values mgr.channel_notifiers |> List.of_seq in
@@ -353,6 +356,11 @@ let set_interrupt_if_present mgr ~key message =
       | Some (_, _, interrupt) -> interrupt := Some message
       | None -> ());
       Lwt.return_unit)
+
+let interrupt_check_if_present mgr ~key () =
+  match Hashtbl.find_opt mgr.sessions key with
+  | Some (_, _, interrupt) -> !interrupt
+  | None -> None
 
 let is_main_session_key key = key = "__main__"
 
@@ -719,6 +727,7 @@ let rec turn mgr ~key ~message ?(attachments = []) ?channel_name ?channel_type
   let* handled =
     handle_special_command mgr ~key ~message
       ?send_progress:(find_registered_notifier mgr ~key)
+      ~interrupt_check:(interrupt_check_if_present mgr ~key)
       ()
   in
   match handled with
@@ -769,7 +778,11 @@ let turn_stream mgr ~key ~message ?(attachments = []) ?channel_name
   let* () = mark_autonomous_activity_started mgr ~key in
   let* message = normalize_incoming_message mgr ~key ~message in
   let send_progress text = on_chunk (Provider.Delta (text ^ "\n")) in
-  let* handled = handle_special_command mgr ~key ~message ~send_progress () in
+  let* handled =
+    handle_special_command mgr ~key ~message ~send_progress
+      ~interrupt_check:(interrupt_check_if_present mgr ~key)
+      ()
+  in
   match handled with
   | Some response ->
       let* () = on_chunk (Provider.Delta response) in
@@ -941,8 +954,8 @@ let compact mgr ~key =
       end
       else Lwt.return false)
 
-let rec schedule_autonomous_continuation ?(delay = default_autonomous_continuation_delay)
-    mgr ~key =
+let rec schedule_autonomous_continuation
+    ?(delay = default_autonomous_continuation_delay) mgr ~key =
   let open Lwt.Syntax in
   let* should_schedule, cancel_waiter =
     with_continuation_state mgr ~key (fun state ->
@@ -960,8 +973,10 @@ let rec schedule_autonomous_continuation ?(delay = default_autonomous_continuati
       let* cancelled =
         Lwt.pick
           [
-            (let* () = Lwt_unix.sleep delay in Lwt.return_false);
-            (let* () = cancel_waiter in Lwt.return_true);
+            (let* () = Lwt_unix.sleep delay in
+             Lwt.return_false);
+            (let* () = cancel_waiter in
+             Lwt.return_true);
           ]
       in
       if cancelled then Lwt.return_unit
@@ -987,8 +1002,8 @@ let rec schedule_autonomous_continuation ?(delay = default_autonomous_continuati
           schedule_autonomous_continuation ~delay mgr ~key
         end
 
-let process_autonomous_turn_result ?(delay = default_autonomous_continuation_delay)
-    mgr ~key ~response =
+let process_autonomous_turn_result
+    ?(delay = default_autonomous_continuation_delay) mgr ~key ~response =
   let trimmed = String.trim response in
   if trimmed = "" || trimmed = "HEARTBEAT_OK" then Lwt.return_unit
   else if trimmed = autonomous_stay_idle_message then

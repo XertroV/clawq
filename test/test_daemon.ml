@@ -450,7 +450,8 @@ let test_resume_pending_main_session_arms_autonomous_continuation () =
   let config =
     {
       Runtime_config.default with
-      channels = { Runtime_config.default.channels with slack = Some slack_config };
+      channels =
+        { Runtime_config.default.channels with slack = Some slack_config };
     }
   in
   let session_manager = Session.create ~config ~db () in
@@ -470,7 +471,8 @@ let test_resume_pending_main_session_arms_autonomous_continuation () =
         }
       ~run_turn:(fun agent _interrupt ->
         agent.Agent.history <-
-          Provider.make_message ~role:"assistant" ~content:"continue_work" :: agent.Agent.history;
+          Provider.make_message ~role:"assistant" ~content:"continue_work"
+          :: agent.Agent.history;
         Lwt.return "continue_work")
       ~after_dispatch:(fun ~response ->
         Session.process_autonomous_turn_result session_manager ~key:session_key
@@ -478,8 +480,11 @@ let test_resume_pending_main_session_arms_autonomous_continuation () =
       ()
   in
   Lwt_main.run
-    (Daemon.resume_pending_agent_sessions ~session_manager ~config ~resume_one ());
-  let state = Hashtbl.find session_manager.Session.continuation_checks "__main__" in
+    (Daemon.resume_pending_agent_sessions ~session_manager ~config ~resume_one
+       ());
+  let state =
+    Hashtbl.find session_manager.Session.continuation_checks "__main__"
+  in
   Alcotest.(check bool) "main session not disarmed" false state.disarmed;
   Alcotest.(check bool) "continuation armed" true (Option.is_some state.cancel)
 
@@ -518,4 +523,3 @@ let suite =
     Alcotest.test_case "date banner logs on day rollover" `Quick
       test_maybe_emit_date_banner_logs_when_day_advances;
   ]
-

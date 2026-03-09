@@ -3,6 +3,7 @@ type risk_level = Low | Medium | High
 type invoke_context = {
   session_key : string option;
   send_progress : (string -> unit Lwt.t) option;
+  interrupt_check : (unit -> string option) option;
 }
 
 type invoke_stream =
@@ -21,4 +22,5 @@ type t = {
   deferred : bool;
 }
 
-let default_context = { session_key = None; send_progress = None }
+let default_context =
+  { session_key = None; send_progress = None; interrupt_check = None }

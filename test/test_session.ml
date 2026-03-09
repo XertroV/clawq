@@ -601,7 +601,8 @@ let test_turn_uses_special_command_handler () =
   let config = Runtime_config.default in
   let mgr = Session.create ~config () in
   let progress = ref [] in
-  Session.set_special_command_handler mgr (fun ~key ~message ~send_progress ->
+  Session.set_special_command_handler mgr
+    (fun ~key ~message ~send_progress ~interrupt_check:_ ->
       let open Lwt.Syntax in
       Alcotest.(check string) "handler key" "web:update" key;
       Alcotest.(check string) "handler message" "/update" message;
@@ -636,7 +637,7 @@ let test_turn_stream_uses_special_command_handler () =
          Lwt.return_unit
        in
        Session.set_special_command_handler mgr
-         (fun ~key ~message ~send_progress ->
+         (fun ~key ~message ~send_progress ~interrupt_check:_ ->
            let open Lwt.Syntax in
            Alcotest.(check string) "stream handler key" "web:update" key;
            Alcotest.(check string) "stream handler message" "/update" message;
@@ -1070,7 +1071,8 @@ let test_restore_sanitizes_orphaned_tool_results () =
 let test_autonomous_continuation_stays_idle_disarms () =
   let continuation_calls = ref 0 in
   let response_for_user message =
-    if String.starts_with ~prefix:Session.autonomous_continuation_prompt message then (
+    if String.starts_with ~prefix:Session.autonomous_continuation_prompt message
+    then (
       incr continuation_calls;
       "STAY_IDLE")
     else "reply:" ^ message
@@ -1087,7 +1089,8 @@ let test_autonomous_continuation_stays_idle_disarms () =
 let test_autonomous_continuation_resets_after_work () =
   let continuation_calls = ref 0 in
   let response_for_user message =
-    if String.starts_with ~prefix:Session.autonomous_continuation_prompt message then (
+    if String.starts_with ~prefix:Session.autonomous_continuation_prompt message
+    then (
       incr continuation_calls;
       if !continuation_calls < 2 then "keep_working" else "STAY_IDLE")
     else "reply:" ^ message
@@ -1098,13 +1101,16 @@ let test_autonomous_continuation_resets_after_work () =
       Lwt_main.run
         (Session.schedule_autonomous_continuation ~delay:0.02 mgr ~key);
       let state = Hashtbl.find mgr.Session.continuation_checks key in
-      Alcotest.(check int) "two continuation prompts before idling" 2 !continuation_calls;
-      Alcotest.(check bool) "disarmed after second STAY_IDLE" true state.disarmed)
+      Alcotest.(check int)
+        "two continuation prompts before idling" 2 !continuation_calls;
+      Alcotest.(check bool)
+        "disarmed after second STAY_IDLE" true state.disarmed)
 
 let test_autonomous_continuation_is_cancellable_by_new_turn () =
   let continuation_calls = ref 0 in
   let response_for_user message =
-    if String.starts_with ~prefix:Session.autonomous_continuation_prompt message then (
+    if String.starts_with ~prefix:Session.autonomous_continuation_prompt message
+    then (
       incr continuation_calls;
       "keep_working")
     else "reply:" ^ message
@@ -1114,11 +1120,14 @@ let test_autonomous_continuation_is_cancellable_by_new_turn () =
       let key = "__main__" in
       Lwt_main.run
         (let open Lwt.Syntax in
-         let continuation_p = Session.schedule_autonomous_continuation ~delay:0.2 mgr ~key in
+         let continuation_p =
+           Session.schedule_autonomous_continuation ~delay:0.2 mgr ~key
+         in
          let* () = Lwt_unix.sleep 0.05 in
          let* _ = Session.turn mgr ~key ~message:"manual nudge" () in
          continuation_p);
-      Alcotest.(check int) "continuation prompt suppressed" 0 !continuation_calls)
+      Alcotest.(check int)
+        "continuation prompt suppressed" 0 !continuation_calls)
 
 let suite =
   [
@@ -1175,8 +1184,7 @@ let suite =
     Alcotest.test_case
       "autonomous continuation prompt can disarm with STAY_IDLE" `Quick
       test_autonomous_continuation_stays_idle_disarms;
-    Alcotest.test_case
-      "autonomous continuation can resume then disarm" `Quick
+    Alcotest.test_case "autonomous continuation can resume then disarm" `Quick
       test_autonomous_continuation_resets_after_work;
     Alcotest.test_case
       "autonomous continuation is cancellable by new turn activity" `Quick
@@ -1240,4 +1248,3 @@ let test_drain_queued_messages_drains_all_pending_without_relock () =
   Lwt_main.run
     (Session.drain_queued_messages session_manager ~key agent interrupt);
   Alcotest.(check int) "all queued messages notified" 3 (List.length !notified)
-

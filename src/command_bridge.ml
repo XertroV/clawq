@@ -613,8 +613,8 @@ let parse_background_add_args args =
                 else Ok { runner; model; repo_path; branch; prompt })
         | _ ->
             Error
-              "Usage: clawq background add <codex|claude> [--model <name>] <repo> [--branch \
-               <name>] <prompt>")
+              "Usage: clawq background add <codex|claude> [--model <name>] \
+               <repo> [--branch <name>] <prompt>")
     | "--model" :: value :: rest -> loop (Some value) branch positionals rest
     | "--branch" :: value :: rest -> loop model (Some value) positionals rest
     | arg :: rest -> loop model branch (arg :: positionals) rest
@@ -665,8 +665,8 @@ let parse_delegate_args args =
         let goal = String.concat " " (List.rev positionals) |> String.trim in
         if goal = "" then
           Error
-            "Usage: clawq delegate [--runner auto|codex|claude] [--model <name>] [--repo \
-             <path>] [--branch <name>] <goal>"
+            "Usage: clawq delegate [--runner auto|codex|claude] [--model \
+             <name>] [--repo <path>] [--branch <name>] <goal>"
         else Ok { preferred_runner; model; repo_path; branch; goal }
     | "--runner" :: value :: rest ->
         let value = String.lowercase_ascii (String.trim value) in
@@ -1138,9 +1138,10 @@ let cmd_background args =
       | Ok parsed -> (
           let channel, channel_id = notify_route cfg in
           match
-            Background_task.enqueue ~db ~runner:parsed.runner ?model:parsed.model
-              ~repo_path:parsed.repo_path ~prompt:parsed.prompt
-              ?branch:parsed.branch ?channel ?channel_id ()
+            Background_task.enqueue ~db ~runner:parsed.runner
+              ?model:parsed.model ~repo_path:parsed.repo_path
+              ~prompt:parsed.prompt ?branch:parsed.branch ?channel ?channel_id
+              ()
           with
           | Ok id ->
               Printf.sprintf

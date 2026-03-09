@@ -287,14 +287,13 @@ let resume_pending_agent_sessions ?(senders = default_resume_senders)
     | None ->
         fun ~session_key ~channel ~channel_id ->
           let after_dispatch =
-            if session_key = "__main__" then
-              fun ~response ->
-                Session.process_autonomous_turn_result session_manager
-                  ~key:session_key ~response
+            if session_key = "__main__" then fun ~response ->
+              Session.process_autonomous_turn_result session_manager
+                ~key:session_key ~response
             else fun ~response:_ -> Lwt.return_unit
           in
-          resume_agent_session ~senders ~after_dispatch ~session_manager
-            ~config ~session_key ~channel ~channel_id ()
+          resume_agent_session ~senders ~after_dispatch ~session_manager ~config
+            ~session_key ~channel ~channel_id ()
   in
   let pending =
     Session.load_pending_agent_sessions session_manager ~max_age_seconds:3600
@@ -730,10 +729,13 @@ let run ~(config : Runtime_config.t) =
         update_in_progress := false;
         Lwt.return_unit)
   in
-  let run_update ?prepare_restart ~send_progress () =
+  let run_update ?prepare_restart ~send_progress ~interrupt_check () =
     Update_tool.run_update ?prepare_restart ~claim_update ~finish_update
       ~is_draining:(fun () -> Session.is_draining session_manager)
-      ~send_progress ()
+      ~send_progress ~interrupt_check ()
+  in
+  let run_update_command ?prepare_restart ~send_progress () =
+    run_update ?prepare_restart ~send_progress ~interrupt_check:None ()
   in
   (match tool_registry with
   | Some registry ->
@@ -743,7 +745,7 @@ let run ~(config : Runtime_config.t) =
            ())
   | None -> ());
   Session.set_special_command_handler session_manager
-    (fun ~key ~message ~send_progress ->
+    (fun ~key ~message ~send_progress ~interrupt_check ->
       if not (Update_tool.is_update_command message) then Lwt.return_none
       else
         let send_progress =
@@ -759,7 +761,9 @@ let run ~(config : Runtime_config.t) =
           Lwt.return (Ok ())
         in
         let open Lwt.Syntax in
-        let* response = run_update ~prepare_restart ~send_progress () in
+        let* response =
+          run_update ~prepare_restart ~send_progress ~interrupt_check ()
+        in
         Lwt.return_some response);
   let* () = resume_pending_agent_sessions ~session_manager ~config () in
   let* () =
@@ -886,7 +890,7 @@ let run ~(config : Runtime_config.t) =
           ?slack_config:config.channels.slack
           ?github_config:config.channels.github ~github_api_limiter ~ip_limiter
           ~session_limiter ~slack_event_limiter ?web_channel:web_channel_handler
-          ~slack_run_update_command:run_update
+          ~slack_run_update_command:run_update_command
           ?whatsapp_config:config.channels.whatsapp
           ?line_config:config.channels.line
           ?lark_config:
@@ -902,8 +906,8 @@ let run ~(config : Runtime_config.t) =
   let telegram =
     Lwt.catch
       (fun () ->
-        Telegram.start_polling ~config ~session_manager
-          ~run_update_command:run_update ~chat_limiter ())
+        Telegram.start_polling ~config ~session_manager ~run_update_command
+          ~chat_limiter ())
       (fun exn ->
         Logs.err (fun m ->
             m "Telegram polling error: %s" (Printexc.to_string exn));

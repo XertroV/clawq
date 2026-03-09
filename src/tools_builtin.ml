@@ -443,7 +443,9 @@ let shell_exec ~workspace ~workspace_only ~allowed_commands ~extra_allowed_paths
     let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
     Filename.concat (Filename.concat home ".clawq") "tool-output"
   in
-  let ensure_dir path = if Sys.file_exists path then () else Unix.mkdir path 0o755 in
+  let ensure_dir path =
+    if Sys.file_exists path then () else Unix.mkdir path 0o755
+  in
   let ensure_parent_dirs path =
     let rec loop p =
       let parent = Filename.dirname p in
@@ -459,19 +461,25 @@ let shell_exec ~workspace ~workspace_only ~allowed_commands ~extra_allowed_paths
     if String.length text <= max_chars then None
     else
       let dir = shell_output_dir () in
-      (try ensure_dir (Filename.concat (try Sys.getenv "HOME" with Not_found -> "/tmp") ".clawq") with _ -> ());
+      (try
+         ensure_dir
+           (Filename.concat
+              (try Sys.getenv "HOME" with Not_found -> "/tmp")
+              ".clawq")
+       with _ -> ());
       (try ensure_dir dir with _ -> ());
       let path =
         Filename.concat dir
-          (Printf.sprintf "shell-exec-%Ld.txt" (Int64.of_float (Unix.gettimeofday () *. 1000000.)))
+          (Printf.sprintf "shell-exec-%Ld.txt"
+             (Int64.of_float (Unix.gettimeofday () *. 1000000.)))
       in
-      (try
-         ensure_parent_dirs path;
-         let oc = open_out_bin path in
-         output_string oc text;
-         close_out oc;
-         Some path
-       with _ -> None)
+      try
+        ensure_parent_dirs path;
+        let oc = open_out_bin path in
+        output_string oc text;
+        close_out oc;
+        Some path
+      with _ -> None
   in
   let render_command_result ~exit_code ~stdout ~stderr =
     let stdout_note, stdout_rendered =
@@ -479,7 +487,8 @@ let shell_exec ~workspace ~workspace_only ~allowed_commands ~extra_allowed_paths
       | Some path ->
           let head = String.sub stdout 0 20000 in
           ( Printf.sprintf
-              "\n[stdout truncated; full stdout saved to %s for later inspection]"
+              "\n\
+               [stdout truncated; full stdout saved to %s for later inspection]"
               path,
             head ^ "\n... (truncated)" )
       | None -> ("", stdout)
@@ -489,7 +498,8 @@ let shell_exec ~workspace ~workspace_only ~allowed_commands ~extra_allowed_paths
       | Some path ->
           let head = String.sub stderr 0 20000 in
           ( Printf.sprintf
-              "\n[stderr truncated; full stderr saved to %s for later inspection]"
+              "\n\
+               [stderr truncated; full stderr saved to %s for later inspection]"
               path,
             head ^ "\n... (truncated)" )
       | None -> ("", stderr)
@@ -497,8 +507,97 @@ let shell_exec ~workspace ~workspace_only ~allowed_commands ~extra_allowed_paths
     Printf.sprintf "exit_code: %d\nstdout:\n%s%s\nstderr:\n%s%s" exit_code
       stdout_rendered stdout_note stderr_rendered stderr_note
   in
-  let run_command ?context:_ ?on_output_chunk args =
+  let should_interrupt interrupt_check =
+    match interrupt_check with
+    | Some check -> (
+        match check () with
+        | Some reason when reason <> Agent.queued_message_interrupt_token ->
+            true
+        | _ -> false)
+    | None -> false
+  in
+  let wait_for_interrupt interrupt_check =
+    let open Lwt.Syntax in
+    let rec loop () =
+      if should_interrupt interrupt_check then Lwt.return_unit
+      else
+        let* () = Lwt_unix.sleep 0.05 in
+        loop ()
+    in
+    loop ()
+  in
+  let run_process_with_timeout ?interrupt_check ?on_output_chunk ~cwd ~env ~cmd
+      ~timeout_secs () =
+    let open Lwt.Syntax in
+    let proc = Lwt_process.open_process_full ?cwd ~env cmd in
+    let stdout_buf = Buffer.create 1024 in
+    let stderr_buf = Buffer.create 256 in
+    let runner_result, runner_wakener = Lwt.wait () in
+    let finish_runner result =
+      if Lwt.is_sleeping runner_result then
+        Lwt.wakeup_later runner_wakener result
+    in
+    Lwt.async (fun () ->
+        Lwt.catch
+          (fun () ->
+            let* _ =
+              Lwt.both
+                (read_channel ?on_chunk:on_output_chunk proc#stdout stdout_buf)
+                (read_channel ?on_chunk:on_output_chunk proc#stderr stderr_buf)
+            in
+            let* status = proc#close in
+            let exit_code =
+              match status with
+              | Unix.WEXITED n -> n
+              | Unix.WSIGNALED n -> 128 + n
+              | Unix.WSTOPPED n -> 128 + n
+            in
+            finish_runner
+              (Ok
+                 (render_command_result ~exit_code
+                    ~stdout:(Buffer.contents stdout_buf)
+                    ~stderr:(Buffer.contents stderr_buf)));
+            Lwt.return_unit)
+          (fun exn ->
+            finish_runner (Error exn);
+            Lwt.return_unit));
+    let timeout =
+      let* () = Lwt_unix.sleep timeout_secs in
+      (try proc#kill Sys.sigkill with _ -> ());
+      let* _ = runner_result in
+      Lwt.return
+        (`Done
+           (Printf.sprintf "Error: command timed out after %.0f seconds"
+              timeout_secs))
+    in
+    let interrupt =
+      match interrupt_check with
+      | None -> fst (Lwt.wait ())
+      | Some _ ->
+          let* () = wait_for_interrupt interrupt_check in
+          (try proc#kill Sys.sigkill with _ -> ());
+          let* _ = runner_result in
+          Lwt.return (`Done "Command interrupted by user.")
+    in
+    let* outcome =
+      Lwt.pick
+        [
+          (let* result = runner_result in
+           Lwt.return (`Runner result));
+          timeout;
+          interrupt;
+        ]
+    in
+    match outcome with
+    | `Runner (Ok result) -> Lwt.return result
+    | `Runner (Error exn) -> Lwt.fail exn
+    | `Done result -> Lwt.return result
+  in
+  let run_command ?context ?on_output_chunk args =
     let open Yojson.Safe.Util in
+    let interrupt_check =
+      match context with Some c -> c.Tool.interrupt_check | None -> None
+    in
     let command = try args |> member "command" |> to_string with _ -> "" in
     let cwd_arg =
       try
@@ -549,41 +648,8 @@ let shell_exec ~workspace ~workspace_only ~allowed_commands ~extra_allowed_paths
           in
           let command = Sandbox.wrap_command sandbox command in
           let run_proc cmd =
-            let proc = Lwt_process.open_process_full ?cwd ~env cmd in
-            let timeout = Lwt_unix.sleep timeout_secs in
-            let stdout_buf = Buffer.create 1024 in
-            let stderr_buf = Buffer.create 256 in
-            let runner =
-              let* _ =
-                Lwt.both
-                  (read_channel ?on_chunk:on_output_chunk proc#stdout stdout_buf)
-                  (read_channel ?on_chunk:on_output_chunk proc#stderr stderr_buf)
-              in
-              let* status = proc#close in
-              let exit_code =
-                match status with
-                | Unix.WEXITED n -> n
-                | Unix.WSIGNALED n -> 128 + n
-                | Unix.WSTOPPED n -> 128 + n
-              in
-              Lwt.return
-                (render_command_result ~exit_code
-                   ~stdout:(Buffer.contents stdout_buf)
-                   ~stderr:(Buffer.contents stderr_buf))
-            in
-            let* result =
-              Lwt.pick
-                [
-                  runner;
-                  (let* () = timeout in
-                   proc#kill Sys.sigkill;
-                   Lwt.return
-                     (Printf.sprintf
-                        "Error: command timed out after %.0f seconds"
-                        timeout_secs));
-                ]
-            in
-            Lwt.return result
+            run_process_with_timeout ?interrupt_check ?on_output_chunk ~cwd ~env
+              ~cmd ~timeout_secs ()
           in
           if workspace_only then
             match split_command_words command with
@@ -2442,8 +2508,11 @@ let git_operations ~workspace =
           ("required", `List [ `String "operation" ]);
         ];
     invoke =
-      (fun ?context:_ args ->
+      (fun ?context args ->
         let open Yojson.Safe.Util in
+        let interrupt_check =
+          match context with Some c -> c.Tool.interrupt_check | None -> None
+        in
         let operation =
           try args |> member "operation" |> to_string with _ -> ""
         in
@@ -2501,7 +2570,7 @@ let git_operations ~workspace =
           in
           match build_argv () with
           | Error msg -> Lwt.return msg
-          | Ok argv ->
+          | Ok argv -> (
               (* Sanitize user-supplied inputs: paths and branch name.
                  The commit message is intentionally excluded — it is passed
                  as an execve argument, not interpreted by a shell, so shell
@@ -2526,34 +2595,75 @@ let git_operations ~workspace =
                 let proc =
                   Lwt_process.open_process_full ~cwd:workspace ~env cmd
                 in
-                let timeout = Lwt_unix.sleep 30.0 in
-                let* result =
+                let runner_result, runner_wakener = Lwt.wait () in
+                let finish_runner result =
+                  if Lwt.is_sleeping runner_result then
+                    Lwt.wakeup_later runner_wakener result
+                in
+                Lwt.async (fun () ->
+                    Lwt.catch
+                      (fun () ->
+                        let* stdout = Lwt_io.read proc#stdout in
+                        let* stderr = Lwt_io.read proc#stderr in
+                        let* status = proc#close in
+                        let exit_code =
+                          match status with
+                          | Unix.WEXITED n -> n
+                          | Unix.WSIGNALED n -> 128 + n
+                          | Unix.WSTOPPED n -> 128 + n
+                        in
+                        let output =
+                          (if stdout <> "" then stdout else "")
+                          ^ if stderr <> "" then stderr else ""
+                        in
+                        finish_runner
+                          (Ok
+                             (if exit_code = 0 then
+                                if output = "" then "(no output)" else output
+                              else
+                                Printf.sprintf "exit_code: %d\n%s" exit_code
+                                  output));
+                        Lwt.return_unit)
+                      (fun exn ->
+                        finish_runner (Error exn);
+                        Lwt.return_unit));
+                let timeout =
+                  let* () = Lwt_unix.sleep 30.0 in
+                  (try proc#kill Sys.sigkill with _ -> ());
+                  let* _ = runner_result in
+                  Lwt.return (`Done "Error: git timed out after 30 seconds")
+                in
+                let interrupt =
+                  match interrupt_check with
+                  | None -> fst (Lwt.wait ())
+                  | Some check ->
+                      let rec wait () =
+                        match check () with
+                        | Some reason
+                          when reason <> Agent.queued_message_interrupt_token ->
+                            Lwt.return_unit
+                        | _ ->
+                            let* () = Lwt_unix.sleep 0.05 in
+                            wait ()
+                      in
+                      let* () = wait () in
+                      (try proc#kill Sys.sigkill with _ -> ());
+                      let* _ = runner_result in
+                      Lwt.return (`Done "Git command interrupted by user.")
+                in
+                let* outcome =
                   Lwt.pick
                     [
-                      (let* stdout = Lwt_io.read proc#stdout in
-                       let* stderr = Lwt_io.read proc#stderr in
-                       let* status = proc#close in
-                       let exit_code =
-                         match status with
-                         | Unix.WEXITED n -> n
-                         | Unix.WSIGNALED n -> 128 + n
-                         | Unix.WSTOPPED n -> 128 + n
-                       in
-                       let output =
-                         (if stdout <> "" then stdout else "")
-                         ^ if stderr <> "" then stderr else ""
-                       in
-                       Lwt.return
-                         (if exit_code = 0 then
-                            if output = "" then "(no output)" else output
-                          else
-                            Printf.sprintf "exit_code: %d\n%s" exit_code output));
-                      (let* () = timeout in
-                       proc#kill Sys.sigkill;
-                       Lwt.return "Error: git timed out after 30 seconds");
+                      (let* result = runner_result in
+                       Lwt.return (`Runner result));
+                      timeout;
+                      interrupt;
                     ]
                 in
-                Lwt.return result);
+                match outcome with
+                | `Runner (Ok result) -> Lwt.return result
+                | `Runner (Error exn) -> Lwt.fail exn
+                | `Done result -> Lwt.return result));
     invoke_stream = None;
     risk_level = Medium;
     deferred = false;

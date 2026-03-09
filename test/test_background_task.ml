@@ -137,6 +137,7 @@ let test_enqueue_tool_uses_context_session_key () =
                {
                  Tool.session_key = Some "telegram:42:user";
                  send_progress = None;
+                 interrupt_check = None;
                }
              args)
       in
@@ -382,8 +383,12 @@ let test_command_of_task_codex_with_model () =
   Alcotest.(check (array string))
     "codex argv with model"
     [|
-      "codex"; "exec"; "--model"; "gpt-5.4";
-      "--dangerously-bypass-approvals-and-sandbox"; "ship it";
+      "codex";
+      "exec";
+      "--model";
+      "gpt-5.4";
+      "--dangerously-bypass-approvals-and-sandbox";
+      "ship it";
     |]
     (Background_task.command_of_task task)
 
@@ -412,8 +417,12 @@ let test_command_of_task_claude_with_model () =
   Alcotest.(check (array string))
     "claude argv with model"
     [|
-      "claude"; "-p"; "--model"; "claude-sonnet-4-6";
-      "--dangerously-skip-permissions"; "ship it";
+      "claude";
+      "-p";
+      "--model";
+      "claude-sonnet-4-6";
+      "--dangerously-skip-permissions";
+      "ship it";
     |]
     (Background_task.command_of_task task)
 
@@ -446,4 +455,3 @@ let suite =
     Alcotest.test_case "enqueue rejects non-git repo" `Quick
       test_enqueue_rejects_non_git_repo;
   ]
-
