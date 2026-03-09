@@ -132,6 +132,12 @@ let dispatch_resumed_message ?(senders = default_resume_senders)
       | None -> Lwt.return (Error "slack channel is not configured"))
   | _ -> Lwt.return (Error (Printf.sprintf "unsupported channel %s" channel))
 
+let resumed_dispatch_target ~session_key ~channel ~channel_id =
+  if session_key = "__main__" then
+    Printf.sprintf "session=%s route=main-via-%s:%s" session_key channel
+      channel_id
+  else Printf.sprintf "session=%s route=%s:%s" session_key channel channel_id
+
 let notify_resumed_session ?(senders = default_resume_senders)
     ~(session_manager : Session.t) ~(config : Runtime_config.t) ~session_key
     ~channel ~channel_id text =
@@ -164,6 +170,62 @@ let notify_resumed_session ?(senders = default_resume_senders)
               m "Resumed session notice dispatch failed for %s: %s" session_key
                 (Printexc.to_string exn));
           Lwt.return_unit)
+
+let post_dispatch_resumed_session_response
+    ?(continuation_delay = Session.default_autonomous_continuation_delay)
+    ?(senders = default_resume_senders)
+    ~(session_manager : Session.t) ~(config : Runtime_config.t) ~session_key
+    ~channel ~channel_id ~response () =
+  let trimmed = String.trim response in
+  let target = resumed_dispatch_target ~session_key ~channel ~channel_id in
+  Logs.info (fun m ->
+      m "Resume continuation evaluation starting %s response_len=%d" target
+        (String.length trimmed));
+  if trimmed = "" || trimmed = "HEARTBEAT_OK" then begin
+    Logs.info (fun m ->
+        m "Resume continuation stayed idle %s reason=no-follow-up-response"
+          target);
+    Lwt.return_unit
+  end
+  else if trimmed = Session.autonomous_stay_idle_message then begin
+    let open Lwt.Syntax in
+    let* () =
+      Session.process_autonomous_turn_result ~delay:continuation_delay
+        session_manager ~key:session_key ~response:trimmed
+    in
+    Logs.info (fun m ->
+        m "Resume continuation disarmed %s reason=agent-requested-idle" target);
+    Lwt.return_unit
+  end
+  else begin
+    let on_response follow_up =
+      let open Lwt.Syntax in
+      Logs.info (fun m ->
+          m "Resume continuation sending follow-up %s follow_up_len=%d" target
+            (String.length (String.trim follow_up)));
+      let* () =
+        if session_key = "__main__" then Lwt.return_unit
+        else
+          notify_resumed_session ~senders ~session_manager ~config ~session_key
+            ~channel ~channel_id follow_up
+      in
+      Logs.info (fun m ->
+          m "Resume continuation follow-up sent %s" target);
+      Lwt.return_unit
+    in
+    Lwt.async (fun () ->
+        Lwt.catch
+          (fun () ->
+            Session.process_autonomous_turn_result ~delay:continuation_delay
+              ~on_response session_manager ~key:session_key ~response:trimmed)
+          (fun exn ->
+            Logs.err (fun m ->
+                m "Resume continuation failed %s: %s" target
+                  (Printexc.to_string exn));
+            Lwt.return_unit));
+    Logs.info (fun m -> m "Resume continuation armed %s" target);
+    Lwt.return_unit
+  end
 
 let handle_heartbeat_response
     ?(continuation_delay = Session.default_autonomous_continuation_delay)
@@ -346,6 +408,9 @@ let resume_agent_session ?(senders = default_resume_senders) ?run_turn
     | None -> default_resume_turn ~session_manager ~notify ~session_key
   in
   let open Lwt.Syntax in
+  Logs.info (fun m ->
+      m "Resuming pending agent session %s"
+        (resumed_dispatch_target ~session_key ~channel ~channel_id));
   Session.with_session_lock session_manager ~key:session_key
     (fun agent interrupt ->
       let history_before = List.length agent.Agent.history in
@@ -361,6 +426,10 @@ let resume_agent_session ?(senders = default_resume_senders) ?run_turn
       in
       match dispatch_result with
       | Ok () ->
+          Logs.info (fun m ->
+              m "Resumed session response dispatched %s response_len=%d"
+                (resumed_dispatch_target ~session_key ~channel ~channel_id)
+                (String.length (String.trim response)));
           let* () = after_dispatch ~response in
           Session.clear_response_deferred session_manager ~key:session_key;
           Session.mark_response_sent session_manager ~key:session_key;
@@ -378,11 +447,9 @@ let resume_pending_agent_sessions ?(senders = default_resume_senders)
     | Some f -> f
     | None ->
         fun ~session_key ~channel ~channel_id ->
-          let after_dispatch =
-            if session_key = "__main__" then fun ~response ->
-              Session.process_autonomous_turn_result session_manager
-                ~key:session_key ~response
-            else fun ~response:_ -> Lwt.return_unit
+          let after_dispatch ~response =
+            post_dispatch_resumed_session_response ~senders ~session_manager
+              ~config ~session_key ~channel ~channel_id ~response ()
           in
           resume_agent_session ~senders ~after_dispatch ~session_manager ~config
             ~session_key ~channel ~channel_id ()

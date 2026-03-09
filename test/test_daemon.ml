@@ -492,6 +492,103 @@ let test_resume_pending_main_session_arms_autonomous_continuation () =
   Alcotest.(check bool) "main session not disarmed" false state.disarmed;
   Alcotest.(check bool) "continuation armed" true (Option.is_some state.cancel)
 
+let test_post_dispatch_resumed_routed_session_arms_and_sends_follow_up () =
+  let db = Memory.init ~db_path:":memory:" () in
+  let telegram_account =
+    { Runtime_config.bot_token = "tg-token"; allow_from = []; totp = None }
+  in
+  let config =
+    {
+      Runtime_config.default with
+      channels =
+        {
+          Runtime_config.default.channels with
+          telegram = Some { accounts = [ ("main", telegram_account) ] };
+        };
+    }
+  in
+  let session_manager = Session.create ~config ~db () in
+  let prompts = ref 0 in
+  let sent = ref [] in
+  Session.set_special_command_handler session_manager
+    (fun ~key ~message ~send_progress:_ ~interrupt_check:_ ->
+      if
+        key = "telegram:42:user"
+        && String.starts_with
+             ~prefix:Session.autonomous_continuation_prompt message
+      then begin
+        incr prompts;
+        if !prompts = 1 then Lwt.return_some "follow-up"
+        else Lwt.return_some Session.autonomous_stay_idle_message
+      end
+      else Lwt.return_none);
+  let senders =
+    {
+      Daemon.default_resume_senders with
+      send_telegram =
+        (fun ~bot_token:_ ~chat_id ~text ->
+          sent := (chat_id, text) :: !sent;
+          Lwt.return_unit);
+    }
+  in
+  Lwt_main.run
+    (let open Lwt.Syntax in
+     let* () =
+       Daemon.post_dispatch_resumed_session_response ~continuation_delay:0.02
+         ~senders ~session_manager ~config ~session_key:"telegram:42:user"
+         ~channel:"telegram" ~channel_id:"42" ~response:"continue_work" ()
+     in
+     let* () = Lwt_unix.sleep 0.08 in
+     Lwt.return_unit);
+  let state =
+    Hashtbl.find session_manager.Session.continuation_checks "telegram:42:user"
+  in
+  Alcotest.(check int) "continuation prompt ran twice" 2 !prompts;
+  Alcotest.(check (list (pair string string)))
+    "follow-up delivered to resumed telegram session"
+    [ ("42", "follow-up") ]
+    (List.rev !sent);
+  Alcotest.(check bool) "routed continuation disarmed after stay idle" true
+    state.disarmed
+
+let test_post_dispatch_resumed_routed_session_disarms_on_stay_idle () =
+  let db = Memory.init ~db_path:":memory:" () in
+  let telegram_account =
+    { Runtime_config.bot_token = "tg-token"; allow_from = []; totp = None }
+  in
+  let config =
+    {
+      Runtime_config.default with
+      channels =
+        {
+          Runtime_config.default.channels with
+          telegram = Some { accounts = [ ("main", telegram_account) ] };
+        };
+    }
+  in
+  let session_manager = Session.create ~config ~db () in
+  let sent = ref [] in
+  let senders =
+    {
+      Daemon.default_resume_senders with
+      send_telegram =
+        (fun ~bot_token:_ ~chat_id ~text ->
+          sent := (chat_id, text) :: !sent;
+          Lwt.return_unit);
+    }
+  in
+  Lwt_main.run
+    (Daemon.post_dispatch_resumed_session_response ~continuation_delay:0.02
+       ~senders ~session_manager ~config ~session_key:"telegram:42:user"
+       ~channel:"telegram" ~channel_id:"42"
+       ~response:Session.autonomous_stay_idle_message ());
+  let state =
+    Hashtbl.find session_manager.Session.continuation_checks "telegram:42:user"
+  in
+  Alcotest.(check bool) "stay idle disarms routed continuation" true
+    state.disarmed;
+  Alcotest.(check (list (pair string string))) "no follow-up sent" [] !sent
+
 let test_handle_heartbeat_response_keeps_idle_heartbeat_idle () =
   let db = Memory.init ~db_path:":memory:" () in
   let session_manager = Session.create ~config:Runtime_config.default ~db () in
@@ -701,6 +798,13 @@ let suite =
     Alcotest.test_case
       "resume pending main session arms autonomous continuation" `Quick
       test_resume_pending_main_session_arms_autonomous_continuation;
+    Alcotest.test_case
+      "post-dispatch resumed routed session sends continuation follow-up"
+      `Quick
+      test_post_dispatch_resumed_routed_session_arms_and_sends_follow_up;
+    Alcotest.test_case
+      "post-dispatch resumed routed session stays idle on STAY_IDLE" `Quick
+      test_post_dispatch_resumed_routed_session_disarms_on_stay_idle;
     Alcotest.test_case "heartbeat ok stays idle without continuation" `Quick
       test_handle_heartbeat_response_keeps_idle_heartbeat_idle;
     Alcotest.test_case "heartbeat STAY_IDLE disarms continuation" `Quick
