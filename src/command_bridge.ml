@@ -1442,14 +1442,17 @@ let parse_background_add_args args =
         | runner_s :: repo_path :: prompt_parts -> (
             match Background_task.runner_of_string runner_s with
             | None ->
-                Error "Runner must be one of: codex, claude (or claude-code)"
+                Error
+                  "Runner must be one of: codex, claude (or claude-code), \
+                   kimi, gemini, opencode, cursor (or cursor-cli)"
             | Some runner ->
                 let prompt = String.concat " " prompt_parts |> String.trim in
                 if prompt = "" then Error "Prompt is required"
                 else Ok { runner; model; repo_path; branch; prompt })
         | _ ->
             Error
-              "Usage: clawq background add <codex|claude> [--model <name>] \
+              "Usage: clawq background add \
+               <codex|claude|kimi|gemini|opencode|cursor> [--model <name>] \
                <repo> [--branch <name>] <prompt>")
     | "--model" :: value :: rest -> loop (Some value) branch positionals rest
     | "--branch" :: value :: rest -> loop model (Some value) positionals rest
@@ -1509,8 +1512,9 @@ let parse_delegate_args args =
         let goal = String.concat " " (List.rev positionals) |> String.trim in
         if goal = "" then
           Error
-            "Usage: clawq delegate [--runner auto|codex|claude] [--model \
-             <name>] [--repo <path>] [--branch <name>] <goal>"
+            "Usage: clawq delegate [--runner \
+             auto|kimi|opencode|codex|claude|gemini|cursor] [--model <name>] \
+             [--repo <path>] [--branch <name>] <goal>"
         else Ok { preferred_runner; model; repo_path; branch; goal }
     | "--runner" :: value :: rest ->
         let value = String.lowercase_ascii (String.trim value) in
@@ -1519,7 +1523,9 @@ let parse_delegate_args args =
           else Background_task.runner_of_string value
         in
         if value <> "auto" && preferred_runner = None then
-          Error "Runner must be one of: auto, codex, claude"
+          Error
+            "Runner must be one of: auto, codex, claude, kimi, gemini, \
+             opencode, cursor"
         else loop preferred_runner model repo_path branch positionals rest
     | "--model" :: value :: rest ->
         loop preferred_runner (Some value) repo_path branch positionals rest
@@ -1966,8 +1972,8 @@ let cmd_background args =
          tasks\n\
         \  background show <id>                                    - Show task \
          details\n\
-        \  background add <codex|claude> <repo> [--branch <name>] <prompt> - \
-         Queue a task\n\
+        \  background add <codex|claude|kimi|gemini|opencode|cursor> <repo> \
+         [--branch <name>] <prompt> - Queue a task\n\
         \  background wait <id> [--timeout <seconds>]              - Wait for \
          completion\n\
         \  background logs <id> [--lines N] [--offset N] [--follow] - Show \
@@ -2078,8 +2084,8 @@ let cmd_background args =
        and completed tasks\n\
       \  background show <id>                                    - Show task \
        details\n\
-      \  background add <codex|claude> <repo> [--branch <name>] <prompt> - \
-       Queue a worktree runner\n\
+      \  background add <codex|claude|kimi|gemini|opencode|cursor> <repo> \
+       [--branch <name>] <prompt> - Queue a worktree runner\n\
       \  background wait <id> [--timeout <seconds>]              - Wait for a \
        task to finish\n\
       \  background logs <id> [--lines N] [--offset N] [--follow] - Show task \

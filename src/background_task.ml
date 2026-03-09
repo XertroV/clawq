@@ -1,4 +1,4 @@
-type runner = Codex | Claude | Kimi | Gemini | Opencode
+type runner = Codex | Claude | Kimi | Gemini | Opencode | Cursor
 type status = Queued | Running | Succeeded | Failed | Cancelled
 
 type task = {
@@ -27,6 +27,7 @@ let string_of_runner = function
   | Kimi -> "kimi"
   | Gemini -> "gemini"
   | Opencode -> "opencode"
+  | Cursor -> "cursor"
 
 let runner_of_string s =
   match String.lowercase_ascii (String.trim s) with
@@ -35,6 +36,8 @@ let runner_of_string s =
   | "kimi" -> Some Kimi
   | "gemini" -> Some Gemini
   | "opencode" -> Some Opencode
+  | "cursor" | "cursor-cli" | "cursor_cli" | "cursor-agent" | "cursor_agent" ->
+      Some Cursor
   | _ -> None
 
 let string_of_status = function
@@ -63,6 +66,7 @@ let runner_binary = function
   | Kimi -> "kimi"
   | Gemini -> "gemini"
   | Opencode -> "opencode"
+  | Cursor -> "cursor-agent"
 
 let command_exists command =
   Sys.command
@@ -91,20 +95,21 @@ let runner_available runner = command_exists (runner_binary runner)
 let resolve_runner ?(check_available = true) ?preferred () =
   let available runner = (not check_available) || runner_available runner in
   match preferred with
-  | Some runner when available runner -> Ok runner
+  | Some runner when available runner -> Ok (runner, None)
   | Some runner ->
       Error
         (Printf.sprintf "Runner '%s' is not available in PATH"
            (string_of_runner runner))
-  | None when available Codex -> Ok Codex
-  | None when available Claude -> Ok Claude
-  | None when available Kimi -> Ok Kimi
-  | None when available Gemini -> Ok Gemini
-  | None when available Opencode -> Ok Opencode
+  | None when available Kimi -> Ok (Kimi, None)
+  | None when available Cursor -> Ok (Cursor, None)
+  | None when available Opencode -> Ok (Opencode, Some "zai-coding-plan/glm-5")
+  | None when available Codex -> Ok (Codex, None)
+  | None when available Claude -> Ok (Claude, None)
+  | None when available Gemini -> Ok (Gemini, None)
   | None ->
       Error
         "No supported background runner is available in PATH (looked for \
-         'codex', 'claude', 'kimi', 'gemini', and 'opencode')"
+         'kimi', 'cursor-agent', 'opencode', 'codex', 'claude', and 'gemini')"
 
 let default_branch_name id = Printf.sprintf "clawq-bg-%d" id
 
@@ -844,14 +849,18 @@ let delegate_enqueue ?context ?notify_cfg ?(check_available = true) ~db
           resolve_runner ~check_available ?preferred:preferred_runner ()
         with
         | Error _ as err -> err
-        | Ok runner -> (
+        | Ok (runner, auto_model) -> (
+            let effective_model =
+              match model with Some _ -> model | None -> auto_model
+            in
             let prompt = build_delegate_prompt ~goal in
             let session_key, channel, channel_id =
               routing_from_context ?context ?notify_cfg ()
             in
             match
-              enqueue ~db ~runner ?model ~repo_path:chosen_repo_path ~prompt
-                ?branch ?session_key ?channel ?channel_id ()
+              enqueue ~db ~runner ?model:effective_model
+                ~repo_path:chosen_repo_path ~prompt ?branch ?session_key
+                ?channel ?channel_id ()
             with
             | Ok id -> Ok (id, runner, chosen_repo_path)
             | Error _ as err -> err))
@@ -894,6 +903,13 @@ let command_of_task task =
   | Opencode ->
       Array.concat
         [ [| "opencode"; "run" |]; model_args "--model"; [| task.prompt |] ]
+  | Cursor ->
+      Array.concat
+        [
+          [| "cursor-agent"; "--print"; "--yolo"; "--trust" |];
+          model_args "--model";
+          [| task.prompt |];
+        ]
 
 let elapsed_string (task : task) =
   let now = Unix.gettimeofday () in
@@ -1276,10 +1292,10 @@ let enqueue_tool_with_notify ~notify_cfg ~db =
   {
     Tool.name = "background_task_enqueue";
     description =
-      "Queue a background Codex or Claude coding task in its own git worktree. \
-       Lower-level alternative to delegate — use when you need explicit \
-       control over runner, repo, branch, or model. Use delegate for simple \
-       'spawn a subagent' requests.";
+      "Queue a background coding task (Codex, Claude, Kimi, Gemini, Opencode, \
+       or Cursor) in its own git worktree. Lower-level alternative to delegate \
+       — use when you need explicit control over runner, repo, branch, or \
+       model. Use delegate for simple 'spawn a subagent' requests.";
     parameters_schema =
       `Assoc
         [
@@ -1299,6 +1315,7 @@ let enqueue_tool_with_notify ~notify_cfg ~db =
                             `String "kimi";
                             `String "gemini";
                             `String "opencode";
+                            `String "cursor";
                           ] );
                       ( "description",
                         `String
@@ -1320,7 +1337,8 @@ let enqueue_tool_with_notify ~notify_cfg ~db =
                       ("type", `String "string");
                       ( "description",
                         `String
-                          "Implementation prompt to hand to Codex or Claude." );
+                          "Implementation prompt to hand to the coding agent."
+                      );
                     ] );
                 ( "branch",
                   `Assoc
@@ -1372,8 +1390,8 @@ let enqueue_tool_with_notify ~notify_cfg ~db =
         match runner_of_string runner_s with
         | None ->
             Lwt.return
-              "Error: runner must be 'codex', 'claude', 'kimi', 'gemini', or \
-               'opencode'"
+              "Error: runner must be 'codex', 'claude', 'kimi', 'gemini', \
+               'opencode', or 'cursor'"
         | Some runner when String.trim repo_path = "" ->
             Lwt.return "Error: repo_path is required"
         | Some _ when String.trim prompt = "" ->
@@ -1608,10 +1626,10 @@ let delegate_tool_with_notify ?(check_available = true) ~db ~default_repo_path
     Tool.name = "delegate";
     description =
       "Delegate a coding task to a background subagent (Codex, Claude, Kimi, \
-       Gemini, or Opencode) that runs in its own git worktree. Use when asked \
-       to spawn subagents, use workers, or run tasks with a specific model \
-       (e.g. 'use haiku to ...', 'delegate to sonnet'). Auto-selects runner \
-       and repo by default.";
+       Gemini, Opencode, or Cursor) that runs in its own git worktree. Use \
+       when asked to spawn subagents, use workers, or run tasks with a \
+       specific model (e.g. 'use haiku to ...', 'delegate to sonnet'). \
+       Auto-selects runner and repo by default.";
     parameters_schema =
       `Assoc
         [
@@ -1641,12 +1659,13 @@ let delegate_tool_with_notify ?(check_available = true) ~db ~default_repo_path
                             `String "kimi";
                             `String "gemini";
                             `String "opencode";
+                            `String "cursor";
                           ] );
                       ( "description",
                         `String
-                          "Optional runner choice. 'auto' prefers Codex when \
-                           available, then Claude, then Kimi, then Gemini, \
-                           then Opencode." );
+                          "Optional runner choice. 'auto' prefers Kimi, then \
+                           Cursor, then Opencode (with zai-coding-plan/glm-5), \
+                           then Codex, then Claude, then Gemini." );
                     ] );
                 ( "repo_path",
                   `Assoc
@@ -1695,7 +1714,7 @@ let delegate_tool_with_notify ?(check_available = true) ~db ~default_repo_path
                     ( None,
                       Some
                         "runner must be 'auto', 'codex', 'claude', 'kimi', \
-                         'gemini', or 'opencode'" ))
+                         'gemini', 'opencode', or 'cursor'" ))
           with _ -> (None, None)
         in
         let repo_path =

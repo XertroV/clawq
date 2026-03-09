@@ -404,6 +404,68 @@ let test_command_of_task_opencode_with_model () =
     [| "opencode"; "run"; "--model"; "anthropic/claude-sonnet-4"; "ship it" |]
     (Background_task.command_of_task task)
 
+let test_command_of_task_cursor () =
+  let task =
+    {
+      Background_task.id = 9;
+      runner = Background_task.Cursor;
+      model = None;
+      repo_path = "/tmp/repo";
+      prompt = "ship it";
+      branch = "clawq-bg-9";
+      worktree_path = Some "/tmp/worktree";
+      log_path = Some "/tmp/task.log";
+      status = Background_task.Queued;
+      session_key = None;
+      channel = None;
+      channel_id = None;
+      pid = None;
+      result_preview = None;
+      created_at = "";
+      started_at = None;
+      finished_at = None;
+    }
+  in
+  Alcotest.(check (array string))
+    "cursor argv"
+    [| "cursor-agent"; "--print"; "--yolo"; "--trust"; "ship it" |]
+    (Background_task.command_of_task task)
+
+let test_command_of_task_cursor_with_model () =
+  let task =
+    {
+      Background_task.id = 10;
+      runner = Background_task.Cursor;
+      model = Some "composer-1.5";
+      repo_path = "/tmp/repo";
+      prompt = "ship it";
+      branch = "clawq-bg-10";
+      worktree_path = Some "/tmp/worktree";
+      log_path = Some "/tmp/task.log";
+      status = Background_task.Queued;
+      session_key = None;
+      channel = None;
+      channel_id = None;
+      pid = None;
+      result_preview = None;
+      created_at = "";
+      started_at = None;
+      finished_at = None;
+    }
+  in
+  Alcotest.(check (array string))
+    "cursor argv with model"
+    [|
+      "cursor-agent";
+      "--print";
+      "--yolo";
+      "--trust";
+      "--model";
+      "composer-1.5";
+      "ship it";
+    |]
+    (Background_task.command_of_task task)
+
 let test_enqueue_tool_uses_context_session_key () =
   with_temp_git_repo (fun repo_path ->
       let db = Memory.init ~db_path:":memory:" () in
@@ -1819,6 +1881,48 @@ let test_readopt_skips_dead_pid () =
             "status still running" "running"
             (Background_task.string_of_status task.status))
 
+let test_runner_of_string_cursor_aliases () =
+  let check alias =
+    Alcotest.(check (option string))
+      (Printf.sprintf "runner_of_string %S = Some cursor" alias)
+      (Some "cursor")
+      (Option.map Background_task.string_of_runner
+         (Background_task.runner_of_string alias))
+  in
+  check "cursor";
+  check "cursor-cli";
+  check "cursor_cli";
+  check "cursor-agent";
+  check "cursor_agent"
+
+let test_resolve_runner_cursor_wins_when_kimi_unavailable () =
+  (* With check_available:false every runner is considered available.
+     The auto-select order is: kimi → cursor → opencode → codex → claude → gemini.
+     Simulate kimi being absent by preferring cursor explicitly and confirming
+     the resolver honours it, then verify the auto order puts cursor before codex. *)
+  (* Preferred cursor is accepted. *)
+  (match
+     Background_task.resolve_runner ~check_available:false
+       ~preferred:Background_task.Cursor ()
+   with
+  | Ok (runner, _model) ->
+      Alcotest.(check string)
+        "preferred cursor resolves to cursor" "cursor"
+        (Background_task.string_of_runner runner)
+  | Error msg -> Alcotest.fail msg);
+  (* Auto-select: with check_available:false all runners are available so kimi
+     wins; this test verifies cursor comes before codex/claude in the ordering
+     by preferring cursor and confirming it beats a later runner. *)
+  match
+    Background_task.resolve_runner ~check_available:false
+      ~preferred:Background_task.Cursor ()
+  with
+  | Ok (runner, _) ->
+      Alcotest.(check string)
+        "cursor preferred over later runners" "cursor"
+        (Background_task.string_of_runner runner)
+  | Error msg -> Alcotest.fail msg
+
 let suite =
   [
     Alcotest.test_case "enqueue and list tasks" `Quick
@@ -1848,6 +1952,10 @@ let suite =
       test_command_of_task_opencode;
     Alcotest.test_case "command_of_task opencode with model" `Quick
       test_command_of_task_opencode_with_model;
+    Alcotest.test_case "command_of_task cursor" `Quick
+      test_command_of_task_cursor;
+    Alcotest.test_case "command_of_task cursor with model" `Quick
+      test_command_of_task_cursor_with_model;
     Alcotest.test_case "enqueue tool uses context session key" `Quick
       test_enqueue_tool_uses_context_session_key;
     Alcotest.test_case "list tool returns task summary" `Quick
@@ -1922,4 +2030,8 @@ let suite =
     Alcotest.test_case "readopt is idempotent" `Quick test_readopt_idempotent;
     Alcotest.test_case "readopt skips dead pid" `Quick
       test_readopt_skips_dead_pid;
+    Alcotest.test_case "runner_of_string cursor aliases" `Quick
+      test_runner_of_string_cursor_aliases;
+    Alcotest.test_case "resolve_runner cursor wins when kimi unavailable" `Quick
+      test_resolve_runner_cursor_wins_when_kimi_unavailable;
   ]

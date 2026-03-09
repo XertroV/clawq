@@ -183,8 +183,7 @@ let background_add_cmd =
   in
   let prompt = required_trailing_args 1 "PROMPT" in
   Cmd.v
-    (Cmd.info "add"
-       ~doc:"Queue a Codex or Claude background task for a repository.")
+    (Cmd.info "add" ~doc:"Queue a background coding task for a repository.")
     Term.(
       ret
         (const (fun runner repo model branch prompt ->
@@ -280,7 +279,7 @@ let background_cmd =
     ~default:Term.(ret (const (run "background") $ const []))
     (Cmd.info "background"
        ~doc:
-         "Manage background coding tasks that run Codex or Claude in git \
+         "Manage background coding tasks that run a coding agent in git \
           worktrees.")
     [
       background_list_cmd;
@@ -297,7 +296,10 @@ let delegate_cmd =
       value
       & opt (some string) None
       & info [ "runner" ] ~docv:"RUNNER"
-          ~doc:"Preferred runner: auto, codex, or claude.")
+          ~doc:
+            "Preferred runner: auto (kimi → cursor → \
+             opencode/zai-coding-plan/glm-5 → codex → claude → gemini), or \
+             explicit: kimi, opencode, codex, claude, gemini, cursor.")
   in
   let repo =
     Arg.(

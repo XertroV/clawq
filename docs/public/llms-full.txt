@@ -38,11 +38,11 @@ Every command below is invoked as `clawq COMMAND`. Run `clawq COMMAND --help` fo
 | `background` | Inspect and control background coding tasks (default: list) |
 | `background list` | List queued, running, and completed background tasks |
 | `background show ID` | Show detailed status for a background task |
-| `background add RUNNER [--model MODEL] REPO [--branch NAME] PROMPT` | Queue a Codex or Claude task in a git worktree |
+| `background add RUNNER [--model MODEL] REPO [--branch NAME] PROMPT` | Queue a background coding task (Codex, Claude, Kimi, Gemini, Opencode, or Cursor) in a git worktree |
 | `background wait ID [--timeout SECONDS]` | Wait for a background task to finish, then print its final status/result summary |
 | `background logs ID [--lines COUNT] [--offset LINE] [--follow/-f]` | Print the captured log for a background task; `--offset` reads forward from a line number, `--follow` tails live output (mutually exclusive) |
 | `background cancel ID` | Cancel a queued or running background task |
-| `delegate [--runner auto|codex|claude] [--model MODEL] [--repo PATH] [--branch NAME] GOAL` | High-level shortcut for handing off repository work as a background task with sensible defaults |
+| `delegate [--runner auto|kimi|opencode|codex|claude|gemini|cursor] [--model MODEL] [--repo PATH] [--branch NAME] GOAL` | High-level shortcut for handing off repository work as a background task with sensible defaults; auto order: kimi → cursor → opencode (zai-coding-plan/glm-5) → codex → claude → gemini |
 | `debug` | Internal debugging utilities |
 | `debug html-preview [PORT]` | Serve HTML preview test pages on localhost |
 | `doctor` | Check config for common issues |
@@ -288,11 +288,11 @@ You have up to 29 built-in tools. 14 are always registered; `web_search`, `send_
 | `memory_forget` | Delete a persistent memory by its exact key |
 | `memory_list` | List all persistent memories, optionally filtered by category |
 | `history_search` | Search your own session's chat history across current and archived epochs |
-| `background_task_enqueue` | Queue a background Codex/Claude task in a git worktree (lower-level; use delegate for simple requests) |
+| `background_task_enqueue` | Queue a background coding agent task (Codex/Claude/Kimi/Gemini/Opencode/Cursor) in a git worktree (lower-level; use delegate for simple requests) |
 | `background_task_list` | List background tasks or inspect a single task by id, including status, branch, log path, and result preview |
 | `background_task_wait` | Wait for a background task to finish (max 3 minutes). Returns status and re-wait instructions if the task is still running |
 | `background_task_logs` | Read the latest lines from a background task log file |
-| `delegate` | Delegate a coding task to a background subagent (Codex/Claude) in a git worktree. Use for 'spawn subagent'/'use haiku to ...' requests |
+| `delegate` | Delegate a coding task to a background subagent (Codex/Claude/Kimi/Gemini/Opencode/Cursor) in a git worktree. Use for 'spawn subagent'/'use haiku to ...' requests |
 | `background_task_cancel` | Cancel a queued or running background task |
 | `task_tree` | Track and organize work using a persistent hierarchical task tree. Survives context compaction, visible every turn. Operations: add, update, remove, clear, archive. Statuses: pending, in_progress, done, error, cancelled. Supports depth-based auto-nesting, lifecycle enforcement (parent can't be done until children are), and archiving completed subtrees |
 
