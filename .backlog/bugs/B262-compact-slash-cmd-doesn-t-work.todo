@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B262
+priority: high
+status: pending
+tags: []
+title: /compact slash cmd doesn't work at all or seem to do anything
+---
+
+/compact slash cmd doesn't work at all or seem to do anything

@@ -260,3 +260,4 @@ bugs:
     - file: B259-make-the-auto-check-in-period.todo
     - file: B260-compaction-sometimes-doesnt-se.todo
     - file: B261-tool-calls-aren-t-being-forwar.todo
+    - file: B262-compact-slash-cmd-doesn-t-work.todo
