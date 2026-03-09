@@ -75,15 +75,16 @@ let validate_repo_path repo_path =
 
 let runner_available runner = command_exists (runner_binary runner)
 
-let resolve_runner ?preferred () =
+let resolve_runner ?(check_available = true) ?preferred () =
+  let available runner = (not check_available) || runner_available runner in
   match preferred with
-  | Some runner when runner_available runner -> Ok runner
+  | Some runner when available runner -> Ok runner
   | Some runner ->
       Error
         (Printf.sprintf "Runner '%s' is not available in PATH"
            (string_of_runner runner))
-  | None when runner_available Codex -> Ok Codex
-  | None when runner_available Claude -> Ok Claude
+  | None when available Codex -> Ok Codex
+  | None when available Claude -> Ok Claude
   | None ->
       Error
         "No supported background runner is available in PATH (looked for \
@@ -504,8 +505,8 @@ let build_delegate_prompt ~goal =
        explicitly asked.";
     ]
 
-let delegate_enqueue ?context ?notify_cfg ~db ?preferred_runner ?model
-    ?repo_path ?branch ~default_repo_path ~goal () =
+let delegate_enqueue ?context ?notify_cfg ?(check_available = true) ~db
+    ?preferred_runner ?model ?repo_path ?branch ~default_repo_path ~goal () =
   let chosen_repo_path =
     match repo_path with
     | Some path when String.trim path <> "" -> path
@@ -517,7 +518,9 @@ let delegate_enqueue ?context ?notify_cfg ~db ?preferred_runner ?model
     match validate_repo_path chosen_repo_path with
     | Error _ as err -> err
     | Ok () -> (
-        match resolve_runner ?preferred:preferred_runner () with
+        match
+          resolve_runner ~check_available ?preferred:preferred_runner ()
+        with
         | Error _ as err -> err
         | Ok runner -> (
             let prompt = build_delegate_prompt ~goal in
@@ -1037,7 +1040,8 @@ let logs_tool ~db =
     deferred = false;
   }
 
-let delegate_tool_with_notify ~db ~default_repo_path ~notify_cfg () =
+let delegate_tool_with_notify ?(check_available = true) ~db ~default_repo_path
+    ~notify_cfg () =
   {
     Tool.name = "delegate";
     description =
@@ -1146,7 +1150,7 @@ let delegate_tool_with_notify ~db ~default_repo_path ~notify_cfg () =
           Lwt.return ("Error: " ^ Option.get runner_error)
         else
           match
-            delegate_enqueue ?context ?notify_cfg ~db
+            delegate_enqueue ?context ?notify_cfg ~check_available ~db
               ?preferred_runner:runner_pref ?model ?repo_path ?branch
               ~default_repo_path ~goal ()
           with
@@ -1162,8 +1166,9 @@ let delegate_tool_with_notify ~db ~default_repo_path ~notify_cfg () =
     deferred = false;
   }
 
-let delegate_tool ~db ~default_repo_path () =
-  delegate_tool_with_notify ~db ~default_repo_path ~notify_cfg:None ()
+let delegate_tool ?check_available ~db ~default_repo_path () =
+  delegate_tool_with_notify ?check_available ~db ~default_repo_path
+    ~notify_cfg:None ()
 
 let cancel_tool ~db =
   {

@@ -429,7 +429,10 @@ let test_delegate_tool_queues_task () =
   with_temp_git_repo (fun repo ->
       let db = Memory.init ~db_path:":memory:" () in
       Background_task.init_schema db;
-      let tool = Background_task.delegate_tool ~db ~default_repo_path:repo () in
+      let tool =
+        Background_task.delegate_tool ~check_available:false ~db
+          ~default_repo_path:repo ()
+      in
       let result =
         Lwt_main.run
           (tool.Tool.invoke
