@@ -141,6 +141,51 @@ let status_summary = function
   | Failed -> "failed"
   | Cancelled -> "cancelled"
 
+let parse_sqlite_datetime s =
+  try
+    Scanf.sscanf s "%d-%d-%d %d:%d:%d" (fun y mo d h mi s ->
+        let tm =
+          {
+            Unix.tm_sec = s;
+            tm_min = mi;
+            tm_hour = h;
+            tm_mday = d;
+            tm_mon = mo - 1;
+            tm_year = y - 1900;
+            tm_wday = 0;
+            tm_yday = 0;
+            tm_isdst = false;
+          }
+        in
+        fst (Unix.mktime tm))
+  with _ -> 0.0
+
+let format_elapsed_seconds secs =
+  let secs = max 0 (int_of_float secs) in
+  if secs < 60 then "<1m"
+  else
+    let mins = secs / 60 in
+    let hours = mins / 60 in
+    if hours = 0 then Printf.sprintf "%dm" mins
+    else if hours >= 2 then "2h+"
+    else Printf.sprintf "%dh%dm" hours (mins mod 60)
+
+let runtime_string (task : task) =
+  match task.started_at with
+  | None -> "-"
+  | Some started -> (
+      let start_time = parse_sqlite_datetime started in
+      if start_time <= 0.0 then "-"
+      else
+        let end_time =
+          match task.finished_at with
+          | Some finished ->
+              let t = parse_sqlite_datetime finished in
+              if t > 0.0 then t else Unix.gettimeofday ()
+          | None -> Unix.gettimeofday ()
+        in
+        format_elapsed_seconds (end_time -. start_time))
+
 let format_task_summary (task : task) =
   let branch = if task.branch = "" then "(auto)" else task.branch in
   let lines = ref [] in
@@ -152,6 +197,7 @@ let format_task_summary (task : task) =
       add (Printf.sprintf "model: %s" model)
   | _ -> ());
   add (Printf.sprintf "status: %s" (status_summary task.status));
+  add (Printf.sprintf "runtime: %s" (runtime_string task));
   add (Printf.sprintf "repo: %s" task.repo_path);
   add (Printf.sprintf "branch: %s" branch);
   add (Printf.sprintf "created_at: %s" task.created_at);
@@ -182,17 +228,18 @@ and format_task_list_with_hidden tasks hidden_count =
   if tasks = [] && hidden_count = 0 then "No background tasks."
   else
     let header =
-      Printf.sprintf "  %-4s %-8s %-8s %-18s %s" "ID" "RUNNER" "STATUS" "BRANCH"
-        "REPO"
+      Printf.sprintf "  %-4s %-8s %-8s %-8s %-18s %s" "ID" "RUNNER" "STATUS"
+        "RUNTIME" "BRANCH" "REPO"
     in
     let rows =
       List.map
         (fun (task : task) ->
           let branch = if task.branch = "" then "-" else task.branch in
-          Printf.sprintf "  %-4d %-8s %-8s %-18s %s" task.id
+          let runtime = runtime_string task in
+          Printf.sprintf "  %-4d %-8s %-8s %-8s %-18s %s" task.id
             (string_of_runner task.runner)
             (string_of_status task.status)
-            branch task.repo_path)
+            runtime branch task.repo_path)
         tasks
     in
     let footer =
@@ -851,35 +898,6 @@ let command_of_task task =
           model_args "--model";
           [| task.prompt |];
         ]
-
-let parse_sqlite_datetime s =
-  try
-    Scanf.sscanf s "%d-%d-%d %d:%d:%d" (fun y mo d h mi s ->
-        let tm =
-          {
-            Unix.tm_sec = s;
-            tm_min = mi;
-            tm_hour = h;
-            tm_mday = d;
-            tm_mon = mo - 1;
-            tm_year = y - 1900;
-            tm_wday = 0;
-            tm_yday = 0;
-            tm_isdst = false;
-          }
-        in
-        fst (Unix.mktime tm))
-  with _ -> 0.0
-
-let format_elapsed_seconds secs =
-  let secs = max 0 (int_of_float secs) in
-  if secs < 60 then "<1m"
-  else
-    let mins = secs / 60 in
-    let hours = mins / 60 in
-    if hours = 0 then Printf.sprintf "%dm" mins
-    else if hours >= 2 then "2h+"
-    else Printf.sprintf "%dh%dm" hours (mins mod 60)
 
 let elapsed_string (task : task) =
   let now = Unix.gettimeofday () in
