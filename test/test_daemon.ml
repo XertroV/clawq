@@ -492,6 +492,147 @@ let test_resume_pending_main_session_arms_autonomous_continuation () =
   Alcotest.(check bool) "main session not disarmed" false state.disarmed;
   Alcotest.(check bool) "continuation armed" true (Option.is_some state.cancel)
 
+let make_test_task ?(id = 9) ?(session_key = Some "telegram:42:user")
+    ?(channel = Some "telegram") ?(channel_id = Some "42") () :
+    Background_task.task =
+  {
+    id;
+    runner = Background_task.Codex;
+    model = Some "gpt-5.4";
+    repo_path = "/repo";
+    prompt = "investigate";
+    branch = Printf.sprintf "clawq-bg-%d" id;
+    worktree_path = Some (Printf.sprintf "/tmp/task-%d" id);
+    log_path = Some (Printf.sprintf "/tmp/task-%d.log" id);
+    status = Background_task.Succeeded;
+    session_key;
+    channel;
+    channel_id;
+    pid = None;
+    result_preview = Some "ok";
+    created_at = "2026-03-09 00:00:00";
+    started_at = Some "2026-03-09 00:00:01";
+    finished_at = Some "2026-03-09 00:00:02";
+  }
+
+let test_notify_background_task_finished_dispatches_and_injects_wakeup () =
+  let db = Memory.init ~db_path:":memory:" () in
+  let telegram_account =
+    { Runtime_config.bot_token = "tg-token"; allow_from = []; totp = None }
+  in
+  let config =
+    {
+      Runtime_config.default with
+      channels =
+        {
+          Runtime_config.default.channels with
+          telegram = Some { accounts = [ ("main", telegram_account) ] };
+        };
+    }
+  in
+  let session_manager = Session.create ~config ~db () in
+  let dispatched = ref None in
+  let injected = ref [] in
+  let senders =
+    {
+      Daemon.default_resume_senders with
+      send_telegram =
+        (fun ~bot_token ~chat_id ~text ->
+          dispatched := Some (bot_token, chat_id, text);
+          Lwt.return_unit);
+    }
+  in
+  Session.set_special_command_handler session_manager
+    (fun ~key ~message ~send_progress:_ ~interrupt_check:_ ->
+      if key = "telegram:42:user" then begin
+        injected := message :: !injected;
+        Lwt.return_some "woke up"
+      end
+      else Lwt.return_none);
+  let task = make_test_task () in
+  Lwt_main.run
+    (Daemon.notify_background_task_finished ~senders ~session_manager ~config
+       task);
+  Alcotest.(check (option (triple string string string)))
+    "telegram sender called"
+    (Some
+       ( "tg-token",
+         "42",
+         Background_task.status_message task ))
+    !dispatched;
+  match List.rev !injected with
+  | [ message ] ->
+      Alcotest.(check bool)
+        "automatic label present" true
+        (String.starts_with ~prefix:"[automatic background-task completion notice]"
+           message);
+      Alcotest.(check bool)
+        "mentions automatic wake-up" true
+        (try
+           ignore
+             (Str.search_forward
+                (Str.regexp_string "wakes in the same session")
+                message 0);
+           true
+         with Not_found -> false);
+      Alcotest.(check int)
+        "one automatic wake-up injection observed" 1 (List.length !injected)
+  | msgs ->
+      Alcotest.failf "expected exactly one injected wake-up message, got %d"
+        (List.length msgs)
+
+let test_notify_background_task_finished_queues_wakeup_when_session_busy () =
+  let db = Memory.init ~db_path:":memory:" () in
+  let config = Runtime_config.default in
+  let session_manager = Session.create ~config ~db () in
+  Session.register_channel_notifier session_manager ~key:"telegram:42:user"
+    (fun _ -> Lwt.return_unit);
+  let blocker, release = Lwt.wait () in
+  let seen = ref [] in
+  Session.set_special_command_handler session_manager
+    (fun ~key ~message ~send_progress:_ ~interrupt_check:_ ->
+      if key = "telegram:42:user" && message = "hold" then blocker
+      else if key = "telegram:42:user" then begin
+        seen := message :: !seen;
+        Lwt.return_some "processed"
+      end
+      else Lwt.return_none);
+  Lwt.async (fun () ->
+      let open Lwt.Syntax in
+      let* _ = Session.turn session_manager ~key:"telegram:42:user" ~message:"hold" () in
+      Lwt.return_unit);
+  Unix.sleepf 0.05;
+  let task = make_test_task ~id:12 () in
+  Lwt_main.run
+    (Daemon.notify_background_task_finished ~session_manager ~config task);
+  let wake_messages_before =
+    List.filter
+      (fun message ->
+        String.starts_with
+          ~prefix:"[automatic background-task completion notice]" message)
+      !seen
+  in
+  Alcotest.(check int)
+    "exactly one automatic wake-up injection observed" 1
+    (List.length wake_messages_before);
+  Lwt.wakeup_later release (Some "released");
+  Unix.sleepf 0.05;
+  let wake_messages =
+    List.filter
+      (fun message ->
+        String.starts_with
+          ~prefix:"[automatic background-task completion notice]" message)
+      !seen
+  in
+  match List.rev wake_messages with
+  | [ message ] ->
+      Alcotest.(check bool)
+        "queued automatic label present" true
+        (String.starts_with ~prefix:"[automatic background-task completion notice]"
+           message)
+  | msgs ->
+      Alcotest.failf "expected one queued wake-up message, got %d" (List.length msgs)
+
 let suite =
   [
     Alcotest.test_case "dispatch resumed message routes telegram" `Quick
@@ -501,6 +642,12 @@ let suite =
       test_resume_pending_agent_sessions_marks_missing_channel_info;
     Alcotest.test_case "resume agent session persists response and marks sent"
       `Quick test_resume_agent_session_persists_response_and_marks_sent;
+    Alcotest.test_case
+      "background completion dispatches and injects wake-up" `Quick
+      test_notify_background_task_finished_dispatches_and_injects_wakeup;
+    Alcotest.test_case
+      "background completion queues wake-up when session busy" `Quick
+      test_notify_background_task_finished_queues_wakeup_when_session_busy;
     Alcotest.test_case "resume agent session sends compaction notice" `Quick
       test_resume_agent_session_sends_compaction_notice;
     Alcotest.test_case
@@ -527,3 +674,4 @@ let suite =
     Alcotest.test_case "date banner logs on day rollover" `Quick
       test_maybe_emit_date_banner_logs_when_day_advances;
   ]
+
