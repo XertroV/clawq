@@ -1211,6 +1211,205 @@ let test_reorder_preserves_children () =
   in
   Alcotest.(check bool) "Root2 before Root1" true (root2_pos < root1_pos)
 
+let test_add_empty_parent_normalized_to_root () =
+  let db = fresh_db () in
+  let result =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [
+            ("op", `String "add");
+            ("title", `String "Root via empty parent");
+            ("parent", `String "");
+          ];
+      ]
+  in
+  (match result with Ok _ -> () | Error e -> Alcotest.fail e);
+  let tasks = Task_tree.load_tasks ~db ~session_key:"s1" in
+  Alcotest.(check int) "one task" 1 (List.length tasks);
+  Alcotest.(check (option string))
+    "root (no parent)" None (List.hd tasks).parent_id
+
+let test_add_whitespace_parent_normalized () =
+  let db = fresh_db () in
+  let result =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [
+            ("op", `String "add");
+            ("title", `String "Root via whitespace parent");
+            ("parent", `String "  ");
+          ];
+      ]
+  in
+  (match result with Ok _ -> () | Error e -> Alcotest.fail e);
+  let tasks = Task_tree.load_tasks ~db ~session_key:"s1" in
+  Alcotest.(check int) "one task" 1 (List.length tasks);
+  Alcotest.(check (option string))
+    "root (no parent)" None (List.hd tasks).parent_id
+
+let test_add_depth_overrides_invalid_parent () =
+  let db = fresh_db () in
+  let result =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [
+            ("op", `String "add");
+            ("title", `String "Root despite bad parent");
+            ("parent", `String "nonexistent");
+            ("depth", `Int 0);
+          ];
+      ]
+  in
+  (match result with Ok _ -> () | Error e -> Alcotest.fail e);
+  let tasks = Task_tree.load_tasks ~db ~session_key:"s1" in
+  Alcotest.(check int) "one task" 1 (List.length tasks);
+  Alcotest.(check (option string))
+    "root (depth 0 wins)" None (List.hd tasks).parent_id
+
+let test_add_batch_b237_scenario () =
+  let db = fresh_db () in
+  (* Reproduces the exact B237 bug scenario: depth carries intent, parent is noise *)
+  let result =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [
+            ("op", `String "add");
+            ("id", `String "plan");
+            ("title", `String "Plan");
+            ("parent", `String "");
+            ("depth", `Int 0);
+          ];
+        `Assoc
+          [
+            ("op", `String "add");
+            ("id", `String "step1");
+            ("title", `String "Step 1");
+            ("parent", `String "missing");
+            ("depth", `Int 1);
+          ];
+        `Assoc
+          [
+            ("op", `String "add");
+            ("id", `String "step1a");
+            ("title", `String "Step 1a");
+            ("parent", `String "");
+            ("depth", `Int 2);
+          ];
+        `Assoc
+          [
+            ("op", `String "add");
+            ("id", `String "step2");
+            ("title", `String "Step 2");
+            ("parent", `String "missing");
+            ("depth", `Int 1);
+          ];
+        `Assoc
+          [
+            ("op", `String "add");
+            ("id", `String "step3");
+            ("title", `String "Step 3");
+            ("depth", `Int 1);
+          ];
+      ]
+  in
+  (match result with Ok _ -> () | Error e -> Alcotest.fail e);
+  let tasks = Task_tree.load_tasks ~db ~session_key:"s1" in
+  Alcotest.(check int) "five tasks" 5 (List.length tasks);
+  let plan = List.find (fun t -> t.Task_tree.id = "plan") tasks in
+  let step1 = List.find (fun t -> t.Task_tree.id = "step1") tasks in
+  let step1a = List.find (fun t -> t.Task_tree.id = "step1a") tasks in
+  let step2 = List.find (fun t -> t.Task_tree.id = "step2") tasks in
+  let step3 = List.find (fun t -> t.Task_tree.id = "step3") tasks in
+  Alcotest.(check (option string)) "plan is root" None plan.parent_id;
+  Alcotest.(check (option string))
+    "step1 under plan" (Some "plan") step1.parent_id;
+  Alcotest.(check (option string))
+    "step1a under step1" (Some "step1") step1a.parent_id;
+  Alcotest.(check (option string))
+    "step2 under plan" (Some "plan") step2.parent_id;
+  Alcotest.(check (option string))
+    "step3 under plan" (Some "plan") step3.parent_id
+
+let test_add_depth_and_valid_parent_uses_depth () =
+  let db = fresh_db () in
+  (* First create a root task *)
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [
+            ("op", `String "add");
+            ("id", `String "root");
+            ("title", `String "Root");
+          ];
+      ]
+  in
+  (* Now add with both parent (valid) and depth 0 — depth should win *)
+  let result =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [
+            ("op", `String "add");
+            ("title", `String "New root despite valid parent");
+            ("parent", `String "root");
+            ("depth", `Int 0);
+          ];
+      ]
+  in
+  (match result with Ok _ -> () | Error e -> Alcotest.fail e);
+  let tasks = Task_tree.load_tasks ~db ~session_key:"s1" in
+  let new_task = List.find (fun t -> t.Task_tree.id <> "root") tasks in
+  Alcotest.(check (option string))
+    "depth 0 wins over valid parent" None new_task.parent_id
+
+let test_error_msg_parent_not_found_has_suggestion () =
+  let db = fresh_db () in
+  let result =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [
+            ("op", `String "add");
+            ("title", `String "Orphan");
+            ("parent", `String "nope");
+          ];
+      ]
+  in
+  match result with
+  | Ok _ -> Alcotest.fail "Expected error for missing parent"
+  | Error e ->
+      Alcotest.(check bool)
+        "error mentions suggestion" true
+        (try
+           ignore
+             (Str.search_forward
+                (Str.regexp_string "Omit both for a root task")
+                e 0);
+           true
+         with Not_found -> false)
+
+let test_error_msg_unknown_op_lists_valid () =
+  let db = fresh_db () in
+  let result =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [ `Assoc [ ("op", `String "foo") ] ]
+  in
+  match result with
+  | Ok _ -> Alcotest.fail "Expected error for unknown op"
+  | Error e ->
+      Alcotest.(check bool)
+        "error lists valid operations" true
+        (try
+           ignore
+             (Str.search_forward (Str.regexp_string "Valid operations:") e 0);
+           true
+         with Not_found -> false)
+
 let suite =
   [
     Alcotest.test_case "init_schema idempotent" `Quick
@@ -1276,4 +1475,17 @@ let suite =
       test_reorder_invalid_position;
     Alcotest.test_case "reorder preserves children" `Quick
       test_reorder_preserves_children;
+    Alcotest.test_case "empty parent normalized to root" `Quick
+      test_add_empty_parent_normalized_to_root;
+    Alcotest.test_case "whitespace parent normalized" `Quick
+      test_add_whitespace_parent_normalized;
+    Alcotest.test_case "depth overrides invalid parent" `Quick
+      test_add_depth_overrides_invalid_parent;
+    Alcotest.test_case "batch B237 scenario" `Quick test_add_batch_b237_scenario;
+    Alcotest.test_case "depth and valid parent uses depth" `Quick
+      test_add_depth_and_valid_parent_uses_depth;
+    Alcotest.test_case "error msg parent not found has suggestion" `Quick
+      test_error_msg_parent_not_found_has_suggestion;
+    Alcotest.test_case "error msg unknown op lists valid" `Quick
+      test_error_msg_unknown_op_lists_valid;
   ]

@@ -383,7 +383,8 @@ let do_add ~db ~session_key ~id ~parent_id ~title ~status ~note =
     Error
       (Printf.sprintf "Title too long (%d chars, max %d)" (String.length title)
          max_title_length)
-  else if String.length title = 0 then Error "Title is required for add"
+  else if String.length title = 0 then
+    Error "Title is required for add. Provide a 'title' field."
   else if count_tasks ~db ~session_key >= max_active_tasks then
     Error
       (Printf.sprintf "Too many active tasks (max %d). Archive or clear first."
@@ -393,7 +394,11 @@ let do_add ~db ~session_key ~id ~parent_id ~title ~status ~note =
       match id with Some i -> i | None -> next_auto_id ~db ~session_key
     in
     if id_exists ~db ~session_key ~id:actual_id then
-      Error (Printf.sprintf "Task ID '%s' already exists" actual_id)
+      Error
+        (Printf.sprintf
+           "Task ID '%s' already exists. Choose a different 'id' or omit it \
+            for auto-assignment."
+           actual_id)
     else
       let tasks = load_tasks ~db ~session_key in
       let parent_depth =
@@ -403,7 +408,10 @@ let do_add ~db ~session_key ~id ~parent_id ~title ~status ~note =
       in
       if parent_depth >= max_depth then
         Error
-          (Printf.sprintf "Max nesting depth exceeded (max %d levels)" max_depth)
+          (Printf.sprintf
+             "Max nesting depth exceeded (max %d levels). Flatten the \
+              hierarchy or archive completed subtrees first."
+             max_depth)
       else
         let parent_valid =
           match parent_id with
@@ -412,7 +420,11 @@ let do_add ~db ~session_key ~id ~parent_id ~title ~status ~note =
         in
         if not parent_valid then
           Error
-            (Printf.sprintf "Parent task '%s' not found" (Option.get parent_id))
+            (Printf.sprintf
+               "Parent task '%s' not found. Use 'depth' for batch tree \
+                building (depth 0 = root), or set 'parent' to an existing task \
+                ID. Omit both for a root task."
+               (Option.get parent_id))
         else begin
           let actual_status =
             match status with Some s -> s | None -> Pending
@@ -447,7 +459,12 @@ let do_add ~db ~session_key ~id ~parent_id ~title ~status ~note =
 let do_update ~db ~session_key ~id ~status ~note =
   let tasks = load_tasks ~db ~session_key in
   match List.find_opt (fun t -> t.id = id) tasks with
-  | None -> Error (Printf.sprintf "Task '%s' not found" id)
+  | None ->
+      Error
+        (Printf.sprintf
+           "Task '%s' not found. Check the ID against the current task tree — \
+            IDs are case-sensitive."
+           id)
   | Some task -> (
       match (status, note) with
       | None, None -> Error "Update requires at least status or note"
@@ -520,7 +537,12 @@ let do_update ~db ~session_key ~id ~status ~note =
 let do_remove ~db ~session_key ~id =
   let tasks = load_tasks ~db ~session_key in
   match List.find_opt (fun t -> t.id = id) tasks with
-  | None -> Error (Printf.sprintf "Task '%s' not found" id)
+  | None ->
+      Error
+        (Printf.sprintf
+           "Task '%s' not found. Check the ID against the current task tree — \
+            IDs are case-sensitive."
+           id)
   | Some _ ->
       let subtree_ids = get_subtree_ids ~tasks ~id in
       let has_in_progress =
@@ -635,7 +657,12 @@ let do_archive ~db ~session_key ~id =
   match id with
   | Some root_id -> (
       match List.find_opt (fun t -> t.id = root_id) tasks with
-      | None -> Error (Printf.sprintf "Task '%s' not found" root_id)
+      | None ->
+          Error
+            (Printf.sprintf
+               "Task '%s' not found. Check the ID against the current task \
+                tree — IDs are case-sensitive."
+               root_id)
       | Some _ -> archive_subtree root_id)
   | None ->
       (* Archive all fully-completed root trees *)
@@ -663,7 +690,12 @@ let do_archive ~db ~session_key ~id =
 let do_reorder ~db ~session_key ~id ~position =
   let tasks = load_tasks ~db ~session_key in
   match List.find_opt (fun t -> t.id = id) tasks with
-  | None -> Error (Printf.sprintf "Task '%s' not found" id)
+  | None ->
+      Error
+        (Printf.sprintf
+           "Task '%s' not found. Check the ID against the current task tree — \
+            IDs are case-sensitive."
+           id)
   | Some task -> (
       let siblings =
         List.filter (fun t -> t.parent_id = task.parent_id) tasks
@@ -770,7 +802,10 @@ let process_operations ~db ~session_key (ops : Yojson.Safe.t list) =
                     with _ -> None
                   in
                   let explicit_parent =
-                    try Some (op_json |> member "parent" |> to_string)
+                    try
+                      let p = op_json |> member "parent" |> to_string in
+                      let trimmed = String.trim p in
+                      if String.length trimmed = 0 then None else Some trimmed
                     with _ -> None
                   in
                   let depth =
@@ -791,41 +826,40 @@ let process_operations ~db ~session_key (ops : Yojson.Safe.t list) =
                     with _ -> None
                   in
                   match title with
-                  | None -> Error "Title is required for add"
+                  | None ->
+                      Error
+                        "Title is required for add. Provide a 'title' field."
                   | Some title -> (
                       let parent_id =
-                        match explicit_parent with
-                        | Some p -> Some p
-                        | None -> (
-                            match depth with
-                            | None | Some 0 -> None
-                            | Some d ->
-                                if d < 0 then None
-                                else
-                                  (* Check depth jump *)
-                                  let max_depth_in_stack =
-                                    match !depth_stack with
-                                    | [] -> -1
-                                    | _ ->
-                                        List.fold_left
-                                          (fun acc (lvl, _) -> max acc lvl)
-                                          (-1) !depth_stack
-                                  in
-                                  if d > max_depth_in_stack + 1 + 1 then
-                                    failwith
-                                      (Printf.sprintf
-                                         "depth %d skips levels — use depth %d \
-                                          first or set parent explicitly"
-                                         d
-                                         (max_depth_in_stack + 1 + 1))
-                                  else
-                                    (* Find parent at depth d-1 *)
-                                    let parent =
-                                      List.find_opt
-                                        (fun (lvl, _) -> lvl = d - 1)
-                                        !depth_stack
-                                    in
-                                    Option.map snd parent)
+                        match depth with
+                        | Some 0 -> None
+                        | Some d when d > 0 ->
+                            let max_depth_in_stack =
+                              match !depth_stack with
+                              | [] -> -1
+                              | _ ->
+                                  List.fold_left
+                                    (fun acc (lvl, _) -> max acc lvl)
+                                    (-1) !depth_stack
+                            in
+                            if d > max_depth_in_stack + 1 + 1 then
+                              failwith
+                                (Printf.sprintf
+                                   "depth %d skips levels — use depth %d first \
+                                    or set parent explicitly"
+                                   d
+                                   (max_depth_in_stack + 1 + 1))
+                            else
+                              let parent =
+                                List.find_opt
+                                  (fun (lvl, _) -> lvl = d - 1)
+                                  !depth_stack
+                              in
+                              Option.map snd parent
+                        | _ -> (
+                            match explicit_parent with
+                            | Some p -> Some p
+                            | None -> None)
                       in
                       let add_result =
                         do_add ~db ~session_key ~id:custom_id ~parent_id ~title
@@ -886,7 +920,10 @@ let process_operations ~db ~session_key (ops : Yojson.Safe.t list) =
                     with _ -> None
                   in
                   match id_str with
-                  | None -> Error "ID is required for update"
+                  | None ->
+                      Error
+                        "ID is required for update. Provide an 'id' field with \
+                         an existing task ID."
                   | Some id_str -> (
                       (* Support comma-separated IDs *)
                       let ids =
@@ -928,7 +965,10 @@ let process_operations ~db ~session_key (ops : Yojson.Safe.t list) =
                     with _ -> None
                   in
                   match id with
-                  | None -> Error "ID is required for remove"
+                  | None ->
+                      Error
+                        "ID is required for remove. Provide an 'id' field with \
+                         an existing task ID."
                   | Some id -> (
                       match do_remove ~db ~session_key ~id with
                       | Ok () ->
@@ -966,8 +1006,12 @@ let process_operations ~db ~session_key (ops : Yojson.Safe.t list) =
                     with _ -> None
                   in
                   match (id, position) with
-                  | None, _ -> Error "ID is required for reorder"
-                  | _, None -> Error "position is required for reorder"
+                  | None, _ ->
+                      Error "ID is required for reorder. Provide an 'id' field."
+                  | _, None ->
+                      Error
+                        "position is required for reorder. Use 'first', \
+                         'last', 'before:<id>', or 'after:<id>'."
                   | Some id, Some position -> (
                       match do_reorder ~db ~session_key ~id ~position with
                       | Ok () ->
@@ -976,7 +1020,12 @@ let process_operations ~db ~session_key (ops : Yojson.Safe.t list) =
                           Ok ()
                       | Error e -> Error e))
               | "" -> Error "Operation 'op' field is required"
-              | other -> Error (Printf.sprintf "Unknown operation '%s'" other)
+              | other ->
+                  Error
+                    (Printf.sprintf
+                       "Unknown operation '%s'. Valid operations: add, update, \
+                        remove, clear, archive, reorder."
+                       other)
             with Failure msg -> Error msg
           in
           match result with
@@ -1016,8 +1065,10 @@ let tool ~db : Tool.t =
        (completed), error (blocked/failed), cancelled (abandoned).\n\n\
        Adding tasks: Use 'depth' for easy tree building in a batch — depth 0 \
        is root, depth 1 nests under the last root, depth 2 under the last \
-       depth-1, etc. Or use 'parent' for explicit placement. Set 'id' for a \
-       memorable name, or let it auto-assign.\n\n\
+       depth-1, etc. Alternatively, use 'parent' (an existing task ID) for \
+       explicit placement without depth. When both are provided, depth takes \
+       priority. Omit both for a root task. Set 'id' for a memorable name, or \
+       let it auto-assign.\n\n\
        Updating: Set 'id' to a task ID and provide 'status' and/or 'note'. For \
        batch status updates, use comma-separated IDs.\n\n\
        Archiving: Use 'archive' to move fully completed subtrees to the \
@@ -1070,9 +1121,28 @@ let tool ~db : Tool.t =
                                       ] );
                                   ("id", `Assoc [ ("type", `String "string") ]);
                                   ( "parent",
-                                    `Assoc [ ("type", `String "string") ] );
+                                    `Assoc
+                                      [
+                                        ("type", `String "string");
+                                        ( "description",
+                                          `String
+                                            "ID of an existing task to nest \
+                                             under. Alternative to depth — \
+                                             when both are provided, depth \
+                                             takes priority. Omit for root \
+                                             tasks." );
+                                      ] );
                                   ( "depth",
-                                    `Assoc [ ("type", `String "integer") ] );
+                                    `Assoc
+                                      [
+                                        ("type", `String "integer");
+                                        ( "description",
+                                          `String
+                                            "Hierarchical level for batch tree \
+                                             building: 0 = root, 1 = child of \
+                                             last root, etc. Takes priority \
+                                             over parent." );
+                                      ] );
                                   ( "title",
                                     `Assoc [ ("type", `String "string") ] );
                                   ( "status",
