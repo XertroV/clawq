@@ -10,3 +10,5 @@ title: Agent should be able to search it's own session/chat log history (even fo
 ---
 
 Agent should be able to search it's own session/chat log history (even for archived epochs)
+
+Add a tool to handle this
