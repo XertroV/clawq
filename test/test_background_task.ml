@@ -462,6 +462,88 @@ let test_delegate_tool_queues_task () =
             (String.length task.prompt
             > String.length "implement the feature from TASK.md"))
 
+let test_routing_from_context_reads_env () =
+  let old_val =
+    try Some (Sys.getenv "CLAWQ_SESSION_ID") with Not_found -> None
+  in
+  Fun.protect
+    (fun () ->
+      Unix.putenv "CLAWQ_SESSION_ID" "telegram:99:testuser";
+      let session_key, channel, channel_id =
+        Background_task.routing_from_context ()
+      in
+      Alcotest.(check (option string))
+        "session_key from env" (Some "telegram:99:testuser") session_key;
+      Alcotest.(check (option string))
+        "channel from env" (Some "telegram") channel;
+      Alcotest.(check (option string))
+        "channel_id from env" (Some "99") channel_id)
+    ~finally:(fun () ->
+      match old_val with
+      | Some v -> Unix.putenv "CLAWQ_SESSION_ID" v
+      | None -> ( try Unix.putenv "CLAWQ_SESSION_ID" "" with _ -> ()))
+
+let test_routing_from_context_prefers_context_over_env () =
+  let old_val =
+    try Some (Sys.getenv "CLAWQ_SESSION_ID") with Not_found -> None
+  in
+  Fun.protect
+    (fun () ->
+      Unix.putenv "CLAWQ_SESSION_ID" "telegram:99:testuser";
+      let context =
+        {
+          Tool.session_key = Some "discord:77:guilduser";
+          send_progress = None;
+          interrupt_check = None;
+        }
+      in
+      let session_key, channel, channel_id =
+        Background_task.routing_from_context ~context ()
+      in
+      Alcotest.(check (option string))
+        "session_key from context" (Some "discord:77:guilduser") session_key;
+      Alcotest.(check (option string))
+        "channel from context" (Some "discord") channel;
+      Alcotest.(check (option string))
+        "channel_id from context" (Some "77") channel_id)
+    ~finally:(fun () ->
+      match old_val with
+      | Some v -> Unix.putenv "CLAWQ_SESSION_ID" v
+      | None -> ( try Unix.putenv "CLAWQ_SESSION_ID" "" with _ -> ()))
+
+let test_cmd_background_add_picks_up_session_env () =
+  with_temp_git_repo (fun repo_path ->
+      let old_val =
+        try Some (Sys.getenv "CLAWQ_SESSION_ID") with Not_found -> None
+      in
+      Fun.protect
+        (fun () ->
+          Unix.putenv "CLAWQ_SESSION_ID" "telegram:55:chatuser";
+          let db = Memory.init ~db_path:":memory:" () in
+          Background_task.init_schema db;
+          let result =
+            Background_task.enqueue ~db ~runner:Background_task.Codex ~repo_path
+              ~prompt:"test prompt" ~session_key:"telegram:55:chatuser"
+              ~channel:"telegram" ~channel_id:"55" ()
+          in
+          match result with
+          | Error msg -> Alcotest.fail msg
+          | Ok id -> (
+              match Background_task.get_task ~db ~id with
+              | None -> Alcotest.fail "expected task"
+              | Some task ->
+                  Alcotest.(check (option string))
+                    "session_key captured" (Some "telegram:55:chatuser")
+                    task.session_key;
+                  Alcotest.(check (option string))
+                    "channel captured" (Some "telegram") task.channel;
+                  Alcotest.(check (option string))
+                    "channel_id captured" (Some "55") task.channel_id))
+        ~finally:(fun () ->
+          match old_val with
+          | Some v -> Unix.putenv "CLAWQ_SESSION_ID" v
+          | None -> ( try Unix.putenv "CLAWQ_SESSION_ID" "" with _ -> ())))
+
 let test_enqueue_rejects_non_git_repo () =
   let db = Memory.init ~db_path:":memory:" () in
   Background_task.init_schema db;
@@ -588,4 +670,10 @@ let suite =
       test_delegate_tool_queues_task;
     Alcotest.test_case "enqueue rejects non-git repo" `Quick
       test_enqueue_rejects_non_git_repo;
+    Alcotest.test_case "routing_from_context reads CLAWQ_SESSION_ID env" `Quick
+      test_routing_from_context_reads_env;
+    Alcotest.test_case "routing_from_context prefers context over env" `Quick
+      test_routing_from_context_prefers_context_over_env;
+    Alcotest.test_case "cmd_background add picks up session env" `Quick
+      test_cmd_background_add_picks_up_session_env;
   ]

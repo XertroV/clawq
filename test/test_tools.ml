@@ -1025,6 +1025,42 @@ let test_extract_cd_prefix () =
     "just cd no &&" None
     (Tools_builtin.extract_cd_prefix "cd /tmp")
 
+let test_shell_exec_injects_session_id_env () =
+  with_temp_workspace (fun workspace ->
+      let sandbox =
+        Sandbox.create ~backend:Sandbox.None ~workspace ~extra_allowed_paths:[]
+          ~workspace_only:false ()
+      in
+      let tool =
+        Tools_builtin.shell_exec ~workspace ~workspace_only:false
+          ~allowed_commands:[] ~extra_allowed_paths:[] ~sandbox
+      in
+      let context =
+        {
+          Tool.session_key = Some "telegram:42:testuser";
+          send_progress = None;
+          interrupt_check = None;
+        }
+      in
+      let result =
+        Lwt_main.run
+          (tool.Tool.invoke ~context
+             (`Assoc [ ("command", `String "printenv CLAWQ_SESSION_ID") ]))
+      in
+      let contains s sub =
+        let slen = String.length s and nlen = String.length sub in
+        let rec loop i =
+          if i + nlen > slen then false
+          else if String.sub s i nlen = sub then true
+          else loop (i + 1)
+        in
+        nlen = 0 || loop 0
+      in
+      Alcotest.(check bool)
+        "output contains session id" true
+        (contains result "telegram:42:testuser");
+      Alcotest.(check bool) "exit code 0" true (contains result "exit_code: 0"))
+
 let test_shell_exec_cd_prefix_optimization () =
   with_temp_workspace (fun workspace ->
       let subdir = Filename.concat workspace "subdir" in
@@ -1160,4 +1196,6 @@ let suite =
       test_extract_cd_prefix;
     Alcotest.test_case "shell_exec cd prefix optimization sets cwd" `Quick
       test_shell_exec_cd_prefix_optimization;
+    Alcotest.test_case "shell_exec injects CLAWQ_SESSION_ID env" `Quick
+      test_shell_exec_injects_session_id_env;
   ]

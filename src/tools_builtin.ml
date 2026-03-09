@@ -777,7 +777,7 @@ let shell_exec ~workspace ~workspace_only ~allowed_commands ~extra_allowed_paths
               match cwd_result with
               | Error msg -> Lwt.return msg
               | Ok cwd -> (
-                  let env =
+                  let base_env =
                     if workspace_only then
                       [|
                         ("HOME="
@@ -788,6 +788,29 @@ let shell_exec ~workspace ~workspace_only ~allowed_commands ~extra_allowed_paths
                           with Not_found -> "/usr/bin:/bin");
                       |]
                     else Unix.environment ()
+                  in
+                  let env =
+                    match context with
+                    | Some c -> (
+                        match c.Tool.session_key with
+                        | Some sk ->
+                            let prefix = "CLAWQ_SESSION_ID=" in
+                            let var = prefix ^ sk in
+                            let replaced = ref false in
+                            let updated =
+                              Array.map
+                                (fun entry ->
+                                  if String.starts_with ~prefix entry then begin
+                                    replaced := true;
+                                    var
+                                  end
+                                  else entry)
+                                base_env
+                            in
+                            if !replaced then updated
+                            else Array.append base_env [| var |]
+                        | None -> base_env)
+                    | None -> base_env
                   in
                   let command = Sandbox.wrap_command sandbox command in
                   let run_proc cmd =

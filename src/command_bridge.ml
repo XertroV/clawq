@@ -953,11 +953,6 @@ type delegate_args = {
   goal : string;
 }
 
-let notify_route (cfg : Runtime_config.t) =
-  match cfg.notify with
-  | Some notify -> (Some notify.notify_channel, Some notify.notify_target)
-  | None -> (None, None)
-
 let path_is_git_repo path =
   Sys.command
     (Printf.sprintf "git -C %s rev-parse --is-inside-work-tree >/dev/null 2>&1"
@@ -1492,12 +1487,14 @@ let cmd_background args =
       match parse_background_add_args rest with
       | Error msg -> "Error: " ^ msg
       | Ok parsed -> (
-          let channel, channel_id = notify_route cfg in
+          let session_key, channel, channel_id =
+            Background_task.routing_from_context ?notify_cfg:cfg.notify ()
+          in
           match
             Background_task.enqueue ~db ~runner:parsed.runner
               ?model:parsed.model ~repo_path:parsed.repo_path
-              ~prompt:parsed.prompt ?branch:parsed.branch ?channel ?channel_id
-              ()
+              ~prompt:parsed.prompt ?branch:parsed.branch ?session_key ?channel
+              ?channel_id ()
           with
           | Ok id ->
               Printf.sprintf

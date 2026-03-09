@@ -293,6 +293,7 @@ Background delegation notes:
 - The `background` command family is the lower-level control surface: queue work, inspect task metadata, wait for completion, read captured logs, or cancel a run.
 - Background task worktrees live under `~/.clawq/background-worktrees/`.
 - Background task logs live under `~/.clawq/background-logs/`.
+- Session routing preservation: when `shell_exec` runs inside an active session (Telegram, Discord, etc.), it injects the `CLAWQ_SESSION_ID` env var into the child process. CLI subprocesses (e.g. `clawq background add`) read this variable to capture the originating session's routing metadata (session_key, channel, channel_id) on the task row, enabling completion notices to return to the originating channel. Standalone CLI launches without this env var fall back to static `notify` config or no routing.
 
 Security features:
 - Dual path safety: Coq-extracted pure check (PathSafety.v) AND OCaml realpath check — both must pass
