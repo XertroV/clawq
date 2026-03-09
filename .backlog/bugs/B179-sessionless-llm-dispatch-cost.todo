@@ -1,0 +1,11 @@
+---
+complexity: low
+depends_on: []
+estimate_hours: 1
+id: B179
+priority: medium
+status: pending
+tags: []
+title: Sessionless LLM dispatch/cost logs should include session ID
+---
+Observed in Telegram DM logs: tool result lines are tagged with the session key (for example `[telegram:58495225:58495225] Tool result: ...`) but adjacent LLM dispatch/cost lines are not. Examples: `LLM native stream dispatch provider=openai-codex model=gpt-5.4 msgs=133` and `Cost: model=gpt-5.4 prompt=81342 completion=32 cost=$0.000000 session_total=$0.0000` appeared without session tagging. Goal: ensure LLM request/stream dispatch and cost logs include the relevant session identifier when a turn is associated with a session, matching the observability quality of tool-result logs. Acceptance criteria: (1) LLM dispatch and cost lines include session ID where available; (2) logging remains correct for non-session contexts; (3) no secret leakage; (4) targeted verification/tests where practical.
