@@ -1,0 +1,11 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B232
+priority: medium
+status: pending
+tags: []
+title: Connector-native status/update rendering should be unified behind a reusable status framework
+---
+Multiple features now want rich connector-native status output: Telegram reactions, task-tree updates, busy-session notices, review progress, completion/error summaries, etc. Instead of one-off formatting paths per feature, clawq should have a reusable status/update abstraction with connector-specific renderers. Acceptance criteria: (1) identify a common abstraction for progress/state updates; (2) connector renderers can express the same status semantics appropriately for Telegram/Discord/etc; (3) new features can reuse the framework instead of inventing bespoke formatting paths; (4) the design reduces duplication and inconsistent UX across channels.
