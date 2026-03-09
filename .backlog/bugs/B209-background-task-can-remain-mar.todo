@@ -1,0 +1,11 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B209
+priority: high
+status: pending
+tags: []
+title: Background task can remain marked running while making no progress and without completion detection after restart
+---
+Live task 18 (codex) survived daemon restart and remained present as status=running, but its log stopped advancing around 03:46 local while the task row still reported running at 04:06. The codex subprocesses still existed, suggesting a stuck or wedged child rather than clean completion, and there was no daemon-side completion transition. Need to investigate liveness/completion detection for background tasks, especially across daemon restart: a task should not remain indefinitely marked running without progress, and restart should not strand completion bookkeeping. Acceptance criteria: (1) background tasks that wedge or lose output after restart are detectable; (2) completion/exit is observed reliably after daemon restart; (3) stale running tasks can be distinguished from healthy quiet tasks via heartbeat/progress/mtime or child-process checks; (4) tests or tight verification cover restart-adjacent behavior. Distinct from prior restart routing bugs; this is about background-task liveness/completion tracking.
