@@ -389,8 +389,9 @@ let default_resume_turn ~(session_manager : Session.t) ~notify ~session_key
   if compacted then
     Session.persist_compacted_history session_manager ~key:session_key agent;
   Logs.info (fun m ->
-      m "Resuming pending session with automatic prompt session=%s prompt=%S"
-        session_key resume_turn_prompt);
+      m "Firing automatic restart-resume prompt for session=%s prompt_len=%d"
+        session_key
+        (String.length resume_turn_prompt));
   agent.Agent.history <-
     Provider.make_message ~role:"system" ~content:resume_turn_prompt
     :: agent.Agent.history;
@@ -421,7 +422,7 @@ let resume_agent_session ?(senders = default_resume_senders) ?run_turn
   in
   let open Lwt.Syntax in
   Logs.info (fun m ->
-      m "Resuming pending agent session %s"
+      m "Automatic restart-resume: beginning resume sequence for %s"
         (resumed_dispatch_target ~session_key ~channel ~channel_id));
   Session.with_session_lock session_manager ~key:session_key
     (fun agent interrupt ->
