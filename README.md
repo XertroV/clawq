@@ -193,11 +193,11 @@ Run `clawq COMMAND --help` for per-command usage.
 # High-level handoff for a background coding run
 clawq delegate "implement the feature described in TODO.md"
 
-# Explicit runner/repo overrides when needed
-clawq delegate --runner codex --repo /path/to/repo "implement the feature described in TODO.md"
+# Explicit runner/repo/model overrides when needed
+clawq delegate --runner codex --model gpt-5.4 --repo /path/to/repo "implement the feature described in TODO.md"
 
 # Low-level queue command for the same flow
-clawq background add codex /path/to/repo "implement the feature described in TODO.md"
+clawq background add codex --model gpt-5.4 /path/to/repo "implement the feature described in TODO.md"
 
 # Queue a Claude task on a specific branch
 clawq background add claude /path/to/repo --branch clawq-experiment "fix failing tests and summarize the changes"
@@ -303,3 +303,5 @@ make fv-all
 
 ## Notes
 - The generated extraction file path is `src/extracted/clawq_core.ml`.
+
+When delegation quality matters, prefer `gpt-5.4` for Codex background work. Use `gpt-5.3-codex` when you specifically want the Codex-tuned path or need to mirror Codex OAuth defaults more closely.

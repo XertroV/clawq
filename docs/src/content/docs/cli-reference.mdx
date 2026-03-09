@@ -126,8 +126,8 @@ clawq capabilities     # list available features
 
 ```bash
 clawq delegate "implement the task from TASK.md"
-clawq delegate --runner codex --repo /path/to/repo "implement the task from TASK.md"
-clawq background add codex /path/to/repo "implement the task from TASK.md"
+clawq delegate --runner codex --model gpt-5.4 --repo /path/to/repo "implement the task from TASK.md"
+clawq background add codex --model gpt-5.4 /path/to/repo "implement the task from TASK.md"
 clawq background add claude /path/to/repo --branch clawq-fixup "repair the failing tests"
 clawq background list
 clawq background show 1
@@ -228,3 +228,5 @@ opam exec --switch=clawq-5.1 -- dune exec test/test_main.exe -- test command_bri
 # Run multiple indices or ranges
 opam exec --switch=clawq-5.1 -- dune exec test/test_main.exe -- test scheduler 0,3,8-10
 ```
+
+Prefer `gpt-5.4` for Codex delegation when quality matters. Use `gpt-5.3-codex` when you specifically want the Codex-tuned path or need to mirror Codex OAuth defaults.
