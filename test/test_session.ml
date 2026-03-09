@@ -48,6 +48,29 @@ let free_port () =
       | Unix.ADDR_INET (_, port) -> port
       | Unix.ADDR_UNIX _ -> Alcotest.fail "expected inet socket")
 
+let rec remove_path path =
+  try
+    if Sys.is_directory path then begin
+      Array.iter
+        (fun name -> remove_path (Filename.concat path name))
+        (Sys.readdir path);
+      Unix.rmdir path
+    end
+    else Sys.remove path
+  with Sys_error _ | Unix.Unix_error _ -> ()
+
+let run_command_or_fail ~label cmd =
+  match Sys.command cmd with
+  | 0 -> ()
+  | code -> Alcotest.failf "%s failed (exit %d): %s" label code cmd
+
+let with_temp_workspace f =
+  let base = Filename.get_temp_dir_name () in
+  let workspace = Filename.temp_file ~temp_dir:base "clawq_ws_" "" in
+  Sys.remove workspace;
+  Unix.mkdir workspace 0o755;
+  Fun.protect (fun () -> f workspace) ~finally:(fun () -> remove_path workspace)
+
 let make_fake_provider_config base_url : Runtime_config.provider_config =
   {
     api_key = "test-key";
@@ -1142,6 +1165,365 @@ let test_restore_sanitizes_orphaned_tool_results () =
   let persisted = Memory.load_history ~db ~session_key:"web:s1" in
   Alcotest.(check int) "sanitized history persisted" 1 (List.length persisted)
 
+let test_active_doc_write_persists_workspace_refresh_event () =
+  with_temp_workspace (fun workspace ->
+      let db = Memory.init ~db_path:":memory:" () in
+      let prompt =
+        { Runtime_config.default.prompt with workspace_files = [ "AGENTS.md" ] }
+      in
+      let config = { Runtime_config.default with workspace; prompt } in
+      let mgr = Session.create ~config ~db () in
+      let registry = Tool_registry.create () in
+      Tool_registry.register registry
+        (Tools_builtin.doc_write ~workspace ~workspace_files:[ "AGENTS.md" ]);
+      let agent = Agent.create ~config ~tool_registry:registry () in
+      let history_before = List.length agent.Agent.history in
+      let call =
+        {
+          Provider.id = "tc-doc-write";
+          function_name = "doc_write";
+          arguments =
+            Yojson.Safe.to_string
+              (`Assoc
+                 [
+                   ("filename", `String "AGENTS.md");
+                   ("content", `String "updated guidance");
+                 ]);
+        }
+      in
+      Lwt_main.run
+        (Agent.execute_tool_calls agent ~db:None ~audit_enabled:false
+           ~session_key:(Some "web:s1") [ call ]);
+      Session.persist_new_messages mgr ~key:"web:s1" ~history_before agent;
+      let persisted = Memory.load_history ~db ~session_key:"web:s1" in
+      Alcotest.(check int)
+        "tool result and refresh persisted" 2 (List.length persisted);
+      Alcotest.(check string)
+        "tool result role first" "tool" (List.nth persisted 0).Provider.role;
+      Alcotest.(check string)
+        "refresh role second" "event" (List.nth persisted 1).Provider.role;
+      Alcotest.(check bool)
+        "refresh mentions file" true
+        (string_contains (List.nth persisted 1).Provider.content "AGENTS.md"))
+
+let test_active_file_write_persists_workspace_refresh_event () =
+  with_temp_workspace (fun workspace ->
+      let db = Memory.init ~db_path:":memory:" () in
+      let prompt =
+        { Runtime_config.default.prompt with workspace_files = [ "AGENTS.md" ] }
+      in
+      let config = { Runtime_config.default with workspace; prompt } in
+      let mgr = Session.create ~config ~db () in
+      let registry = Tool_registry.create () in
+      Tool_registry.register registry
+        (Tools_builtin.file_write ~workspace ~workspace_only:true
+           ~extra_allowed_paths:[]);
+      let agent = Agent.create ~config ~tool_registry:registry () in
+      let history_before = List.length agent.Agent.history in
+      let call =
+        {
+          Provider.id = "tc-file-write";
+          function_name = "file_write";
+          arguments =
+            Yojson.Safe.to_string
+              (`Assoc
+                 [
+                   ("path", `String "AGENTS.md");
+                   ("content", `String "updated guidance");
+                 ]);
+        }
+      in
+      Lwt_main.run
+        (Agent.execute_tool_calls agent ~db:None ~audit_enabled:false
+           ~session_key:(Some "web:s1") [ call ]);
+      Session.persist_new_messages mgr ~key:"web:s1" ~history_before agent;
+      let persisted = Memory.load_history ~db ~session_key:"web:s1" in
+      Alcotest.(check int)
+        "tool result and refresh persisted for file_write" 2
+        (List.length persisted);
+      Alcotest.(check string)
+        "refresh role second" "event" (List.nth persisted 1).Provider.role;
+      Alcotest.(check bool)
+        "refresh mentions file" true
+        (string_contains (List.nth persisted 1).Provider.content "AGENTS.md"))
+
+let test_active_file_write_with_equivalent_path_persists_workspace_refresh_event
+    () =
+  with_temp_workspace (fun workspace ->
+      let db = Memory.init ~db_path:":memory:" () in
+      let prompt =
+        { Runtime_config.default.prompt with workspace_files = [ "AGENTS.md" ] }
+      in
+      let config = { Runtime_config.default with workspace; prompt } in
+      let mgr = Session.create ~config ~db () in
+      let registry = Tool_registry.create () in
+      Tool_registry.register registry
+        (Tools_builtin.file_write ~workspace ~workspace_only:true
+           ~extra_allowed_paths:[]);
+      let agent = Agent.create ~config ~tool_registry:registry () in
+      let history_before = List.length agent.Agent.history in
+      let call =
+        {
+          Provider.id = "tc-file-write-dot";
+          function_name = "file_write";
+          arguments =
+            Yojson.Safe.to_string
+              (`Assoc
+                 [
+                   ("path", `String "./AGENTS.md");
+                   ("content", `String "updated guidance");
+                 ]);
+        }
+      in
+      Lwt_main.run
+        (Agent.execute_tool_calls agent ~db:None ~audit_enabled:false
+           ~session_key:(Some "web:s1") [ call ]);
+      Session.persist_new_messages mgr ~key:"web:s1" ~history_before agent;
+      let persisted = Memory.load_history ~db ~session_key:"web:s1" in
+      Alcotest.(check int)
+        "tool result and refresh persisted for equivalent file_write path" 2
+        (List.length persisted);
+      Alcotest.(check string)
+        "refresh role second" "event" (List.nth persisted 1).Provider.role;
+      Alcotest.(check bool)
+        "refresh mentions normalized file" true
+        (string_contains (List.nth persisted 1).Provider.content "AGENTS.md"))
+
+let test_shell_exec_persists_workspace_refresh_event_for_active_file_update () =
+  with_temp_workspace (fun workspace ->
+      let db = Memory.init ~db_path:":memory:" () in
+      let prompt =
+        { Runtime_config.default.prompt with workspace_files = [ "AGENTS.md" ] }
+      in
+      let config = { Runtime_config.default with workspace; prompt } in
+      let mgr = Session.create ~config ~db () in
+      let registry = Tool_registry.create () in
+      let sandbox =
+        Sandbox.create ~backend:Sandbox.None ~workspace ~extra_allowed_paths:[]
+          ~workspace_only:true ()
+      in
+      Tool_registry.register registry
+        (Tools_builtin.shell_exec ~workspace ~workspace_only:true
+           ~allowed_commands:[ "touch" ] ~extra_allowed_paths:[] ~sandbox);
+      let agent = Agent.create ~config ~tool_registry:registry () in
+      let history_before = List.length agent.Agent.history in
+      let call =
+        {
+          Provider.id = "tc-shell-touch";
+          function_name = "shell_exec";
+          arguments =
+            Yojson.Safe.to_string
+              (`Assoc [ ("command", `String "touch AGENTS.md") ]);
+        }
+      in
+      Lwt_main.run
+        (Agent.execute_tool_calls agent ~db:None ~audit_enabled:false
+           ~session_key:(Some "web:s1") [ call ]);
+      Session.persist_new_messages mgr ~key:"web:s1" ~history_before agent;
+      let persisted = Memory.load_history ~db ~session_key:"web:s1" in
+      Alcotest.(check int)
+        "tool result and refresh persisted for shell active file update" 2
+        (List.length persisted);
+      Alcotest.(check string)
+        "refresh role second" "event" (List.nth persisted 1).Provider.role;
+      Alcotest.(check bool)
+        "refresh mentions shell-updated file" true
+        (string_contains (List.nth persisted 1).Provider.content "AGENTS.md"))
+
+let test_git_operations_checkout_persists_workspace_refresh_event () =
+  with_temp_workspace (fun workspace ->
+      run_command_or_fail ~label:"git init"
+        (Printf.sprintf "git -C %s init -q" (Filename.quote workspace));
+      run_command_or_fail ~label:"git config email"
+        (Printf.sprintf "git -C %s config user.email test@example.com"
+           (Filename.quote workspace));
+      run_command_or_fail ~label:"git config name"
+        (Printf.sprintf "git -C %s config user.name Test"
+           (Filename.quote workspace));
+      let agents_path = Filename.concat workspace "AGENTS.md" in
+      let oc = open_out agents_path in
+      output_string oc "base guidance\n";
+      close_out oc;
+      run_command_or_fail ~label:"git add"
+        (Printf.sprintf "git -C %s add AGENTS.md" (Filename.quote workspace));
+      run_command_or_fail ~label:"git commit"
+        (Printf.sprintf "git -C %s commit -q -m init" (Filename.quote workspace));
+      let oc = open_out agents_path in
+      output_string oc "changed guidance\n";
+      close_out oc;
+      let db = Memory.init ~db_path:":memory:" () in
+      let prompt =
+        { Runtime_config.default.prompt with workspace_files = [ "AGENTS.md" ] }
+      in
+      let config = { Runtime_config.default with workspace; prompt } in
+      let mgr = Session.create ~config ~db () in
+      let registry = Tool_registry.create () in
+      Tool_registry.register registry (Tools_builtin.git_operations ~workspace);
+      let agent = Agent.create ~config ~tool_registry:registry () in
+      let history_before = List.length agent.Agent.history in
+      let call =
+        {
+          Provider.id = "tc-git-checkout";
+          function_name = "git_operations";
+          arguments =
+            Yojson.Safe.to_string
+              (`Assoc
+                 [
+                   ("operation", `String "checkout");
+                   ("paths", `List [ `String "AGENTS.md" ]);
+                 ]);
+        }
+      in
+      Lwt_main.run
+        (Agent.execute_tool_calls agent ~db:None ~audit_enabled:false
+           ~session_key:(Some "web:s1") [ call ]);
+      Session.persist_new_messages mgr ~key:"web:s1" ~history_before agent;
+      let persisted = Memory.load_history ~db ~session_key:"web:s1" in
+      Alcotest.(check int)
+        "tool result and refresh persisted for git checkout active file update"
+        2 (List.length persisted);
+      Alcotest.(check string)
+        "refresh role second" "event" (List.nth persisted 1).Provider.role;
+      Alcotest.(check bool)
+        "refresh mentions git-updated file" true
+        (string_contains (List.nth persisted 1).Provider.content "AGENTS.md"))
+
+let test_batched_active_workspace_updates_attribute_refresh_per_tool_call () =
+  with_temp_workspace (fun workspace ->
+      let db = Memory.init ~db_path:":memory:" () in
+      let prompt =
+        {
+          Runtime_config.default.prompt with
+          workspace_files = [ "AGENTS.md"; "CLAUDE.md" ];
+        }
+      in
+      let config = { Runtime_config.default with workspace; prompt } in
+      let mgr = Session.create ~config ~db () in
+      let registry = Tool_registry.create () in
+      Tool_registry.register registry
+        (Tools_builtin.file_write ~workspace ~workspace_only:true
+           ~extra_allowed_paths:[]);
+      let agent = Agent.create ~config ~tool_registry:registry () in
+      let history_before = List.length agent.Agent.history in
+      let calls =
+        [
+          {
+            Provider.id = "tc-file-write-agents";
+            function_name = "file_write";
+            arguments =
+              Yojson.Safe.to_string
+                (`Assoc
+                   [
+                     ("path", `String "AGENTS.md");
+                     ("content", `String "agents guidance");
+                   ]);
+          };
+          {
+            Provider.id = "tc-file-write-claude";
+            function_name = "file_write";
+            arguments =
+              Yojson.Safe.to_string
+                (`Assoc
+                   [
+                     ("path", `String "CLAUDE.md");
+                     ("content", `String "claude guidance");
+                   ]);
+          };
+        ]
+      in
+      Lwt_main.run
+        (Agent.execute_tool_calls agent ~db:None ~audit_enabled:false
+           ~session_key:(Some "web:s1") calls);
+      Session.persist_new_messages mgr ~key:"web:s1" ~history_before agent;
+      let persisted = Memory.load_history ~db ~session_key:"web:s1" in
+      Alcotest.(check int)
+        "two tool results and two refresh events persisted" 4
+        (List.length persisted);
+      Alcotest.(check string)
+        "first refresh mentions AGENTS only"
+        "[workspace context refreshed after active workspace file update: \
+         AGENTS.md]"
+        (List.nth persisted 1).Provider.content;
+      Alcotest.(check string)
+        "second refresh mentions CLAUDE only"
+        "[workspace context refreshed after active workspace file update: \
+         CLAUDE.md]"
+        (List.nth persisted 3).Provider.content)
+
+let test_workspace_refresh_event_does_not_enter_live_prompt () =
+  with_temp_workspace (fun workspace ->
+      let prompt =
+        { Runtime_config.default.prompt with workspace_files = [ "AGENTS.md" ] }
+      in
+      let config = { Runtime_config.default with workspace; prompt } in
+      let registry = Tool_registry.create () in
+      Tool_registry.register registry
+        (Tools_builtin.doc_write ~workspace ~workspace_files:[ "AGENTS.md" ]);
+      let agent = Agent.create ~config ~tool_registry:registry () in
+      let call =
+        {
+          Provider.id = "tc-doc-write";
+          function_name = "doc_write";
+          arguments =
+            Yojson.Safe.to_string
+              (`Assoc
+                 [
+                   ("filename", `String "AGENTS.md");
+                   ("content", `String "updated guidance");
+                 ]);
+        }
+      in
+      Lwt_main.run
+        (Agent.execute_tool_calls agent ~db:None ~audit_enabled:false
+           ~session_key:(Some "web:s1") [ call ]);
+      let msgs = Agent.build_messages agent in
+      let system_msg =
+        List.find (fun (msg : Provider.message) -> msg.role = "system") msgs
+      in
+      Alcotest.(check bool)
+        "refresh marker not injected into live prompt" false
+        (string_contains system_msg.content
+           "workspace context refreshed after active workspace file update");
+      Alcotest.(check bool)
+        "event role omitted from live messages" false
+        (List.exists (fun (msg : Provider.message) -> msg.role = "event") msgs))
+
+let test_non_active_doc_write_does_not_persist_workspace_refresh_event () =
+  with_temp_workspace (fun workspace ->
+      let db = Memory.init ~db_path:":memory:" () in
+      let prompt =
+        { Runtime_config.default.prompt with workspace_files = [ "AGENTS.md" ] }
+      in
+      let config = { Runtime_config.default with workspace; prompt } in
+      let mgr = Session.create ~config ~db () in
+      let registry = Tool_registry.create () in
+      Tool_registry.register registry
+        (Tools_builtin.doc_write ~workspace ~workspace_files:[ "AGENTS.md" ]);
+      let agent = Agent.create ~config ~tool_registry:registry () in
+      let history_before = List.length agent.Agent.history in
+      let call =
+        {
+          Provider.id = "tc-doc-write-other";
+          function_name = "doc_write";
+          arguments =
+            Yojson.Safe.to_string
+              (`Assoc
+                 [
+                   ("filename", `String "NOTES.md");
+                   ("content", `String "scratchpad");
+                 ]);
+        }
+      in
+      Lwt_main.run
+        (Agent.execute_tool_calls agent ~db:None ~audit_enabled:false
+           ~session_key:(Some "web:s1") [ call ]);
+      Session.persist_new_messages mgr ~key:"web:s1" ~history_before agent;
+      let persisted = Memory.load_history ~db ~session_key:"web:s1" in
+      Alcotest.(check int)
+        "only tool result persisted" 1 (List.length persisted);
+      Alcotest.(check string)
+        "only tool result role" "tool" (List.hd persisted).Provider.role)
+
 let test_autonomous_continuation_stays_idle_disarms () =
   let continuation_calls = ref 0 in
   let response_for_user message =
@@ -1518,6 +1900,29 @@ let suite =
       test_mid_turn_injection_adds_to_history;
     Alcotest.test_case "restore sanitizes orphaned tool results" `Quick
       test_restore_sanitizes_orphaned_tool_results;
+    Alcotest.test_case "active doc_write persists workspace refresh event"
+      `Quick test_active_doc_write_persists_workspace_refresh_event;
+    Alcotest.test_case "active file_write persists workspace refresh event"
+      `Quick test_active_file_write_persists_workspace_refresh_event;
+    Alcotest.test_case
+      "active file_write equivalent path persists workspace refresh event"
+      `Quick
+      test_active_file_write_with_equivalent_path_persists_workspace_refresh_event;
+    Alcotest.test_case
+      "shell_exec persists workspace refresh event for active file update"
+      `Quick
+      test_shell_exec_persists_workspace_refresh_event_for_active_file_update;
+    Alcotest.test_case
+      "git checkout persists workspace refresh event for active file update"
+      `Quick test_git_operations_checkout_persists_workspace_refresh_event;
+    Alcotest.test_case
+      "batched active workspace updates attribute refresh per tool call" `Quick
+      test_batched_active_workspace_updates_attribute_refresh_per_tool_call;
+    Alcotest.test_case
+      "non-active doc_write does not persist workspace refresh event" `Quick
+      test_non_active_doc_write_does_not_persist_workspace_refresh_event;
+    Alcotest.test_case "workspace refresh event does not enter live prompt"
+      `Quick test_workspace_refresh_event_does_not_enter_live_prompt;
     Alcotest.test_case "drain progress callbacks fire for queued messages"
       `Quick test_drain_progress_callbacks_fire_for_queued_messages;
     Alcotest.test_case "drain progress not called when no queued messages"

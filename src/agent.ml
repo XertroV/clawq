@@ -40,6 +40,13 @@ let create ~config ?tool_registry () =
   let system_prompt = Prompt_builder.build ~config ~tool_registry () in
   { history = []; config; system_prompt; tool_registry }
 
+let is_session_event_message (msg : Provider.message) = msg.role = "event"
+
+let runtime_history_messages history =
+  List.filter
+    (fun (msg : Provider.message) -> not (is_session_event_message msg))
+    history
+
 let inject_runtime_context messages runtime_context =
   let rec loop rev_prefix = function
     | [] -> List.rev rev_prefix
@@ -56,7 +63,7 @@ let build_messages ?runtime_context agent =
       ();
   let messages =
     Provider.make_message ~role:"system" ~content:agent.system_prompt
-    :: List.rev agent.history
+    :: List.rev (runtime_history_messages agent.history)
   in
   match runtime_context with
   | Some block when String.trim block <> "" ->
@@ -68,7 +75,8 @@ let estimate_tokens content = (String.length content + 3) / 4
 let estimate_history_tokens history =
   List.fold_left
     (fun acc (m : Provider.message) -> acc + estimate_tokens m.content)
-    0 history
+    0
+    (runtime_history_messages history)
 
 let context_window_for_agent agent =
   let model =
@@ -681,6 +689,108 @@ let risk_level_to_string = function
   | Tool.Medium -> "medium"
   | Tool.High -> "high"
 
+let active_workspace_files agent =
+  let workspace = Runtime_config.effective_workspace agent.config in
+  let normalize_workspace_path path =
+    let resolved =
+      if Filename.is_relative path then Filename.concat workspace path else path
+    in
+    Path_util.normalize_path resolved
+  in
+  List.map
+    (fun file -> (file, normalize_workspace_path file))
+    agent.config.prompt.workspace_files
+
+let capture_active_workspace_file_state agent =
+  active_workspace_files agent
+  |> List.map (fun (file, path) ->
+      let digest =
+        try Some (Digest.to_hex (Digest.file path)) with _ -> None
+      in
+      (file, digest))
+
+let changed_active_workspace_files before after =
+  List.filter_map
+    (fun (file, before_digest) ->
+      let after_digest =
+        match List.assoc_opt file after with Some d -> d | None -> None
+      in
+      if before_digest <> after_digest then Some file else None)
+    before
+
+let dedup_preserve_order items =
+  let rec loop seen acc = function
+    | [] -> List.rev acc
+    | item :: rest when List.mem item seen -> loop seen acc rest
+    | item :: rest -> loop (item :: seen) (item :: acc) rest
+  in
+  loop [] [] items
+
+let active_workspace_refresh_targets_from_call agent (tc : Provider.tool_call)
+    result =
+  if String.starts_with ~prefix:"Error:" result then None
+  else
+    let configured = active_workspace_files agent in
+    let find_configured_file resolved_path =
+      List.find_map
+        (fun (file, configured_path) ->
+          if resolved_path = configured_path then Some file else None)
+        configured
+    in
+    try
+      let open Yojson.Safe.Util in
+      let args = Yojson.Safe.from_string tc.arguments in
+      match tc.function_name with
+      | "doc_write" ->
+          let filename = args |> member "filename" |> to_string in
+          if List.mem filename agent.config.prompt.workspace_files then
+            Some [ filename ]
+          else None
+      | "file_write" | "file_append" | "file_edit" | "file_edit_lines" ->
+          let workspace = Runtime_config.effective_workspace agent.config in
+          let normalize_workspace_path path =
+            let resolved =
+              if Filename.is_relative path then Filename.concat workspace path
+              else path
+            in
+            Path_util.normalize_path resolved
+          in
+          let path = args |> member "path" |> to_string in
+          let resolved_path = normalize_workspace_path path in
+          Option.map (fun file -> [ file ]) (find_configured_file resolved_path)
+      | _ -> None
+    with _ -> None
+
+let workspace_refresh_message agent tc result ~before_active_workspace_files =
+  let direct_targets =
+    match active_workspace_refresh_targets_from_call agent tc result with
+    | Some files -> files
+    | None -> []
+  in
+  let changed_targets =
+    changed_active_workspace_files before_active_workspace_files
+      (capture_active_workspace_file_state agent)
+  in
+  let refreshed_files =
+    dedup_preserve_order (direct_targets @ changed_targets)
+  in
+  match refreshed_files with
+  | [] -> None
+  | filenames ->
+      Some
+        (Provider.make_message ~role:"event"
+           ~content:
+             (Printf.sprintf
+                "[workspace context refreshed after active workspace file \
+                 update: %s]"
+                (String.concat ", " filenames)))
+
+let append_tool_history agent tool_msg refresh_msg_opt =
+  agent.history <- tool_msg :: agent.history;
+  match refresh_msg_opt with
+  | Some refresh_msg -> agent.history <- refresh_msg :: agent.history
+  | None -> ()
+
 (* Handle a tool_search call by searching the registry and returning
    matching tool definitions as a tool_search_output message. *)
 let resolve_tool_search agent (tc : Provider.tool_call) =
@@ -706,9 +816,8 @@ let resolve_tool_search agent (tc : Provider.tool_call) =
           m "Tool search query=%S found=%d tools" query (List.length top));
       Provider.make_tool_search_result ~tool_call_id:tc.id ~tools_json
 
-(* Execute all tool calls in parallel, then append results to history in the
-   original call order. Parallel execution reduces latency when the LLM issues
-   multiple independent tool calls in a single turn. *)
+(* Execute tool calls in order so workspace refresh events can attribute active
+   prompt-file updates to the specific tool call that triggered them. *)
 let execute_tool_calls_stream agent ~db ~audit_enabled ~session_key
     ?interrupt_check ~on_chunk calls =
   let open Lwt.Syntax in
@@ -728,7 +837,7 @@ let execute_tool_calls_stream agent ~db ~audit_enabled ~session_key
       | None -> false
   in
   let* results =
-    Lwt_list.map_p
+    Lwt_list.map_s
       (fun (tc : Provider.tool_call) ->
         Logs.info (fun m ->
             m "%sTool call: %s (id=%s) args=%s" sk_tag tc.function_name tc.id
@@ -784,9 +893,12 @@ let execute_tool_calls_stream agent ~db ~audit_enabled ~session_key
                    is_error = false;
                  })
           in
-          Lwt.return (tc, result_msg)
+          Lwt.return (tc, result_msg, None)
         end
         else
+          let before_active_workspace_files =
+            capture_active_workspace_file_state agent
+          in
           let is_tool_search = tc.function_name = "tool_search" in
           let streamed_output = ref false in
           let* result_msg, result_for_event =
@@ -881,12 +993,16 @@ let execute_tool_calls_stream agent ~db ~audit_enabled ~session_key
                    is_error = not success;
                  })
           in
-          Lwt.return (tc, result_msg))
+          let refresh_msg =
+            workspace_refresh_message agent tc result
+              ~before_active_workspace_files
+          in
+          Lwt.return (tc, result_msg, refresh_msg))
       calls
   in
   List.iter
-    (fun ((_tc : Provider.tool_call), tool_msg) ->
-      agent.history <- tool_msg :: agent.history)
+    (fun ((_tc : Provider.tool_call), tool_msg, refresh_msg) ->
+      append_tool_history agent tool_msg refresh_msg)
     results;
   Lwt.return_unit
 
@@ -909,7 +1025,7 @@ let execute_tool_calls agent ~db ~audit_enabled ~session_key ?interrupt_check
       | None -> false
   in
   let* results =
-    Lwt_list.map_p
+    Lwt_list.map_s
       (fun (tc : Provider.tool_call) ->
         Logs.info (fun m ->
             m "%sTool call: %s (id=%s) args=%s" sk_tag tc.function_name tc.id
@@ -949,10 +1065,13 @@ let execute_tool_calls agent ~db ~audit_enabled ~session_key ?interrupt_check
           Lwt.return
             ( tc,
               Provider.make_tool_result ~tool_call_id:tc.id
-                ~name:tc.function_name ~content:"[skipped: interrupted by user]"
-            )
+                ~name:tc.function_name ~content:"[skipped: interrupted by user]",
+              None )
         end
         else
+          let before_active_workspace_files =
+            capture_active_workspace_file_state agent
+          in
           let is_tool_search = tc.function_name = "tool_search" in
           let* result_msg =
             if is_tool_search then Lwt.return (resolve_tool_search agent tc)
@@ -1013,13 +1132,17 @@ let execute_tool_calls agent ~db ~audit_enabled ~session_key ?interrupt_check
           else
             Logs.warn (fun m ->
                 m "%sTool error: %s -> %s" sk_tag tc.function_name truncated);
-          Lwt.return (tc, result_msg))
+          let refresh_msg =
+            workspace_refresh_message agent tc result
+              ~before_active_workspace_files
+          in
+          Lwt.return (tc, result_msg, refresh_msg))
       calls
   in
-  (* Append results in original call order so history is deterministic *)
+  (* Results already reflect execution order; append deterministically. *)
   List.iter
-    (fun ((_tc : Provider.tool_call), tool_msg) ->
-      agent.history <- tool_msg :: agent.history)
+    (fun ((_tc : Provider.tool_call), tool_msg, refresh_msg) ->
+      append_tool_history agent tool_msg refresh_msg)
     results;
   Lwt.return_unit
 

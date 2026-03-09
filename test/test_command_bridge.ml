@@ -424,11 +424,12 @@ let test_handle_session_epochs_and_show_archived_epoch () =
            true
          with Not_found -> false);
       Alcotest.(check bool)
-        "session show system_prompt contains Operating Stance section" true
+        "session show redacts system prompt contents" true
         (try
            ignore
              (Str.search_forward
-                (Str.regexp_string "Operating Stance")
+                (Str.regexp_string
+                   "\"system_prompt\": \"[redacted in session show]\"")
                 current_result 0);
            true
          with Not_found -> false);
@@ -489,6 +490,216 @@ let test_handle_session_epochs_and_show_archived_epoch () =
                 archived_result 0);
            true
          with Not_found -> false))
+
+let test_session_show_includes_workspace_refresh_event () =
+  with_temp_home (fun home ->
+      let db = session_db home in
+      let workspace = Filename.concat home "workspace" in
+      Unix.mkdir workspace 0o755;
+      Fun.protect
+        (fun () ->
+          let secret = "persistent prompt guidance" in
+          write_config home
+            (Printf.sprintf
+               "{\n\
+               \  \"workspace\": %S,\n\
+               \  \"prompt\": { \"workspace_files\": [\"AGENTS.md\"] },\n\
+               \  \"security\": { \"tools_enabled\": false }\n\
+                }\n"
+               workspace);
+          let prompt =
+            {
+              Runtime_config.default.prompt with
+              workspace_files = [ "AGENTS.md" ];
+            }
+          in
+          let config = { Runtime_config.default with workspace; prompt } in
+          let registry = Tool_registry.create () in
+          Tool_registry.register registry
+            (Tools_builtin.doc_write ~workspace ~workspace_files:[ "AGENTS.md" ]);
+          let agent = Agent.create ~config ~tool_registry:registry () in
+          let mgr = Session.create ~config ~db () in
+          let history_before = List.length agent.Agent.history in
+          let call =
+            {
+              Provider.id = "tc-doc-write";
+              function_name = "doc_write";
+              arguments =
+                Yojson.Safe.to_string
+                  (`Assoc
+                     [
+                       ("filename", `String "AGENTS.md");
+                       ("content", `String secret);
+                     ]);
+            }
+          in
+          Lwt_main.run
+            (Agent.execute_tool_calls agent ~db:None ~audit_enabled:false
+               ~session_key:(Some "web:test") [ call ]);
+          Session.persist_new_messages mgr ~key:"web:test" ~history_before agent;
+          let shown = Command_bridge.handle [ "session"; "show"; "web:test" ] in
+          Alcotest.(check bool)
+            "session show includes refresh event" true
+            (try
+               ignore
+                 (Str.search_forward
+                    (Str.regexp_string
+                       "workspace context refreshed after active workspace \
+                        file update: AGENTS.md")
+                    shown 0);
+               true
+             with Not_found -> false);
+          Alcotest.(check bool)
+            "session show redacts prompt file contents" false
+            (try
+               ignore (Str.search_forward (Str.regexp_string secret) shown 0);
+               true
+             with Not_found -> false);
+          Alcotest.(check bool)
+            "session show redacts system prompt" true
+            (try
+               ignore
+                 (Str.search_forward
+                    (Str.regexp_string
+                       "\"system_prompt\": \"[redacted in session show]\"")
+                    shown 0);
+               true
+             with Not_found -> false))
+        ~finally:(fun () ->
+          (try Sys.remove (Filename.concat workspace "AGENTS.md") with _ -> ());
+          Unix.rmdir workspace))
+
+let test_session_show_redacts_shell_exec_prompt_file_updates () =
+  with_temp_home (fun home ->
+      let db = session_db home in
+      let workspace = Filename.concat home "workspace" in
+      Unix.mkdir workspace 0o755;
+      Fun.protect
+        (fun () ->
+          let secret = "shell secret prompt text" in
+          write_config home
+            (Printf.sprintf
+               "{\n\
+               \  \"workspace\": %S,\n\
+               \  \"prompt\": { \"workspace_files\": [\"AGENTS.md\"] },\n\
+               \  \"security\": { \"tools_enabled\": false }\n\
+                }\n"
+               workspace);
+          let prompt =
+            {
+              Runtime_config.default.prompt with
+              workspace_files = [ "AGENTS.md" ];
+            }
+          in
+          let config = { Runtime_config.default with workspace; prompt } in
+          let registry = Tool_registry.create () in
+          let sandbox =
+            Sandbox.create ~backend:Sandbox.None ~workspace
+              ~extra_allowed_paths:[] ~workspace_only:false ()
+          in
+          Tool_registry.register registry
+            (Tools_builtin.shell_exec ~workspace ~workspace_only:false
+               ~allowed_commands:[] ~extra_allowed_paths:[] ~sandbox);
+          let agent = Agent.create ~config ~tool_registry:registry () in
+          let mgr = Session.create ~config ~db () in
+          let history_before = List.length agent.Agent.history in
+          let command = Printf.sprintf "printf %%s %S > AGENTS.md" secret in
+          let call =
+            {
+              Provider.id = "tc-shell-write";
+              function_name = "shell_exec";
+              arguments =
+                Yojson.Safe.to_string
+                  (`Assoc
+                     [
+                       ("command", `String command); ("cwd", `String workspace);
+                     ]);
+            }
+          in
+          Lwt_main.run
+            (Agent.execute_tool_calls agent ~db:None ~audit_enabled:false
+               ~session_key:(Some "web:test") [ call ]);
+          Session.persist_new_messages mgr ~key:"web:test" ~history_before agent;
+          let shown = Command_bridge.handle [ "session"; "show"; "web:test" ] in
+          Alcotest.(check bool)
+            "session show includes refresh event for shell update" true
+            (try
+               ignore
+                 (Str.search_forward
+                    (Str.regexp_string
+                       "workspace context refreshed after active workspace \
+                        file update: AGENTS.md")
+                    shown 0);
+               true
+             with Not_found -> false);
+          Alcotest.(check bool)
+            "session show redacts shell command secret" false
+            (try
+               ignore (Str.search_forward (Str.regexp_string secret) shown 0);
+               true
+             with Not_found -> false))
+        ~finally:(fun () ->
+          (try Sys.remove (Filename.concat workspace "AGENTS.md") with _ -> ());
+          Unix.rmdir workspace))
+
+let test_session_show_redacts_shell_exec_provider_response_items () =
+  with_temp_home (fun home ->
+      let db = session_db home in
+      let workspace = Filename.concat home "workspace" in
+      Unix.mkdir workspace 0o755;
+      Fun.protect
+        (fun () ->
+          let secret = "shell secret prompt text" in
+          write_config home
+            (Printf.sprintf
+               "{\n\
+               \  \"workspace\": %S,\n\
+               \  \"prompt\": { \"workspace_files\": [\"AGENTS.md\"] },\n\
+               \  \"security\": { \"tools_enabled\": false }\n\
+                }\n"
+               workspace);
+          let command = Printf.sprintf "printf %%s %S > AGENTS.md" secret in
+          let provider_response_items_json =
+            Yojson.Safe.to_string
+              (`List
+                 [
+                   `Assoc
+                     [
+                       ("type", `String "function_call");
+                       ("id", `String "fc-shell");
+                       ("call_id", `String "fc-shell");
+                       ("name", `String "shell_exec");
+                       ( "arguments",
+                         `String
+                           (Yojson.Safe.to_string
+                              (`Assoc
+                                 [
+                                   ("command", `String command);
+                                   ("cwd", `String workspace);
+                                 ])) );
+                     ];
+                 ])
+          in
+          Memory.store_message ~db ~session_key:"web:test"
+            (Provider.make_message_full ~role:"assistant" ~content:""
+               ~provider_response_items_json:(Some provider_response_items_json));
+          let shown = Command_bridge.handle [ "session"; "show"; "web:test" ] in
+          Alcotest.(check bool)
+            "session show redacts shell_exec provider_response_items secret"
+            false
+            (try
+               ignore (Str.search_forward (Str.regexp_string secret) shown 0);
+               true
+             with Not_found -> false);
+          Alcotest.(check bool)
+            "session show redacts shell_exec provider_response_items arguments"
+            true
+            (try
+               ignore
+                 (Str.search_forward (Str.regexp_string "[redacted]") shown 0);
+               true
+             with Not_found -> false))
+        ~finally:(fun () -> Unix.rmdir workspace))
 
 let test_handle_capabilities () =
   let result = Command_bridge.handle [ "capabilities" ] in
@@ -1461,6 +1672,12 @@ let suite =
       test_handle_update_prefers_static_auth_token_over_auto_pair;
     Alcotest.test_case "handle session inject auto pairs with live gateway"
       `Quick test_handle_session_inject_auto_pairs_with_live_gateway;
+    Alcotest.test_case "session show includes workspace refresh event" `Quick
+      test_session_show_includes_workspace_refresh_event;
+    Alcotest.test_case "session show redacts shell_exec prompt file updates"
+      `Quick test_session_show_redacts_shell_exec_prompt_file_updates;
+    Alcotest.test_case "session show redacts shell_exec provider response items"
+      `Quick test_session_show_redacts_shell_exec_provider_response_items;
     Alcotest.test_case "handle migrate no source" `Quick
       test_handle_migrate_no_source;
     Alcotest.test_case "handle skills" `Quick test_handle_skills;

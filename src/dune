@@ -21,6 +21,7 @@
   format_adapter
   status_message
   workspace_scaffold
+  path_util
   agent
   session
   stt

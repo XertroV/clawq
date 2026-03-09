@@ -727,8 +727,212 @@ let parse_epoch_selector args =
   loop None args
 
 let string_or_null = function Some value -> `String value | None -> `Null
+let session_show_system_prompt _config = "[redacted in session show]"
 
-let raw_message_json index (row : Memory.raw_message) =
+let session_show_active_workspace_file config filename =
+  List.mem filename config.Runtime_config.prompt.workspace_files
+
+let session_show_active_workspace_path config path =
+  let workspace = Runtime_config.effective_workspace config in
+  let resolved =
+    if Filename.is_relative path then Filename.concat workspace path else path
+  in
+  let normalized = Path_util.normalize_path resolved in
+  List.exists
+    (fun filename ->
+      Path_util.normalize_path (Filename.concat workspace filename) = normalized)
+    config.Runtime_config.prompt.workspace_files
+
+let session_show_shell_command_targets_active_workspace_file config command =
+  let workspace = Runtime_config.effective_workspace config in
+  List.exists
+    (fun filename ->
+      let abs_path =
+        Path_util.normalize_path (Filename.concat workspace filename)
+      in
+      List.exists
+        (fun needle ->
+          let needle_len = String.length needle in
+          needle_len > 0
+          && String.length command >= needle_len
+          &&
+          let rec loop i =
+            if i + needle_len > String.length command then false
+            else if String.sub command i needle_len = needle then true
+            else loop (i + 1)
+          in
+          loop 0)
+        [ filename; Filename.basename filename; "./" ^ filename; abs_path ])
+    config.Runtime_config.prompt.workspace_files
+
+let redact_tool_call_arguments_for_session_show ~config ~function_name arguments
+    =
+  let open Yojson.Safe.Util in
+  try
+    let args = Yojson.Safe.from_string arguments in
+    let redacted json = Some (Yojson.Safe.to_string json) in
+    match function_name with
+    | "doc_write" ->
+        let filename = args |> member "filename" |> to_string in
+        if session_show_active_workspace_file config filename then
+          redacted
+            (`Assoc
+               [
+                 ("filename", `String filename);
+                 ("content", `String "[redacted]");
+               ])
+        else None
+    | "file_write" | "file_append" ->
+        let path = args |> member "path" |> to_string in
+        if session_show_active_workspace_path config path then
+          redacted
+            (`Assoc
+               [ ("path", `String path); ("content", `String "[redacted]") ])
+        else None
+    | "file_edit" ->
+        let path = args |> member "path" |> to_string in
+        if session_show_active_workspace_path config path then
+          redacted
+            (`Assoc
+               [
+                 ("path", `String path);
+                 ("old_text", `String "[redacted]");
+                 ("new_text", `String "[redacted]");
+                 ( "replace_all",
+                   match args |> member "replace_all" with
+                   | `Bool b -> `Bool b
+                   | _ -> `Bool false );
+               ])
+        else None
+    | "file_edit_lines" ->
+        let path = args |> member "path" |> to_string in
+        if session_show_active_workspace_path config path then
+          redacted
+            (`Assoc
+               [
+                 ("path", `String path);
+                 ( "start_line",
+                   match args |> member "start_line" with
+                   | `Int n -> `Int n
+                   | _ -> `Null );
+                 ( "end_line",
+                   match args |> member "end_line" with
+                   | `Int n -> `Int n
+                   | _ -> `Null );
+                 ("content", `String "[redacted]");
+               ])
+        else None
+    | "shell_exec" ->
+        let command = args |> member "command" |> to_string in
+        if
+          session_show_shell_command_targets_active_workspace_file config
+            command
+        then
+          redacted
+            (`Assoc
+               [
+                 ("command", `String "[redacted]");
+                 ( "cwd",
+                   match args |> member "cwd" with
+                   | `String cwd -> `String cwd
+                   | _ -> `Null );
+               ])
+        else None
+    | _ -> None
+  with _ -> None
+
+let sanitize_tool_calls_json_for_session_show ~config = function
+  | None -> None
+  | Some tool_calls_json -> (
+      try
+        let json = Yojson.Safe.from_string tool_calls_json in
+        let sanitized =
+          match json with
+          | `List calls ->
+              `List
+                (List.map
+                   (function
+                     | `Assoc fields as call ->
+                         let function_name =
+                           match List.assoc_opt "function_name" fields with
+                           | Some (`String name) -> Some name
+                           | _ -> None
+                         in
+                         let arguments =
+                           match List.assoc_opt "arguments" fields with
+                           | Some (`String args) -> Some args
+                           | _ -> None
+                         in
+                         begin match (function_name, arguments) with
+                         | Some name, Some args -> (
+                             match
+                               redact_tool_call_arguments_for_session_show
+                                 ~config ~function_name:name args
+                             with
+                             | Some redacted_arguments ->
+                                 `Assoc
+                                   (("arguments", `String redacted_arguments)
+                                   :: List.remove_assoc "arguments" fields)
+                             | None -> call)
+                         | _ -> call
+                         end
+                     | other -> other)
+                   calls)
+          | other -> other
+        in
+        Some (Yojson.Safe.to_string sanitized)
+      with _ -> Some tool_calls_json)
+
+let sanitize_provider_response_items_json_for_session_show ~config = function
+  | None -> None
+  | Some provider_response_items_json -> (
+      try
+        let json = Yojson.Safe.from_string provider_response_items_json in
+        let sanitized =
+          match json with
+          | `List items ->
+              `List
+                (List.map
+                   (function
+                     | `Assoc fields as item ->
+                         let item_type =
+                           match List.assoc_opt "type" fields with
+                           | Some (`String value) -> Some value
+                           | _ -> None
+                         in
+                         let function_name =
+                           match List.assoc_opt "name" fields with
+                           | Some (`String value) -> Some value
+                           | _ -> None
+                         in
+                         let arguments =
+                           match List.assoc_opt "arguments" fields with
+                           | Some (`String value) -> Some value
+                           | _ -> None
+                         in
+                         begin match (item_type, function_name, arguments) with
+                         | ( Some ("function_call" | "tool_call"),
+                             Some name,
+                             Some args ) -> (
+                             match
+                               redact_tool_call_arguments_for_session_show
+                                 ~config ~function_name:name args
+                             with
+                             | Some redacted_arguments ->
+                                 `Assoc
+                                   (("arguments", `String redacted_arguments)
+                                   :: List.remove_assoc "arguments" fields)
+                             | None -> item)
+                         | _ -> item
+                         end
+                     | other -> other)
+                   items)
+          | other -> other
+        in
+        Some (Yojson.Safe.to_string sanitized)
+      with _ -> Some provider_response_items_json)
+
+let raw_message_json config index (row : Memory.raw_message) =
   `Assoc
     [
       ("index", `Int index);
@@ -737,9 +941,14 @@ let raw_message_json index (row : Memory.raw_message) =
       ("content", `String row.content);
       ("tool_call_id", string_or_null row.tool_call_id);
       ("tool_name", string_or_null row.tool_name);
-      ("tool_calls_json", string_or_null row.tool_calls_json);
+      ( "tool_calls_json",
+        string_or_null
+          (sanitize_tool_calls_json_for_session_show ~config row.tool_calls_json)
+      );
       ( "provider_response_items_json",
-        string_or_null row.provider_response_items_json );
+        string_or_null
+          (sanitize_provider_response_items_json_for_session_show ~config
+             row.provider_response_items_json) );
       ("created_at", `String row.created_at);
     ]
 
@@ -850,9 +1059,6 @@ let cmd_session args =
           | None -> Printf.sprintf "No epoch matched for session %s" session_key
           | Some rows ->
               let config = get_config () in
-              let system_prompt =
-                Prompt_builder.build ~config ~tool_registry:None ()
-              in
               let epochs = Memory.list_session_epochs ~db ~session_key in
               let archived =
                 List.filter
@@ -870,13 +1076,15 @@ let cmd_session args =
                    [
                      ("session_key", `String session_key);
                      ("epoch", epoch_label);
-                     ("system_prompt", `String system_prompt);
+                     ( "system_prompt",
+                       `String (session_show_system_prompt config) );
                      ("archived_epoch_count", `Int archived_epoch_count);
                      ("total_archived_messages", `Int total_archived_messages);
                      ( "messages",
                        `List
-                         (List.mapi (fun i row -> raw_message_json i row) rows)
-                     );
+                         (List.mapi
+                            (fun i row -> raw_message_json config i row)
+                            rows) );
                    ])))
   | "inject" :: session_key :: message_parts -> (
       let message = String.concat " " message_parts in

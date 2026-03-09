@@ -1,18 +1,4 @@
-let normalize_path path =
-  let parts = String.split_on_char '/' path in
-  let is_abs = String.length path > 0 && path.[0] = '/' in
-  let rec resolve acc = function
-    | [] -> List.rev acc
-    | "." :: rest -> resolve acc rest
-    | ".." :: rest -> (
-        match acc with _ :: tl -> resolve tl rest | [] -> resolve [] rest)
-    | "" :: rest -> resolve acc rest
-    | part :: rest -> resolve (part :: acc) rest
-  in
-  let resolved = resolve [] parts in
-  let joined = String.concat "/" resolved in
-  if is_abs then "/" ^ joined else joined
-
+let normalize_path = Path_util.normalize_path
 let path_drift_count = ref 0
 let shell_syntax_drift_count = ref 0
 let shell_tokenizer_drift_count = ref 0
