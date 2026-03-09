@@ -62,7 +62,10 @@ let wait_for_interrupt interrupt_check =
   loop ()
 
 let stream_process ~cwd ~argv ~send_progress ~interrupt_check =
-  let proc = Lwt_process.open_process_full ~cwd ("", argv) in
+  let proc =
+    Process_group.start ~cwd ~env:(Unix.environment ())
+      (Process_group.Exec argv)
+  in
   let read_channel ch =
     let rec loop () =
       let open Lwt.Syntax in
@@ -83,12 +86,19 @@ let stream_process ~cwd ~argv ~send_progress ~interrupt_check =
   Lwt.async (fun () ->
       Lwt.catch
         (fun () ->
-          let* () =
-            Lwt.join [ read_channel proc#stdout; read_channel proc#stderr ]
-          in
-          let* status = proc#close in
-          finish_runner (Ok (exit_code_of_status status));
-          Lwt.return_unit)
+          Lwt.finalize
+            (fun () ->
+              let* () =
+                Lwt.join
+                  [
+                    read_channel proc.Process_group.stdout;
+                    read_channel proc.Process_group.stderr;
+                  ]
+              in
+              let* status = Process_group.wait proc.pid in
+              finish_runner (Ok (exit_code_of_status status));
+              Lwt.return_unit)
+            (fun () -> Process_group.close proc))
         (fun exn ->
           finish_runner (Error exn);
           Lwt.return_unit));
@@ -112,7 +122,7 @@ let stream_process ~cwd ~argv ~send_progress ~interrupt_check =
       | `Finished (Ok exit_code) -> Lwt.return exit_code
       | `Finished (Error exn) -> Lwt.fail exn
       | `Interrupted ->
-          (try proc#kill Sys.sigkill with _ -> ());
+          let* () = Process_group.terminate_immediately proc.pid in
           let* _ = runner_result in
           Lwt.fail Interrupted_by_user)
 

@@ -16,6 +16,12 @@ let with_temp_git_repo f =
     ~finally:(fun () ->
       ignore (Sys.command (Printf.sprintf "rm -rf %s" (Filename.quote repo))))
 
+let process_exists pid =
+  try
+    Unix.kill pid 0;
+    true
+  with Unix.Unix_error _ -> false
+
 let test_enqueue_and_list_tasks () =
   with_temp_git_repo (fun repo_path ->
       let db = Memory.init ~db_path:":memory:" () in
@@ -60,6 +66,125 @@ let test_cancel_queued_task () =
           Alcotest.(check string)
             "cancelled" "cancelled"
             (Background_task.string_of_status task.status))
+
+let test_cancel_running_task_signals_process_group () =
+  with_temp_git_repo (fun repo_path ->
+      let db = Memory.init ~db_path:":memory:" () in
+      Background_task.init_schema db;
+      let id =
+        match
+          Background_task.enqueue ~db ~runner:Background_task.Claude ~repo_path
+            ~prompt:"fix bug" ()
+        with
+        | Ok id -> id
+        | Error msg -> Alcotest.fail msg
+      in
+      ignore
+        (Background_task.set_running ~db ~id ~branch:"clawq-bg-1"
+           ~worktree_path:"/tmp/worktree" ~log_path:"/tmp/task.log" ~pid:4321);
+      let signaled = ref None in
+      let result =
+        Background_task.cancel_with_signal
+          ~send_signal:(fun pid signal -> signaled := Some (pid, signal))
+          ~db ~id ()
+      in
+      (match result with Ok _ -> () | Error msg -> Alcotest.fail msg);
+      Alcotest.(check (option (pair int int)))
+        "signals process group"
+        (Some (-4321, Sys.sigterm))
+        !signaled)
+
+let test_cancel_running_task_without_valid_pid_skips_signal () =
+  with_temp_git_repo (fun repo_path ->
+      let db = Memory.init ~db_path:":memory:" () in
+      Background_task.init_schema db;
+      let id =
+        match
+          Background_task.enqueue ~db ~runner:Background_task.Claude ~repo_path
+            ~prompt:"fix bug" ()
+        with
+        | Ok id -> id
+        | Error msg -> Alcotest.fail msg
+      in
+      ignore
+        (Background_task.set_running ~db ~id ~branch:"clawq-bg-1"
+           ~worktree_path:"/tmp/worktree" ~log_path:"/tmp/task.log" ~pid:(-1));
+      let signaled = ref false in
+      let result =
+        Background_task.cancel_with_signal
+          ~send_signal:(fun _ _ -> signaled := true)
+          ~db ~id ()
+      in
+      (match result with Ok _ -> () | Error msg -> Alcotest.fail msg);
+      Alcotest.(check bool) "does not signal invalid pid" false !signaled)
+
+let test_cancel_running_task_waits_for_descendants () =
+  with_temp_git_repo (fun repo_path ->
+      let db = Memory.init ~db_path:":memory:" () in
+      Background_task.init_schema db;
+      let id =
+        match
+          Background_task.enqueue ~db ~runner:Background_task.Claude ~repo_path
+            ~prompt:"fix bug" ()
+        with
+        | Ok id -> id
+        | Error msg -> Alcotest.fail msg
+      in
+      let pid_file = Filename.concat repo_path "bg-child.pid" in
+      let proc =
+        Process_group.start ~cwd:repo_path ~env:(Unix.environment ())
+          (Process_group.Exec
+             [|
+               "sh";
+               "-c";
+               Printf.sprintf
+                 "sleep 10 & child=$!; printf \"%%s\" \"$child\" > %s; wait \
+                  $child"
+                 (Filename.quote pid_file);
+             |])
+      in
+      let rec wait_for_pid_file attempts =
+        if Sys.file_exists pid_file then ()
+        else if attempts <= 0 then Alcotest.fail "child pid file not written"
+        else begin
+          Unix.sleepf 0.02;
+          wait_for_pid_file (attempts - 1)
+        end
+      in
+      wait_for_pid_file 50;
+      let child_pid =
+        let ic = open_in pid_file in
+        Fun.protect
+          (fun () -> int_of_string (input_line ic))
+          ~finally:(fun () -> close_in ic)
+      in
+      ignore
+        (Background_task.set_running ~db ~id ~branch:"clawq-bg-1"
+           ~worktree_path:repo_path ~log_path:"/tmp/task.log" ~pid:proc.pid);
+      let result =
+        Background_task.cancel_with_signal ~send_signal:Unix.kill ~db ~id ()
+      in
+      (match result with Ok _ -> () | Error msg -> Alcotest.fail msg);
+      let rec wait_until_gone attempts =
+        if attempts <= 0 || not (process_exists child_pid) then ()
+        else begin
+          Unix.sleepf 0.05;
+          wait_until_gone (attempts - 1)
+        end
+      in
+      wait_until_gone 20;
+      Alcotest.(check bool)
+        "child process terminated before return" false
+        (process_exists child_pid);
+      (match Background_task.get_task ~db ~id with
+      | Some task ->
+          Alcotest.(check string)
+            "task marked cancelled" "cancelled"
+            (Background_task.string_of_status task.status)
+      | None -> Alcotest.fail "expected cancelled task");
+      ignore (Lwt_main.run (Process_group.wait proc.pid));
+      ignore (Lwt_main.run (Process_group.close proc));
+      Sys.remove pid_file)
 
 let test_command_of_task_codex () =
   let task =
@@ -431,6 +556,12 @@ let suite =
     Alcotest.test_case "enqueue and list tasks" `Quick
       test_enqueue_and_list_tasks;
     Alcotest.test_case "cancel queued task" `Quick test_cancel_queued_task;
+    Alcotest.test_case "cancel running task signals process group" `Quick
+      test_cancel_running_task_signals_process_group;
+    Alcotest.test_case "cancel running task skips invalid pid" `Quick
+      test_cancel_running_task_without_valid_pid_skips_signal;
+    Alcotest.test_case "cancel running task waits for descendants" `Quick
+      test_cancel_running_task_waits_for_descendants;
     Alcotest.test_case "command_of_task codex" `Quick test_command_of_task_codex;
     Alcotest.test_case "command_of_task codex with model" `Quick
       test_command_of_task_codex_with_model;

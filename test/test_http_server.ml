@@ -89,7 +89,7 @@ let test_session_inject_uses_session_turn () =
   let config = Runtime_config.default in
   let session_manager = Session.create ~config () in
   Session.set_special_command_handler session_manager
-    (fun ~key ~message ~send_progress:_ ->
+    (fun ~key ~message ~send_progress:_ ~interrupt_check:_ ->
       if key = "telegram:1:u" && message = "hello" then
         Lwt.return_some "processed live"
       else Lwt.return_none);

@@ -10,6 +10,12 @@ let with_temp_workspace f =
     (fun () -> f dir)
     ~finally:(fun () -> try Unix.rmdir dir with _ -> ())
 
+let process_exists pid =
+  try
+    Unix.kill pid 0;
+    true
+  with Unix.Unix_error _ -> false
+
 let random_segment state =
   match Random.State.int state 10 with
   | 0 -> ""
@@ -697,6 +703,112 @@ let test_shell_exec_interrupts_running_process () =
         "interrupt result" "Command interrupted by user." result;
       Alcotest.(check bool) "returns promptly" true (elapsed < 2.0))
 
+let test_shell_exec_interrupt_kills_descendants () =
+  with_temp_workspace (fun workspace ->
+      let sandbox =
+        Sandbox.create ~backend:Sandbox.None ~workspace ~extra_allowed_paths:[]
+          ~workspace_only:false ()
+      in
+      let tool =
+        Tools_builtin.shell_exec ~workspace ~workspace_only:false
+          ~allowed_commands:[] ~extra_allowed_paths:[] ~sandbox
+      in
+      let interrupted = ref None in
+      let pid_file = Filename.concat workspace "child.pid" in
+      let command =
+        Printf.sprintf
+          "sleep 10 & child=$!; printf '%%s' \"$child\" > %s; wait $child"
+          (Filename.quote pid_file)
+      in
+      let result =
+        Lwt_main.run
+          (let open Lwt.Syntax in
+           let trigger =
+             let rec wait_for_pid_file attempts =
+               if Sys.file_exists pid_file || attempts <= 0 then Lwt.return_unit
+               else
+                 let* () = Lwt_unix.sleep 0.02 in
+                 wait_for_pid_file (attempts - 1)
+             in
+             let* () = wait_for_pid_file 50 in
+             interrupted := Some "stop now";
+             Lwt.return_unit
+           in
+           let invoke =
+             tool.Tool.invoke
+               ~context:
+                 {
+                   Tool.session_key = Some "web:test";
+                   send_progress = None;
+                   interrupt_check = Some (fun () -> !interrupted);
+                 }
+               (`Assoc [ ("command", `String command) ])
+           in
+           let* result, () = Lwt.both invoke trigger in
+           Lwt.return result)
+      in
+      let child_pid =
+        let ic = open_in pid_file in
+        Fun.protect
+          (fun () -> int_of_string (input_line ic))
+          ~finally:(fun () -> close_in ic)
+      in
+      let rec wait_until_gone attempts =
+        if attempts <= 0 || not (process_exists child_pid) then ()
+        else begin
+          Unix.sleepf 0.05;
+          wait_until_gone (attempts - 1)
+        end
+      in
+      wait_until_gone 20;
+      Alcotest.(check string)
+        "interrupt result" "Command interrupted by user." result;
+      Alcotest.(check bool)
+        "child process terminated" false (process_exists child_pid);
+      Sys.remove pid_file)
+
+let test_shell_exec_timeout_kills_descendants () =
+  with_temp_workspace (fun workspace ->
+      let sandbox =
+        Sandbox.create ~backend:Sandbox.None ~workspace ~extra_allowed_paths:[]
+          ~workspace_only:false ()
+      in
+      let tool =
+        Tools_builtin.shell_exec ~workspace ~workspace_only:false
+          ~allowed_commands:[] ~extra_allowed_paths:[] ~sandbox
+      in
+      let pid_file = Filename.concat workspace "child-timeout.pid" in
+      let command =
+        Printf.sprintf
+          "sleep 10 & child=$!; printf '%%s' \"$child\" > %s; wait $child"
+          (Filename.quote pid_file)
+      in
+      let result =
+        Lwt_main.run
+          (tool.Tool.invoke
+             (`Assoc [ ("command", `String command); ("timeout", `Float 1.0) ]))
+      in
+      let child_pid =
+        let ic = open_in pid_file in
+        Fun.protect
+          (fun () -> int_of_string (input_line ic))
+          ~finally:(fun () -> close_in ic)
+      in
+      let rec wait_until_gone attempts =
+        if attempts <= 0 || not (process_exists child_pid) then ()
+        else begin
+          Unix.sleepf 0.05;
+          wait_until_gone (attempts - 1)
+        end
+      in
+      wait_until_gone 20;
+      Alcotest.(check string)
+        "timeout result" "Error: command timed out after 1 seconds" result;
+      Alcotest.(check bool)
+        "child process terminated after timeout" false
+        (process_exists child_pid);
+      Sys.remove pid_file)
+
 let suite =
   [
     Alcotest.test_case "normalize absolute" `Quick test_normalize_absolute;
@@ -782,4 +894,8 @@ let suite =
       test_shell_exec_saves_full_output_when_truncated;
     Alcotest.test_case "shell_exec interrupts running process" `Quick
       test_shell_exec_interrupts_running_process;
+    Alcotest.test_case "shell_exec interrupt kills descendants" `Quick
+      test_shell_exec_interrupt_kills_descendants;
+    Alcotest.test_case "shell_exec timeout kills descendants" `Quick
+      test_shell_exec_timeout_kills_descendants;
   ]

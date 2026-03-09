@@ -424,7 +424,8 @@ let mark_cancelled ~db ~id ~result_preview =
       ignore (Sqlite3.step stmt);
       Sqlite3.changes db > 0)
 
-let cancel_with_signal ~send_signal ~db ~id =
+let cancel_with_signal ~send_signal ~db ~id
+    ?(terminate_group = Process_group.terminate_blocking) () =
   match get_task ~db ~id with
   | None -> Error (Printf.sprintf "No background task found with id %d" id)
   | Some task -> (
@@ -439,20 +440,21 @@ let cancel_with_signal ~send_signal ~db ~id =
           Ok "Cancelled queued task"
       | Running -> (
           match task.pid with
-          | Some pid ->
-              (try send_signal pid Sys.sigterm with _ -> ());
+          | Some pid when pid > 0 ->
+              (try send_signal (-pid) Sys.sigterm with _ -> ());
+              terminate_group pid;
               ignore
                 (mark_cancelled ~db ~id
                    ~result_preview:"Cancellation requested for running task");
               Ok (Printf.sprintf "Sent SIGTERM to task %d (pid %d)" id pid)
-          | None ->
+          | Some _ | None ->
               ignore
                 (mark_cancelled ~db ~id
                    ~result_preview:
                      "Cancelled running task without tracked process id");
               Ok "Cancelled running task"))
 
-let cancel ~db ~id = cancel_with_signal ~send_signal:Unix.kill ~db ~id
+let cancel ~db ~id = cancel_with_signal ~send_signal:Unix.kill ~db ~id ()
 
 let ensure_roots () =
   ensure_dir (clawq_dir ());
@@ -594,35 +596,49 @@ let exit_code_of_status = function
   | Unix.WSTOPPED n -> 128 + n
 
 let run_command_capture ~cwd ~argv ~log_path =
-  let proc = Lwt_process.open_process_full ~cwd ("", argv) in
+  let proc =
+    Process_group.start ~cwd ~env:(Unix.environment ())
+      (Process_group.Exec argv)
+  in
   let stdout_buf = Buffer.create 1024 in
   let stderr_buf = Buffer.create 256 in
   let open Lwt.Syntax in
   let* result =
-    Lwt_io.with_file ~mode:Lwt_io.Output log_path (fun log_oc ->
-        let* () =
-          Lwt.join
-            [
-              read_into_buffer_and_log proc#stdout log_oc stdout_buf;
-              read_into_buffer_and_log proc#stderr log_oc stderr_buf;
-            ]
-        in
-        let* status = proc#close in
-        Lwt.return
-          ( proc#pid,
-            exit_code_of_status status,
-            Buffer.contents stdout_buf,
-            Buffer.contents stderr_buf ))
+    Lwt.finalize
+      (fun () ->
+        Lwt_io.with_file ~mode:Lwt_io.Output log_path (fun log_oc ->
+            let* () =
+              Lwt.join
+                [
+                  read_into_buffer_and_log proc.Process_group.stdout log_oc
+                    stdout_buf;
+                  read_into_buffer_and_log proc.Process_group.stderr log_oc
+                    stderr_buf;
+                ]
+            in
+            let* status = Process_group.wait proc.pid in
+            Lwt.return
+              ( proc.pid,
+                exit_code_of_status status,
+                Buffer.contents stdout_buf,
+                Buffer.contents stderr_buf )))
+      (fun () -> Process_group.close proc)
   in
   Lwt.return result
 
 let run_simple_command ~cwd argv =
-  let proc = Lwt_process.open_process_full ~cwd ("", argv) in
+  let proc =
+    Process_group.start ~cwd ~env:(Unix.environment ())
+      (Process_group.Exec argv)
+  in
   let open Lwt.Syntax in
-  let* stdout = Lwt_io.read proc#stdout in
-  let* stderr = Lwt_io.read proc#stderr in
-  let* status = proc#close in
-  Lwt.return (exit_code_of_status status, stdout, stderr)
+  Lwt.finalize
+    (fun () ->
+      let* stdout = Lwt_io.read proc.Process_group.stdout in
+      let* stderr = Lwt_io.read proc.Process_group.stderr in
+      let* status = Process_group.wait proc.pid in
+      Lwt.return (exit_code_of_status status, stdout, stderr))
+    (fun () -> Process_group.close proc)
 
 let prepare_worktree ?(run_simple_command = run_simple_command) task =
   let branch =
@@ -685,45 +701,40 @@ let spawn_task ?(on_task_finished = fun _ -> Lwt.return_unit)
                     log_path = Some log_path;
                   }
               in
-              let pid = -1 in
+              let proc =
+                Process_group.start ~cwd:worktree_path
+                  ~env:(Unix.environment ()) (Process_group.Exec argv)
+              in
+              let pid = proc.pid in
               if
                 not
                   (set_running ~db ~id:task.id ~branch ~worktree_path ~log_path
                      ~pid)
-              then Lwt.return_unit
+              then
+                let* () = Process_group.terminate_immediately pid in
+                let* _ = Process_group.wait pid in
+                let* () = Process_group.close proc in
+                Lwt.return_unit
               else
-                let proc =
-                  Lwt_process.open_process_full ~cwd:worktree_path ("", argv)
-                in
-                let pid = proc#pid in
-                let _ =
-                  let sql =
-                    "UPDATE background_tasks SET pid = ? WHERE id = ? AND \
-                     status = 'running'"
-                  in
-                  let stmt = Sqlite3.prepare db sql in
-                  Fun.protect
-                    ~finally:(fun () -> ignore (Sqlite3.finalize stmt))
-                    (fun () ->
-                      ignore
-                        (Sqlite3.bind stmt 1
-                           (Sqlite3.Data.INT (Int64.of_int pid)));
-                      ignore
-                        (Sqlite3.bind stmt 2
-                           (Sqlite3.Data.INT (Int64.of_int task.id)));
-                      ignore (Sqlite3.step stmt))
-                in
                 let stdout_buf = Buffer.create 1024 in
                 let stderr_buf = Buffer.create 256 in
-                let* () =
-                  Lwt_io.with_file ~mode:Lwt_io.Output log_path (fun log_oc ->
-                      Lwt.join
-                        [
-                          read_into_buffer_and_log proc#stdout log_oc stdout_buf;
-                          read_into_buffer_and_log proc#stderr log_oc stderr_buf;
-                        ])
+                let* status =
+                  Lwt.finalize
+                    (fun () ->
+                      let* () =
+                        Lwt_io.with_file ~mode:Lwt_io.Output log_path
+                          (fun log_oc ->
+                            Lwt.join
+                              [
+                                read_into_buffer_and_log
+                                  proc.Process_group.stdout log_oc stdout_buf;
+                                read_into_buffer_and_log
+                                  proc.Process_group.stderr log_oc stderr_buf;
+                              ])
+                      in
+                      Process_group.wait proc.pid)
+                    (fun () -> Process_group.close proc)
                 in
-                let* status = proc#close in
                 let output =
                   String.trim
                     (Buffer.contents stdout_buf ^ "\n"

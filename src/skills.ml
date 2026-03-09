@@ -37,7 +37,18 @@ let risk_level_of_string = function
   | "medium" -> Tool.Medium
   | _ -> Tool.Low
 
-let load_skill ?(workspace_only = true)
+let wait_for_interrupt interrupt_check =
+  let open Lwt.Syntax in
+  let rec loop () =
+    match interrupt_check () with
+    | Some _ -> Lwt.return_unit
+    | None ->
+        let* () = Lwt_unix.sleep 0.05 in
+        loop ()
+  in
+  loop ()
+
+let load_skill ?(workspace_only = true) ?(timeout_secs = 30.0)
     ?(allowed_commands = Tools_builtin.default_shell_allowlist) path =
   try
     let json = Yojson.Safe.from_file path in
@@ -60,7 +71,7 @@ let load_skill ?(workspace_only = true)
         description;
         parameters_schema;
         invoke =
-          (fun ?context:_ args ->
+          (fun ?context args ->
             let cmd = substitute_template command args in
             if workspace_only && Tools_builtin.has_unsafe_shell_syntax cmd then
               Lwt.return
@@ -96,8 +107,13 @@ let load_skill ?(workspace_only = true)
                       Lwt.return
                         "Error: skill command contains paths/targets \
                          disallowed in workspace_only mode"
-                  | _ ->
+                  | _ -> (
                       let open Lwt.Syntax in
+                      let interrupt_check =
+                        match context with
+                        | Some c -> c.Tool.interrupt_check
+                        | None -> None
+                      in
                       let env =
                         if workspace_only then
                           [|
@@ -114,33 +130,82 @@ let load_skill ?(workspace_only = true)
                         if workspace_only then Some (Sys.getcwd ()) else None
                       in
                       let proc =
-                        Lwt_process.open_process_full ?cwd ~env
-                          ("", Array.of_list argv)
+                        Process_group.start ?cwd ~env
+                          (Process_group.Exec (Array.of_list argv))
                       in
-                      let timeout = Lwt_unix.sleep 30.0 in
+                      let runner_result, runner_wakener = Lwt.wait () in
+                      let forced_result = ref None in
+                      let finish_runner result =
+                        if Lwt.is_sleeping runner_result then
+                          Lwt.wakeup_later runner_wakener result
+                      in
+                      Lwt.async (fun () ->
+                          Lwt.catch
+                            (fun () ->
+                              Lwt.finalize
+                                (fun () ->
+                                  let* stdout, stderr =
+                                    Lwt.both
+                                      (Lwt_io.read proc.Process_group.stdout)
+                                      (Lwt_io.read proc.Process_group.stderr)
+                                  in
+                                  let* status = Process_group.wait proc.pid in
+                                  let exit_code =
+                                    match status with
+                                    | Unix.WEXITED n -> n
+                                    | Unix.WSIGNALED n -> 128 + n
+                                    | Unix.WSTOPPED n -> 128 + n
+                                  in
+                                  finish_runner
+                                    (Ok
+                                       (Printf.sprintf
+                                          "exit_code: %d\n\
+                                           stdout:\n\
+                                           %s\n\
+                                           stderr:\n\
+                                           %s"
+                                          exit_code stdout stderr));
+                                  Lwt.return_unit)
+                                (fun () -> Process_group.close proc))
+                            (fun exn ->
+                              finish_runner (Error exn);
+                              Lwt.return_unit));
                       let* result =
                         Lwt.pick
                           [
-                            (let* stdout = Lwt_io.read proc#stdout in
-                             let* stderr = Lwt_io.read proc#stderr in
-                             let* status = proc#close in
-                             let exit_code =
-                               match status with
-                               | Unix.WEXITED n -> n
-                               | Unix.WSIGNALED n -> 128 + n
-                               | Unix.WSTOPPED n -> 128 + n
+                            (let* result = runner_result in
+                             match !forced_result with
+                             | Some output -> Lwt.return (`Done output)
+                             | None -> Lwt.return (`Runner result));
+                            (let* () = Lwt_unix.sleep timeout_secs in
+                             let output =
+                               Printf.sprintf
+                                 "Error: skill command timed out after %.0f \
+                                  seconds"
+                                 timeout_secs
                              in
-                             Lwt.return
-                               (Printf.sprintf
-                                  "exit_code: %d\nstdout:\n%s\nstderr:\n%s"
-                                  exit_code stdout stderr));
-                            (let* () = timeout in
-                             proc#kill Sys.sigkill;
-                             Lwt.return
-                               "Error: skill command timed out after 30 seconds");
+                             forced_result := Some output;
+                             let* () = Process_group.terminate proc.pid in
+                             let* _ = runner_result in
+                             Lwt.return (`Done output));
+                            (match interrupt_check with
+                            | None -> fst (Lwt.wait ())
+                            | Some check ->
+                                let* () = wait_for_interrupt check in
+                                forced_result :=
+                                  Some "Skill command interrupted by user.";
+                                let* () =
+                                  Process_group.terminate_immediately proc.pid
+                                in
+                                let* _ = runner_result in
+                                Lwt.return
+                                  (`Done "Skill command interrupted by user."));
                           ]
                       in
-                      Lwt.return result));
+                      match result with
+                      | `Runner (Ok output) -> Lwt.return output
+                      | `Runner (Error exn) -> Lwt.fail exn
+                      | `Done output -> Lwt.return output)));
         invoke_stream = None;
         risk_level;
         deferred = false;

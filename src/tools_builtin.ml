@@ -529,10 +529,19 @@ let shell_exec ~workspace ~workspace_only ~allowed_commands ~extra_allowed_paths
   let run_process_with_timeout ?interrupt_check ?on_output_chunk ~cwd ~env ~cmd
       ~timeout_secs () =
     let open Lwt.Syntax in
-    let proc = Lwt_process.open_process_full ?cwd ~env cmd in
+    let proc =
+      match cmd with
+      | "", argv -> Process_group.start ?cwd ~env (Process_group.Exec argv)
+      | command, [||] ->
+          Process_group.start ?cwd ~env (Process_group.Shell command)
+      | command, argv ->
+          Process_group.start ?cwd ~env
+            (Process_group.Exec (Array.append [| command |] argv))
+    in
     let stdout_buf = Buffer.create 1024 in
     let stderr_buf = Buffer.create 256 in
     let runner_result, runner_wakener = Lwt.wait () in
+    let forced_result = ref None in
     let finish_runner result =
       if Lwt.is_sleeping runner_result then
         Lwt.wakeup_later runner_wakener result
@@ -540,42 +549,50 @@ let shell_exec ~workspace ~workspace_only ~allowed_commands ~extra_allowed_paths
     Lwt.async (fun () ->
         Lwt.catch
           (fun () ->
-            let* _ =
-              Lwt.both
-                (read_channel ?on_chunk:on_output_chunk proc#stdout stdout_buf)
-                (read_channel ?on_chunk:on_output_chunk proc#stderr stderr_buf)
-            in
-            let* status = proc#close in
-            let exit_code =
-              match status with
-              | Unix.WEXITED n -> n
-              | Unix.WSIGNALED n -> 128 + n
-              | Unix.WSTOPPED n -> 128 + n
-            in
-            finish_runner
-              (Ok
-                 (render_command_result ~exit_code
-                    ~stdout:(Buffer.contents stdout_buf)
-                    ~stderr:(Buffer.contents stderr_buf)));
-            Lwt.return_unit)
+            Lwt.finalize
+              (fun () ->
+                let* _ =
+                  Lwt.both
+                    (read_channel ?on_chunk:on_output_chunk
+                       proc.Process_group.stdout stdout_buf)
+                    (read_channel ?on_chunk:on_output_chunk
+                       proc.Process_group.stderr stderr_buf)
+                in
+                let* status = Process_group.wait proc.pid in
+                let exit_code =
+                  match status with
+                  | Unix.WEXITED n -> n
+                  | Unix.WSIGNALED n -> 128 + n
+                  | Unix.WSTOPPED n -> 128 + n
+                in
+                finish_runner
+                  (Ok
+                     (render_command_result ~exit_code
+                        ~stdout:(Buffer.contents stdout_buf)
+                        ~stderr:(Buffer.contents stderr_buf)));
+                Lwt.return_unit)
+              (fun () -> Process_group.close proc))
           (fun exn ->
             finish_runner (Error exn);
             Lwt.return_unit));
     let timeout =
       let* () = Lwt_unix.sleep timeout_secs in
-      (try proc#kill Sys.sigkill with _ -> ());
+      let output =
+        Printf.sprintf "Error: command timed out after %.0f seconds"
+          timeout_secs
+      in
+      forced_result := Some output;
+      let* () = Process_group.terminate proc.pid in
       let* _ = runner_result in
-      Lwt.return
-        (`Done
-           (Printf.sprintf "Error: command timed out after %.0f seconds"
-              timeout_secs))
+      Lwt.return (`Done output)
     in
     let interrupt =
       match interrupt_check with
       | None -> fst (Lwt.wait ())
       | Some _ ->
           let* () = wait_for_interrupt interrupt_check in
-          (try proc#kill Sys.sigkill with _ -> ());
+          forced_result := Some "Command interrupted by user.";
+          let* () = Process_group.terminate_immediately proc.pid in
           let* _ = runner_result in
           Lwt.return (`Done "Command interrupted by user.")
     in
@@ -583,7 +600,9 @@ let shell_exec ~workspace ~workspace_only ~allowed_commands ~extra_allowed_paths
       Lwt.pick
         [
           (let* result = runner_result in
-           Lwt.return (`Runner result));
+           match !forced_result with
+           | Some output -> Lwt.return (`Done output)
+           | None -> Lwt.return (`Runner result));
           timeout;
           interrupt;
         ]
@@ -669,7 +688,7 @@ let shell_exec ~workspace ~workspace_only ~allowed_commands ~extra_allowed_paths
                       "Error: command contains paths/targets disallowed in \
                        workspace_only mode"
                 | _ -> run_proc ("", Array.of_list argv))
-          else run_proc (Lwt_process.shell command)
+          else run_proc ("", [| "/bin/sh"; "-c"; command |])
   in
   {
     Tool.name = "shell_exec";
@@ -2591,11 +2610,12 @@ let git_operations ~workspace =
                     "GIT_TERMINAL_PROMPT=0";
                   |]
                 in
-                let cmd = ("", Array.of_list argv) in
                 let proc =
-                  Lwt_process.open_process_full ~cwd:workspace ~env cmd
+                  Process_group.start ~cwd:workspace ~env
+                    (Process_group.Exec (Array.of_list argv))
                 in
                 let runner_result, runner_wakener = Lwt.wait () in
+                let forced_result = ref None in
                 let finish_runner result =
                   if Lwt.is_sleeping runner_result then
                     Lwt.wakeup_later runner_wakener result
@@ -2603,33 +2623,41 @@ let git_operations ~workspace =
                 Lwt.async (fun () ->
                     Lwt.catch
                       (fun () ->
-                        let* stdout = Lwt_io.read proc#stdout in
-                        let* stderr = Lwt_io.read proc#stderr in
-                        let* status = proc#close in
-                        let exit_code =
-                          match status with
-                          | Unix.WEXITED n -> n
-                          | Unix.WSIGNALED n -> 128 + n
-                          | Unix.WSTOPPED n -> 128 + n
-                        in
-                        let output =
-                          (if stdout <> "" then stdout else "")
-                          ^ if stderr <> "" then stderr else ""
-                        in
-                        finish_runner
-                          (Ok
-                             (if exit_code = 0 then
-                                if output = "" then "(no output)" else output
-                              else
-                                Printf.sprintf "exit_code: %d\n%s" exit_code
-                                  output));
-                        Lwt.return_unit)
+                        Lwt.finalize
+                          (fun () ->
+                            let* stdout, stderr =
+                              Lwt.both
+                                (Lwt_io.read proc.Process_group.stdout)
+                                (Lwt_io.read proc.Process_group.stderr)
+                            in
+                            let* status = Process_group.wait proc.pid in
+                            let exit_code =
+                              match status with
+                              | Unix.WEXITED n -> n
+                              | Unix.WSIGNALED n -> 128 + n
+                              | Unix.WSTOPPED n -> 128 + n
+                            in
+                            let output =
+                              (if stdout <> "" then stdout else "")
+                              ^ if stderr <> "" then stderr else ""
+                            in
+                            finish_runner
+                              (Ok
+                                 (if exit_code = 0 then
+                                    if output = "" then "(no output)"
+                                    else output
+                                  else
+                                    Printf.sprintf "exit_code: %d\n%s" exit_code
+                                      output));
+                            Lwt.return_unit)
+                          (fun () -> Process_group.close proc))
                       (fun exn ->
                         finish_runner (Error exn);
                         Lwt.return_unit));
                 let timeout =
                   let* () = Lwt_unix.sleep 30.0 in
-                  (try proc#kill Sys.sigkill with _ -> ());
+                  forced_result := Some "Error: git timed out after 30 seconds";
+                  let* () = Process_group.terminate proc.pid in
                   let* _ = runner_result in
                   Lwt.return (`Done "Error: git timed out after 30 seconds")
                 in
@@ -2647,7 +2675,8 @@ let git_operations ~workspace =
                             wait ()
                       in
                       let* () = wait () in
-                      (try proc#kill Sys.sigkill with _ -> ());
+                      forced_result := Some "Git command interrupted by user.";
+                      let* () = Process_group.terminate_immediately proc.pid in
                       let* _ = runner_result in
                       Lwt.return (`Done "Git command interrupted by user.")
                 in
@@ -2655,7 +2684,9 @@ let git_operations ~workspace =
                   Lwt.pick
                     [
                       (let* result = runner_result in
-                       Lwt.return (`Runner result));
+                       match !forced_result with
+                       | Some output -> Lwt.return (`Done output)
+                       | None -> Lwt.return (`Runner result));
                       timeout;
                       interrupt;
                     ]

@@ -16,8 +16,20 @@ let test_substitute_no_match () =
   let result = Skills.substitute_template "no params here" (`Assoc []) in
   Alcotest.(check string) "no substitution" "no params here" result
 
-let test_load_skill_from_file () =
+let process_exists pid =
+  try
+    Unix.kill pid 0;
+    true
+  with Unix.Unix_error _ -> false
+
+let with_temp_skill_file json f =
   let tmp = Filename.temp_file "skill_test" ".json" in
+  let oc = open_out tmp in
+  output_string oc json;
+  close_out oc;
+  Fun.protect (fun () -> f tmp) ~finally:(fun () -> Sys.remove tmp)
+
+let test_load_skill_from_file () =
   let json =
     {|{
     "name": "test_skill",
@@ -32,16 +44,16 @@ let test_load_skill_from_file () =
     "risk_level": "low"
   }|}
   in
-  let oc = open_out tmp in
-  output_string oc json;
-  close_out oc;
-  (match Skills.load_skill tmp with
-  | Some tool ->
-      Alcotest.(check string) "tool name" "test_skill" tool.name;
-      Alcotest.(check string) "tool description" "A test skill" tool.description;
-      Alcotest.(check bool) "risk level low" true (tool.risk_level = Tool.Low)
-  | None -> Alcotest.fail "failed to load skill");
-  Sys.remove tmp
+  with_temp_skill_file json (fun tmp ->
+      match Skills.load_skill tmp with
+      | Some tool ->
+          Alcotest.(check string) "tool name" "test_skill" tool.name;
+          Alcotest.(check string)
+            "tool description" "A test skill" tool.description;
+          Alcotest.(check bool)
+            "risk level low" true
+            (tool.risk_level = Tool.Low)
+      | None -> Alcotest.fail "failed to load skill")
 
 let test_load_skill_invalid () =
   let tmp = Filename.temp_file "skill_bad" ".json" in
@@ -194,6 +206,113 @@ let test_skill_invoke_workspace_binary_path_blocked () =
          with Not_found -> false));
   Sys.remove tmp
 
+let test_skill_interrupt_kills_descendants () =
+  let workspace = Filename.get_temp_dir_name () in
+  let pid_file = Filename.concat workspace "skill-child.pid" in
+  let json =
+    Printf.sprintf
+      {|{
+    "name": "interrupt_test",
+    "description": "Interrupt test",
+    "parameters": {"type": "object", "properties": {}},
+    "command": "sh -c 'sleep 10 & child=$!; printf \"%%s\" \"$child\" > %s; wait $child'",
+    "risk_level": "low"
+  }|}
+      (Filename.quote pid_file)
+  in
+  with_temp_skill_file json (fun tmp ->
+      match Skills.load_skill ~workspace_only:false tmp with
+      | None -> Alcotest.fail "failed to load skill"
+      | Some tool ->
+          let interrupted = ref None in
+          let result =
+            Lwt_main.run
+              (let open Lwt.Syntax in
+               let trigger =
+                 let rec wait_for_pid_file attempts =
+                   if Sys.file_exists pid_file || attempts <= 0 then
+                     Lwt.return_unit
+                   else
+                     let* () = Lwt_unix.sleep 0.02 in
+                     wait_for_pid_file (attempts - 1)
+                 in
+                 let* () = wait_for_pid_file 50 in
+                 interrupted := Some "stop now";
+                 Lwt.return_unit
+               in
+               let invoke =
+                 tool.invoke
+                   ~context:
+                     {
+                       Tool.session_key = Some "web:test";
+                       send_progress = None;
+                       interrupt_check = Some (fun () -> !interrupted);
+                     }
+                   (`Assoc [])
+               in
+               let* result, () = Lwt.both invoke trigger in
+               Lwt.return result)
+          in
+          let child_pid =
+            let ic = open_in pid_file in
+            Fun.protect
+              (fun () -> int_of_string (input_line ic))
+              ~finally:(fun () -> close_in ic)
+          in
+          let rec wait_until_gone attempts =
+            if attempts <= 0 || not (process_exists child_pid) then ()
+            else begin
+              Unix.sleepf 0.05;
+              wait_until_gone (attempts - 1)
+            end
+          in
+          wait_until_gone 20;
+          Alcotest.(check string)
+            "interrupt result" "Skill command interrupted by user." result;
+          Alcotest.(check bool)
+            "child process terminated" false (process_exists child_pid);
+          Sys.remove pid_file)
+
+let test_skill_timeout_kills_descendants () =
+  let workspace = Filename.get_temp_dir_name () in
+  let pid_file = Filename.concat workspace "skill-timeout-child.pid" in
+  let json =
+    Printf.sprintf
+      {|{
+    "name": "timeout_test",
+    "description": "Timeout test",
+    "parameters": {"type": "object", "properties": {}},
+    "command": "sh -c 'sleep 10 & child=$!; printf \"%%s\" \"$child\" > %s; wait $child'",
+    "risk_level": "low"
+  }|}
+      (Filename.quote pid_file)
+  in
+  with_temp_skill_file json (fun tmp ->
+      match Skills.load_skill ~workspace_only:false ~timeout_secs:1.0 tmp with
+      | None -> Alcotest.fail "failed to load skill"
+      | Some tool ->
+          let result = Lwt_main.run (tool.invoke (`Assoc [])) in
+          let child_pid =
+            let ic = open_in pid_file in
+            Fun.protect
+              (fun () -> int_of_string (input_line ic))
+              ~finally:(fun () -> close_in ic)
+          in
+          let rec wait_until_gone attempts =
+            if attempts <= 0 || not (process_exists child_pid) then ()
+            else begin
+              Unix.sleepf 0.05;
+              wait_until_gone (attempts - 1)
+            end
+          in
+          wait_until_gone 20;
+          Alcotest.(check string)
+            "timeout result" "Error: skill command timed out after 1 seconds"
+            result;
+          Alcotest.(check bool)
+            "child process terminated" false (process_exists child_pid);
+          Sys.remove pid_file)
+
 let test_is_valid_skill_name () =
   Alcotest.(check bool) "simple" true (Skills.is_valid_skill_name "hello");
   Alcotest.(check bool)
@@ -335,6 +454,10 @@ let suite =
       test_skill_invoke_workspace_path_blocked;
     Alcotest.test_case "skill invoke workspace binary path blocked" `Quick
       test_skill_invoke_workspace_binary_path_blocked;
+    Alcotest.test_case "skill interrupt kills descendants" `Quick
+      test_skill_interrupt_kills_descendants;
+    Alcotest.test_case "skill timeout kills descendants" `Quick
+      test_skill_timeout_kills_descendants;
     Alcotest.test_case "valid skill name" `Quick test_is_valid_skill_name;
     Alcotest.test_case "skill_create valid" `Quick test_skill_create_valid;
     Alcotest.test_case "skill_create invalid name" `Quick

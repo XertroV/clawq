@@ -138,6 +138,12 @@ let test_migrates_v1_db_to_v4_without_data_loss () =
       Alcotest.(check bool)
         "discord_resume_state exists after migration" true
         (table_exists migrated "discord_resume_state");
+      Alcotest.(check bool)
+        "session_log_epochs exists after migration" true
+        (table_exists migrated "session_log_epochs");
+      Alcotest.(check bool)
+        "session_log_epoch_messages exists after migration" true
+        (table_exists migrated "session_log_epoch_messages");
       let msgs = Memory.load_history ~db:migrated ~session_key:"legacy" in
       Alcotest.(check int) "legacy row preserved" 1 (List.length msgs);
       Alcotest.(check string)

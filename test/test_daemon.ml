@@ -474,9 +474,13 @@ let test_resume_pending_main_session_arms_autonomous_continuation () =
           Provider.make_message ~role:"assistant" ~content:"continue_work"
           :: agent.Agent.history;
         Lwt.return "continue_work")
-      ~after_dispatch:(fun ~response ->
-        Session.process_autonomous_turn_result session_manager ~key:session_key
-          ~response)
+      ~after_dispatch:(fun ~response:_ ->
+        let state =
+          Session.continuation_state session_manager ~key:session_key
+        in
+        let _waiter, wakener = Lwt.wait () in
+        state.Session.cancel <- Some wakener;
+        Lwt.return_unit)
       ()
   in
   Lwt_main.run

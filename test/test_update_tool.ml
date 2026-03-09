@@ -6,6 +6,12 @@ let test_find_repo_root_returns_none_when_missing () =
   in
   Alcotest.(check (option string)) "no repo root" None result
 
+let process_exists pid =
+  try
+    Unix.kill pid 0;
+    true
+  with Unix.Unix_error _ -> false
+
 let test_run_update_continues_after_git_failure () =
   let commands = ref [] in
   let progress = ref [] in
@@ -398,6 +404,69 @@ let test_run_update_interrupts_running_command () =
     "progress started" true
     (List.mem "Starting update..." !progress)
 
+let test_stream_process_interrupt_kills_descendants () =
+  let interrupted = ref None in
+  let workspace = Filename.get_temp_dir_name () in
+  let pid_file = Filename.concat workspace "update-child.pid" in
+  let argv =
+    [|
+      "sh";
+      "-c";
+      Printf.sprintf
+        "sleep 10 & child=$!; printf \"%%s\" \"$child\" > %s; wait $child"
+        (Filename.quote pid_file);
+    |]
+  in
+  let result =
+    Lwt_main.run
+      (let open Lwt.Syntax in
+       let trigger =
+         let rec wait_for_pid_file attempts =
+           if Sys.file_exists pid_file then Lwt.return_unit
+           else if attempts <= 0 then Lwt.fail_with "child pid file not written"
+           else
+             let* () = Lwt_unix.sleep 0.02 in
+             wait_for_pid_file (attempts - 1)
+         in
+         let* () = wait_for_pid_file 50 in
+         interrupted := Some "stop now";
+         Lwt.return_unit
+       in
+       let run =
+         Lwt.catch
+           (fun () ->
+             let* _ =
+               Update_tool.stream_process ~cwd:workspace ~argv
+                 ~send_progress:(fun _ -> Lwt.return_unit)
+                 ~interrupt_check:(Some (fun () -> !interrupted))
+             in
+             Lwt.return "completed")
+           (function
+             | Update_tool.Interrupted_by_user -> Lwt.return "interrupted"
+             | exn -> Lwt.fail exn)
+       in
+       let* result, () = Lwt.both run trigger in
+       Lwt.return result)
+  in
+  let child_pid =
+    let ic = open_in pid_file in
+    Fun.protect
+      (fun () -> int_of_string (input_line ic))
+      ~finally:(fun () -> close_in ic)
+  in
+  let rec wait_until_gone attempts =
+    if attempts <= 0 || not (process_exists child_pid) then ()
+    else begin
+      Unix.sleepf 0.05;
+      wait_until_gone (attempts - 1)
+    end
+  in
+  wait_until_gone 20;
+  Alcotest.(check string) "interrupt result" "interrupted" result;
+  Alcotest.(check bool)
+    "child process terminated" false (process_exists child_pid);
+  Sys.remove pid_file
+
 let suite =
   [
     Alcotest.test_case "find repo root returns none when missing" `Quick
@@ -424,4 +493,6 @@ let suite =
       test_run_update_aborts_when_prepare_restart_fails;
     Alcotest.test_case "run update interrupts running command" `Quick
       test_run_update_interrupts_running_command;
+    Alcotest.test_case "stream_process interrupt kills descendants" `Quick
+      test_stream_process_interrupt_kills_descendants;
   ]

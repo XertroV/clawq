@@ -1,14 +1,19 @@
 ---
-completed_at: null
+claimed_at: "2026-03-09T08:49:59Z"
+claimed_by: cli-user
+completed_at: "2026-03-09T08:50:02Z"
 complexity: medium
 depends_on: []
+duration_minutes: 0.06666034381666666
 estimate_hours: 1
 id: B117
 priority: high
-started_at: null
-status: pending
+started_at: "2026-03-09T08:49:59Z"
+status: done
 tags: []
 title: At some stage recently we started getting stale build locks. Not sure why. Might be related to some restart logic tests? or any other reason that dune might exit early or improperly.
 ---
 
 At some stage recently we started getting stale build locks. Not sure why. Might be related to some restart logic tests? or any other reason that dune might exit early or improperly.
+
+This didn't used to be an issue, it startted happening yesterday. It started after we began using worktrunk (though I think I had run into the dune parallel issue before that). When I started using `wt` it got better for a while, but then we started getting the build locks persisting all the time. Like delete lock, run build, build succeeds, lock still present (not premoved). IDK why, very strange.
