@@ -1,10 +1,15 @@
 ---
+claimed_at: "2026-03-09T13:49:27Z"
+claimed_by: cli-user
+completed_at: "2026-03-09T13:54:02Z"
 complexity: low
 depends_on: []
+duration_minutes: 4.5838810567333335
 estimate_hours: 1
 id: B179
 priority: medium
-status: pending
+started_at: "2026-03-09T13:49:27Z"
+status: done
 tags: []
 title: Sessionless LLM dispatch/cost logs should include session ID
 ---

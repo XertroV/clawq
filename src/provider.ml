@@ -485,16 +485,17 @@ let select_provider ~(config : Runtime_config.t) =
   in
   (provider_name, provider, model)
 
-let complete ~(config : Runtime_config.t) ~messages ?tools () =
+let complete ~(config : Runtime_config.t) ~messages ?tools ?session_key () =
   let open Lwt.Syntax in
   let provider_name, provider, model = select_provider ~config in
   let kind = detect_kind ~name:provider_name provider in
+  let sk_tag = match session_key with Some s -> "[" ^ s ^ "] " | None -> "" in
   (* Dispatch to native handler if registered *)
   match List.assoc_opt kind !native_complete with
   | Some fn ->
       Logs.info (fun m ->
-          m "LLM native dispatch provider=%s model=%s msgs=%d" provider_name
-            model (List.length messages));
+          m "%sLLM native dispatch provider=%s model=%s msgs=%d" sk_tag
+            provider_name model (List.length messages));
       fn ~config ~provider ~model ~messages ?tools ()
   | None -> (
       let base_url =
@@ -523,8 +524,8 @@ let complete ~(config : Runtime_config.t) ~messages ?tools () =
       let body = `Assoc body_fields |> Yojson.Safe.to_string in
       let headers = [ ("Authorization", "Bearer " ^ provider.api_key) ] in
       Logs.info (fun m ->
-          m "LLM request to %s provider=%s model=%s msgs=%d" uri provider_name
-            model (List.length messages));
+          m "%sLLM request to %s provider=%s model=%s msgs=%d" sk_tag uri
+            provider_name model (List.length messages));
       let* status, response_body = Http_client.post_json ~uri ~headers ~body in
       if status < 200 || status >= 300 then begin
         if status = 400 then
@@ -846,15 +847,17 @@ let process_sse_stream ?(thinking_style = NoThinking) stream ~on_chunk =
            provider_response_items_json = None;
          })
 
-let complete_stream ~(config : Runtime_config.t) ~messages ?tools ~on_chunk () =
+let complete_stream ~(config : Runtime_config.t) ~messages ?tools ?session_key
+    ~on_chunk () =
   let open Lwt.Syntax in
   let provider_name, provider, model = select_provider ~config in
   let kind = detect_kind ~name:provider_name provider in
+  let sk_tag = match session_key with Some s -> "[" ^ s ^ "] " | None -> "" in
   (* Dispatch to native stream handler if registered *)
   match List.assoc_opt kind !native_stream with
   | Some fn ->
       Logs.info (fun m ->
-          m "LLM native stream dispatch provider=%s model=%s msgs=%d"
+          m "%sLLM native stream dispatch provider=%s model=%s msgs=%d" sk_tag
             provider_name model (List.length messages));
       fn ~config ~provider ~model ~messages ?tools ~on_chunk ()
   | None ->
@@ -885,7 +888,7 @@ let complete_stream ~(config : Runtime_config.t) ~messages ?tools ~on_chunk () =
       let body = `Assoc body_fields |> Yojson.Safe.to_string in
       let headers = [ ("Authorization", "Bearer " ^ provider.api_key) ] in
       Logs.info (fun m ->
-          m "LLM stream request to %s provider=%s model=%s msgs=%d" uri
+          m "%sLLM stream request to %s provider=%s model=%s msgs=%d" sk_tag uri
             provider_name model (List.length messages));
       let* status, stream = Http_client.post_stream ~uri ~headers ~body in
       if status < 200 || status >= 300 then begin

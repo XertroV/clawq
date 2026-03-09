@@ -111,9 +111,12 @@ let record_turn ~model ~prompt_tokens ~completion_tokens ~session_id =
     stats.total_completion_tokens + completion_tokens;
   stats.total_cost <- stats.total_cost +. cost;
   stats.turn_count <- stats.turn_count + 1;
+  let sk_tag = if session_id <> "" then "[" ^ session_id ^ "] " else "" in
   Logs.info (fun m ->
-      m "Cost: model=%s prompt=%d completion=%d cost=$%.6f session_total=$%.4f"
-        model prompt_tokens completion_tokens cost stats.total_cost)
+      m
+        "%sCost: model=%s prompt=%d completion=%d cost=$%.6f \
+         session_total=$%.4f"
+        sk_tag model prompt_tokens completion_tokens cost stats.total_cost)
 
 let get_session_cost ~session_id =
   match Hashtbl.find_opt sessions session_id with

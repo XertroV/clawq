@@ -822,7 +822,9 @@ let turn agent ~user_message ?db ?session_key ?interrupt_check ?inject_messages
   let resilient_complete config messages tools =
     let res = config.Runtime_config.resilience in
     let open Lwt.Syntax in
-    let primary () = Provider.complete ~config ~messages ?tools () in
+    let primary () =
+      Provider.complete ~config ~messages ?tools ?session_key ()
+    in
     let with_optional_fallback () =
       match res.fallback_provider with
       | Some fb_name ->
@@ -834,7 +836,8 @@ let turn agent ~user_message ?db ?session_key ?interrupt_check ?inject_messages
           if fallback_name = primary_name then primary ()
           else
             Resilience.with_fallback ~primary ~fallback:(fun () ->
-                Provider.complete ~config:fb_config ~messages ?tools ())
+                Provider.complete ~config:fb_config ~messages ?tools
+                  ?session_key ())
       | None -> primary ()
     in
     let* timed =
@@ -1019,7 +1022,8 @@ let turn_stream agent ~user_message ?db ?session_key ?interrupt_check
     let open Lwt.Syntax in
     Buffer.clear partial_buf;
     let primary () =
-      Provider.complete_stream ~config ~messages ?tools ~on_chunk ()
+      Provider.complete_stream ~config ~messages ?tools ?session_key ~on_chunk
+        ()
     in
     let with_optional_fallback () =
       match res.fallback_provider with
@@ -1033,7 +1037,7 @@ let turn_stream agent ~user_message ?db ?session_key ?interrupt_check
           else
             Resilience.with_fallback ~primary ~fallback:(fun () ->
                 Provider.complete_stream ~config:fb_config ~messages ?tools
-                  ~on_chunk ())
+                  ?session_key ~on_chunk ())
       | None -> primary ()
     in
     let* timed =
