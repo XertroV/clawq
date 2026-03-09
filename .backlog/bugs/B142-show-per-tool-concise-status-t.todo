@@ -1,10 +1,14 @@
 ---
+claimed_at: "2026-03-09T08:16:25Z"
+claimed_by: cli-user
+completed_at: null
 complexity: medium
 depends_on: []
 estimate_hours: 1
 id: B142
 priority: medium
-status: pending
+started_at: "2026-03-09T08:16:25Z"
+status: in_progress
 tags: []
 title: Show per-tool concise status/timing summary in Telegram progress messages
 ---

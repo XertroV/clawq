@@ -41,6 +41,7 @@ type t = {
   debounce_interval : float;
   mutable heartbeat_cancel : (unit Lwt.t * unit Lwt.u) option;
   mutable thinking_text : string;
+  mutable finalized : bool;
 }
 (** The consolidated status message state *)
 
@@ -61,6 +62,7 @@ let create ?(debounce_interval = 0.5) ~notifier ~parse_mode () =
     debounce_interval;
     heartbeat_cancel = None;
     thinking_text = "";
+    finalized = false;
   }
 
 let format_duration secs =
@@ -107,7 +109,7 @@ let render t =
     (* Collapsing: if more than 8 completed, collapse all but last 2 *)
     let n_completed = List.length completed in
     let collapsed_count, visible_completed =
-      if n_completed > 8 then
+      if n_completed > 8 && not t.finalized then
         let to_collapse = n_completed - 2 in
         let visible = List.filteri (fun i _ -> i >= to_collapse) completed in
         (to_collapse, visible)
@@ -152,7 +154,7 @@ let render t =
              summary_part preview_part timing);
         (* Show output tail for the last completed shell_exec when no tools
            are still running, so the user sees recent stdout briefly *)
-        if i = n_visible - 1 && is_last_overall entry then
+        if i = n_visible - 1 && is_last_overall entry && not t.finalized then
           match entry.output_tail with
           | Some tail ->
               Buffer.add_string buf (Printf.sprintf "```\n%s\n```\n" tail)
@@ -434,20 +436,14 @@ let finalize t =
         t.msg_id <- None;
         Lwt.return_unit
     | None -> Lwt.return_unit
-  else if total >= 4 then
-    let total_time =
-      match t.first_tool_at with
-      | Some start -> format_duration (Unix.gettimeofday () -. start)
-      | None -> "0s"
-    in
-    let text =
-      Printf.sprintf "\xE2\x9C\x93 %d tools \xC2\xB7 %s" total total_time
-    in
+  else if total >= 4 then (
+    t.finalized <- true;
+    let text = render t in
     match t.msg_id with
     | Some id ->
         let* () = t.notifier.edit id ~parse_mode:t.parse_mode text in
         Lwt.return_unit
-    | None -> Lwt.return_unit
-  else
-    (* < 4 tools, leave as-is *)
-    Lwt.return_unit
+    | None -> Lwt.return_unit)
+  else (
+    t.finalized <- true;
+    Lwt.return_unit)

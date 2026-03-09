@@ -263,6 +263,12 @@ let test_failed_tools_never_collapse () =
        true
      with Not_found -> false)
 
+let contains s sub =
+  try
+    ignore (Str.search_forward (Str.regexp_string sub) s 0);
+    true
+  with Not_found -> false
+
 let test_finalize_compacts () =
   let notifier, _, edited, _ = mock_notifier () in
   let t =
@@ -286,22 +292,16 @@ let test_finalize_compacts () =
     | (_, text) :: _ -> text
     | [] -> Alcotest.fail "expected at least one edit after finalize"
   in
-  (* Compact form: "✓ 5 tools · <time>" *)
+  (* Finalized form preserves per-tool detail + aggregate footer *)
+  Alcotest.(check bool) "contains tool_0" true (contains last_edit "tool_0");
+  Alcotest.(check bool) "contains tool_4" true (contains last_edit "tool_4");
   Alcotest.(check bool)
-    "compact contains checkmark and count" true
-    (let re = Str.regexp_string "5 tools" in
-     try
-       ignore (Str.search_forward re last_edit 0);
-       true
-     with Not_found -> false);
-  (* Should be short — not the full expanded render *)
-  Alcotest.(check bool) "compact is short" true (String.length last_edit < 50)
-
-let contains s sub =
-  try
-    ignore (Str.search_forward (Str.regexp_string sub) s 0);
-    true
-  with Not_found -> false
+    "contains aggregate footer" true
+    (contains last_edit "5 tools");
+  (* ━ = E2 94 81 *)
+  Alcotest.(check bool)
+    "contains separator" true
+    (contains last_edit "\xe2\x94\x81")
 
 let test_running_tool_elapsed_time () =
   let notifier, _, _, _ = mock_notifier () in
@@ -429,6 +429,183 @@ let test_box_drawing () =
     "has box connector ┗" true
     (contains output "\xe2\x94\x97")
 
+let test_finalize_preserves_per_tool_detail () =
+  let notifier, _, edited, _ = mock_notifier () in
+  let t =
+    Status_message.create ~debounce_interval:0.0 ~notifier
+      ~parse_mode:"Markdown" ()
+  in
+  Lwt_main.run
+    (let open Lwt.Syntax in
+     (* 3 successes *)
+     let* () =
+       Lwt_list.iter_s
+         (fun i ->
+           let id = Printf.sprintf "t%d" i in
+           let name = Printf.sprintf "good_%d" i in
+           add_completed_tool t ~id ~name)
+         [ 0; 1; 2 ]
+     in
+     (* 2 failures *)
+     let* () =
+       Status_message.tool_start t ~id:"f1" ~name:"bad_1"
+         ~summary:(Some "oops1")
+     in
+     let* () =
+       Status_message.tool_result t ~id:"f1" ~name:"bad_1" ~result:"error one"
+         ~is_error:true
+     in
+     let* () =
+       Status_message.tool_start t ~id:"f2" ~name:"bad_2"
+         ~summary:(Some "oops2")
+     in
+     let* () =
+       Status_message.tool_result t ~id:"f2" ~name:"bad_2" ~result:"error two"
+         ~is_error:true
+     in
+     Status_message.finalize t);
+  let last_edit =
+    match !edited with
+    | (_, text) :: _ -> text
+    | [] -> Alcotest.fail "expected edit after finalize"
+  in
+  (* All tool names present *)
+  List.iter
+    (fun name ->
+      Alcotest.(check bool)
+        (Printf.sprintf "%s present" name)
+        true (contains last_edit name))
+    [ "good_0"; "good_1"; "good_2"; "bad_1"; "bad_2" ];
+  (* Failures show error detail *)
+  Alcotest.(check bool)
+    "error one visible" true
+    (contains last_edit "error one");
+  Alcotest.(check bool)
+    "error two visible" true
+    (contains last_edit "error two");
+  (* Checkmark and failure mark present *)
+  Alcotest.(check bool) "has checkmark" true (contains last_edit "\xe2\x9c\x93");
+  Alcotest.(check bool)
+    "has failure mark" true
+    (contains last_edit "\xe2\x9c\x97");
+  (* Aggregate footer *)
+  Alcotest.(check bool) "footer present" true (contains last_edit "5 tools")
+
+let test_finalize_no_collapsing () =
+  let notifier, _, edited, _ = mock_notifier () in
+  let t =
+    Status_message.create ~debounce_interval:0.0 ~notifier
+      ~parse_mode:"Markdown" ()
+  in
+  Lwt_main.run
+    (let open Lwt.Syntax in
+     let* () =
+       Lwt_list.iter_s
+         (fun i ->
+           let id = Printf.sprintf "t%d" i in
+           let name = Printf.sprintf "tool_%d" i in
+           add_completed_tool t ~id ~name)
+         (List.init 10 Fun.id)
+     in
+     Status_message.finalize t);
+  let last_edit =
+    match !edited with
+    | (_, text) :: _ -> text
+    | [] -> Alcotest.fail "expected edit after finalize"
+  in
+  (* ALL tool names must appear — no collapsing in finalized *)
+  List.iter
+    (fun i ->
+      let name = Printf.sprintf "tool_%d" i in
+      Alcotest.(check bool)
+        (Printf.sprintf "%s visible" name)
+        true (contains last_edit name))
+    (List.init 10 Fun.id);
+  (* Should NOT contain collapse line *)
+  Alcotest.(check bool)
+    "no collapse line" false
+    (contains last_edit "tools completed");
+  (* Aggregate footer *)
+  Alcotest.(check bool) "footer present" true (contains last_edit "10 tools")
+
+let test_finalize_suppresses_output_tail () =
+  let notifier, _, _, _ = mock_notifier () in
+  let t =
+    Status_message.create ~debounce_interval:0.0 ~notifier
+      ~parse_mode:"Markdown" ()
+  in
+  Lwt_main.run
+    (let open Lwt.Syntax in
+     let* () =
+       Status_message.tool_start t ~id:"t1" ~name:"shell_exec"
+         ~summary:(Some "make build")
+     in
+     let* () =
+       Status_message.tool_result t ~id:"t1" ~name:"shell_exec"
+         ~result:"line1\nline2\nline3\nline4\nline5" ~is_error:false
+     in
+     Lwt.return_unit);
+  (* Before finalize: output_tail code block should be present *)
+  let before = Status_message.render t in
+  Alcotest.(check bool)
+    "output tail present before finalize" true (contains before "```");
+  (* Finalize *)
+  t.finalized <- true;
+  let after = Status_message.render t in
+  Alcotest.(check bool)
+    "output tail suppressed after finalize" false (contains after "```")
+
+let test_finalize_mixed_success_failure () =
+  let notifier, _, edited, _ = mock_notifier () in
+  let t =
+    Status_message.create ~debounce_interval:0.0 ~notifier
+      ~parse_mode:"Markdown" ()
+  in
+  Lwt_main.run
+    (let open Lwt.Syntax in
+     (* 2 successes *)
+     let* () = add_completed_tool t ~id:"s1" ~name:"file_read" in
+     let* () = add_completed_tool t ~id:"s2" ~name:"file_write" in
+     (* 2 failures *)
+     let* () =
+       Status_message.tool_start t ~id:"f1" ~name:"shell_exec"
+         ~summary:(Some "make test")
+     in
+     let* () =
+       Status_message.tool_result t ~id:"f1" ~name:"shell_exec"
+         ~result:"Exit code 1" ~is_error:true
+     in
+     let* () =
+       Status_message.tool_start t ~id:"f2" ~name:"shell_exec"
+         ~summary:(Some "make lint")
+     in
+     let* () =
+       Status_message.tool_result t ~id:"f2" ~name:"shell_exec"
+         ~result:"Lint failed" ~is_error:true
+     in
+     Status_message.finalize t);
+  let last_edit =
+    match !edited with
+    | (_, text) :: _ -> text
+    | [] -> Alcotest.fail "expected edit after finalize"
+  in
+  (* Both markers present *)
+  Alcotest.(check bool) "has checkmark" true (contains last_edit "\xe2\x9c\x93");
+  Alcotest.(check bool)
+    "has failure mark" true
+    (contains last_edit "\xe2\x9c\x97");
+  (* Error details visible *)
+  Alcotest.(check bool)
+    "exit code visible" true
+    (contains last_edit "Exit code 1");
+  Alcotest.(check bool)
+    "lint failed visible" true
+    (contains last_edit "Lint failed");
+  (* Aggregate footer says 4 tools *)
+  Alcotest.(check bool)
+    "footer says 4 tools" true
+    (contains last_edit "4 tools")
+
 let suite =
   [
     Alcotest.test_case "render empty" `Quick test_render_empty;
@@ -452,4 +629,12 @@ let suite =
       test_progress_counter_hidden_when_all_done;
     Alcotest.test_case "progress bar" `Quick test_progress_bar;
     Alcotest.test_case "box drawing" `Quick test_box_drawing;
+    Alcotest.test_case "finalize preserves per-tool detail" `Quick
+      test_finalize_preserves_per_tool_detail;
+    Alcotest.test_case "finalize no collapsing" `Quick
+      test_finalize_no_collapsing;
+    Alcotest.test_case "finalize suppresses output tail" `Quick
+      test_finalize_suppresses_output_tail;
+    Alcotest.test_case "finalize mixed success failure" `Quick
+      test_finalize_mixed_success_failure;
   ]
