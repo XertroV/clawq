@@ -158,8 +158,12 @@ let format_task_summary (task : task) =
   add (Printf.sprintf "prompt: %s" task.prompt);
   String.concat "\n" (List.rev !lines)
 
-let format_task_list tasks =
-  if tasks = [] then "No background tasks queued."
+let max_inactive_shown = 3
+
+let rec format_task_list tasks = format_task_list_with_hidden tasks 0
+
+and format_task_list_with_hidden tasks hidden_count =
+  if tasks = [] && hidden_count = 0 then "No background tasks."
   else
     let header =
       Printf.sprintf "  %-4s %-8s %-8s %-18s %s" "ID" "RUNNER" "STATUS" "BRANCH"
@@ -175,7 +179,17 @@ let format_task_list tasks =
             branch task.repo_path)
         tasks
     in
-    "Background tasks:\n" ^ header ^ "\n" ^ String.concat "\n" rows
+    let footer =
+      if hidden_count > 0 then
+        Printf.sprintf
+          "\n\
+          \  (%d older task%s hidden. Use `clawq background show <id>` to \
+           view.)"
+          hidden_count
+          (if hidden_count = 1 then "" else "s")
+      else ""
+    in
+    "Background tasks:\n" ^ header ^ "\n" ^ String.concat "\n" rows ^ footer
 
 let sql_text = function Sqlite3.Data.TEXT s -> Some s | _ -> None
 let sql_int = function Sqlite3.Data.INT i -> Some (Int64.to_int i) | _ -> None
@@ -301,6 +315,28 @@ let list_tasks ~db =
         rows := task_of_stmt stmt :: !rows
       done;
       List.rev !rows)
+
+let list_tasks_for_display ~db =
+  let all = list_tasks ~db in
+  let active, inactive =
+    List.partition (fun t -> not (is_terminal_status t.status)) all
+  in
+  let recent_inactive =
+    (* all is ordered by id DESC then reversed, so inactive preserves that;
+       sort desc and take the most recent N *)
+    let sorted = List.sort (fun a b -> compare b.id a.id) inactive in
+    let rec take n = function
+      | [] -> []
+      | _ when n <= 0 -> []
+      | x :: xs -> x :: take (n - 1) xs
+    in
+    take max_inactive_shown sorted
+  in
+  let hidden_count = List.length inactive - List.length recent_inactive in
+  let visible =
+    List.sort (fun a b -> compare b.id a.id) (active @ recent_inactive)
+  in
+  (visible, hidden_count)
 
 let get_task ~db ~id =
   let sql =
@@ -936,7 +972,9 @@ let list_tool ~db =
             | None ->
                 Lwt.return
                   (Printf.sprintf "No background task found with id %d" id))
-        | None -> Lwt.return (format_task_list (list_tasks ~db)));
+        | None ->
+            let tasks, hidden = list_tasks_for_display ~db in
+            Lwt.return (format_task_list_with_hidden tasks hidden));
     invoke_stream = None;
     risk_level = Low;
     deferred = false;

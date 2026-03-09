@@ -1698,12 +1698,14 @@ let cmd_background args =
   | [ "list" ] ->
       let db = get_db () in
       Background_task.init_schema db;
-      Background_task.format_task_list (Background_task.list_tasks ~db)
+      let tasks, hidden = Background_task.list_tasks_for_display ~db in
+      Background_task.format_task_list_with_hidden tasks hidden
   | [] ->
       let db = get_db () in
       Background_task.init_schema db;
+      let tasks, hidden = Background_task.list_tasks_for_display ~db in
       let list_output =
-        Background_task.format_task_list (Background_task.list_tasks ~db)
+        Background_task.format_task_list_with_hidden tasks hidden
       in
       list_output
       ^ "\n\n\

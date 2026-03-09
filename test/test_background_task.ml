@@ -636,6 +636,63 @@ let test_command_of_task_claude_with_model () =
     |]
     (Background_task.command_of_task task)
 
+let test_list_tasks_for_display_filters () =
+  with_temp_git_repo (fun repo_path ->
+      let db = Memory.init ~db_path:":memory:" () in
+      Background_task.init_schema db;
+      (* Enqueue 6 tasks *)
+      let ids =
+        List.init 6 (fun i ->
+            match
+              Background_task.enqueue ~db ~runner:Background_task.Codex
+                ~repo_path
+                ~prompt:(Printf.sprintf "task %d" i)
+                ()
+            with
+            | Ok id -> id
+            | Error msg -> Alcotest.fail msg)
+      in
+      (* Mark first 5 as succeeded via raw SQL *)
+      List.iter
+        (fun id ->
+          let sql =
+            Printf.sprintf
+              "UPDATE background_tasks SET status = 'succeeded' WHERE id = %d"
+              id
+          in
+          ignore (Sqlite3.exec db sql))
+        (List.filteri (fun i _ -> i < 5) ids);
+      (* Task 6 (index 5) remains queued/active *)
+      let visible, hidden = Background_task.list_tasks_for_display ~db in
+      (* Should see: 1 active + 3 most recent inactive = 4 visible *)
+      Alcotest.(check int) "visible count" 4 (List.length visible);
+      (* 5 inactive - 3 shown = 2 hidden *)
+      Alcotest.(check int) "hidden count" 2 hidden;
+      (* The active task should be in visible *)
+      let active_ids =
+        List.filter
+          (fun t ->
+            not (Background_task.is_terminal_status t.Background_task.status))
+          visible
+        |> List.map (fun t -> t.Background_task.id)
+      in
+      Alcotest.(check int) "one active task visible" 1 (List.length active_ids);
+      Alcotest.(check int)
+        "active is last task" (List.nth ids 5) (List.hd active_ids);
+      (* format_task_list_with_hidden should mention hidden tasks *)
+      let output =
+        Background_task.format_task_list_with_hidden visible hidden
+      in
+      Alcotest.(check bool)
+        "mentions hidden" true
+        (String.length output > 0
+        &&
+        let hidden_str = "2 older tasks hidden" in
+        try
+          ignore (Str.search_forward (Str.regexp_string hidden_str) output 0);
+          true
+        with Not_found -> false))
+
 let suite =
   [
     Alcotest.test_case "enqueue and list tasks" `Quick
@@ -676,4 +733,6 @@ let suite =
       test_routing_from_context_prefers_context_over_env;
     Alcotest.test_case "cmd_background add picks up session env" `Quick
       test_cmd_background_add_picks_up_session_env;
+    Alcotest.test_case "list_tasks_for_display filters inactive" `Quick
+      test_list_tasks_for_display_filters;
   ]
