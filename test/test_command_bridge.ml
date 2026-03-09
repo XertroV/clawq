@@ -290,6 +290,34 @@ let test_handle_session_inject_persists_when_daemon_missing () =
         (try
            ignore (Str.search_forward (Str.regexp_string "hello") show_result 0);
            true
+         with Not_found -> false);
+      Alcotest.(check bool)
+        "session show includes archived_epoch_count 0 when no compaction" true
+        (try
+           ignore
+             (Str.search_forward
+                (Str.regexp_string "\"archived_epoch_count\": 0")
+                show_result 0);
+           true
+         with Not_found -> false);
+      Alcotest.(check bool)
+        "session show includes total_archived_messages 0 when no compaction"
+        true
+        (try
+           ignore
+             (Str.search_forward
+                (Str.regexp_string "\"total_archived_messages\": 0")
+                show_result 0);
+           true
+         with Not_found -> false);
+      Alcotest.(check bool)
+        "session show includes system_prompt field when no compaction" true
+        (try
+           ignore
+             (Str.search_forward
+                (Str.regexp_string "\"system_prompt\":")
+                show_result 0);
+           true
          with Not_found -> false))
 
 let test_handle_session_inject_reports_queued_bang () =
@@ -386,6 +414,42 @@ let test_handle_session_epochs_and_show_archived_epoch () =
                 current_result 0);
            true
          with Not_found -> false);
+      Alcotest.(check bool)
+        "session show includes system_prompt field" true
+        (try
+           ignore
+             (Str.search_forward
+                (Str.regexp_string "\"system_prompt\":")
+                current_result 0);
+           true
+         with Not_found -> false);
+      Alcotest.(check bool)
+        "session show system_prompt contains Operating Stance section" true
+        (try
+           ignore
+             (Str.search_forward
+                (Str.regexp_string "Operating Stance")
+                current_result 0);
+           true
+         with Not_found -> false);
+      Alcotest.(check bool)
+        "session show includes archived_epoch_count after compaction" true
+        (try
+           ignore
+             (Str.search_forward
+                (Str.regexp_string "\"archived_epoch_count\": 1")
+                current_result 0);
+           true
+         with Not_found -> false);
+      Alcotest.(check bool)
+        "session show includes total_archived_messages after compaction" true
+        (try
+           ignore
+             (Str.search_forward
+                (Str.regexp_string "\"total_archived_messages\": 2")
+                current_result 0);
+           true
+         with Not_found -> false);
       let archived_result =
         Command_bridge.handle [ "session"; "show"; "web:test"; "--epoch"; "1" ]
       in
@@ -395,6 +459,33 @@ let test_handle_session_epochs_and_show_archived_epoch () =
            ignore
              (Str.search_forward
                 (Str.regexp_string "before compaction")
+                archived_result 0);
+           true
+         with Not_found -> false);
+      Alcotest.(check bool)
+        "archived epoch view includes system_prompt field" true
+        (try
+           ignore
+             (Str.search_forward
+                (Str.regexp_string "\"system_prompt\":")
+                archived_result 0);
+           true
+         with Not_found -> false);
+      Alcotest.(check bool)
+        "archived epoch view includes archived_epoch_count" true
+        (try
+           ignore
+             (Str.search_forward
+                (Str.regexp_string "\"archived_epoch_count\": 1")
+                archived_result 0);
+           true
+         with Not_found -> false);
+      Alcotest.(check bool)
+        "archived epoch view includes total_archived_messages" true
+        (try
+           ignore
+             (Str.search_forward
+                (Str.regexp_string "\"total_archived_messages\": 2")
                 archived_result 0);
            true
          with Not_found -> false))

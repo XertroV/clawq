@@ -849,11 +849,30 @@ let cmd_session args =
           match Memory.load_epoch_messages ~db ~session_key ~epoch with
           | None -> Printf.sprintf "No epoch matched for session %s" session_key
           | Some rows ->
+              let config = get_config () in
+              let system_prompt =
+                Prompt_builder.build ~config ~tool_registry:None ()
+              in
+              let epochs = Memory.list_session_epochs ~db ~session_key in
+              let archived =
+                List.filter
+                  (fun (e : Memory.session_epoch) -> not e.current)
+                  epochs
+              in
+              let archived_epoch_count = List.length archived in
+              let total_archived_messages =
+                List.fold_left
+                  (fun acc (e : Memory.session_epoch) -> acc + e.message_count)
+                  0 archived
+              in
               Yojson.Safe.pretty_to_string
                 (`Assoc
                    [
                      ("session_key", `String session_key);
                      ("epoch", epoch_label);
+                     ("system_prompt", `String system_prompt);
+                     ("archived_epoch_count", `Int archived_epoch_count);
+                     ("total_archived_messages", `Int total_archived_messages);
                      ( "messages",
                        `List
                          (List.mapi (fun i row -> raw_message_json i row) rows)
