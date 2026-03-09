@@ -198,3 +198,4 @@ bugs:
     - file: B197-telegram-typing-indicator-shou.todo
     - file: B198-emoji-reactions-to-injected-me.todo
     - file: B199-update-system-prompt-to-encour.todo
+    - file: B200-background-tasks-delegate-and.todo

@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B200
+priority: high
+status: pending
+tags: []
+title: background tasks, delegate, and spawning tools are not available to the agent -- is there a setting required or something? if I run /tools i don't see them. (Also, /tools should return tools alphabetically if it doesn't already). Do an audit of all the tools and find out how many are implemented but not available to the agent.
+---
+
+background tasks, delegate, and spawning tools are not available to the agent -- is there a setting required or something? if I run /tools i don't see them. (Also, /tools should return tools alphabetically if it doesn't already). Do an audit of all the tools and find out how many are implemented but not available to the agent.
