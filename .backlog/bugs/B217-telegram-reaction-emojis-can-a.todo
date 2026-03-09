@@ -1,0 +1,11 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B217
+priority: medium
+status: pending
+tags: []
+title: Telegram reaction emojis can advance from eyes to in-progress but then stop updating afterward
+---
+Observed in live Telegram sessions: reaction emojis progress from the initial eyes/received state to an in-progress indicator, but then are not updated afterward to reflect later task/session state changes (for example done, error, or other final status). Investigate the reaction update lifecycle and grouping logic across injected messages, busy-session/drain paths, and finalization. Acceptance criteria: (1) reaction emojis continue updating through the full session/task lifecycle rather than stalling after the in-progress transition; (2) final states such as success/error are reflected consistently where intended; (3) injected/queued/drain-related messages stay in sync with the primary message group; (4) logging/tests cover the update path sufficiently to prevent regressions.
