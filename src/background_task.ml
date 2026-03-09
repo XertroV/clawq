@@ -790,7 +790,7 @@ let running : (int, unit) Hashtbl.t = Hashtbl.create 16
 
 let spawn_task ?(on_task_started = fun _ -> Lwt.return_unit)
     ?(on_task_finished = fun _ -> Lwt.return_unit)
-    ?(run_simple_command = run_simple_command) ~db task =
+    ?(run_simple_command = run_simple_command) ?command_override ~db task =
   Hashtbl.replace running task.id ();
   Lwt.async (fun () ->
       let open Lwt.Syntax in
@@ -806,18 +806,22 @@ let spawn_task ?(on_task_started = fun _ -> Lwt.return_unit)
               finish ~db ~id:task.id ~status:Failed ~result_preview:err;
               Lwt.return_unit
           | Ok (branch, worktree_path, log_path) ->
-              let argv =
-                command_of_task
-                  {
-                    task with
-                    branch;
-                    worktree_path = Some worktree_path;
-                    log_path = Some log_path;
-                  }
+              let command =
+                match command_override with
+                | Some cmd -> cmd
+                | None ->
+                    Process_group.Exec
+                      (command_of_task
+                         {
+                           task with
+                           branch;
+                           worktree_path = Some worktree_path;
+                           log_path = Some log_path;
+                         })
               in
               let proc =
                 Process_group.start ~cwd:worktree_path
-                  ~env:(Unix.environment ()) (Process_group.Exec argv)
+                  ~env:(Unix.environment ()) command
               in
               let pid = proc.pid in
               if
@@ -837,6 +841,21 @@ let spawn_task ?(on_task_started = fun _ -> Lwt.return_unit)
                 in
                 let stdout_buf = Buffer.create 1024 in
                 let stderr_buf = Buffer.create 256 in
+                let wait_promise = Process_group.wait proc.pid in
+                (* B210 watchdog: after child exits, give IO 2s to drain,
+                   then kill remaining process group members that may be
+                   holding pipe fds open (e.g. grandchildren) *)
+                Lwt.async (fun () ->
+                    let open Lwt.Syntax in
+                    let* _status = wait_promise in
+                    let* () = Lwt_unix.sleep 2.0 in
+                    Logs.info (fun m ->
+                        m
+                          "Background task %d: child exited, killing remaining \
+                           process group members"
+                          task.id);
+                    Process_group.signal_group proc.pid Sys.sigkill;
+                    Lwt.return_unit);
                 let* status =
                   Lwt.finalize
                     (fun () ->
@@ -851,7 +870,7 @@ let spawn_task ?(on_task_started = fun _ -> Lwt.return_unit)
                                   proc.Process_group.stderr log_oc stderr_buf;
                               ])
                       in
-                      Process_group.wait proc.pid)
+                      wait_promise)
                     (fun () -> Process_group.close proc)
                 in
                 let output =
@@ -898,6 +917,42 @@ let start_queued_with_callback ~on_task_finished ~db
 
 let start_queued ~db =
   start_queued_with_callback ~on_task_finished:(fun _ -> Lwt.return_unit) ~db ()
+
+let is_tracked_locally id = Hashtbl.mem running id
+
+let reap_dead_running_tasks ~db ~on_task_finished =
+  let running_in_db =
+    List.filter
+      (fun t -> t.status = Running && not (Hashtbl.mem running t.id))
+      (list_tasks ~db)
+  in
+  let count = ref 0 in
+  List.iter
+    (fun task ->
+      let pid_alive =
+        match task.pid with
+        | Some pid when pid > 0 -> Process_group.group_alive pid
+        | _ -> false
+      in
+      if not pid_alive then begin
+        let reason =
+          match task.pid with
+          | Some pid ->
+              Printf.sprintf
+                "Process group %d no longer alive (orphaned/crashed)" pid
+          | None -> "No PID recorded for running task"
+        in
+        Logs.warn (fun m ->
+            m "Reaping stale background task %d: %s" task.id reason);
+        finish ~db ~id:task.id ~status:Failed ~result_preview:reason;
+        incr count;
+        Lwt.async (fun () ->
+            match get_task ~db ~id:task.id with
+            | Some t -> on_task_finished t
+            | None -> Lwt.return_unit)
+      end)
+    running_in_db;
+  !count
 
 let enqueue_tool_with_notify ~notify_cfg ~db =
   {

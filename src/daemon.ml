@@ -1521,6 +1521,17 @@ let run ~(config : Runtime_config.t) =
   | Some db ->
       Scheduler.init_schema db;
       Background_task.init_schema db;
+      let recovered =
+        Background_task.reap_dead_running_tasks ~db
+          ~on_task_finished:
+            (notify_background_task_finished ~session_manager ~config)
+      in
+      if recovered > 0 then
+        Logs.warn (fun m ->
+            m
+              "Recovered %d orphaned background task(s) from previous daemon \
+               run"
+              recovered);
       Lwt.async (fun () ->
           Lwt.catch
             (fun () ->
@@ -1593,6 +1604,10 @@ let run ~(config : Runtime_config.t) =
                   Logs.info (fun m ->
                       m "Background task poll: %d queued task(s) pending"
                         (List.length queued));
+                ignore
+                  (Background_task.reap_dead_running_tasks ~db
+                     ~on_task_finished:
+                       (notify_background_task_finished ~session_manager ~config));
                 let () =
                   Background_task.start_queued_with_callback ~db
                     ~on_task_finished:

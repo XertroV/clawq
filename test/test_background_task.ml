@@ -755,6 +755,267 @@ let test_command_of_task_claude_with_model () =
     |]
     (Background_task.command_of_task task)
 
+let test_reap_marks_dead_pid_failed () =
+  with_temp_git_repo (fun repo_path ->
+      let db = Memory.init ~db_path:":memory:" () in
+      Background_task.init_schema db;
+      let id =
+        match
+          Background_task.enqueue ~db ~runner:Background_task.Codex ~repo_path
+            ~prompt:"test reap" ()
+        with
+        | Ok id -> id
+        | Error msg -> Alcotest.fail msg
+      in
+      ignore
+        (Background_task.set_running ~db ~id ~branch:"clawq-bg-1"
+           ~worktree_path:"/tmp/worktree" ~log_path:"/tmp/task.log" ~pid:999999);
+      let callback_fired = ref false in
+      let reaped =
+        Background_task.reap_dead_running_tasks ~db ~on_task_finished:(fun _ ->
+            callback_fired := true;
+            Lwt.return_unit)
+      in
+      Alcotest.(check int) "one task reaped" 1 reaped;
+      (match Background_task.get_task ~db ~id with
+      | None -> Alcotest.fail "expected task"
+      | Some task ->
+          Alcotest.(check string)
+            "status failed" "failed"
+            (Background_task.string_of_status task.status);
+          Alcotest.(check bool)
+            "result mentions no longer alive" true
+            (match task.result_preview with
+            | Some s -> (
+                try
+                  ignore
+                    (Str.search_forward
+                       (Str.regexp_string "no longer alive")
+                       s 0);
+                  true
+                with Not_found -> false)
+            | None -> false));
+      (* Run Lwt loop briefly to let Lwt.async callback fire *)
+      Lwt_main.run (Lwt_unix.sleep 0.01);
+      Alcotest.(check bool) "on_task_finished fired" true !callback_fired)
+
+let test_reap_keeps_alive_process () =
+  with_temp_git_repo (fun repo_path ->
+      let db = Memory.init ~db_path:":memory:" () in
+      Background_task.init_schema db;
+      let id =
+        match
+          Background_task.enqueue ~db ~runner:Background_task.Codex ~repo_path
+            ~prompt:"test reap alive" ()
+        with
+        | Ok id -> id
+        | Error msg -> Alcotest.fail msg
+      in
+      let proc =
+        Process_group.start ~env:(Unix.environment ())
+          (Process_group.Exec [| "sleep"; "30" |])
+      in
+      Fun.protect
+        (fun () ->
+          ignore
+            (Background_task.set_running ~db ~id ~branch:"clawq-bg-1"
+               ~worktree_path:"/tmp/worktree" ~log_path:"/tmp/task.log"
+               ~pid:proc.pid);
+          let reaped =
+            Background_task.reap_dead_running_tasks ~db
+              ~on_task_finished:(fun _ -> Lwt.return_unit)
+          in
+          Alcotest.(check int) "no tasks reaped" 0 reaped;
+          match Background_task.get_task ~db ~id with
+          | None -> Alcotest.fail "expected task"
+          | Some task ->
+              Alcotest.(check string)
+                "status still running" "running"
+                (Background_task.string_of_status task.status))
+        ~finally:(fun () ->
+          Process_group.terminate_blocking proc.pid;
+          ignore (Lwt_main.run (Process_group.wait proc.pid));
+          ignore (Lwt_main.run (Process_group.close proc))))
+
+let test_reap_skips_locally_tracked () =
+  with_temp_git_repo (fun repo_path ->
+      let db = Memory.init ~db_path:":memory:" () in
+      Background_task.init_schema db;
+      let id =
+        match
+          Background_task.enqueue ~db ~runner:Background_task.Codex ~repo_path
+            ~prompt:"test reap tracked" ()
+        with
+        | Ok id -> id
+        | Error msg -> Alcotest.fail msg
+      in
+      ignore
+        (Background_task.set_running ~db ~id ~branch:"clawq-bg-1"
+           ~worktree_path:"/tmp/worktree" ~log_path:"/tmp/task.log" ~pid:999999);
+      (* Simulate local tracking by spawning — we use the impl detail that
+         spawn_task adds to the running hashtable. Instead, we verify via
+         is_tracked_locally after a fake spawn_task mock. Since we can't
+         directly add to the hashtable, we use spawn_task with a failing
+         run_simple_command and check that it adds then removes. Instead,
+         let's just verify the reap function skips tracked tasks by using
+         a real short-lived spawn. We do it differently: call spawn_task
+         with a mock, and check that while it's in the hashtable, reap
+         skips it. *)
+      (* Alternative approach: just enqueue + set_running with a dead PID,
+         but also start a real spawn_task for the same ID to put it in the
+         hashtable. Actually the simplest: use spawn_task which adds to
+         running hashtable, then manually check. But spawn_task is async.
+         Instead, let's directly test via the hashtable exposure. *)
+      (* The function is_tracked_locally checks Hashtbl.mem running id.
+         We need to get the task into the hashtable without a full spawn.
+         The cleanest test: start a spawn_task with a mock that blocks,
+         verify reap skips it, then let it finish. *)
+      let block_promise, block_resolver = Lwt.wait () in
+      Lwt_main.run
+        (let open Lwt.Syntax in
+         Background_task.spawn_task ~db
+           ~run_simple_command:(fun ~cwd:_ _argv ->
+             let* () = block_promise in
+             Lwt.return (1, "", "blocked"))
+           (Option.get (Background_task.get_task ~db ~id));
+         (* Give Lwt.async a chance to start *)
+         let* () = Lwt_unix.sleep 0.01 in
+         Alcotest.(check bool)
+           "task is tracked locally" true
+           (Background_task.is_tracked_locally id);
+         let reaped =
+           Background_task.reap_dead_running_tasks ~db
+             ~on_task_finished:(fun _ -> Lwt.return_unit)
+         in
+         Alcotest.(check int) "no tasks reaped (locally tracked)" 0 reaped;
+         (* Unblock the spawn so it cleans up *)
+         Lwt.wakeup block_resolver ();
+         let* () = Lwt_unix.sleep 0.05 in
+         Lwt.return_unit))
+
+let test_reap_handles_no_pid () =
+  with_temp_git_repo (fun repo_path ->
+      let db = Memory.init ~db_path:":memory:" () in
+      Background_task.init_schema db;
+      let id =
+        match
+          Background_task.enqueue ~db ~runner:Background_task.Codex ~repo_path
+            ~prompt:"test reap no pid" ()
+        with
+        | Ok id -> id
+        | Error msg -> Alcotest.fail msg
+      in
+      (* Manually set status to running with no PID via raw SQL *)
+      let sql =
+        Printf.sprintf
+          "UPDATE background_tasks SET status = 'running' WHERE id = %d" id
+      in
+      ignore (Sqlite3.exec db sql);
+      let reaped =
+        Background_task.reap_dead_running_tasks ~db ~on_task_finished:(fun _ ->
+            Lwt.return_unit)
+      in
+      Alcotest.(check int) "one task reaped" 1 reaped;
+      match Background_task.get_task ~db ~id with
+      | None -> Alcotest.fail "expected task"
+      | Some task ->
+          Alcotest.(check string)
+            "status failed" "failed"
+            (Background_task.string_of_status task.status);
+          Alcotest.(check bool)
+            "result mentions No PID" true
+            (match task.result_preview with
+            | Some s -> (
+                try
+                  ignore (Str.search_forward (Str.regexp_string "No PID") s 0);
+                  true
+                with Not_found -> false)
+            | None -> false))
+
+let test_spawn_detects_child_exit_despite_open_pipes () =
+  with_temp_git_repo (fun repo_path ->
+      let db = Memory.init ~db_path:":memory:" () in
+      Background_task.init_schema db;
+      let id =
+        match
+          Background_task.enqueue ~db ~runner:Background_task.Codex ~repo_path
+            ~prompt:"test B210 watchdog" ()
+        with
+        | Ok id -> id
+        | Error msg -> Alcotest.fail msg
+      in
+      (* Mock run_simple_command so prepare_worktree succeeds without git.
+         We need to create the worktree dir since spawn_task uses it as cwd. *)
+      let wt_path =
+        Filename.concat
+          (Filename.concat
+             (Filename.concat
+                (try Sys.getenv "HOME" with Not_found -> "/tmp")
+                ".clawq")
+             "background-worktrees")
+          (Printf.sprintf "task-%d" id)
+      in
+      (* Ensure parent dirs exist so prepare_worktree can run;
+         don't create wt_path itself — prepare_worktree rejects existing *)
+      (try Unix.mkdir (Filename.dirname wt_path) 0o755
+       with Unix.Unix_error (Unix.EEXIST, _, _) -> ());
+      (try Sys.rmdir wt_path with Sys_error _ -> ());
+      let finished = ref false in
+      Lwt_main.run
+        (let open Lwt.Syntax in
+         (* Command: main process exits immediately, but sleep 999 keeps
+            pipe fds open as a grandchild in the same process group *)
+         Background_task.spawn_task ~db
+           ~run_simple_command:(fun ~cwd:_ _argv ->
+             (* Mock git worktree add: create the directory so
+                Process_group.start has a valid cwd *)
+             (try Unix.mkdir wt_path 0o755
+              with Unix.Unix_error (Unix.EEXIST, _, _) -> ());
+             Lwt.return (0, "", ""))
+           ~command_override:(Process_group.Shell "sleep 999 & exec true")
+           ~on_task_finished:(fun _ ->
+             finished := true;
+             Lwt.return_unit)
+           (Option.get (Background_task.get_task ~db ~id));
+         (* Wait for task to reach terminal status — the watchdog needs
+            ~2s after child exits to kill remaining process group members.
+            Total timeout 8s is generous. *)
+         let deadline = Unix.gettimeofday () +. 8.0 in
+         let rec wait () =
+           match Background_task.get_task ~db ~id with
+           | Some t when Background_task.is_terminal_status t.status ->
+               Lwt.return_unit
+           | _ when Unix.gettimeofday () > deadline ->
+               Alcotest.fail "task did not reach terminal status within timeout"
+           | _ ->
+               let* () = Lwt_unix.sleep 0.1 in
+               wait ()
+         in
+         let* () = wait () in
+         Lwt.return_unit);
+      (* Kill any lingering sleep 999 processes from this test *)
+      (try ignore (Sys.command "pkill -f 'sleep 999' 2>/dev/null || true")
+       with _ -> ());
+      (match Background_task.get_task ~db ~id with
+      | None -> Alcotest.fail "expected task"
+      | Some task ->
+          Alcotest.(check bool)
+            "task reached terminal status" true
+            (Background_task.is_terminal_status task.status));
+      Alcotest.(check bool) "on_task_finished fired" true !finished;
+      (* Cleanup worktree dir and log file *)
+      (try
+         let log_dir =
+           Filename.concat
+             (Filename.concat
+                (try Sys.getenv "HOME" with Not_found -> "/tmp")
+                ".clawq")
+             "background-logs"
+         in
+         Sys.remove (Filename.concat log_dir (Printf.sprintf "task-%d.log" id))
+       with Sys_error _ -> ());
+      try Sys.rmdir wt_path with Sys_error _ -> ())
+
 let test_list_tasks_for_display_filters () =
   with_temp_git_repo (fun repo_path ->
       let db = Memory.init ~db_path:":memory:" () in
@@ -866,4 +1127,13 @@ let suite =
       test_cmd_background_add_picks_up_session_env;
     Alcotest.test_case "list_tasks_for_display filters inactive" `Quick
       test_list_tasks_for_display_filters;
+    Alcotest.test_case "reap marks dead pid failed" `Quick
+      test_reap_marks_dead_pid_failed;
+    Alcotest.test_case "reap keeps alive process" `Quick
+      test_reap_keeps_alive_process;
+    Alcotest.test_case "reap skips locally tracked" `Quick
+      test_reap_skips_locally_tracked;
+    Alcotest.test_case "reap handles no pid" `Quick test_reap_handles_no_pid;
+    Alcotest.test_case "spawn detects child exit despite open pipes" `Slow
+      test_spawn_detects_child_exit_despite_open_pipes;
   ]
