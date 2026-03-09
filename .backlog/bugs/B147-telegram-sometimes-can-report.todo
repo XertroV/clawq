@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B147
+priority: high
+status: pending
+tags: []
+title: Telegram sometimes can report a 409 erorr and we do not handle it
+---
+
+Telegram sometimes can report a 409 erorr and we do not handle it
