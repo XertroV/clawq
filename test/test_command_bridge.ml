@@ -1017,6 +1017,32 @@ let test_cmd_agent_reexecs_on_restart () =
     (Some (Sys.executable_name, [ Sys.executable_name; "agent" ]))
     !execd
 
+let test_cmd_agent_reexecs_on_restart_with_fresh_path () =
+  let previous = Sys.getenv_opt Restart_exec.reexec_path_env in
+  Unix.putenv Restart_exec.reexec_path_env "/tmp/clawq-fresh";
+  Fun.protect
+    (fun () ->
+      let execd = ref None in
+      let result =
+        Command_bridge.cmd_agent
+          ~acquire_lock:(fun () ->
+            Some (Unix.openfile "/dev/null" [ Unix.O_RDONLY ] 0))
+          ~release_lock:(fun fd_opt -> Option.iter Unix.close fd_opt)
+          ~run_daemon:(fun ~config:_ -> Daemon.Restart)
+          ~execv:(fun path argv -> execd := Some (path, Array.to_list argv))
+          ()
+      in
+      Alcotest.(check string) "restart result" "Daemon restart requested."
+        result;
+      Alcotest.(check (option (pair string (list string))))
+        "re-execs agent with fresh path"
+        (Some ("/tmp/clawq-fresh", [ "/tmp/clawq-fresh"; "agent" ]))
+        !execd)
+    ~finally:(fun () ->
+      match previous with
+      | Some value -> Unix.putenv Restart_exec.reexec_path_env value
+      | None -> Unix.putenv Restart_exec.reexec_path_env "")
+
 let test_cmd_agent_stops_on_shutdown () =
   let execd = ref false in
   let result =
@@ -1276,6 +1302,8 @@ let suite =
     Alcotest.test_case "handle tunnel status" `Quick test_handle_tunnel_status;
     Alcotest.test_case "cmd_agent reexecs on restart" `Quick
       test_cmd_agent_reexecs_on_restart;
+    Alcotest.test_case "cmd_agent reexecs on restart with fresh path" `Quick
+      test_cmd_agent_reexecs_on_restart_with_fresh_path;
     Alcotest.test_case "cmd_agent stops on shutdown" `Quick
       test_cmd_agent_stops_on_shutdown;
     Alcotest.test_case "status cleans stale daemon state" `Quick

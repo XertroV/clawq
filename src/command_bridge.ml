@@ -1354,7 +1354,7 @@ let cmd_mcp () =
     ""
   end
 
-let agent_argv () = [| Sys.executable_name; "agent" |]
+let agent_argv ~executable = [| executable; "agent" |]
 
 let cmd_agent ?(run_daemon = fun ~config -> Lwt_main.run (Daemon.run ~config))
     ?(execv = Unix.execv) ?(acquire_lock = Service.acquire_singleton_lock)
@@ -1377,7 +1377,8 @@ let cmd_agent ?(run_daemon = fun ~config -> Lwt_main.run (Daemon.run ~config))
           release_lock (Some lock_fd);
           "Daemon stopped."
       | Daemon.Restart ->
-          execv Sys.executable_name (agent_argv ());
+          let executable = Restart_exec.executable () in
+          execv executable (agent_argv ~executable);
           "Daemon restart requested.")
 
 let cmd_cron args =

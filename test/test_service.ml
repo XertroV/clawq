@@ -10,6 +10,14 @@ let env_lacks_key env key =
          String.length entry >= plen && String.sub entry 0 plen = prefix)
        env)
 
+let with_env key value f =
+  let previous = Sys.getenv_opt key in
+  (match value with Some v -> Unix.putenv key v | None -> Unix.putenv key "");
+  Fun.protect f ~finally:(fun () ->
+      match previous with
+      | Some v -> Unix.putenv key v
+      | None -> Unix.putenv key "")
+
 let test_handle_daemon_exit_restart_sets_nofork_and_execs () =
   let called = ref None in
   Service.handle_daemon_exit
@@ -56,6 +64,17 @@ let test_handle_daemon_exit_restart_carries_restart_notify_env () =
   in
   Restart_notify.remove ();
   Alcotest.(check bool) "restart notify env present" true contains_restart_json
+
+let test_handle_daemon_exit_restart_prefers_reexec_env () =
+  with_env Restart_exec.reexec_path_env (Some "/tmp/clawq-fresh") (fun () ->
+      let called = ref None in
+      Service.handle_daemon_exit
+        ~execve:(fun path argv _ -> called := Some (path, Array.to_list argv))
+        Daemon.Restart;
+      Alcotest.(check (option (pair string (list string))))
+        "execve uses fresh path"
+        (Some ("/tmp/clawq-fresh", [ "/tmp/clawq-fresh"; "service"; "start" ]))
+        !called)
 
 let test_handle_daemon_exit_shutdown_skips_exec () =
   let called = ref false in
@@ -109,6 +128,27 @@ let test_run_nofork_start_runs_daemon_in_internal_mode () =
     "internal nofork cleared before daemon run" (Some "") !internal_seen;
   Alcotest.(check bool) "no exec on shutdown result" false !exec_called
 
+let test_run_nofork_start_prefers_reexec_env () =
+  with_env "CLAWQ_DAEMON_NOFORK" (Some "1") (fun () ->
+      with_env "CLAWQ_DAEMON_INTERNAL_NOFORK" (Some "") (fun () ->
+          with_env Restart_exec.reexec_path_env (Some "/tmp/clawq-fresh")
+            (fun () ->
+              let called = ref None in
+              let config = Runtime_config.default in
+              ignore
+                (Service.run_nofork_start ~config
+                   ~execve:(fun path argv _ ->
+                     called := Some (path, Array.to_list argv))
+                   ~run_daemon:(fun ~config:_ ->
+                     Alcotest.fail "daemon should not run before re-exec")
+                   ());
+              Alcotest.(check (option (pair string (list string))))
+                "re-exec uses fresh path"
+                (Some
+                   ( "/tmp/clawq-fresh",
+                     [ "/tmp/clawq-fresh"; "service"; "start" ] ))
+                !called)))
+
 let test_cmd_signal_restart_reports_missing_daemon () =
   let result = Service.cmd_signal_restart ~read_pid:(fun () -> None) () in
   Alcotest.(check string) "missing daemon" "Daemon is not running" result
@@ -149,12 +189,16 @@ let suite =
       test_handle_daemon_exit_restart_sets_nofork_and_execs;
     Alcotest.test_case "handle daemon exit restart carries restart notify env"
       `Quick test_handle_daemon_exit_restart_carries_restart_notify_env;
+    Alcotest.test_case "handle daemon exit restart prefers reexec env" `Quick
+      test_handle_daemon_exit_restart_prefers_reexec_env;
     Alcotest.test_case "handle daemon exit shutdown skips exec" `Quick
       test_handle_daemon_exit_shutdown_skips_exec;
     Alcotest.test_case "run nofork start reexecs without public env" `Quick
       test_run_nofork_start_reexecs_without_public_env;
     Alcotest.test_case "run nofork start runs daemon in internal mode" `Quick
       test_run_nofork_start_runs_daemon_in_internal_mode;
+    Alcotest.test_case "run nofork start prefers reexec env" `Quick
+      test_run_nofork_start_prefers_reexec_env;
     Alcotest.test_case "cmd signal restart reports missing daemon" `Quick
       test_cmd_signal_restart_reports_missing_daemon;
     Alcotest.test_case "cmd signal restart signals running daemon" `Quick

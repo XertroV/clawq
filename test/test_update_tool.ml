@@ -314,6 +314,51 @@ let test_run_update_prepares_restart_before_signal () =
        !progress);
   Alcotest.(check bool) "restart signal sent" true !signaled
 
+let test_run_update_sets_reexec_path_to_fresh_git_build () =
+  let previous = Sys.getenv_opt Restart_exec.reexec_path_env in
+  let repo_root = Filename.temp_file "clawq_update_repo" "" in
+  Sys.remove repo_root;
+  Unix.mkdir repo_root 0o755;
+  let build_dir = Filename.concat repo_root "_build" in
+  let default_dir = Filename.concat build_dir "default" in
+  let src_dir = Filename.concat default_dir "src" in
+  Unix.mkdir build_dir 0o755;
+  Unix.mkdir default_dir 0o755;
+  Unix.mkdir src_dir 0o755;
+  let fresh_binary = Filename.concat src_dir "main.exe" in
+  let oc = open_out fresh_binary in
+  output_string oc "";
+  close_out oc;
+  Unix.putenv Restart_exec.reexec_path_env "";
+  Fun.protect
+    (fun () ->
+      let signaled = ref false in
+      let progress = ref [] in
+      let send_progress text =
+        progress := text :: !progress;
+        Lwt.return_unit
+      in
+      let result =
+        Lwt_main.run
+          (Update_tool.run_update
+             ~find_repo_root:(fun ?start_path:_ ?exists:_ () -> Some repo_root)
+             ~run_command:(fun ~cwd:_ ~argv:_ ~send_progress:_ ~interrupt_check:_ ->
+               Lwt.return 0)
+             ~send_signal:(fun _ _ -> signaled := true)
+             ~is_draining:(fun () -> false)
+             ~send_progress ())
+      in
+      Alcotest.(check string)
+        "success result" "Build complete. Sending restart signal..." result;
+      Alcotest.(check bool) "restart signal sent" true !signaled;
+      Alcotest.(check (option string))
+        "fresh restart path set" (Some fresh_binary)
+        (Sys.getenv_opt Restart_exec.reexec_path_env))
+    ~finally:(fun () ->
+      match previous with
+      | Some value -> Unix.putenv Restart_exec.reexec_path_env value
+      | None -> Unix.putenv Restart_exec.reexec_path_env "")
+
 let test_run_update_aborts_when_prepare_restart_fails () =
   let progress = ref [] in
   let signaled = ref false in
@@ -606,6 +651,8 @@ let suite =
       `Quick test_update_tool_writes_restart_marker_from_session_context;
     Alcotest.test_case "run update prepares restart before signal" `Quick
       test_run_update_prepares_restart_before_signal;
+    Alcotest.test_case "run update sets reexec path to fresh git build" `Quick
+      test_run_update_sets_reexec_path_to_fresh_git_build;
     Alcotest.test_case "run update aborts when prepare restart fails" `Quick
       test_run_update_aborts_when_prepare_restart_fails;
     Alcotest.test_case "run update interrupts running command" `Quick

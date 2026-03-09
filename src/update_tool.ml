@@ -162,6 +162,9 @@ let binary_url_of_env () =
   | Some url when String.trim url <> "" -> Some (String.trim url)
   | _ -> None
 
+let git_build_output_path ~repo_root =
+  Filename.concat repo_root "_build/default/src/main.exe"
+
 let run_git_update ~repo_root ~run_command ~send_signal ~send_progress
     ~prepare_restart =
   let progress_lines = ref [] in
@@ -198,6 +201,9 @@ let run_git_update ~repo_root ~run_command ~send_signal ~send_progress
     Lwt.return message
   end
   else begin
+    let fresh_binary = git_build_output_path ~repo_root in
+    if Sys.file_exists fresh_binary then
+      Unix.putenv Restart_exec.reexec_path_env fresh_binary;
     let message = "Build complete. Sending restart signal..." in
     let* prepared = prepare_restart ~send_progress in
     match prepared with
