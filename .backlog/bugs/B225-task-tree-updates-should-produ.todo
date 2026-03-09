@@ -1,0 +1,11 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B225
+priority: medium
+status: pending
+tags: []
+title: Task tree updates should produce rich connector-native status updates in Telegram, Discord, and other channels
+---
+The new task_tree tool exists and is injected into runtime context, but changes to the task tree should also be surfaced outward to users through connector-native updates. Desired behavior: when the task tree changes meaningfully, Telegram/Discord/etc should receive a well-formatted update using each connector's native affordances (for example Telegram rich formatting/buttons/collapsible structure where appropriate, Discord-friendly formatting, etc.), rather than plain raw text dumps. Acceptance criteria: (1) meaningful task-tree changes can trigger user-visible status updates in channel-backed sessions; (2) formatting is connector-appropriate and polished rather than one-size-fits-all plain text; (3) updates are concise but useful, emphasizing changed tasks/current focus; (4) behavior is configurable enough to avoid spam; (5) tests/logging cover the update path and formatting contracts where practical.

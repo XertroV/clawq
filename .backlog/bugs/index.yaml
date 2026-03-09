@@ -223,3 +223,4 @@ bugs:
     - file: B222-clawq-background-logs-should-h.todo
     - file: B223-background-task-wait-should-ha.todo
     - file: B224-task-tree-tool-should-support.todo
+    - file: B225-task-tree-updates-should-produ.todo
