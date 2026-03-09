@@ -406,6 +406,110 @@ let render_tree_with_legend ~db ~session_key =
        Legend: [ ] pending  [>] in_progress  [x] done  [!] error  [-] cancelled"
     ^ warning
 
+let render_compact ~db ~session_key =
+  let tasks = load_tasks ~db ~session_key in
+  if tasks = [] then
+    "No tasks tracked. Use the task_tree tool to plan and track your work.\n\
+     Breaking complex goals into subtasks helps maintain focus across long \
+     sessions."
+  else
+    let buf = Buffer.create 256 in
+    (* Count by status *)
+    let n_pending = ref 0 in
+    let n_active = ref 0 in
+    let n_done = ref 0 in
+    let n_error = ref 0 in
+    let n_cancelled = ref 0 in
+    List.iter
+      (fun t ->
+        match t.status with
+        | Pending -> incr n_pending
+        | In_progress -> incr n_active
+        | Done -> incr n_done
+        | Task_error -> incr n_error
+        | Cancelled -> incr n_cancelled)
+      tasks;
+    let total = List.length tasks in
+    (* Summary line with non-zero counts *)
+    let counts =
+      List.filter_map
+        (fun (n, label) ->
+          if n > 0 then Some (Printf.sprintf "%d %s" n label) else None)
+        [
+          (!n_pending, "pending");
+          (!n_active, "active");
+          (!n_done, "done");
+          (!n_error, "error");
+          (!n_cancelled, "cancelled");
+        ]
+    in
+    Buffer.add_string buf
+      (Printf.sprintf "Tasks: %d total (%s)" total (String.concat ", " counts));
+    (* Active section *)
+    let active_tasks =
+      List.filter (fun t -> t.status = In_progress) tasks
+      |> List.sort (fun a b -> compare a.sort_order b.sort_order)
+    in
+    if active_tasks <> [] then begin
+      Buffer.add_string buf "\nActive:";
+      List.iter
+        (fun t ->
+          let note_str =
+            match t.note with Some n -> " (" ^ n ^ ")" | None -> ""
+          in
+          Buffer.add_string buf
+            (Printf.sprintf "\n  [>] #%s — %s%s" t.id t.title note_str))
+        active_tasks
+    end;
+    (* Blocked section *)
+    let error_tasks =
+      List.filter (fun t -> t.status = Task_error) tasks
+      |> List.sort (fun a b -> compare a.sort_order b.sort_order)
+    in
+    if error_tasks <> [] then begin
+      Buffer.add_string buf "\nBlocked:";
+      List.iter
+        (fun t ->
+          let note_str =
+            match t.note with Some n -> " (" ^ n ^ ")" | None -> ""
+          in
+          Buffer.add_string buf
+            (Printf.sprintf "\n  [!] #%s — %s%s" t.id t.title note_str))
+        error_tasks
+    end;
+    (* Next: root-actionable pending tasks (no pending ancestor) *)
+    let pending_tasks =
+      List.filter (fun t -> t.status = Pending) tasks
+      |> List.sort (fun a b -> compare a.sort_order b.sort_order)
+    in
+    let actionable =
+      List.filter
+        (fun t ->
+          let ancestors = get_ancestors ~tasks ~id:t.id in
+          not
+            (List.exists
+               (fun a -> a.id <> t.id && a.status = Pending)
+               ancestors))
+        pending_tasks
+    in
+    if actionable <> [] then begin
+      let show = List.filteri (fun i _ -> i < 3) actionable in
+      let overflow = List.length actionable - 3 in
+      Buffer.add_string buf "\nNext:";
+      List.iter
+        (fun t ->
+          Buffer.add_string buf (Printf.sprintf "\n  [ ] #%s — %s" t.id t.title))
+        show;
+      if overflow > 0 then
+        Buffer.add_string buf (Printf.sprintf "\n  (+%d more)" overflow)
+    end;
+    (* Archive nudge *)
+    let n_archivable = !n_done + !n_cancelled in
+    if n_archivable > 0 then
+      Buffer.add_string buf
+        (Printf.sprintf "\n(%d done — archive to save tokens)" n_archivable);
+    Buffer.contents buf
+
 let format_notification ~connector ~db ~session_key (ops : Yojson.Safe.t list) =
   let open Yojson.Safe.Util in
   let lines = Buffer.create 128 in
@@ -1520,7 +1624,7 @@ let process_operations ~db ~session_key (ops : Yojson.Safe.t list) =
             Error (msg ^ ". No operations were applied.")
         | None ->
             Memory.exec_exn db "COMMIT";
-            let tree = render_tree ~db ~session_key in
+            let summary = render_compact ~db ~session_key in
             let output = Buffer.contents results in
             let ip_count = count_in_progress ~db ~session_key in
             let warning =
@@ -1533,54 +1637,27 @@ let process_operations ~db ~session_key (ops : Yojson.Safe.t list) =
                   ip_count
               else ""
             in
-            Ok
-              (output ^ "\n## Task Tree\n" ^ tree
-             ^ "\n\n\
-                Legend: [ ] pending  [>] in_progress  [x] done  [!] error  [-] \
-                cancelled" ^ warning)
+            Ok (output ^ "\n" ^ summary ^ warning)
       end
 
 let tool ~db ?notify () : Tool.t =
   {
     name = "task_tree";
     description =
-      "Track and organize your work using a persistent hierarchical task tree. \
-       Use this proactively at the start of any non-trivial task to plan your \
-       approach, and update it as you work. The task tree survives context \
-       compaction and is visible every turn.\n\n\
-       Operations: add, update, remove, clear, archive, reorder, seed, \
-       save_template, list_templates, delete_template.\n\n\
-       Statuses: pending (not started), in_progress (actively working), done \
-       (completed), error (blocked/failed), cancelled (abandoned).\n\n\
-       Adding tasks: Use 'depth' for easy tree building in a batch — depth 0 \
-       is root, depth 1 nests under the last root, depth 2 under the last \
-       depth-1, etc. Alternatively, use 'parent' (an existing task ID) for \
-       explicit placement without depth. When both are provided, depth takes \
-       priority. Omit both for a root task. Set 'id' for a memorable name, or \
-       let it auto-assign.\n\n\
-       Updating: Set 'id' to a task ID and provide 'status' and/or 'note'. For \
-       batch status updates, use comma-separated IDs.\n\n\
-       Archiving: Use 'archive' to move fully completed subtrees to the \
-       archive. This cleans up the active tree and resets ID numbering.\n\n\
-       Reordering: Use 'reorder' with 'id' and 'position' to change task \
-       priority order among siblings. Position values: 'before:<id>', \
-       'after:<id>', 'first', 'last'.\n\n\
-       Templates: Use 'seed' to instantiate a task tree from a named template \
-       or inline task definitions. Templates support {{key}} variable \
-       substitution in titles and notes via the 'vars' object. Use \
-       'save_template' to persist reusable templates, 'list_templates' to \
-       discover them, and 'delete_template' to remove them. Seed expands into \
-       add operations, so expanded tasks count toward batch limits.\n\n\
-       Lifecycle rules (enforced automatically):\n\
-       - A parent cannot be marked done until all children are done or \
-       cancelled.\n\
+      "Persistent hierarchical task tree. Survives context compaction, visible \
+       every turn.\n\n\
+       Ops: add, update, remove, clear, archive, reorder, seed, save_template, \
+       list_templates, delete_template.\n\
+       Statuses: pending, in_progress, done, error, cancelled.\n\n\
+       Rules:\n\
+       - Parent cannot be done until all children are done/cancelled.\n\
        - In-progress tasks cannot be removed.\n\
-       - Setting in_progress automatically promotes pending ancestors.\n\n\
-       Best practices:\n\
-       - Break complex work into 3-7 subtasks before starting.\n\
-       - Mark each task in_progress as you begin, done when complete.\n\
-       - Use error + note when blocked. Archive completed work to keep the \
-       tree focused.";
+       - Setting in_progress promotes pending ancestors.\n\n\
+       Tips:\n\
+       - Let IDs auto-assign (omit 'id' on add). Use 'depth' for tree building.\n\
+       - Keep titles <60 chars; put details in 'note'.\n\
+       - Batch ops in one call. Archive done work to keep tree small.\n\
+       - 3-7 subtasks per parent. Mark in_progress/done as you go.";
     parameters_schema =
       `Assoc
         [
@@ -1620,28 +1697,9 @@ let tool ~db ?notify () : Tool.t =
                                       ] );
                                   ("id", `Assoc [ ("type", `String "string") ]);
                                   ( "parent",
-                                    `Assoc
-                                      [
-                                        ("type", `String "string");
-                                        ( "description",
-                                          `String
-                                            "ID of an existing task to nest \
-                                             under. Alternative to depth — \
-                                             when both are provided, depth \
-                                             takes priority. Omit for root \
-                                             tasks." );
-                                      ] );
+                                    `Assoc [ ("type", `String "string") ] );
                                   ( "depth",
-                                    `Assoc
-                                      [
-                                        ("type", `String "integer");
-                                        ( "description",
-                                          `String
-                                            "Hierarchical level for batch tree \
-                                             building: 0 = root, 1 = child of \
-                                             last root, etc. Takes priority \
-                                             over parent." );
-                                      ] );
+                                    `Assoc [ ("type", `String "integer") ] );
                                   ( "title",
                                     `Assoc [ ("type", `String "string") ] );
                                   ( "status",
@@ -1660,34 +1718,13 @@ let tool ~db ?notify () : Tool.t =
                                       ] );
                                   ("note", `Assoc [ ("type", `String "string") ]);
                                   ( "position",
-                                    `Assoc
-                                      [
-                                        ("type", `String "string");
-                                        ( "description",
-                                          `String
-                                            "Position to move the task to: \
-                                             'first', 'last', 'before:<id>', \
-                                             or 'after:<id>'" );
-                                      ] );
+                                    `Assoc [ ("type", `String "string") ] );
                                   ( "template",
-                                    `Assoc
-                                      [
-                                        ("type", `String "string");
-                                        ( "description",
-                                          `String
-                                            "Name of a saved template to seed \
-                                             from (for 'seed' op)" );
-                                      ] );
+                                    `Assoc [ ("type", `String "string") ] );
                                   ( "tasks",
                                     `Assoc
                                       [
                                         ("type", `String "array");
-                                        ( "description",
-                                          `String
-                                            "Inline task definitions for \
-                                             'seed', or task definitions to \
-                                             save with 'save_template'. Each \
-                                             item needs 'title' and 'depth'." );
                                         ( "items",
                                           `Assoc
                                             [
@@ -1716,34 +1753,10 @@ let tool ~db ?notify () : Tool.t =
                                                   ] );
                                             ] );
                                       ] );
-                                  ( "vars",
-                                    `Assoc
-                                      [
-                                        ("type", `String "object");
-                                        ( "description",
-                                          `String
-                                            "Key-value pairs for {{key}} \
-                                             substitution in seed task titles \
-                                             and notes" );
-                                      ] );
+                                  ("vars", `Assoc [ ("type", `String "object") ]);
                                   ( "description",
-                                    `Assoc
-                                      [
-                                        ("type", `String "string");
-                                        ( "description",
-                                          `String
-                                            "Human-readable description for \
-                                             'save_template'" );
-                                      ] );
-                                  ( "name",
-                                    `Assoc
-                                      [
-                                        ("type", `String "string");
-                                        ( "description",
-                                          `String
-                                            "Template name for 'save_template' \
-                                             or 'delete_template'" );
-                                      ] );
+                                    `Assoc [ ("type", `String "string") ] );
+                                  ("name", `Assoc [ ("type", `String "string") ]);
                                 ] );
                             ("required", `List [ `String "op" ]);
                           ] );

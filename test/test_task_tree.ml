@@ -571,9 +571,9 @@ let test_tool_invoke_round_trip () =
        true
      with Not_found -> false);
   Alcotest.(check bool)
-    "contains Task Tree" true
+    "contains compact summary" true
     (try
-       ignore (Str.search_forward (Str.regexp_string "Task Tree") result 0);
+       ignore (Str.search_forward (Str.regexp_string "Tasks: 1 total") result 0);
        true
      with Not_found -> false)
 
@@ -2079,6 +2079,274 @@ let test_find_active_session_key_empty () =
   let result = Task_tree.find_active_session_key ~db ~preferred:"__main__" in
   Alcotest.(check (option string)) "returns None when empty" None result
 
+let test_render_compact_empty () =
+  let db = fresh_db () in
+  let result = Task_tree.render_compact ~db ~session_key:"s1" in
+  Alcotest.(check bool)
+    "contains no tasks message" true
+    (String.length result > 0
+    &&
+      try
+        ignore
+          (Str.search_forward (Str.regexp_string "No tasks tracked") result 0);
+        true
+      with Not_found -> false)
+
+let test_render_compact_summary_counts () =
+  let db = fresh_db () in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc [ ("op", `String "add"); ("title", `String "T1") ];
+        `Assoc [ ("op", `String "add"); ("title", `String "T2") ];
+        `Assoc
+          [
+            ("op", `String "update");
+            ("id", `String "1");
+            ("status", `String "in_progress");
+          ];
+        `Assoc
+          [
+            ("op", `String "update");
+            ("id", `String "2");
+            ("status", `String "done");
+          ];
+      ]
+  in
+  let result = Task_tree.render_compact ~db ~session_key:"s1" in
+  Alcotest.(check bool)
+    "has total count" true
+    (try
+       ignore (Str.search_forward (Str.regexp_string "Tasks: 2 total") result 0);
+       true
+     with Not_found -> false);
+  Alcotest.(check bool)
+    "has active count" true
+    (try
+       ignore (Str.search_forward (Str.regexp_string "1 active") result 0);
+       true
+     with Not_found -> false);
+  Alcotest.(check bool)
+    "has done count" true
+    (try
+       ignore (Str.search_forward (Str.regexp_string "1 done") result 0);
+       true
+     with Not_found -> false)
+
+let test_render_compact_shows_active_and_error () =
+  let db = fresh_db () in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc [ ("op", `String "add"); ("title", `String "Active task") ];
+        `Assoc [ ("op", `String "add"); ("title", `String "Blocked task") ];
+        `Assoc
+          [
+            ("op", `String "update");
+            ("id", `String "1");
+            ("status", `String "in_progress");
+          ];
+        `Assoc
+          [
+            ("op", `String "update");
+            ("id", `String "2");
+            ("status", `String "error");
+            ("note", `String "upstream issue");
+          ];
+      ]
+  in
+  let result = Task_tree.render_compact ~db ~session_key:"s1" in
+  Alcotest.(check bool)
+    "shows active section" true
+    (try
+       ignore (Str.search_forward (Str.regexp_string "[>] #1") result 0);
+       true
+     with Not_found -> false);
+  Alcotest.(check bool)
+    "shows active title" true
+    (try
+       ignore (Str.search_forward (Str.regexp_string "Active task") result 0);
+       true
+     with Not_found -> false);
+  Alcotest.(check bool)
+    "shows blocked section" true
+    (try
+       ignore (Str.search_forward (Str.regexp_string "[!] #2") result 0);
+       true
+     with Not_found -> false);
+  Alcotest.(check bool)
+    "shows error note" true
+    (try
+       ignore (Str.search_forward (Str.regexp_string "upstream issue") result 0);
+       true
+     with Not_found -> false)
+
+let test_render_compact_hides_done_cancelled () =
+  let db = fresh_db () in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc [ ("op", `String "add"); ("title", `String "Done task") ];
+        `Assoc [ ("op", `String "add"); ("title", `String "Cancelled task") ];
+        `Assoc
+          [
+            ("op", `String "update");
+            ("id", `String "1");
+            ("status", `String "done");
+          ];
+        `Assoc
+          [
+            ("op", `String "update");
+            ("id", `String "2");
+            ("status", `String "cancelled");
+          ];
+      ]
+  in
+  let result = Task_tree.render_compact ~db ~session_key:"s1" in
+  Alcotest.(check bool)
+    "no Done task title listed" true
+    (not
+       (try
+          ignore
+            (Str.search_forward (Str.regexp_string "#1 — Done task") result 0);
+          true
+        with Not_found -> false));
+  Alcotest.(check bool)
+    "no Cancelled task title listed" true
+    (not
+       (try
+          ignore
+            (Str.search_forward
+               (Str.regexp_string "#2 — Cancelled task")
+               result 0);
+          true
+        with Not_found -> false));
+  Alcotest.(check bool)
+    "archive nudge present" true
+    (try
+       ignore
+         (Str.search_forward (Str.regexp_string "2 done — archive") result 0);
+       true
+     with Not_found -> false)
+
+let test_render_compact_next_pending_actionable () =
+  let db = fresh_db () in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [
+            ("op", `String "add"); ("title", `String "Parent"); ("depth", `Int 0);
+          ];
+        `Assoc
+          [
+            ("op", `String "add"); ("title", `String "Child"); ("depth", `Int 1);
+          ];
+        `Assoc
+          [
+            ("op", `String "add"); ("title", `String "Root2"); ("depth", `Int 0);
+          ];
+      ]
+  in
+  let result = Task_tree.render_compact ~db ~session_key:"s1" in
+  (* Parent and Root2 are root-actionable pending; Child has pending parent *)
+  Alcotest.(check bool)
+    "shows Parent in Next" true
+    (try
+       ignore (Str.search_forward (Str.regexp_string "#1 — Parent") result 0);
+       true
+     with Not_found -> false);
+  Alcotest.(check bool)
+    "shows Root2 in Next" true
+    (try
+       ignore (Str.search_forward (Str.regexp_string "#3 — Root2") result 0);
+       true
+     with Not_found -> false);
+  Alcotest.(check bool)
+    "hides Child (has pending parent)" true
+    (not
+       (try
+          ignore (Str.search_forward (Str.regexp_string "#2 — Child") result 0);
+          true
+        with Not_found -> false))
+
+let test_render_compact_limits_pending () =
+  let db = fresh_db () in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc [ ("op", `String "add"); ("title", `String "R1") ];
+        `Assoc [ ("op", `String "add"); ("title", `String "R2") ];
+        `Assoc [ ("op", `String "add"); ("title", `String "R3") ];
+        `Assoc [ ("op", `String "add"); ("title", `String "R4") ];
+        `Assoc [ ("op", `String "add"); ("title", `String "R5") ];
+      ]
+  in
+  let result = Task_tree.render_compact ~db ~session_key:"s1" in
+  Alcotest.(check bool)
+    "overflow indicator present" true
+    (try
+       ignore (Str.search_forward (Str.regexp_string "(+2 more)") result 0);
+       true
+     with Not_found -> false);
+  Alcotest.(check bool)
+    "R4 not shown" true
+    (not
+       (try
+          ignore (Str.search_forward (Str.regexp_string "#4 — R4") result 0);
+          true
+        with Not_found -> false))
+
+let test_render_compact_archive_nudge () =
+  let db = fresh_db () in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc [ ("op", `String "add"); ("title", `String "T1") ];
+        `Assoc [ ("op", `String "add"); ("title", `String "T2") ];
+        `Assoc
+          [
+            ("op", `String "update");
+            ("id", `String "1");
+            ("status", `String "done");
+          ];
+      ]
+  in
+  let result = Task_tree.render_compact ~db ~session_key:"s1" in
+  Alcotest.(check bool)
+    "archive nudge" true
+    (try
+       ignore
+         (Str.search_forward
+            (Str.regexp_string "1 done — archive to save tokens")
+            result 0);
+       true
+     with Not_found -> false)
+
+let test_process_operations_compact_output () =
+  let db = fresh_db () in
+  let result =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [ `Assoc [ ("op", `String "add"); ("title", `String "Test task") ] ]
+  in
+  match result with
+  | Ok output ->
+      Alcotest.(check bool)
+        "no legend line" true
+        (not
+           (try
+              ignore (Str.search_forward (Str.regexp_string "Legend:") output 0);
+              true
+            with Not_found -> false));
+      Alcotest.(check bool)
+        "has compact summary" true
+        (try
+           ignore
+             (Str.search_forward (Str.regexp_string "Tasks: 1 total") output 0);
+           true
+         with Not_found -> false)
+  | Error e -> Alcotest.fail ("Expected Ok, got Error: " ^ e)
+
 let suite =
   [
     Alcotest.test_case "init_schema idempotent" `Quick
@@ -2200,4 +2468,19 @@ let suite =
       test_find_active_session_key_fallback;
     Alcotest.test_case "find_active_session_key empty db" `Quick
       test_find_active_session_key_empty;
+    Alcotest.test_case "render_compact empty" `Quick test_render_compact_empty;
+    Alcotest.test_case "render_compact summary counts" `Quick
+      test_render_compact_summary_counts;
+    Alcotest.test_case "render_compact active and error" `Quick
+      test_render_compact_shows_active_and_error;
+    Alcotest.test_case "render_compact hides done/cancelled" `Quick
+      test_render_compact_hides_done_cancelled;
+    Alcotest.test_case "render_compact next pending actionable" `Quick
+      test_render_compact_next_pending_actionable;
+    Alcotest.test_case "render_compact limits pending" `Quick
+      test_render_compact_limits_pending;
+    Alcotest.test_case "render_compact archive nudge" `Quick
+      test_render_compact_archive_nudge;
+    Alcotest.test_case "process_operations compact output" `Quick
+      test_process_operations_compact_output;
   ]

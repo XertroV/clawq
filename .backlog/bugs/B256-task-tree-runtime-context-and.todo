@@ -1,10 +1,14 @@
 ---
+claimed_at: "2026-03-09T22:12:20Z"
+claimed_by: cli-user
+completed_at: null
 complexity: medium
 depends_on: []
 estimate_hours: 1
 id: B256
 priority: high
-status: pending
+started_at: "2026-03-09T22:12:20Z"
+status: in_progress
 tags: []
 title: task_tree runtime context and channel rendering should be more token-efficient
 ---
