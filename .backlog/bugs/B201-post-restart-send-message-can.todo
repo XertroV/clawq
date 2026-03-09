@@ -1,0 +1,11 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B201
+priority: high
+status: pending
+tags: []
+title: Post-restart send_message can fail before resumed session notifier registration
+---
+Observed in live Telegram restart test after successful restart into build `e968c0e6`. The assistant attempted an explicit post-restart async message (`send_message`) to say it was back and report the running version. Daemon logs showed the call was made from session `telegram:58495225:58495225`, but the tool result was `Error sending message: Failure("No notifier registered for session")`. This indicates that immediately after restart/resume, the session may be active enough for normal resumed work but not yet have a registered notifier for `send_message` targeting the same session. Goal: make post-restart same-session messaging reliable by falling back to routed delivery when notifier registration is not yet ready, or by ensuring notifier registration happens before such messages can be attempted. Acceptance criteria: (1) `send_message` from a just-resumed session does not fail merely because notifier registration lags; (2) same-session post-restart async notifications are delivered reliably; (3) behavior is tested or tightly verified; (4) keep this distinct from prior restart routing/prompt bugs, which are already largely resolved.
