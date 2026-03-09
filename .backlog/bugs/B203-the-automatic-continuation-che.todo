@@ -1,10 +1,15 @@
 ---
+claimed_at: "2026-03-09T16:31:04Z"
+claimed_by: cli-user
+completed_at: "2026-03-09T16:36:01Z"
 complexity: medium
 depends_on: []
+duration_minutes: 4.9519801185
 estimate_hours: 1
 id: B203
 priority: high
-status: pending
+started_at: "2026-03-09T16:31:04Z"
+status: done
 tags: []
 title: the [automatic continuation check-in] message is currently sent to telegram and other connectors. We should gate this behind a config entry (one entry for all connectors). default should be false (do not send it as a user-visible message)
 ---

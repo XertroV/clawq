@@ -152,6 +152,10 @@ let parse_config ?(resolve_secrets = true) json =
         try ad |> member "tool_status_mode" |> to_string
         with _ -> default.agent_defaults.tool_status_mode
       in
+      let send_continuation_checkin =
+        try ad |> member "send_continuation_checkin" |> to_bool
+        with _ -> default.agent_defaults.send_continuation_checkin
+      in
       ({
          primary_model;
          system_prompt;
@@ -161,6 +165,7 @@ let parse_config ?(resolve_secrets = true) json =
          show_thinking;
          show_tool_calls;
          tool_status_mode;
+         send_continuation_checkin;
        }
         : Runtime_config.agent_defaults)
     with _ -> default.agent_defaults
