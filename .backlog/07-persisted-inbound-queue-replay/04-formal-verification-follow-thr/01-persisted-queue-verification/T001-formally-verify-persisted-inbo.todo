@@ -1,0 +1,28 @@
+---
+complexity: medium
+depends_on:
+    - P7.M2
+    - P7.M3.E2.T001
+estimate_hours: 4
+id: P7.M4.E1.T001
+priority: high
+status: pending
+tags:
+    - formal-verification
+    - queue
+    - replay
+title: Formally verify persisted inbound queue replay invariants and reset semantics
+---
+# Formally verify persisted inbound queue replay invariants and reset semantics
+
+## Requirements
+
+- Formally or spec-orientedly verify the highest-value persisted inbound queue safety properties after the runtime implementation lands.
+- Focus on the behaviors that are easiest to regress silently: ordering, reset semantics, history insertion semantics, and startup ordering.
+- Cross-check the proof/spec claims against the documented at-least-once runtime contract.
+
+## Acceptance Criteria
+
+- Verification work covers per-session FIFO replay, no history insertion before processing, reset clears pending rows, and startup replay ordering relative to pending agent resume.
+- Any proof assumptions or unverified gaps are documented explicitly rather than implied away.
+- Runtime docs remain aligned with the verified/spec-checked behavior, especially the at-least-once semantics.

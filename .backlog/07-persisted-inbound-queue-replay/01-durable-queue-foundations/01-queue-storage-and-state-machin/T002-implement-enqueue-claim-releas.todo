@@ -1,0 +1,28 @@
+---
+complexity: high
+depends_on:
+    - P7.M1.E1.T001
+estimate_hours: 3
+id: P7.M1.E1.T002
+priority: high
+status: pending
+tags:
+    - queue
+    - persistence
+    - memory
+title: Implement enqueue, claim, release, reclaim, clear, count, and list Memory APIs with payload_json envelope
+---
+
+# Implement enqueue, claim, release, reclaim, clear, count, and list Memory APIs with payload_json envelope
+
+## Requirements
+
+- Add low-level `Memory` helpers for enqueue, claim, release, reclaim, clear, count, and list operations.
+- Preserve per-session FIFO ordering through queue ID ordering and avoid hidden SQL-only state transitions.
+- Store queue payloads as JSON envelopes and keep operator metadata separate for observability.
+
+## Acceptance Criteria
+
+- `Memory` can enqueue durable inbound rows with `session_key`, `source`, and `payload_json`.
+- Claim/release/delete/reclaim operations are exposed as dedicated APIs and update state consistently.
+- Session-scoped pending counts and row listing are available for CLI/diagnostic use.

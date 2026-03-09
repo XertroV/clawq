@@ -1,0 +1,29 @@
+---
+complexity: medium
+depends_on:
+    - P7.M2.E1.T002
+    - P7.M3.E1.T002
+estimate_hours: 2
+id: P7.M3.E2.T001
+priority: high
+status: pending
+tags:
+    - docs
+    - queue
+    - cli
+title: Update llms-full, CLI help, and runtime comments for durable queue semantics and startup ordering
+---
+
+# Update llms-full, CLI help, and runtime comments for durable queue semantics and startup ordering
+
+## Requirements
+
+- Update docs and help text so they describe the real durable queue semantics rather than the old direct-history fallback.
+- Document startup ordering relative to pending agent resume.
+- Keep implementation, operator docs, and developer docs in sync.
+
+## Acceptance Criteria
+
+- `docs/public/llms-full.txt` and relevant CLI help text describe offline enqueue, startup replay, and at-least-once behavior accurately.
+- Any runtime comments that explain startup ordering or queue semantics reflect the final implementation.
+- There is no remaining user-facing documentation that implies offline inject writes immediately to chat history.

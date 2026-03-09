@@ -1,0 +1,34 @@
+complexity: medium
+depends_on: []
+estimate_hours: 6
+id: P7.M3.E1
+locked: false
+name: Operator Visibility and Diagnostics
+stats:
+    blocked: 0
+    done: 0
+    in_progress: 0
+    pending: 2
+    total: 2
+status: pending
+tasks:
+    - complexity: medium
+      depends_on:
+        - P7.M2.E2.T001
+        - P7.M2.E2.T002
+      estimate_hours: 3
+      file: T001-add-structured-logs-for-enqueu.todo
+      id: T001
+      priority: high
+      status: pending
+      title: Add structured logs for enqueue, claim, replay, release, delete, stale-reclaim, and reset-clear transitions
+    - complexity: medium
+      depends_on:
+        - P7.M1.E2.T002
+        - P7.M3.E1.T001
+      estimate_hours: 3
+      file: T002-surface-pending-inbound-diagno.todo
+      id: T002
+      priority: medium
+      status: pending
+      title: Surface pending inbound diagnostics in session inspection output and regression tests

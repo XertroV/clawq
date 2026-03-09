@@ -1,0 +1,25 @@
+complexity: medium
+depends_on:
+    - P7.M2
+    - P7.M3
+epics:
+    - complexity: medium
+      depends_on: []
+      description: Formally verify the most important persisted inbound queue safety properties and align the specification with runtime behavior and documentation.
+      estimate_hours: 4
+      id: E1
+      locked: false
+      name: Persisted Queue Verification
+      path: 01-persisted-queue-verification
+      status: pending
+estimate_hours: 4
+id: P7.M4
+locked: false
+name: Formal Verification Follow-through
+stats:
+    blocked: 0
+    done: 0
+    in_progress: 0
+    pending: 1
+    total_tasks: 1
+status: pending

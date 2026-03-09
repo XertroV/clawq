@@ -1,0 +1,28 @@
+---
+complexity: high
+depends_on:
+    - P7.M1
+estimate_hours: 4
+id: P7.M2.E1.T001
+priority: high
+status: pending
+tags:
+    - queue
+    - daemon
+    - startup
+title: Add daemon startup reclaim and ordering so pending agent resume happens before durable inbound replay
+---
+
+# Add daemon startup reclaim and ordering so pending agent resume happens before durable inbound replay
+
+## Requirements
+
+- Add daemon startup recovery for stale durable queue claims.
+- Preserve the architectural split between pending agent-turn resume and deferred inbound replay.
+- Make the startup ordering explicit and stable so replay happens only after existing pending agent work is resumed.
+
+## Acceptance Criteria
+
+- Daemon startup reclaims stale durable queue claims before attempting replay.
+- Pending agent-session resume still runs before durable inbound replay.
+- The startup ordering is represented clearly in code and is regression-tested or otherwise enforced.

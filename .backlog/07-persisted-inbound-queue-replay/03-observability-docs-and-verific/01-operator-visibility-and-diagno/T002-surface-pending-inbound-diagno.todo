@@ -1,0 +1,29 @@
+---
+complexity: medium
+depends_on:
+    - P7.M1.E2.T002
+    - P7.M3.E1.T001
+estimate_hours: 3
+id: P7.M3.E1.T002
+priority: medium
+status: pending
+tags:
+    - queue
+    - cli
+    - debugging
+title: Surface pending inbound diagnostics in session inspection output and regression tests
+---
+
+# Surface pending inbound diagnostics in session inspection output and regression tests
+
+## Requirements
+
+- Make queue-state diagnostics visible from normal operator commands rather than hidden in the database or logs alone.
+- Ensure the CLI surfaces the information needed to investigate stuck, retried, or replayed work.
+- Keep regression coverage aligned with the operator output contract.
+
+## Acceptance Criteria
+
+- Session inspection commands expose pending inbound counts and row-level diagnostics after the replay feature lands.
+- The CLI distinguishes durable queued work from processed history and archived epochs.
+- Regression tests cover representative operator output for pending queue inspection.

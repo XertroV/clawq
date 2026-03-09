@@ -1,0 +1,42 @@
+complexity: high
+depends_on: []
+estimate_hours: 10
+id: P7.M2.E1
+locked: false
+name: Daemon Startup Replay Pipeline
+stats:
+    blocked: 0
+    done: 0
+    in_progress: 0
+    pending: 3
+    total: 3
+status: pending
+tasks:
+    - complexity: high
+      depends_on:
+        - P7.M1
+      estimate_hours: 4
+      file: T001-add-daemon-startup-reclaim-and.todo
+      id: T001
+      priority: high
+      status: pending
+      title: Add daemon startup reclaim and ordering so pending agent resume happens before durable inbound replay
+    - complexity: high
+      depends_on:
+        - P7.M2.E1.T001
+      estimate_hours: 4
+      file: T002-replay-durable-inbound-rows-th.todo
+      id: T002
+      priority: high
+      status: pending
+      title: Replay durable inbound rows through the real session runtime with per-session FIFO and bang semantics
+    - complexity: medium
+      depends_on:
+        - P7.M2.E1.T001
+        - P7.M2.E1.T002
+      estimate_hours: 2
+      file: T003-add-daemon-and-session-tests-f.todo
+      id: T003
+      priority: high
+      status: pending
+      title: Add daemon and session tests for startup replay ordering and successful row deletion

@@ -1,0 +1,29 @@
+---
+complexity: medium
+depends_on:
+    - P7.M2.E1.T001
+    - P7.M2.E1.T002
+estimate_hours: 2
+id: P7.M2.E1.T003
+priority: high
+status: pending
+tags:
+    - queue
+    - tests
+    - daemon
+title: Add daemon and session tests for startup replay ordering and successful row deletion
+---
+
+# Add daemon and session tests for startup replay ordering and successful row deletion
+
+## Requirements
+
+- Add restart-oriented tests that prove startup replay behavior instead of only low-level queue API tests.
+- Cover ordering, deletion on success, and interaction with pending agent resume.
+- Exercise the session runtime rather than relying solely on mocked queue-state assertions.
+
+## Acceptance Criteria
+
+- Tests prove startup replay drains queued rows in the intended order.
+- Tests prove successful replay deletes the durable queue rows.
+- Tests prove pending agent resume still precedes durable inbound replay when both kinds of work exist.

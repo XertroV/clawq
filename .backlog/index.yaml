@@ -1,7 +1,22 @@
 critical_path:
-    - I003
+    - P7.M1.E1.T001
+    - P7.M1.E1.T002
+    - P7.M1.E1.T003
+    - P7.M1.E2.T001
+    - P7.M1.E2.T002
+    - P7.M1.E2.T003
+    - P7.M2.E1.T001
+    - P7.M2.E1.T002
+    - P7.M2.E1.T003
+    - P7.M2.E2.T001
+    - P7.M2.E2.T003
+    - P7.M3.E1.T001
+    - P7.M3.E1.T002
+    - P7.M3.E2.T001
+    - P7.M3.E2.T002
+    - P7.M4.E1.T001
 description: A formally verified fully autonomous AI assistant.
-next_available: I007
+next_available: P7.M1.E1.T001
 phases:
     - depends_on: []
       description: 'Features identified via nullclaw comparison and doc review. Organized by effort tier: quick wins, high impact, ecosystem expansion, and formalization.'
@@ -63,11 +78,21 @@ phases:
       priority: high
       status: done
       weeks: 2
+    - depends_on: []
+      description: Add a durable inbound queue for offline session injection, replay it safely on daemon startup through the real session runtime, expose strong operator/debug visibility, and keep docs plus verification follow-through aligned with the final architecture plan.
+      estimate_hours: 40
+      id: P7
+      locked: false
+      name: Persisted Inbound Queue & Replay
+      path: 07-persisted-inbound-queue-replay
+      priority: high
+      status: pending
+      weeks: 3
 project: Clawq
 stats:
-    blocked: 0
-    done: 236
-    in_progress: 3
-    pending: 1
-    total_tasks: 240
+    blocked: 1
+    done: 340
+    in_progress: 6
+    pending: 39
+    total_tasks: 386
 timeline_weeks: 0

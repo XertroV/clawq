@@ -64,6 +64,47 @@ let read_daemon_state () =
     with _ -> None
   else None
 
+let gateway_token_path () =
+  let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
+  Filename.concat (Filename.concat home ".clawq") "gateway_token"
+
+let read_gateway_token () =
+  match read_file (gateway_token_path ()) with
+  | Some token when String.trim token <> "" -> Some (String.trim token)
+  | _ -> None
+
+let read_live_daemon_gateway () =
+  match read_daemon_state () with
+  | None -> None
+  | Some json -> (
+      let open Yojson.Safe.Util in
+      try
+        let pid = json |> member "pid" |> to_int in
+        if not (pid_is_alive pid) then begin
+          remove_daemon_state ();
+          None
+        end
+        else
+          Some
+            ( json |> member "gateway_host" |> to_string,
+              json |> member "gateway_port" |> to_int )
+      with _ -> None)
+
+let gateway_auth_headers cfg =
+  match (cfg.Runtime_config.gateway.auth_token, read_gateway_token ()) with
+  | Some token, _ when String.trim token <> "" ->
+      [ ("Authorization", "Bearer " ^ String.trim token) ]
+  | None, Some token -> [ ("Authorization", "Bearer " ^ token) ]
+  | _ -> []
+
+let parse_json_error_body body =
+  try
+    let json = Yojson.Safe.from_string body in
+    match Yojson.Safe.Util.member "error" json with
+    | `String msg -> Some msg
+    | _ -> None
+  with _ -> None
+
 let read_live_gateway_pairing_code () =
   match read_daemon_state () with
   | None -> None
@@ -563,6 +604,267 @@ let cmd_memory args =
 let cmd_workspace () =
   let cfg = get_config () in
   Printf.sprintf "Workspace: %s" (Runtime_config.effective_workspace cfg)
+
+type session_list_args = {
+  channel : string option;
+  prefix : string option;
+  activity : Memory.session_activity;
+  only_main : bool option;
+}
+
+let parse_session_list_args args =
+  let rec loop state = function
+    | [] -> Ok state
+    | "--channel" :: value :: rest ->
+        loop { state with channel = Some value } rest
+    | "--prefix" :: value :: rest ->
+        loop { state with prefix = Some value } rest
+    | "--active" :: rest -> loop { state with activity = Memory.Active } rest
+    | "--inactive" :: rest ->
+        loop { state with activity = Memory.Inactive } rest
+    | "--main" :: rest -> loop { state with only_main = Some true } rest
+    | "--non-main" :: rest -> loop { state with only_main = Some false } rest
+    | flag :: _ when String.length flag > 0 && flag.[0] = '-' ->
+        Error (Printf.sprintf "Unknown session list flag: %s" flag)
+    | _ ->
+        Error
+          "Usage: clawq session list [--channel NAME] [--prefix PREFIX] \
+           [--active|--inactive] [--main|--non-main]"
+  in
+  loop
+    { channel = None; prefix = None; activity = Memory.Any; only_main = None }
+    args
+
+let parse_epoch_selector args =
+  let rec loop epoch = function
+    | [] -> Ok epoch
+    | "--epoch" :: "current" :: rest -> loop (Some Memory.Current) rest
+    | "--epoch" :: value :: rest -> (
+        match int_of_string_opt value with
+        | Some id when id > 0 -> loop (Some (Memory.Archived id)) rest
+        | _ -> Error (Printf.sprintf "Invalid epoch value: %s" value))
+    | flag :: _ when String.length flag > 0 && flag.[0] = '-' ->
+        Error (Printf.sprintf "Unknown session show flag: %s" flag)
+    | _ -> Error "Usage: clawq session show SESSION [--epoch current|ID]"
+  in
+  loop None args
+
+let string_or_null = function Some value -> `String value | None -> `Null
+
+let raw_message_json index (row : Memory.raw_message) =
+  `Assoc
+    [
+      ("index", `Int index);
+      ("id", `Int row.id);
+      ("role", `String row.role);
+      ("content", `String row.content);
+      ("tool_call_id", string_or_null row.tool_call_id);
+      ("tool_name", string_or_null row.tool_name);
+      ("tool_calls_json", string_or_null row.tool_calls_json);
+      ( "provider_response_items_json",
+        string_or_null row.provider_response_items_json );
+      ("created_at", `String row.created_at);
+    ]
+
+let session_epoch_json (epoch : Memory.session_epoch) =
+  `Assoc
+    [
+      ( "epoch",
+        match epoch.epoch_id with
+        | Some id -> `Int id
+        | None -> `String epoch.label );
+      ("label", `String epoch.label);
+      ("current", `Bool epoch.current);
+      ("message_count", `Int epoch.message_count);
+      ("first_message_at", string_or_null epoch.first_message_at);
+      ("last_message_at", string_or_null epoch.last_message_at);
+      ("recorded_at", string_or_null epoch.recorded_at);
+    ]
+
+let cmd_session args =
+  let db = get_db () in
+  match args with
+  | [] | [ "list" ] ->
+      let sessions = Memory.list_session_infos ~db () in
+      if sessions = [] then "No sessions found"
+      else
+        String.concat "\n"
+          (List.map
+             (fun (row : Memory.session_info) ->
+               let channel =
+                 match row.channel with
+                 | Some value -> value
+                 | None -> (
+                     match
+                       Memory.parse_channel_from_session_key row.session_key
+                     with
+                     | Some value -> value
+                     | None -> "-")
+               in
+               let state =
+                 if row.turn = Some "agent" then "active" else "inactive"
+               in
+               Printf.sprintf
+                 "%s  state=%s  channel=%s  messages=%d  archives=%d"
+                 row.session_key state channel row.message_count
+                 row.archived_epoch_count)
+             sessions)
+  | "list" :: rest -> (
+      match parse_session_list_args rest with
+      | Error msg -> msg
+      | Ok parsed ->
+          let sessions =
+            Memory.list_session_infos ~db ?channel:parsed.channel
+              ?prefix:parsed.prefix ~activity:parsed.activity
+              ?only_main:parsed.only_main ()
+          in
+          if sessions = [] then "No sessions matched"
+          else
+            String.concat "\n"
+              (List.map
+                 (fun (row : Memory.session_info) ->
+                   let channel =
+                     match row.channel with
+                     | Some value -> value
+                     | None -> (
+                         match
+                           Memory.parse_channel_from_session_key row.session_key
+                         with
+                         | Some value -> value
+                         | None -> "-")
+                   in
+                   let state =
+                     if row.turn = Some "agent" then "active" else "inactive"
+                   in
+                   Printf.sprintf
+                     "%s  state=%s  channel=%s  messages=%d  archives=%d"
+                     row.session_key state channel row.message_count
+                     row.archived_epoch_count)
+                 sessions))
+  | [ "epochs"; session_key ] ->
+      let epochs = Memory.list_session_epochs ~db ~session_key in
+      if
+        List.for_all
+          (fun (e : Memory.session_epoch) -> e.message_count = 0)
+          epochs
+      then Printf.sprintf "No chat log found for session %s" session_key
+      else
+        Yojson.Safe.pretty_to_string
+          (`Assoc
+             [
+               ("session_key", `String session_key);
+               ("epochs", `List (List.map session_epoch_json epochs));
+             ])
+  | "show" :: session_key :: rest -> (
+      match parse_epoch_selector rest with
+      | Error msg -> msg
+      | Ok epoch_selector -> (
+          let epoch =
+            match epoch_selector with
+            | Some value -> value
+            | None -> Memory.Current
+          in
+          let epoch_label =
+            match epoch with
+            | Memory.Current -> `String "current"
+            | Memory.Archived id -> `Int id
+          in
+          match Memory.load_epoch_messages ~db ~session_key ~epoch with
+          | None -> Printf.sprintf "No epoch matched for session %s" session_key
+          | Some rows ->
+              Yojson.Safe.pretty_to_string
+                (`Assoc
+                   [
+                     ("session_key", `String session_key);
+                     ("epoch", epoch_label);
+                     ( "messages",
+                       `List
+                         (List.mapi (fun i row -> raw_message_json i row) rows)
+                     );
+                   ])))
+  | "inject" :: session_key :: message_parts -> (
+      let message = String.concat " " message_parts in
+      if String.trim message = "" then
+        "Usage: clawq session inject SESSION MESSAGE..."
+      else
+        match read_live_daemon_gateway () with
+        | None ->
+            Memory.store_message ~db ~session_key
+              (Provider.make_message ~role:"user" ~content:message);
+            Memory.upsert_session_state ~db ~session_key ~turn:"user" ();
+            Printf.sprintf
+              "Warning: no live daemon detected, so the injected message could \
+               not use live busy/queue/bang semantics. Persisted it to session \
+               %s so it will appear in the log when the agent starts again."
+              session_key
+        | Some (host, port) -> (
+            let cfg = get_config () in
+            let url = Printf.sprintf "http://%s:%d/session/inject" host port in
+            let body =
+              Yojson.Safe.to_string
+                (`Assoc
+                   [
+                     ("session_key", `String session_key);
+                     ("message", `String message);
+                   ])
+            in
+            let result =
+              Lwt_main.run
+                (Lwt.catch
+                   (fun () ->
+                     let open Lwt.Syntax in
+                     let* status, resp_body =
+                       Http_client.post_json ~uri:url
+                         ~headers:(gateway_auth_headers cfg) ~body
+                     in
+                     Lwt.return (Ok (status, resp_body)))
+                   (fun exn -> Lwt.return (Error (Printexc.to_string exn))))
+            in
+            match result with
+            | Error msg -> Printf.sprintf "Session inject failed: %s" msg
+            | Ok (status, resp_body) -> (
+                match status with
+                | 200 -> (
+                    try
+                      let json = Yojson.Safe.from_string resp_body in
+                      let open Yojson.Safe.Util in
+                      let queued = json |> member "queued" |> to_bool in
+                      let response = json |> member "response" |> to_string in
+                      if queued then
+                        Printf.sprintf
+                          "Queued injected message for busy session %s%s"
+                          session_key
+                          (if String.length message > 0 && message.[0] = '!'
+                           then " (bang interrupt requested)"
+                           else "")
+                      else
+                        Printf.sprintf
+                          "Processed injected message for session %s\n%s"
+                          session_key response
+                    with _ ->
+                      Printf.sprintf
+                        "Session inject succeeded for %s but returned an \
+                         unexpected response: %s"
+                        session_key resp_body)
+                | 401 | 403 ->
+                    Printf.sprintf
+                      "Session inject was rejected by the live gateway (%d): %s"
+                      status
+                      (match parse_json_error_body resp_body with
+                      | Some msg -> msg
+                      | None -> resp_body)
+                | _ ->
+                    Printf.sprintf "Session inject failed (%d): %s" status
+                      (match parse_json_error_body resp_body with
+                      | Some msg -> msg
+                      | None -> resp_body))))
+  | _ ->
+      "Usage: clawq session <subcommand>\n\
+      \  session list [--channel NAME] [--prefix PREFIX] [--active|--inactive] \
+       [--main|--non-main]\n\
+      \  session epochs SESSION\n\
+      \  session show SESSION [--epoch current|ID]\n\
+      \  session inject SESSION MESSAGE..."
 
 type background_add_args = {
   runner : Background_task.runner;
@@ -1877,6 +2179,7 @@ let handle args =
   | "models" :: _ -> cmd_models ()
   | "channel" :: _ -> cmd_channel ()
   | "memory" :: rest -> cmd_memory rest
+  | "session" :: rest -> cmd_session rest
   | "workspace" :: _ -> cmd_workspace ()
   | "capabilities" :: _ -> cmd_capabilities ()
   | "auth" :: rest -> cmd_auth rest

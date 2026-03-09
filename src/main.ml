@@ -61,6 +61,25 @@ let channel_cmd =
   simple "channel" "List configured channels (CLI, Telegram, Discord, Slack)."
 
 let memory_cmd = simple "memory" "Show memory backend configuration."
+
+let session_cmd =
+  with_args "session" "Inspect persisted sessions and raw chat log epochs."
+    [
+      `S "SUBCOMMANDS";
+      `I
+        ( "list [--channel NAME] [--prefix PREFIX] [--active|--inactive] \
+           [--main|--non-main]",
+          "List persisted sessions with optional filters." );
+      `I ("epochs SESSION", "List the current and archived chat-log epochs.");
+      `I
+        ( "show SESSION [--epoch current|ID]",
+          "Print the raw chat log for the current or a specific archived epoch."
+        );
+      `I
+        ( "inject SESSION MESSAGE...",
+          "Inject a live inbound message through the daemon session manager." );
+    ]
+
 let workspace_cmd = simple "workspace" "Print the current workspace directory."
 
 let capabilities_cmd =
@@ -520,6 +539,7 @@ let () =
       models_cmd;
       channel_cmd;
       memory_cmd;
+      session_cmd;
       workspace_cmd;
       capabilities_cmd;
       auth_cmd;

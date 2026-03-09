@@ -1,0 +1,28 @@
+---
+complexity: high
+depends_on:
+    - P7.M2.E1.T001
+estimate_hours: 4
+id: P7.M2.E1.T002
+priority: high
+status: pending
+tags:
+    - queue
+    - daemon
+    - session
+title: Replay durable inbound rows through the real session runtime with per-session FIFO and bang semantics
+---
+
+# Replay durable inbound rows through the real session runtime with per-session FIFO and bang semantics
+
+## Requirements
+
+- Replay durable inbound rows through the real session runtime rather than inventing a second-class processing path.
+- Preserve per-session FIFO replay order.
+- Preserve bang-message intent by routing replay through the same normalization/interrupt path used for live handling.
+
+## Acceptance Criteria
+
+- Durable rows are replayed into the session runtime, not converted directly into assistant-visible history.
+- Replay order is FIFO within a session.
+- Bang messages replay with the same effective semantics as the live injected path for the supported startup scope.

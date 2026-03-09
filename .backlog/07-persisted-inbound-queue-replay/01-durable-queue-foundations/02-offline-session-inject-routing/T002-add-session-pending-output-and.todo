@@ -1,0 +1,28 @@
+---
+complexity: medium
+depends_on:
+    - P7.M1.E2.T001
+estimate_hours: 2
+id: P7.M1.E2.T002
+priority: medium
+status: pending
+tags:
+    - queue
+    - cli
+    - debugging
+title: Add session pending output and pending_inbound counts in session inspection commands
+---
+
+# Add session pending output and pending_inbound counts in session inspection commands
+
+## Requirements
+
+- Extend session inspection so operators can see pending durable inbound work without reading the database directly.
+- Include pending counts in broader session listing and provide a focused view for one session.
+- Keep output useful for debugging retries and stuck queue items.
+
+## Acceptance Criteria
+
+- `session list` includes pending inbound counts per session.
+- A `session pending SESSION` surface shows row IDs, state, retry metadata, bang intent, and a compact message preview.
+- Output remains distinct from chat-history and epoch-inspection commands.

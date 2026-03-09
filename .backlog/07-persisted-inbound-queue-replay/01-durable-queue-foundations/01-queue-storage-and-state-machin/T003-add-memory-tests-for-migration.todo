@@ -1,0 +1,29 @@
+---
+complexity: medium
+depends_on:
+    - P7.M1.E1.T001
+    - P7.M1.E1.T002
+estimate_hours: 2
+id: P7.M1.E1.T003
+priority: high
+status: pending
+tags:
+    - queue
+    - tests
+    - memory
+title: Add Memory tests for migration, claim exclusivity, stale reclaim, and session-scoped cleanup
+---
+
+# Add Memory tests for migration, claim exclusivity, stale reclaim, and session-scoped cleanup
+
+## Requirements
+
+- Add focused tests for queue schema migration and low-level queue API behavior.
+- Cover exclusivity and stale-claim recovery, not just happy-path enqueue/dequeue.
+- Verify session-scoped cleanup behavior so future reset semantics are grounded in tests.
+
+## Acceptance Criteria
+
+- Tests prove migration creates the new queue table and does not lose existing data.
+- Tests cover enqueue, exclusive claim semantics, stale-claim reclaim, and per-session clear behavior.
+- Tests fail if queue operations regress FIFO-oriented ordering assumptions or cleanup boundaries.

@@ -1,0 +1,29 @@
+---
+complexity: medium
+depends_on:
+    - P7.M2.E2.T001
+    - P7.M2.E2.T002
+estimate_hours: 2
+id: P7.M2.E2.T003
+priority: high
+status: pending
+tags:
+    - queue
+    - tests
+    - reliability
+title: Add tests for retry metadata, cleanup semantics, and history insertion only after successful processing
+---
+
+# Add tests for retry metadata, cleanup semantics, and history insertion only after successful processing
+
+## Requirements
+
+- Add tests for failure bookkeeping and cleanup, not only the successful replay path.
+- Verify queue rows do not leak into chat history before successful processing.
+- Lock down reset semantics so later refactors do not reintroduce surprise replay behavior.
+
+## Acceptance Criteria
+
+- Tests prove retry metadata updates when replay fails.
+- Tests prove reset and low-level cleanup remove pending queue rows.
+- Tests prove queued inbound rows become chat history only after successful processing.

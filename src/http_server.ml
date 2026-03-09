@@ -4,6 +4,12 @@ let json_headers =
 let json_string_response ?(status = `OK) body =
   Cohttp_lwt_unix.Server.respond_string ~status ~headers:json_headers ~body ()
 
+let bad_request msg =
+  Cohttp_lwt_unix.Server.respond_string ~status:`Bad_request
+    ~headers:json_headers
+    ~body:(Yojson.Safe.to_string (`Assoc [ ("error", `String msg) ]))
+    ()
+
 let slash_commands_json () =
   `List
     (List.map
@@ -248,14 +254,8 @@ let handler ~session_manager ~require_pairing ~auth_token ?slack_config
             let message =
               try json |> member "message" |> to_string with _ -> ""
             in
-            if session_id = "" then
-              Cohttp_lwt_unix.Server.respond_string ~status:`Bad_request
-                ~headers:json_headers
-                ~body:{|{"error":"session_id is required"}|} ()
-            else if message = "" then
-              Cohttp_lwt_unix.Server.respond_string ~status:`Bad_request
-                ~headers:json_headers ~body:{|{"error":"message is required"}|}
-                ()
+            if session_id = "" then bad_request "session_id is required"
+            else if message = "" then bad_request "message is required"
             else
               let* sess_ok =
                 match session_limiter with
@@ -293,6 +293,78 @@ let handler ~session_manager ~require_pairing ~auth_token ?slack_config
                         (Yojson.Safe.to_string
                            (`Assoc [ ("error", `String err) ]))
                       ()))
+  | `POST, "/session/inject" -> (
+      if require_pairing && not (pairing_auth_ok ~auth_token ?pairing req) then
+        let* _ = Cohttp_lwt.Body.drain_body body in
+        Cohttp_lwt_unix.Server.respond_string ~status:`Forbidden
+          ~headers:json_headers
+          ~body:
+            {|{"error":"pairing required; use a valid paired token to access this endpoint"}|}
+          ()
+      else if not (auth_ok ~auth_token ?pairing req) then
+        let* _ = Cohttp_lwt.Body.drain_body body in
+        Cohttp_lwt_unix.Server.respond_string ~status:`Unauthorized
+          ~headers:json_headers ~body:{|{"error":"unauthorized"}|} ()
+      else
+        let* body_str = Cohttp_lwt.Body.to_string body in
+        let json =
+          try Ok (Yojson.Safe.from_string body_str)
+          with exn -> Error (Printexc.to_string exn)
+        in
+        match json with
+        | Error msg -> bad_request ("invalid JSON: " ^ msg)
+        | Ok json -> (
+            let open Yojson.Safe.Util in
+            let session_key =
+              try json |> member "session_key" |> to_string with _ -> ""
+            in
+            let message =
+              try json |> member "message" |> to_string with _ -> ""
+            in
+            if session_key = "" then bad_request "session_key is required"
+            else if message = "" then bad_request "message is required"
+            else
+              let* result =
+                Lwt.catch
+                  (fun () ->
+                    Session.with_registered_notifier session_manager
+                      ~key:session_key
+                      ~notify:(fun _text -> Lwt.return_unit)
+                      (fun () ->
+                        let* response =
+                          Session.turn session_manager ~key:session_key ~message
+                            ()
+                        in
+                        let queued =
+                          Session.is_queued_message_response response
+                        in
+                        if
+                          (not queued)
+                          && not
+                               (Session.take_response_deferred session_manager
+                                  ~key:session_key)
+                        then
+                          Session.mark_response_sent session_manager
+                            ~key:session_key;
+                        Lwt.return (Ok (queued, response))))
+                  (fun exn -> Lwt.return (Error (Printexc.to_string exn)))
+              in
+              match result with
+              | Ok (queued, response) ->
+                  json_string_response
+                    (Yojson.Safe.to_string
+                       (`Assoc
+                          [
+                            ("queued", `Bool queued);
+                            ("response", `String response);
+                          ]))
+              | Error err ->
+                  Cohttp_lwt_unix.Server.respond_string
+                    ~status:`Internal_server_error ~headers:json_headers
+                    ~body:
+                      (Yojson.Safe.to_string
+                         (`Assoc [ ("error", `String err) ]))
+                    ()))
   | `POST, "/chat/stream" -> (
       let* ip_ok =
         match ip_limiter with

@@ -1,0 +1,27 @@
+---
+complexity: high
+depends_on: []
+estimate_hours: 3
+id: P7.M1.E1.T001
+priority: high
+status: pending
+tags:
+    - queue
+    - persistence
+    - sqlite
+title: Add inbound_queue schema, migration, and typed queue row/result types
+---
+
+# Add inbound_queue schema, migration, and typed queue row/result types
+
+## Requirements
+
+- Bump the SQLite schema version and add a dedicated `inbound_queue` table for durable inbound work.
+- Use stable operator/debug metadata columns plus a `payload_json` envelope rather than treating queued work as chat history.
+- Introduce typed OCaml row/result types so queue state transitions are explicit and maintainable.
+
+## Acceptance Criteria
+
+- `Memory.init` creates or migrates the durable inbound queue schema without regressing existing tables.
+- The queue schema includes row identity, session key, source/state metadata, claim metadata, retry metadata, and payload JSON.
+- `src/memory.ml` exposes typed representations for queue rows and claim/release outcomes instead of passing around unstructured tuples.

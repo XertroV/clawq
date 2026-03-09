@@ -1,0 +1,34 @@
+complexity: high
+depends_on:
+    - P7.M1
+epics:
+    - complexity: high
+      depends_on: []
+      description: Add startup reclaim and replay flow that hands durable queue rows into the real session runtime with per-session ordering.
+      estimate_hours: 10
+      id: E1
+      locked: false
+      name: Daemon Startup Replay Pipeline
+      path: 01-daemon-startup-replay-pipeline
+      status: pending
+    - complexity: medium
+      depends_on:
+        - P7.M2.E1
+      description: Make replay failure modes explicit, preserve at-least-once bookkeeping, and ensure lifecycle operations clear durable queue state coherently.
+      estimate_hours: 6
+      id: E2
+      locked: false
+      name: Failure Handling and Session Lifecycle
+      path: 02-failure-handling-and-session-l
+      status: pending
+estimate_hours: 16
+id: P7.M2
+locked: false
+name: Startup Replay Engine
+stats:
+    blocked: 0
+    done: 0
+    in_progress: 0
+    pending: 6
+    total_tasks: 6
+status: pending

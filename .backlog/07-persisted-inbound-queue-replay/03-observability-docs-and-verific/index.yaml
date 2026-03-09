@@ -1,0 +1,34 @@
+complexity: medium
+depends_on:
+    - P7.M2
+epics:
+    - complexity: medium
+      depends_on: []
+      description: Expose durable queue state via logs and CLI so operators can debug stuck, replayed, or cleared work.
+      estimate_hours: 6
+      id: E1
+      locked: false
+      name: Operator Visibility and Diagnostics
+      path: 01-operator-visibility-and-diagno
+      status: pending
+    - complexity: medium
+      depends_on:
+        - P7.M3.E1
+      description: Keep docs faithful to the durable queue implementation and track the verification work needed to prove the most important invariants.
+      estimate_hours: 4
+      id: E2
+      locked: false
+      name: Docs and Formal Verification Follow-through
+      path: 02-docs-and-formal-verification-f
+      status: pending
+estimate_hours: 10
+id: P7.M3
+locked: false
+name: Observability, Docs, and Verification
+stats:
+    blocked: 0
+    done: 0
+    in_progress: 0
+    pending: 4
+    total_tasks: 4
+status: pending

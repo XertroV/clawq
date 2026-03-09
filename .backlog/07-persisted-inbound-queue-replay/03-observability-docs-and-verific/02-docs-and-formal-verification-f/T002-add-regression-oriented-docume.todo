@@ -1,0 +1,28 @@
+---
+complexity: low
+depends_on:
+    - P7.M3.E2.T001
+estimate_hours: 2
+id: P7.M3.E2.T002
+priority: medium
+status: pending
+tags:
+    - docs
+    - queue
+    - operations
+title: Add regression-oriented documentation for at-least-once semantics, operator debugging, and replay limitations
+---
+
+# Add regression-oriented documentation for at-least-once semantics, operator debugging, and replay limitations
+
+## Requirements
+
+- Add operator/developer-facing documentation that makes replay limitations and debugging workflow explicit.
+- Document at-least-once semantics honestly so failures are diagnosable rather than surprising.
+- Capture the intended regression checklist for future changes in this area.
+
+## Acceptance Criteria
+
+- Documentation explains at-least-once replay, failure visibility, and the limits of phase-1 startup-only draining.
+- The docs include enough guidance for an operator to inspect pending rows and understand common failure modes.
+- A concise regression checklist or equivalent note exists for future contributors changing this subsystem.

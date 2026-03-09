@@ -32,5 +32,11 @@ milestones:
       path: 03-runtime-invariant-enforcement
       status: done
 name: Formal Verification Gap Closure
+stats:
+    blocked: 0
+    done: 14
+    in_progress: 0
+    pending: 0
+    total_tasks: 14
 status: done
 weeks: 2

@@ -1,0 +1,33 @@
+complexity: high
+depends_on: []
+epics:
+    - complexity: high
+      depends_on: []
+      description: Introduce the inbound_queue storage model, claim lifecycle, payload envelope, and low-level persistence tests.
+      estimate_hours: 8
+      id: E1
+      locked: false
+      name: Queue Storage and State Machine
+      path: 01-queue-storage-and-state-machin
+      status: pending
+    - complexity: medium
+      depends_on:
+        - P7.M1.E1
+      description: Stop treating offline inject as chat history, enqueue durable inbound work instead, and expose pending work via CLI surfaces.
+      estimate_hours: 6
+      id: E2
+      locked: false
+      name: Offline Session Inject Routing
+      path: 02-offline-session-inject-routing
+      status: pending
+estimate_hours: 14
+id: P7.M1
+locked: false
+name: Durable Queue Foundations
+stats:
+    blocked: 0
+    done: 0
+    in_progress: 0
+    pending: 6
+    total_tasks: 6
+status: pending

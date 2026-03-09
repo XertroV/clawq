@@ -148,6 +148,14 @@ Comments:
 - Prefer additive, targeted edits over broad refactors unless requested.
 - Keep Makefile target behavior stable when extending command surface.
 
+## Proactive Completion
+
+- Do not stop at the narrowest possible interpretation if adjacent behavior is clearly required for the feature to be genuinely usable.
+- When a requested command or feature should mirror an existing runtime path, follow the real production path end-to-end rather than adding a debug-only shortcut that bypasses important semantics.
+- If a task uncovers an obvious missing piece, fix it in the same change when it is safe, local, and verifiable.
+- Prefer fully completed behavior plus tests over partial scaffolding, even when the user asked in shorthand.
+- In handoff, call out any deliberate gaps that remain; do not silently leave known functional mismatches.
+
 ## Quick File Map
 
 - Build/test orchestration: `Makefile`
@@ -167,11 +175,12 @@ Comments:
 ## Recommended Agent Workflow
 
 1. Read relevant modules and adjacent tests first.
-2. Implement smallest viable change.
+2. Implement the smallest change that still preserves the real runtime semantics users would expect.
 3. Use the todo tool to keep track of current tasks when it helps maintain progress.
 4. Run focused test(s), then `make test`.
 5. Run formatting checks if OCaml files changed.
-6. Summarize behavior changes and verification commands in final handoff.
+6. Before handoff, quickly check for obvious follow-on fixes/docs/tests needed to make the task feel complete.
+7. Summarize behavior changes and verification commands in final handoff.
 
 ## Formal Verification Docs Maintenance
 

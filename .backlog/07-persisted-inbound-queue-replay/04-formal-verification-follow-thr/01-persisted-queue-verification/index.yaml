@@ -1,0 +1,24 @@
+complexity: medium
+depends_on: []
+estimate_hours: 4
+id: P7.M4.E1
+locked: false
+name: Persisted Queue Verification
+stats:
+    blocked: 0
+    done: 0
+    in_progress: 0
+    pending: 1
+    total: 1
+status: pending
+tasks:
+    - complexity: medium
+      depends_on:
+        - P7.M2
+        - P7.M3.E2.T001
+      estimate_hours: 4
+      file: T001-formally-verify-persisted-inbo.todo
+      id: T001
+      priority: high
+      status: pending
+      title: Formally verify persisted inbound queue replay invariants and reset semantics

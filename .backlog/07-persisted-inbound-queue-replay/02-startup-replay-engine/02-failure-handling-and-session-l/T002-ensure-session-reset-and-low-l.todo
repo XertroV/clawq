@@ -1,0 +1,28 @@
+---
+complexity: medium
+depends_on:
+    - P7.M1.E1.T002
+estimate_hours: 2
+id: P7.M2.E2.T002
+priority: high
+status: pending
+tags:
+    - queue
+    - session
+    - lifecycle
+title: Ensure session reset and low-level clear_session paths clear pending inbound rows and log the cleanup
+---
+
+# Ensure session reset and low-level clear_session paths clear pending inbound rows and log the cleanup
+
+## Requirements
+
+- Make `session reset` semantically complete by clearing pending durable inbound rows for that session.
+- Keep low-level cleanup helpers consistent with the user-facing reset behavior.
+- Log queue cleanup so surprise replay after reset is debuggable or impossible.
+
+## Acceptance Criteria
+
+- `session reset` clears pending durable inbound rows for the target session.
+- Lower-level session cleanup paths clear the same durable queue state consistently.
+- Queue cleanup actions are logged with session identity and cleared row count or equivalent detail.

@@ -1,0 +1,29 @@
+---
+complexity: medium
+depends_on:
+    - P7.M2.E2.T001
+    - P7.M2.E2.T002
+estimate_hours: 3
+id: P7.M3.E1.T001
+priority: high
+status: pending
+tags:
+    - queue
+    - logging
+    - debugging
+title: Add structured logs for enqueue, claim, replay, release, delete, stale-reclaim, and reset-clear transitions
+---
+
+# Add structured logs for enqueue, claim, replay, release, delete, stale-reclaim, and reset-clear transitions
+
+## Requirements
+
+- Add structured, high-signal logs for all major queue state transitions.
+- Ensure logs include queue row identity, session key, and state-transition context useful for debugging stuck or replayed work.
+- Cover both steady-state replay and reset/cleanup paths.
+
+## Acceptance Criteria
+
+- Logs exist for enqueue, claim, replay start, replay success, release, delete, stale reclaim, and reset-clear transitions.
+- Each log entry includes enough metadata to correlate operator reports with a durable queue row.
+- Logging output is covered by focused tests where practical or otherwise verified through existing logging test patterns.

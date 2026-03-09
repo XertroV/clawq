@@ -1,0 +1,44 @@
+complexity: medium
+depends_on:
+    - P7.M2.E1
+estimate_hours: 6
+id: P7.M2.E2
+locked: false
+name: Failure Handling and Session Lifecycle
+stats:
+    blocked: 0
+    done: 0
+    in_progress: 0
+    pending: 3
+    total: 3
+status: pending
+tasks:
+    - complexity: medium
+      depends_on:
+        - P7.M2.E1.T001
+        - P7.M2.E1.T002
+      estimate_hours: 2
+      file: T001-implement-attempt-count-and-la.todo
+      id: T001
+      priority: high
+      status: pending
+      title: Implement attempt_count and last_error bookkeeping with structured malformed and transient failure handling
+    - complexity: medium
+      depends_on:
+        - P7.M1.E1.T002
+      estimate_hours: 2
+      file: T002-ensure-session-reset-and-low-l.todo
+      id: T002
+      priority: high
+      status: pending
+      title: Ensure session reset and low-level clear_session paths clear pending inbound rows and log the cleanup
+    - complexity: medium
+      depends_on:
+        - P7.M2.E2.T001
+        - P7.M2.E2.T002
+      estimate_hours: 2
+      file: T003-add-tests-for-retry-metadata-c.todo
+      id: T003
+      priority: high
+      status: pending
+      title: Add tests for retry metadata, cleanup semantics, and history insertion only after successful processing

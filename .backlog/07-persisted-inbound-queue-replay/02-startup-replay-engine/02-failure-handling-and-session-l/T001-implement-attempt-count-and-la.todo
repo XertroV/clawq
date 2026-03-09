@@ -1,0 +1,29 @@
+---
+complexity: medium
+depends_on:
+    - P7.M2.E1.T001
+    - P7.M2.E1.T002
+estimate_hours: 2
+id: P7.M2.E2.T001
+priority: high
+status: pending
+tags:
+    - queue
+    - logging
+    - reliability
+title: Implement attempt_count and last_error bookkeeping with structured malformed and transient failure handling
+---
+
+# Implement attempt_count and last_error bookkeeping with structured malformed and transient failure handling
+
+## Requirements
+
+- Make at-least-once replay semantics explicit in both data model and failure handling.
+- Track attempt count and last error for operator debugging.
+- Distinguish malformed payloads and transient replay failures clearly enough to support investigation.
+
+## Acceptance Criteria
+
+- Durable rows record incrementing attempt counts and last-error context when replay fails.
+- Failure paths are logged with enough information to identify the queue row and reason.
+- The implementation does not claim exactly-once behavior it cannot provide.

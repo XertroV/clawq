@@ -1,0 +1,29 @@
+---
+complexity: medium
+depends_on:
+    - P7.M1.E2.T001
+    - P7.M1.E2.T002
+estimate_hours: 2
+id: P7.M1.E2.T003
+priority: high
+status: pending
+tags:
+    - queue
+    - tests
+    - cli
+title: Add command bridge tests proving offline inject visibility and no premature chat-log insertion
+---
+
+# Add command bridge tests proving offline inject visibility and no premature chat-log insertion
+
+## Requirements
+
+- Add regression tests for the offline CLI path once it stops writing directly to chat history.
+- Cover the new pending inspection surfaces and ensure they match the durable queue state.
+- Prevent reintroducing the semantic bug where offline inject looks like already-processed history.
+
+## Acceptance Criteria
+
+- Tests prove offline `session inject` creates durable queue state and user-facing warnings.
+- Tests prove pending inspection commands reflect the enqueued row accurately.
+- Tests prove `session show` does not present offline queued work as processed chat history before replay.

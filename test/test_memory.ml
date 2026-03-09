@@ -87,10 +87,10 @@ let test_init_double_call () =
   ignore db1;
   ignore db2
 
-let test_init_schema_version_is_3 () =
+let test_init_schema_version_is_4 () =
   let db = Memory.init ~db_path:":memory:" () in
   Alcotest.(check int)
-    "schema version is 3" 3
+    "schema version is 4" 4
     (query_single_int db "SELECT version FROM schema_version")
 
 let test_init_creates_session_persistence_tables () =
@@ -100,9 +100,15 @@ let test_init_creates_session_persistence_tables () =
     (table_exists db "session_state");
   Alcotest.(check bool)
     "discord_resume_state exists" true
-    (table_exists db "discord_resume_state")
+    (table_exists db "discord_resume_state");
+  Alcotest.(check bool)
+    "session_log_epochs exists" true
+    (table_exists db "session_log_epochs");
+  Alcotest.(check bool)
+    "session_log_epoch_messages exists" true
+    (table_exists db "session_log_epoch_messages")
 
-let test_migrates_v1_db_to_v3_without_data_loss () =
+let test_migrates_v1_db_to_v4_without_data_loss () =
   with_temp_db (fun db_path ->
       let db = Sqlite3.db_open db_path in
       exec_exn db "CREATE TABLE schema_version (version INTEGER NOT NULL)";
@@ -124,7 +130,7 @@ let test_migrates_v1_db_to_v3_without_data_loss () =
       ignore (Sqlite3.db_close db);
       let migrated = Memory.init ~db_path () in
       Alcotest.(check int)
-        "schema version migrated" 3
+        "schema version migrated" 4
         (query_single_int migrated "SELECT version FROM schema_version");
       Alcotest.(check bool)
         "session_state exists after migration" true
@@ -136,6 +142,42 @@ let test_migrates_v1_db_to_v3_without_data_loss () =
       Alcotest.(check int) "legacy row preserved" 1 (List.length msgs);
       Alcotest.(check string)
         "legacy content preserved" "hello from v1" (List.hd msgs).content)
+
+let test_replace_session_messages_archives_previous_epoch () =
+  let db = Memory.init ~db_path:":memory:" () in
+  Memory.store_message ~db ~session_key:"s1" (mk_msg "user" "hello");
+  Memory.store_message ~db ~session_key:"s1" (mk_msg "assistant" "hi");
+  Memory.replace_session_messages ~db ~session_key:"s1"
+    [ mk_msg "assistant" "[Conversation history compacted]" ];
+  let epochs = Memory.list_session_epochs ~db ~session_key:"s1" in
+  let archived =
+    List.filter (fun (epoch : Memory.session_epoch) -> not epoch.current) epochs
+  in
+  Alcotest.(check int) "one archived epoch" 1 (List.length archived);
+  match archived with
+  | [ epoch ] -> (
+      Alcotest.(check int) "archived message count" 2 epoch.message_count;
+      let rows =
+        Memory.load_epoch_messages ~db ~session_key:"s1"
+          ~epoch:(Memory.Archived (Option.get epoch.epoch_id))
+      in
+      match rows with
+      | Some rows ->
+          Alcotest.(check int) "archived rows available" 2 (List.length rows);
+          Alcotest.(check string)
+            "first archived content" "hello" (List.hd rows).content
+      | None -> Alcotest.fail "expected archived epoch rows")
+  | _ -> Alcotest.fail "expected exactly one archived epoch"
+
+let test_clear_session_removes_archived_epochs () =
+  let db = Memory.init ~db_path:":memory:" () in
+  Memory.store_message ~db ~session_key:"s1" (mk_msg "user" "hello");
+  Memory.replace_session_messages ~db ~session_key:"s1"
+    [ mk_msg "assistant" "summary" ];
+  Memory.clear_session ~db ~session_key:"s1";
+  let epochs = Memory.list_session_epochs ~db ~session_key:"s1" in
+  Alcotest.(check int) "only empty current epoch remains" 1 (List.length epochs);
+  Alcotest.(check int) "current epoch empty" 0 (List.hd epochs).message_count
 
 let test_upsert_session_state_roundtrip () =
   let db = Memory.init ~db_path:":memory:" () in
@@ -509,12 +551,12 @@ let suite =
     Alcotest.test_case "init search enabled" `Quick test_init_search_enabled;
     Alcotest.test_case "init search disabled" `Quick test_init_search_disabled;
     Alcotest.test_case "init double call" `Quick test_init_double_call;
-    Alcotest.test_case "init schema version is 3" `Quick
-      test_init_schema_version_is_3;
+    Alcotest.test_case "init schema version is 4" `Quick
+      test_init_schema_version_is_4;
     Alcotest.test_case "init creates session persistence tables" `Quick
       test_init_creates_session_persistence_tables;
-    Alcotest.test_case "migrates v1 db to v3 without data loss" `Quick
-      test_migrates_v1_db_to_v3_without_data_loss;
+    Alcotest.test_case "migrates v1 db to v4 without data loss" `Quick
+      test_migrates_v1_db_to_v4_without_data_loss;
     Alcotest.test_case "upsert session state roundtrip" `Quick
       test_upsert_session_state_roundtrip;
     Alcotest.test_case "mark response sent updates state" `Quick
@@ -540,6 +582,10 @@ let suite =
     Alcotest.test_case "clear session" `Quick test_clear_session;
     Alcotest.test_case "clear session isolates others" `Quick
       test_clear_session_isolates_others;
+    Alcotest.test_case "replace session messages archives previous epoch" `Quick
+      test_replace_session_messages_archives_previous_epoch;
+    Alcotest.test_case "clear session removes archived epochs" `Quick
+      test_clear_session_removes_archived_epochs;
     Alcotest.test_case "list sessions empty" `Quick test_list_sessions_empty;
     Alcotest.test_case "list sessions single" `Quick test_list_sessions_single;
     Alcotest.test_case "list sessions multiple" `Quick

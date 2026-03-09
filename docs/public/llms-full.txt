@@ -49,6 +49,11 @@ Every command below is invoked as `clawq COMMAND`. Run `clawq COMMAND --help` fo
 | `hardware` | Hardware integration (deferred to Phase 2) |
 | `mcp` | Start the MCP server (JSON-RPC via stdio) |
 | `memory` | Show memory backend config |
+| `session` | Inspect persisted sessions and raw chat-log epochs |
+| `session list [--channel NAME] [--prefix PREFIX] [--active|--inactive] [--main|--non-main]` | List persisted sessions with optional filters |
+| `session epochs SESSION` | List the current and archived chat-log epochs for a session |
+| `session show SESSION [--epoch current|ID]` | Print raw persisted chat-log messages for the latest or a selected archived epoch |
+| `session inject SESSION MESSAGE...` | Inject a live inbound message through the daemon session manager; idle sessions process immediately, busy channel sessions queue, and bang messages request interruption |
 | `migrate` | Run database migrations |
 | `models` | List configured LLM providers and models |
 | `onboard` | Create initial config if missing; runs onboarding wizard in TTY, otherwise writes a starter template |
@@ -490,6 +495,7 @@ The daemon serves the web UI and JSON/SSE gateway at `http://host:port/`. Main r
 | `/chat.js`, `/ui/chat.js`, `/chat.css`, `/ui/chat.css` | GET | Embedded UI assets |
 | `/chat` | POST | Synchronous chat (non-streaming) |
 | `/chat/stream` | POST | SSE chat streaming |
+| `/session/inject` | POST | Inject a live inbound message into an arbitrary session key via the daemon session manager |
 | `/health` | GET | Health check — returns `{"status":"ok"}` |
 | `/commands` | GET | Slash-command metadata for autocomplete |
 | `/ui-version` | GET | UI bundle version |
@@ -507,6 +513,7 @@ Gateway auth behavior:
 
 - `GET /`, `/ui*`, `/chat.js`, `/chat.css`, `/commands`, `/health`, and `/ui-version` are unauthenticated.
 - `POST /chat` and `POST /chat/stream` require a paired token when `gateway.require_pairing = true`; otherwise they accept anonymous requests unless `gateway.auth_token` is set.
+- `POST /session/inject` follows the same auth rules as the JSON chat endpoints and is intended for local CLI-driven session control.
 - When `gateway.auth_token` is set, JSON chat endpoints also accept `Authorization: Bearer <token>` or `x-api-key: <token>`.
 - `GET /pair` exposes pairing status only when pairing is configured.
 - `POST /pair` exchanges a valid code for a bearer token.

@@ -4,6 +4,12 @@ estimate_hours: 4
 id: P6.M1.E3
 locked: false
 name: Proof Cleanup
+stats:
+    blocked: 0
+    done: 1
+    in_progress: 0
+    pending: 0
+    total: 1
 status: done
 tasks:
     - complexity: medium

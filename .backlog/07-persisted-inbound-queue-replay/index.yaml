@@ -1,0 +1,55 @@
+complexity: medium
+depends_on: []
+estimate_hours: 40
+id: P7
+locked: false
+milestones:
+    - complexity: high
+      depends_on: []
+      description: Add the durable inbound queue schema, memory APIs, offline inject enqueue path, and initial operator inspection surfaces without changing current live in-memory queue semantics.
+      estimate_hours: 14
+      id: M1
+      locked: false
+      name: Durable Queue Foundations
+      path: 01-durable-queue-foundations
+      status: pending
+    - complexity: high
+      depends_on:
+        - P7.M1
+      description: Replay durable offline inbound work safely at daemon startup after pending agent resume, with clear at-least-once failure handling and session-lifecycle cleanup semantics.
+      estimate_hours: 16
+      id: M2
+      locked: false
+      name: Startup Replay Engine
+      path: 02-startup-replay-engine
+      status: pending
+    - complexity: medium
+      depends_on:
+        - P7.M2
+      description: Make the durable queue observable, document the real semantics accurately, and track the formal verification follow-up explicitly.
+      estimate_hours: 10
+      id: M3
+      locked: false
+      name: Observability, Docs, and Verification
+      path: 03-observability-docs-and-verific
+      status: pending
+    - complexity: medium
+      depends_on:
+        - P7.M2
+        - P7.M3
+      description: Track the post-implementation formal verification work for persisted inbound queue replay invariants, reset semantics, and startup ordering guarantees.
+      estimate_hours: 4
+      id: M4
+      locked: false
+      name: Formal Verification Follow-through
+      path: 04-formal-verification-follow-thr
+      status: pending
+name: Persisted Inbound Queue & Replay
+stats:
+    blocked: 0
+    done: 0
+    in_progress: 0
+    pending: 17
+    total_tasks: 17
+status: pending
+weeks: 3

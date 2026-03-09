@@ -1,0 +1,29 @@
+---
+complexity: medium
+depends_on:
+    - P7.M1.E1.T001
+    - P7.M1.E1.T002
+estimate_hours: 2
+id: P7.M1.E2.T001
+priority: high
+status: pending
+tags:
+    - queue
+    - cli
+    - session
+title: Change no-daemon session inject to enqueue durable inbound rows instead of appending chat history
+---
+
+# Change no-daemon session inject to enqueue durable inbound rows instead of appending chat history
+
+## Requirements
+
+- Stop appending offline `session inject` directly to chat history when no daemon is running.
+- Enqueue a durable inbound row instead, preserving raw message text and bang intent in the payload.
+- Return user-facing output that explains the message was queued for replay on next daemon start.
+
+## Acceptance Criteria
+
+- With no live daemon, `session inject` writes an inbound queue row rather than a `messages` row.
+- The command output clearly warns that live queue semantics were unavailable and that startup replay will handle the message later.
+- No processed chat history is created merely by enqueueing offline work.

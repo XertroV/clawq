@@ -14,4 +14,10 @@ estimate_hours: 8
 id: P6.M2
 locked: false
 name: Audit Chain Extraction
+stats:
+    blocked: 0
+    done: 3
+    in_progress: 0
+    pending: 0
+    total_tasks: 3
 status: done

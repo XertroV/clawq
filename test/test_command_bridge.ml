@@ -92,6 +92,45 @@ let init_git_repo path =
   | 0 -> ()
   | code -> Alcotest.failf "git init failed for %s (exit %d)" path code
 
+let session_db home =
+  let clawq_dir = Filename.concat home ".clawq" in
+  if not (Sys.file_exists clawq_dir) then Unix.mkdir clawq_dir 0o755;
+  Memory.init ~db_path:(Filename.concat clawq_dir "memory.db") ()
+
+let write_json_file path json =
+  let oc = open_out path in
+  output_string oc (Yojson.Safe.to_string json);
+  close_out oc
+
+let with_fake_gateway_server ~port ~callback f =
+  let stop, stopper = Lwt.wait () in
+  let server =
+    Cohttp_lwt_unix.Server.create
+      ~mode:(`TCP (`Port port))
+      (Cohttp_lwt_unix.Server.make ~callback ())
+  in
+  Lwt.async (fun () -> Lwt.pick [ server; stop ]);
+  Fun.protect ~finally:(fun () -> Lwt.wakeup_later stopper ()) f
+
+let write_daemon_state home ~pid ~host ~port =
+  let clawq_dir = Filename.concat home ".clawq" in
+  if not (Sys.file_exists clawq_dir) then Unix.mkdir clawq_dir 0o755;
+  write_json_file
+    (Filename.concat clawq_dir "daemon_state.json")
+    (`Assoc
+       [
+         ("pid", `Int pid);
+         ("gateway_host", `String host);
+         ("gateway_port", `Int port);
+       ])
+
+let write_config home body =
+  let clawq_dir = Filename.concat home ".clawq" in
+  if not (Sys.file_exists clawq_dir) then Unix.mkdir clawq_dir 0o755;
+  let oc = open_out (Filename.concat clawq_dir "config.json") in
+  output_string oc body;
+  close_out oc
+
 let test_handle_channel () =
   let result = Command_bridge.handle [ "channel" ] in
   Alcotest.(check bool)
@@ -132,6 +171,229 @@ let test_handle_workspace_uses_effective_workspace () =
         "workspace reports effective config path"
         ("Workspace: " ^ workspace)
         (Command_bridge.handle [ "workspace" ]))
+
+let test_handle_session_list_filters () =
+  with_temp_home (fun home ->
+      let db = session_db home in
+      Memory.store_message ~db ~session_key:"telegram:42:user1"
+        (Provider.make_message ~role:"user" ~content:"hi");
+      Memory.upsert_session_state ~db ~session_key:"telegram:42:user1"
+        ~turn:"agent" ~channel:"telegram" ~channel_id:"42" ();
+      Memory.store_message ~db ~session_key:"__main__"
+        (Provider.make_message ~role:"user" ~content:"main");
+      let result =
+        Command_bridge.handle
+          [ "session"; "list"; "--channel"; "telegram"; "--active" ]
+      in
+      Alcotest.(check bool)
+        "session list includes active telegram session" true
+        (try
+           ignore
+             (Str.search_forward
+                (Str.regexp_string "telegram:42:user1")
+                result 0);
+           true
+         with Not_found -> false);
+      Alcotest.(check bool)
+        "session list excludes main session" false
+        (try
+           ignore (Str.search_forward (Str.regexp_string "__main__") result 0);
+           true
+         with Not_found -> false))
+
+let test_handle_session_inject_routes_to_live_gateway () =
+  with_temp_home (fun home ->
+      let port = 19080 + Random.int 1000 in
+      write_config home
+        (Printf.sprintf
+           {|{
+  "gateway": { "host": "127.0.0.1", "port": %d, "require_pairing": false, "pair_lockout_seconds": 300, "max_pair_attempts": 5 },
+  "prompt": { "dynamic_enabled": false },
+  "security": { "tools_enabled": false }
+}|}
+           port);
+      write_daemon_state home ~pid:(Unix.getpid ()) ~host:"127.0.0.1" ~port;
+      let callback _conn req body =
+        let open Lwt.Syntax in
+        let* body = Cohttp_lwt.Body.to_string body in
+        let headers = Cohttp.Request.headers req in
+        let auth = Cohttp.Header.get headers "authorization" in
+        let json = Yojson.Safe.from_string body in
+        let open Yojson.Safe.Util in
+        let session_key = json |> member "session_key" |> to_string in
+        let message = json |> member "message" |> to_string in
+        Alcotest.(check (option string))
+          "no auth header when not configured" None auth;
+        Alcotest.(check string)
+          "session key forwarded" "telegram:1:user" session_key;
+        Alcotest.(check string)
+          "message forwarded" "hello persisted world" message;
+        Cohttp_lwt_unix.Server.respond_string ~status:`OK
+          ~body:{|{"queued":false,"response":"processed live"}|} ()
+      in
+      with_fake_gateway_server ~port ~callback (fun () ->
+          let inject_result =
+            Command_bridge.handle
+              [
+                "session";
+                "inject";
+                "telegram:1:user";
+                "hello";
+                "persisted";
+                "world";
+              ]
+          in
+          Alcotest.(check bool)
+            "session inject reports live processing" true
+            (try
+               ignore
+                 (Str.search_forward
+                    (Str.regexp_string "Processed injected message")
+                    inject_result 0);
+               true
+             with Not_found -> false);
+          Alcotest.(check bool)
+            "session inject includes response" true
+            (try
+               ignore
+                 (Str.search_forward
+                    (Str.regexp_string "processed live")
+                    inject_result 0);
+               true
+             with Not_found -> false)))
+
+let test_handle_session_inject_persists_when_daemon_missing () =
+  with_temp_home (fun home ->
+      ignore (session_db home);
+      let result =
+        Command_bridge.handle
+          [ "session"; "inject"; "telegram:1:user"; "hello" ]
+      in
+      Alcotest.(check bool)
+        "session inject warns about missing daemon" true
+        (try
+           ignore
+             (Str.search_forward
+                (Str.regexp_string "no live daemon detected")
+                result 0);
+           true
+         with Not_found -> false);
+      let show_result =
+        Command_bridge.handle [ "session"; "show"; "telegram:1:user" ]
+      in
+      Alcotest.(check bool)
+        "session inject persists message for later" true
+        (try
+           ignore (Str.search_forward (Str.regexp_string "hello") show_result 0);
+           true
+         with Not_found -> false))
+
+let test_handle_session_inject_reports_queued_bang () =
+  with_temp_home (fun home ->
+      let port = 20080 + Random.int 1000 in
+      write_config home
+        (Printf.sprintf
+           {|{
+  "gateway": { "host": "127.0.0.1", "port": %d, "auth_token": "secret", "require_pairing": false, "pair_lockout_seconds": 300, "max_pair_attempts": 5 },
+  "prompt": { "dynamic_enabled": false },
+  "security": { "tools_enabled": false }
+}|}
+           port);
+      write_daemon_state home ~pid:(Unix.getpid ()) ~host:"127.0.0.1" ~port;
+      let callback _conn req body =
+        let open Lwt.Syntax in
+        let* body = Cohttp_lwt.Body.to_string body in
+        let headers = Cohttp.Request.headers req in
+        let auth = Cohttp.Header.get headers "authorization" in
+        let json = Yojson.Safe.from_string body in
+        let open Yojson.Safe.Util in
+        Alcotest.(check (option string))
+          "auth header forwarded" (Some "Bearer secret") auth;
+        Alcotest.(check string)
+          "bang message forwarded" "!interrupt now"
+          (json |> member "message" |> to_string);
+        Cohttp_lwt_unix.Server.respond_string ~status:`OK
+          ~body:{|{"queued":true,"response":"__clawq_message_queued__"}|} ()
+      in
+      with_fake_gateway_server ~port ~callback (fun () ->
+          let result =
+            Command_bridge.handle
+              [ "session"; "inject"; "telegram:1:user"; "!interrupt"; "now" ]
+          in
+          Alcotest.(check bool)
+            "queued bang reported" true
+            (try
+               ignore
+                 (Str.search_forward
+                    (Str.regexp_string
+                       "Queued injected message for busy session")
+                    result 0);
+               true
+             with Not_found -> false);
+          Alcotest.(check bool)
+            "bang interrupt note included" true
+            (try
+               ignore
+                 (Str.search_forward
+                    (Str.regexp_string "bang interrupt requested")
+                    result 0);
+               true
+             with Not_found -> false)))
+
+let test_handle_session_epochs_and_show_archived_epoch () =
+  with_temp_home (fun home ->
+      let db = session_db home in
+      Memory.store_message ~db ~session_key:"web:test"
+        (Provider.make_message ~role:"user" ~content:"before compaction");
+      Memory.store_message ~db ~session_key:"web:test"
+        (Provider.make_message ~role:"assistant" ~content:"reply");
+      Memory.replace_session_messages ~db ~session_key:"web:test"
+        [ Provider.make_message ~role:"assistant" ~content:"summary" ];
+      let epochs_result =
+        Command_bridge.handle [ "session"; "epochs"; "web:test" ]
+      in
+      Alcotest.(check bool)
+        "session epochs includes current marker" true
+        (try
+           ignore
+             (Str.search_forward
+                (Str.regexp_string "\"label\": \"current\"")
+                epochs_result 0);
+           true
+         with Not_found -> false);
+      Alcotest.(check bool)
+        "session epochs includes archived epoch id" true
+        (try
+           ignore
+             (Str.search_forward
+                (Str.regexp_string "\"epoch\": 1")
+                epochs_result 0);
+           true
+         with Not_found -> false);
+      let current_result =
+        Command_bridge.handle [ "session"; "show"; "web:test" ]
+      in
+      Alcotest.(check bool)
+        "default session show uses current epoch" false
+        (try
+           ignore
+             (Str.search_forward
+                (Str.regexp_string "before compaction")
+                current_result 0);
+           true
+         with Not_found -> false);
+      let archived_result =
+        Command_bridge.handle [ "session"; "show"; "web:test"; "--epoch"; "1" ]
+      in
+      Alcotest.(check bool)
+        "archived session show includes old content" true
+        (try
+           ignore
+             (Str.search_forward
+                (Str.regexp_string "before compaction")
+                archived_result 0);
+           true
+         with Not_found -> false))
 
 let test_handle_capabilities () =
   let result = Command_bridge.handle [ "capabilities" ] in
@@ -696,6 +958,16 @@ let suite =
     Alcotest.test_case "handle workspace" `Quick test_handle_workspace;
     Alcotest.test_case "handle workspace uses effective workspace" `Quick
       test_handle_workspace_uses_effective_workspace;
+    Alcotest.test_case "handle session list filters" `Quick
+      test_handle_session_list_filters;
+    Alcotest.test_case "handle session inject routes to live gateway" `Quick
+      test_handle_session_inject_routes_to_live_gateway;
+    Alcotest.test_case "handle session inject persists when daemon missing"
+      `Quick test_handle_session_inject_persists_when_daemon_missing;
+    Alcotest.test_case "handle session inject reports queued bang" `Quick
+      test_handle_session_inject_reports_queued_bang;
+    Alcotest.test_case "handle session epochs and show archived epoch" `Quick
+      test_handle_session_epochs_and_show_archived_epoch;
     Alcotest.test_case "handle capabilities" `Quick test_handle_capabilities;
     Alcotest.test_case "handle auth" `Quick test_handle_auth;
     Alcotest.test_case "handle not-impl commands" `Quick

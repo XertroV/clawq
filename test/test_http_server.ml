@@ -65,6 +65,60 @@ let test_chat_rejects_missing_auth_token () =
 
 let body_string body = Lwt_main.run (Cohttp_lwt.Body.to_string body)
 
+let test_session_inject_rejects_missing_auth_token () =
+  let config = Runtime_config.default in
+  let session_manager = Session.create ~config () in
+  let req =
+    Cohttp.Request.make ~meth:`POST
+      (Uri.of_string "http://127.0.0.1/session/inject")
+  in
+  let body =
+    Cohttp_lwt.Body.of_string
+      {|{"session_key":"telegram:1:u","message":"hello"}|}
+  in
+  let resp, _body =
+    Lwt_main.run
+      (Http_server.handler ~session_manager ~require_pairing:false
+         ~auth_token:(Some "secret") (Obj.magic ()) req body)
+  in
+  Alcotest.(check int)
+    "unauthorized" 401
+    (Cohttp.Code.code_of_status (Cohttp.Response.status resp))
+
+let test_session_inject_uses_session_turn () =
+  let config = Runtime_config.default in
+  let session_manager = Session.create ~config () in
+  Session.set_special_command_handler session_manager
+    (fun ~key ~message ~send_progress:_ ->
+      if key = "telegram:1:u" && message = "hello" then
+        Lwt.return_some "processed live"
+      else Lwt.return_none);
+  let headers = Cohttp.Header.of_list [ ("Authorization", "Bearer secret") ] in
+  let req =
+    Cohttp.Request.make ~headers ~meth:`POST
+      (Uri.of_string "http://127.0.0.1/session/inject")
+  in
+  let body =
+    Cohttp_lwt.Body.of_string
+      {|{"session_key":"telegram:1:u","message":"hello"}|}
+  in
+  let resp, body =
+    Lwt_main.run
+      (Http_server.handler ~session_manager ~require_pairing:false
+         ~auth_token:(Some "secret") (Obj.magic ()) req body)
+  in
+  Alcotest.(check int)
+    "ok" 200
+    (Cohttp.Code.code_of_status (Cohttp.Response.status resp));
+  let payload = Yojson.Safe.from_string (body_string body) in
+  let open Yojson.Safe.Util in
+  Alcotest.(check bool)
+    "not queued" false
+    (payload |> member "queued" |> to_bool);
+  Alcotest.(check string)
+    "handler response preserved" "processed live"
+    (payload |> member "response" |> to_string)
+
 let query_single_text_option db sql =
   let stmt = Sqlite3.prepare db sql in
   Fun.protect
@@ -213,6 +267,10 @@ let suite =
       test_require_pairing_blocks_chat_stream;
     Alcotest.test_case "chat rejects missing auth token" `Quick
       test_chat_rejects_missing_auth_token;
+    Alcotest.test_case "session inject rejects missing auth token" `Quick
+      test_session_inject_rejects_missing_auth_token;
+    Alcotest.test_case "session inject uses session turn" `Quick
+      test_session_inject_uses_session_turn;
     Alcotest.test_case "chat error marks response sent" `Quick
       test_chat_error_marks_response_sent;
     Alcotest.test_case "chat stream error marks response sent" `Quick
