@@ -33,6 +33,8 @@ type t = {
   in_flight_count : int ref;
   channel_notifiers : (string, string -> unit Lwt.t) Hashtbl.t;
   status_message_factories : (string, unit -> Status_message.t) Hashtbl.t;
+  rich_notifiers :
+    (string, Rich_message.t -> Rich_message.send_result Lwt.t) Hashtbl.t;
   deferred_responses : (string, unit) Hashtbl.t;
   queued_messages : (string, queued_message list) Hashtbl.t;
   continuation_checks : (string, continuation_state) Hashtbl.t;
@@ -100,6 +102,7 @@ let create ~config ?tool_registry ?sandbox ?(landlock_enabled = false) ?db () =
     in_flight_count = ref 0;
     channel_notifiers = Hashtbl.create 16;
     status_message_factories = Hashtbl.create 16;
+    rich_notifiers = Hashtbl.create 16;
     deferred_responses = Hashtbl.create 16;
     queued_messages = Hashtbl.create 16;
     continuation_checks = Hashtbl.create 16;
@@ -138,6 +141,12 @@ let unregister_channel_notifier mgr ~key =
 
 let register_status_message_factory mgr ~key factory =
   Hashtbl.replace mgr.status_message_factories key factory
+
+let register_rich_notifier mgr ~key notify =
+  Hashtbl.replace mgr.rich_notifiers key notify
+
+let unregister_rich_notifier mgr ~key = Hashtbl.remove mgr.rich_notifiers key
+let find_rich_notifier mgr ~key = Hashtbl.find_opt mgr.rich_notifiers key
 
 let set_response_deferred mgr ~key =
   Hashtbl.replace mgr.deferred_responses key ()
@@ -1121,6 +1130,7 @@ let reset mgr ~key =
             Hashtbl.remove mgr.queued_messages key;
             Hashtbl.remove mgr.continuation_checks key;
             unregister_channel_notifier mgr ~key;
+            unregister_rich_notifier mgr ~key;
             Hashtbl.remove mgr.sessions key;
             Lwt.return (Some mutex)
         | None ->
@@ -1131,6 +1141,7 @@ let reset mgr ~key =
             Hashtbl.remove mgr.queued_messages key;
             Hashtbl.remove mgr.continuation_checks key;
             unregister_channel_notifier mgr ~key;
+            unregister_rich_notifier mgr ~key;
             Lwt.return None)
   in
   match held_mutex with

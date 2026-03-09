@@ -51,11 +51,28 @@ type callback_query = {
   cb_bot_token : string;
   callback_query_id : string;
   cb_chat_id : string;
+  cb_user_id : string;
   cb_message_id : int;
   data : string;
 }
 
+type poll_answer = {
+  pa_poll_id : string;
+  pa_user_id : string;
+  pa_option_ids : int list;
+}
+
 let pending_callbacks : callback_query Queue.t = Queue.create ()
+let pending_poll_answers : poll_answer Queue.t = Queue.create ()
+
+(* callback_id -> (session_key, label, created_at) *)
+let callback_routing : (string, string * string * float) Hashtbl.t =
+  Hashtbl.create 64
+
+(* poll_id -> (session_key, chat_id, bot_token, options, created_at) *)
+let poll_routing :
+    (string, string * string * string * string list * float) Hashtbl.t =
+  Hashtbl.create 16
 
 type pending_text_update = {
   mutable update : update;
@@ -245,6 +262,11 @@ let get_updates ~bot_token ~offset ~timeout =
               let cq = u |> member "callback_query" in
               if cq = `Null then raise Not_found;
               let callback_query_id = cq |> member "id" |> to_string in
+              let from = cq |> member "from" in
+              let cb_user_id =
+                try from |> member "id" |> to_int |> string_of_int
+                with _ -> "0"
+              in
               let msg = cq |> member "message" in
               let chat = msg |> member "chat" in
               let cb_chat_id = chat |> member "id" |> to_int |> string_of_int in
@@ -255,19 +277,40 @@ let get_updates ~bot_token ~offset ~timeout =
                   cb_bot_token = bot_token;
                   callback_query_id;
                   cb_chat_id;
+                  cb_user_id;
                   cb_message_id;
                   data;
                 }
                 pending_callbacks;
               None
-            with _ ->
-              let update_id =
-                try u |> member "update_id" |> to_int with _ -> -1
-              in
-              Logs.debug (fun m ->
-                  m "Telegram: dropping malformed update (update_id=%d)"
-                    update_id);
-              None))
+            with _ -> (
+              (* Try to parse as poll_answer *)
+              try
+                let open Yojson.Safe.Util in
+                let pa = u |> member "poll_answer" in
+                if pa = `Null then raise Not_found;
+                let pa_poll_id = pa |> member "poll_id" |> to_string in
+                let pa_user_id =
+                  pa |> member "user" |> member "id" |> to_int |> string_of_int
+                in
+                let pa_option_ids =
+                  pa |> member "option_ids" |> to_list |> List.map to_int
+                in
+                Queue.push
+                  { pa_poll_id; pa_user_id; pa_option_ids }
+                  pending_poll_answers;
+                None
+              with _ ->
+                let update_id =
+                  try
+                    let open Yojson.Safe.Util in
+                    u |> member "update_id" |> to_int
+                  with _ -> -1
+                in
+                Logs.debug (fun m ->
+                    m "Telegram: dropping malformed update (update_id=%d)"
+                      update_id);
+                None)))
         results
     in
     Lwt.return (Updates (!max_update_id, updates))
@@ -602,6 +645,58 @@ let send_silent_chunked (send_chunked : chunk_sender) ~bot_token ~chat_id ~text
     =
   send_chunked ~disable_notification:true ~bot_token ~chat_id ~text ()
 
+let send_poll_api ~bot_token ~chat_id ~question ~options ~allows_multiple () =
+  let open Lwt.Syntax in
+  let uri = Printf.sprintf "%s%s/sendPoll" api_base bot_token in
+  let body =
+    `Assoc
+      [
+        ("chat_id", `String chat_id);
+        ("question", `String question);
+        ( "options",
+          `List (List.map (fun o -> `Assoc [ ("text", `String o) ]) options) );
+        ("is_anonymous", `Bool false);
+        ("allows_multiple_answers", `Bool allows_multiple);
+      ]
+    |> Yojson.Safe.to_string
+  in
+  let* _status, resp_body = Http_client.post_json ~uri ~headers:[] ~body in
+  let msg_id, poll_id =
+    try
+      let json = Yojson.Safe.from_string resp_body in
+      let result = json |> Yojson.Safe.Util.member "result" in
+      let mid =
+        result
+        |> Yojson.Safe.Util.member "message_id"
+        |> Yojson.Safe.Util.to_int |> string_of_int
+      in
+      let pid =
+        result
+        |> Yojson.Safe.Util.member "poll"
+        |> Yojson.Safe.Util.member "id"
+        |> Yojson.Safe.Util.to_string
+      in
+      (mid, pid)
+    with _ -> ("0", "0")
+  in
+  Lwt.return (msg_id, poll_id)
+
+let cleanup_stale_routing () =
+  let now = Unix.gettimeofday () in
+  let max_age = 3600.0 in
+  let stale_cbs = ref [] in
+  Hashtbl.iter
+    (fun key (_, _, created_at) ->
+      if now -. created_at >= max_age then stale_cbs := key :: !stale_cbs)
+    callback_routing;
+  List.iter (Hashtbl.remove callback_routing) !stale_cbs;
+  let stale_polls = ref [] in
+  Hashtbl.iter
+    (fun key (_, _, _, _, created_at) ->
+      if now -. created_at >= max_age then stale_polls := key :: !stale_polls)
+    poll_routing;
+  List.iter (Hashtbl.remove poll_routing) !stale_polls
+
 let set_my_commands ~bot_token =
   let open Lwt.Syntax in
   let cmds =
@@ -776,6 +871,48 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
                 (make_status_notifier ~bot_token ~chat_id:update.chat_id)
               ~parse_mode:"MarkdownV2" ())
       end;
+      (* Register rich notifier for inline keyboards and polls *)
+      if Option.is_none (Session.find_rich_notifier session_mgr ~key) then
+        Session.register_rich_notifier session_mgr ~key (fun msg ->
+            let open Lwt.Syntax in
+            match msg with
+            | Rich_message.Text text ->
+                let* () =
+                  send_chunked ~bot_token ~chat_id:update.chat_id ~text ()
+                in
+                Lwt.return Rich_message.{ message_id = "0"; callback_ids = [] }
+            | Rich_message.TextWithButtons { text; button_rows } ->
+                let now = Unix.gettimeofday () in
+                let buttons =
+                  List.concat_map
+                    (fun row ->
+                      List.map
+                        (fun (btn : Rich_message.button) ->
+                          (btn.label, btn.callback_id))
+                        row)
+                    button_rows
+                in
+                let callback_ids =
+                  List.map
+                    (fun (label, cb_id) ->
+                      Hashtbl.replace callback_routing cb_id (key, label, now);
+                      cb_id)
+                    buttons
+                in
+                let* msg_id =
+                  send_message_with_keyboard ~bot_token ~chat_id:update.chat_id
+                    ~text ~buttons ()
+                in
+                Lwt.return Rich_message.{ message_id = msg_id; callback_ids }
+            | Rich_message.Poll { question; options; allows_multiple } ->
+                let* msg_id, poll_id =
+                  send_poll_api ~bot_token ~chat_id:update.chat_id ~question
+                    ~options ~allows_multiple ()
+                in
+                Hashtbl.replace poll_routing poll_id
+                  (key, update.chat_id, bot_token, options, Unix.gettimeofday ());
+                Lwt.return
+                  Rich_message.{ message_id = msg_id; callback_ids = [] });
       let* user_text =
         match update.voice_file_id with
         | Some file_id ->
@@ -1415,10 +1552,47 @@ let poll_account ~bot_token ~(account : Runtime_config.telegram_account) ~name
                           else Some v)
                         tool_result_cache;
                       Lwt.return_unit
-                  | _ ->
-                      answer_callback_query ~bot_token
-                        ~callback_query_id:cb.callback_query_id
-                        ~text:"Unknown action" ())
+                  | data -> (
+                      match Hashtbl.find_opt callback_routing data with
+                      | Some (session_key, label, _created) ->
+                          Hashtbl.remove callback_routing data;
+                          let* () =
+                            answer_callback_query ~bot_token
+                              ~callback_query_id:cb.callback_query_id
+                              ~text:(Printf.sprintf "Selected: %s" label)
+                              ()
+                          in
+                          Lwt.async (fun () ->
+                              Lwt.catch
+                                (fun () ->
+                                  let message =
+                                    Printf.sprintf "[Button: %s]" label
+                                  in
+                                  let* response =
+                                    Session.turn session_mgr ~key:session_key
+                                      ~message ~channel:"telegram"
+                                      ~channel_id:cb.cb_chat_id ()
+                                  in
+                                  if
+                                    not
+                                      (Session.is_queued_message_response
+                                         response)
+                                  then
+                                    send_chunked ~bot_token
+                                      ~chat_id:cb.cb_chat_id ~text:response ()
+                                  else Lwt.return_unit)
+                                (fun exn ->
+                                  Logs.err (fun m ->
+                                      m
+                                        "Telegram: button callback routing \
+                                         error: %s"
+                                        (Printexc.to_string exn));
+                                  Lwt.return_unit));
+                          Lwt.return_unit
+                      | None ->
+                          answer_callback_query ~bot_token
+                            ~callback_query_id:cb.callback_query_id
+                            ~text:"Unknown action" ()))
                 (fun exn ->
                   Logs.err (fun m ->
                       m "Telegram: callback handling error: %s"
@@ -1429,6 +1603,61 @@ let poll_account ~bot_token ~(account : Runtime_config.telegram_account) ~name
       in
       drain_callbacks ()
     in
+    (* Drain poll answers *)
+    let* () =
+      let rec drain_poll_answers () =
+        if Queue.is_empty pending_poll_answers then Lwt.return_unit
+        else
+          let pa = Queue.pop pending_poll_answers in
+          let* () =
+            match Hashtbl.find_opt poll_routing pa.pa_poll_id with
+            | Some (session_key, chat_id, poll_bot_token, options, _created_at)
+              ->
+                let selected =
+                  List.filter_map
+                    (fun idx ->
+                      if idx >= 0 && idx < List.length options then
+                        Some (List.nth options idx)
+                      else None)
+                    pa.pa_option_ids
+                in
+                if selected = [] then Lwt.return_unit
+                else begin
+                  Lwt.async (fun () ->
+                      Lwt.catch
+                        (fun () ->
+                          let message =
+                            Printf.sprintf "[Poll vote: %s]"
+                              (String.concat ", " selected)
+                          in
+                          let* response =
+                            Session.turn session_mgr ~key:session_key ~message
+                              ~channel:"telegram" ~channel_id:chat_id ()
+                          in
+                          if not (Session.is_queued_message_response response)
+                          then
+                            send_chunked ~bot_token:poll_bot_token ~chat_id
+                              ~text:response ()
+                          else Lwt.return_unit)
+                        (fun exn ->
+                          Logs.err (fun m ->
+                              m "Telegram: poll answer routing error: %s"
+                                (Printexc.to_string exn));
+                          Lwt.return_unit));
+                  Lwt.return_unit
+                end
+            | None ->
+                Logs.debug (fun m ->
+                    m "Telegram: ignoring poll_answer for unknown poll_id=%s"
+                      pa.pa_poll_id);
+                Lwt.return_unit
+          in
+          drain_poll_answers ()
+      in
+      drain_poll_answers ()
+    in
+    (* Periodic cleanup of stale routing entries *)
+    if !poll_count mod 100 = 0 then cleanup_stale_routing ();
     poll ()
   in
   poll ()

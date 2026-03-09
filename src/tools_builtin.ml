@@ -2967,16 +2967,24 @@ let git_operations ~workspace =
     deferred = false;
   }
 
-(* ───── Messaging tool ───── *)
+(* ───── Messaging tools ───── *)
 
-let send_message ~(send_fn : (text:string -> unit Lwt.t) option) =
+let generate_callback_id ~index ~label =
+  let nonce = Printf.sprintf "%f_%d" (Unix.gettimeofday ()) (Random.bits ()) in
+  let hash = Digest.to_hex (Digest.string (label ^ nonce)) in
+  Printf.sprintf "cb_%d_%s" index (String.sub hash 0 8)
+
+let send_message ~(send_fn : (text:string -> unit Lwt.t) option)
+    ~(rich_send_fn :
+       (session_key:string -> Rich_message.t -> Rich_message.send_result Lwt.t)
+       option) =
   {
     Tool.name = "send_message";
     description =
       "Send a message to the user immediately via the current session, or via \
        the configured notification channel (Telegram, Discord, etc.) if no \
        session is active. Use when asked to notify, alert, or message the \
-       user.";
+       user. Optionally include inline keyboard buttons for user choices.";
     parameters_schema =
       `Assoc
         [
@@ -2990,28 +2998,224 @@ let send_message ~(send_fn : (text:string -> unit Lwt.t) option) =
                       ("type", `String "string");
                       ("description", `String "Message text to send");
                     ] );
+                ( "buttons",
+                  `Assoc
+                    [
+                      ("type", `String "array");
+                      ( "description",
+                        `String
+                          "Optional inline keyboard buttons. Each is an object \
+                           with 'label' (display text). When clicked, the \
+                           selected label is sent back as a user message." );
+                      ( "items",
+                        `Assoc
+                          [
+                            ("type", `String "object");
+                            ( "properties",
+                              `Assoc
+                                [
+                                  ( "label",
+                                    `Assoc [ ("type", `String "string") ] );
+                                ] );
+                            ("required", `List [ `String "label" ]);
+                          ] );
+                    ] );
               ] );
           ("required", `List [ `String "text" ]);
         ];
     invoke =
-      (fun ?context:_ args ->
+      (fun ?context args ->
         let open Yojson.Safe.Util in
         let text = try args |> member "text" |> to_string with _ -> "" in
         if text = "" then Lwt.return "Error: text is required"
         else
-          match send_fn with
-          | None ->
-              Lwt.return
-                "Error: no active session notifier or configured notification \
-                 channel."
-          | Some f ->
+          let buttons =
+            try
+              args |> member "buttons" |> to_list
+              |> List.map (fun b -> b |> member "label" |> to_string)
+            with _ -> []
+          in
+          if buttons <> [] then
+            let session_key =
+              match context with
+              | Some ctx -> ctx.Tool.session_key
+              | None -> None
+            in
+            let button_objs =
+              List.mapi
+                (fun i label ->
+                  Rich_message.
+                    {
+                      label;
+                      callback_id = generate_callback_id ~index:i ~label;
+                    })
+                buttons
+            in
+            let callback_ids =
+              List.map
+                (fun (b : Rich_message.button) -> b.callback_id)
+                button_objs
+            in
+            (* v1: all buttons in a single row; multi-row layout not yet
+               exposed in the tool schema *)
+            let msg =
+              Rich_message.TextWithButtons
+                { text; button_rows = [ button_objs ] }
+            in
+            match (rich_send_fn, session_key) with
+            | Some rsf, Some sk ->
+                Lwt.catch
+                  (fun () ->
+                    let open Lwt.Syntax in
+                    let* result = rsf ~session_key:sk msg in
+                    let ids =
+                      String.concat ", " result.Rich_message.callback_ids
+                    in
+                    Lwt.return
+                      (Printf.sprintf
+                         "Message sent with %d button(s). message_id=%s \
+                          callback_ids=[%s]"
+                         (List.length buttons) result.message_id ids))
+                  (fun exn ->
+                    Lwt.return
+                      ("Error sending rich message: " ^ Printexc.to_string exn))
+            | _ -> (
+                (* Fallback: render buttons as text *)
+                let fallback_text = Rich_message.to_fallback_text msg in
+                match send_fn with
+                | Some f ->
+                    Lwt.catch
+                      (fun () ->
+                        let open Lwt.Syntax in
+                        let* () = f ~text:fallback_text in
+                        let ids = String.concat ", " callback_ids in
+                        Lwt.return
+                          (Printf.sprintf
+                             "Message sent (buttons rendered as text). \
+                              callback_ids=[%s]"
+                             ids))
+                      (fun exn ->
+                        Lwt.return
+                          ("Error sending message: " ^ Printexc.to_string exn))
+                | None ->
+                    Lwt.return
+                      "Error: no active session notifier or configured \
+                       notification channel.")
+          else
+            match send_fn with
+            | None ->
+                Lwt.return
+                  "Error: no active session notifier or configured \
+                   notification channel."
+            | Some f ->
+                Lwt.catch
+                  (fun () ->
+                    let open Lwt.Syntax in
+                    let* () = f ~text in
+                    Lwt.return "Message sent")
+                  (fun exn ->
+                    Lwt.return
+                      ("Error sending message: " ^ Printexc.to_string exn)));
+    invoke_stream = None;
+    risk_level = Low;
+    deferred = false;
+  }
+
+let send_poll
+    ~(rich_send_fn :
+       (session_key:string -> Rich_message.t -> Rich_message.send_result Lwt.t)
+       option) ~(send_fn : (text:string -> unit Lwt.t) option) =
+  {
+    Tool.name = "send_poll";
+    description =
+      "Send a poll to the user via the current channel. On Telegram, this \
+       creates a native poll; on other channels it renders as a text question. \
+       The user's vote is routed back as a message.";
+    parameters_schema =
+      `Assoc
+        [
+          ("type", `String "object");
+          ( "properties",
+            `Assoc
+              [
+                ( "question",
+                  `Assoc
+                    [
+                      ("type", `String "string");
+                      ("description", `String "The poll question");
+                    ] );
+                ( "options",
+                  `Assoc
+                    [
+                      ("type", `String "array");
+                      ( "description",
+                        `String "Poll options (2-10 items required)" );
+                      ("items", `Assoc [ ("type", `String "string") ]);
+                      ("minItems", `Int 2);
+                      ("maxItems", `Int 10);
+                    ] );
+                ( "allows_multiple",
+                  `Assoc
+                    [
+                      ("type", `String "boolean");
+                      ( "description",
+                        `String
+                          "Whether users can select multiple options (default: \
+                           false)" );
+                    ] );
+              ] );
+          ("required", `List [ `String "question"; `String "options" ]);
+        ];
+    invoke =
+      (fun ?context args ->
+        let open Yojson.Safe.Util in
+        let question =
+          try args |> member "question" |> to_string with _ -> ""
+        in
+        let options =
+          try args |> member "options" |> to_list |> List.map to_string
+          with _ -> []
+        in
+        let allows_multiple =
+          try args |> member "allows_multiple" |> to_bool with _ -> false
+        in
+        if question = "" then Lwt.return "Error: question is required"
+        else if List.length options < 2 then
+          Lwt.return "Error: at least 2 options are required"
+        else if List.length options > 10 then
+          Lwt.return "Error: at most 10 options are allowed"
+        else
+          let session_key =
+            match context with Some ctx -> ctx.Tool.session_key | None -> None
+          in
+          let msg = Rich_message.Poll { question; options; allows_multiple } in
+          match (rich_send_fn, session_key) with
+          | Some rsf, Some sk ->
               Lwt.catch
                 (fun () ->
                   let open Lwt.Syntax in
-                  let* () = f ~text in
-                  Lwt.return "Message sent")
+                  let* result = rsf ~session_key:sk msg in
+                  Lwt.return
+                    (Printf.sprintf "Poll sent. message_id=%s"
+                       result.Rich_message.message_id))
                 (fun exn ->
-                  Lwt.return ("Error sending message: " ^ Printexc.to_string exn)));
+                  Lwt.return ("Error sending poll: " ^ Printexc.to_string exn))
+          | _ -> (
+              let fallback_text = Rich_message.to_fallback_text msg in
+              match send_fn with
+              | Some f ->
+                  Lwt.catch
+                    (fun () ->
+                      let open Lwt.Syntax in
+                      let* () = f ~text:fallback_text in
+                      Lwt.return "Poll sent (rendered as text)")
+                    (fun exn ->
+                      Lwt.return
+                        ("Error sending poll: " ^ Printexc.to_string exn))
+              | None ->
+                  Lwt.return
+                    "Error: no active session notifier or configured \
+                     notification channel."));
     invoke_stream = None;
     risk_level = Low;
     deferred = false;
@@ -3116,7 +3320,7 @@ let doc_write ~workspace ~workspace_files =
   }
 
 let register_all ~(config : Runtime_config.t) ~sandbox ?(db = None)
-    ?(send_fn = None) registry =
+    ?(send_fn = None) ?(rich_send_fn = None) registry =
   let workspace_only = config.security.workspace_only in
   let workspace = Runtime_config.effective_workspace config in
   let extra_allowed_paths = config.security.extra_allowed_paths in
@@ -3146,7 +3350,9 @@ let register_all ~(config : Runtime_config.t) ~sandbox ?(db = None)
   if config.web_search <> None then
     Tool_registry.register registry (web_search ~config);
   (match send_fn with
-  | Some _ -> Tool_registry.register registry (send_message ~send_fn)
+  | Some _ ->
+      Tool_registry.register registry (send_message ~send_fn ~rich_send_fn);
+      Tool_registry.register registry (send_poll ~rich_send_fn ~send_fn)
   | None -> ());
   if config.stt <> None then
     Tool_registry.register registry (transcribe ~config);

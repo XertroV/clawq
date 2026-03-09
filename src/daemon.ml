@@ -875,10 +875,32 @@ let run ~(config : Runtime_config.t) =
     Session.create ~config:!current_config ?tool_registry ~sandbox
       ~landlock_enabled ?db ()
   in
+  let rich_send_fn =
+    Some
+      (fun ~session_key content ->
+        match Session.find_rich_notifier session_manager ~key:session_key with
+        | Some notifier -> notifier content
+        | None -> (
+            match
+              Session.find_registered_notifier session_manager ~key:session_key
+            with
+            | Some text_notify ->
+                let open Lwt.Syntax in
+                let text = Rich_message.to_fallback_text content in
+                let* () = text_notify text in
+                Lwt.return Rich_message.{ message_id = "0"; callback_ids = [] }
+            | None -> Lwt.fail_with "No notifier registered for session"))
+  in
   (match tool_registry with
   | Some registry ->
       Tool_registry.register registry
-        (Tools_builtin.send_message
+        (Tools_builtin.send_message ~rich_send_fn
+           ~send_fn:
+             (Some
+                (fun ~text ->
+                  Session.notify_channel_sessions session_manager text)));
+      Tool_registry.register registry
+        (Tools_builtin.send_poll ~rich_send_fn
            ~send_fn:
              (Some
                 (fun ~text ->

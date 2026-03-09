@@ -462,7 +462,7 @@ let test_send_message_uses_send_fn_over_send_progress () =
   let send_fn_called = ref [] in
   let send_progress_called = ref false in
   let tool =
-    Tools_builtin.send_message
+    Tools_builtin.send_message ~rich_send_fn:None
       ~send_fn:
         (Some
            (fun ~text ->
@@ -492,7 +492,7 @@ let test_send_message_uses_send_fn_over_send_progress () =
 let test_send_message_falls_back_to_notify_channel () =
   let sent = ref [] in
   let tool =
-    Tools_builtin.send_message
+    Tools_builtin.send_message ~rich_send_fn:None
       ~send_fn:
         (Some
            (fun ~text ->
@@ -507,13 +507,243 @@ let test_send_message_falls_back_to_notify_channel () =
     "fallback send used" [ "fallback update" ] (List.rev !sent)
 
 let test_send_message_errors_without_any_notifier () =
-  let tool = Tools_builtin.send_message ~send_fn:None in
+  let tool = Tools_builtin.send_message ~send_fn:None ~rich_send_fn:None in
   let result =
     Lwt_main.run (tool.invoke (`Assoc [ ("text", `String "hello") ]))
   in
   Alcotest.(check bool)
     "error reported" true
     (String.starts_with ~prefix:"Error: no active session notifier" result)
+
+let test_send_message_with_buttons_rich_notifier () =
+  let received = ref None in
+  let rich_send_fn =
+    Some
+      (fun ~session_key:_ msg ->
+        received := Some msg;
+        Lwt.return
+          Rich_message.
+            { message_id = "42"; callback_ids = [ "cb_0_abc"; "cb_1_def" ] })
+  in
+  let tool = Tools_builtin.send_message ~send_fn:None ~rich_send_fn in
+  let result =
+    Lwt_main.run
+      (tool.invoke
+         ~context:
+           {
+             Tool.session_key = Some "telegram:1:1";
+             send_progress = None;
+             interrupt_check = None;
+           }
+         (`Assoc
+            [
+              ("text", `String "Pick one:");
+              ( "buttons",
+                `List
+                  [
+                    `Assoc [ ("label", `String "Option A") ];
+                    `Assoc [ ("label", `String "Option B") ];
+                  ] );
+            ]))
+  in
+  Alcotest.(check bool)
+    "result mentions buttons" true
+    (contains result "2 button(s)");
+  Alcotest.(check bool)
+    "result has message_id" true
+    (contains result "message_id=42");
+  match !received with
+  | Some (Rich_message.TextWithButtons { text; button_rows }) ->
+      Alcotest.(check string) "text" "Pick one:" text;
+      Alcotest.(check int) "button rows" 1 (List.length button_rows);
+      Alcotest.(check int)
+        "buttons in row" 2
+        (List.length (List.hd button_rows))
+  | _ -> Alcotest.fail "expected TextWithButtons"
+
+let test_send_message_with_buttons_text_fallback () =
+  let sent = ref [] in
+  let tool =
+    Tools_builtin.send_message ~rich_send_fn:None
+      ~send_fn:
+        (Some
+           (fun ~text ->
+             sent := text :: !sent;
+             Lwt.return_unit))
+  in
+  let result =
+    Lwt_main.run
+      (tool.invoke
+         (`Assoc
+            [
+              ("text", `String "Choose:");
+              ( "buttons",
+                `List
+                  [
+                    `Assoc [ ("label", `String "Yes") ];
+                    `Assoc [ ("label", `String "No") ];
+                  ] );
+            ]))
+  in
+  Alcotest.(check bool)
+    "result mentions text fallback" true
+    (contains result "buttons rendered as text");
+  Alcotest.(check bool) "sent something" true (List.length !sent = 1);
+  let text = List.hd !sent in
+  Alcotest.(check bool)
+    "contains numbered buttons" true (contains text "1. Yes");
+  Alcotest.(check bool) "contains second button" true (contains text "2. No")
+
+let test_send_poll_rich_notifier () =
+  let received = ref None in
+  let rich_send_fn =
+    Some
+      (fun ~session_key:_ msg ->
+        received := Some msg;
+        Lwt.return Rich_message.{ message_id = "99"; callback_ids = [] })
+  in
+  let tool = Tools_builtin.send_poll ~rich_send_fn ~send_fn:None in
+  let result =
+    Lwt_main.run
+      (tool.invoke
+         ~context:
+           {
+             Tool.session_key = Some "telegram:1:1";
+             send_progress = None;
+             interrupt_check = None;
+           }
+         (`Assoc
+            [
+              ("question", `String "Best color?");
+              ( "options",
+                `List [ `String "Red"; `String "Blue"; `String "Green" ] );
+            ]))
+  in
+  Alcotest.(check bool)
+    "result mentions poll sent" true
+    (contains result "Poll sent");
+  Alcotest.(check bool)
+    "result has message_id" true
+    (contains result "message_id=99");
+  match !received with
+  | Some (Rich_message.Poll { question; options; allows_multiple }) ->
+      Alcotest.(check string) "question" "Best color?" question;
+      Alcotest.(check int) "options count" 3 (List.length options);
+      Alcotest.(check bool) "allows_multiple" false allows_multiple
+  | _ -> Alcotest.fail "expected Poll"
+
+let test_send_poll_text_fallback () =
+  let sent = ref [] in
+  let tool =
+    Tools_builtin.send_poll ~rich_send_fn:None
+      ~send_fn:
+        (Some
+           (fun ~text ->
+             sent := text :: !sent;
+             Lwt.return_unit))
+  in
+  let result =
+    Lwt_main.run
+      (tool.invoke
+         (`Assoc
+            [
+              ("question", `String "Favorite?");
+              ("options", `List [ `String "A"; `String "B" ]);
+            ]))
+  in
+  Alcotest.(check bool)
+    "result mentions text" true
+    (contains result "rendered as text");
+  Alcotest.(check bool) "sent something" true (List.length !sent = 1);
+  let text = List.hd !sent in
+  Alcotest.(check bool) "contains question" true (contains text "Favorite?");
+  Alcotest.(check bool) "contains option 1" true (contains text "1. A");
+  Alcotest.(check bool) "contains option 2" true (contains text "2. B")
+
+let test_send_poll_validation () =
+  let tool = Tools_builtin.send_poll ~rich_send_fn:None ~send_fn:None in
+  let result_empty_q =
+    Lwt_main.run
+      (tool.invoke
+         (`Assoc
+            [
+              ("question", `String "");
+              ("options", `List [ `String "A"; `String "B" ]);
+            ]))
+  in
+  Alcotest.(check bool)
+    "empty question error" true
+    (contains result_empty_q "question is required");
+  let result_too_few =
+    Lwt_main.run
+      (tool.invoke
+         (`Assoc
+            [
+              ("question", `String "Q?");
+              ("options", `List [ `String "Only one" ]);
+            ]))
+  in
+  Alcotest.(check bool)
+    "too few options error" true
+    (contains result_too_few "at least 2");
+  let result_too_many =
+    Lwt_main.run
+      (tool.invoke
+         (`Assoc
+            [
+              ("question", `String "Q?");
+              ( "options",
+                `List (List.init 11 (fun i -> `String (string_of_int i))) );
+            ]))
+  in
+  Alcotest.(check bool)
+    "too many options error" true
+    (contains result_too_many "at most 10")
+
+let test_rich_message_to_fallback_text () =
+  let text_msg = Rich_message.Text "hello" in
+  Alcotest.(check string)
+    "Text fallback" "hello"
+    (Rich_message.to_fallback_text text_msg);
+  let btn_msg =
+    Rich_message.TextWithButtons
+      {
+        text = "Choose:";
+        button_rows =
+          [
+            [
+              Rich_message.{ label = "A"; callback_id = "cb_0" };
+              Rich_message.{ label = "B"; callback_id = "cb_1" };
+            ];
+          ];
+      }
+  in
+  let btn_text = Rich_message.to_fallback_text btn_msg in
+  Alcotest.(check bool)
+    "buttons fallback has text" true
+    (contains btn_text "Choose:");
+  Alcotest.(check bool)
+    "buttons fallback has 1. A" true (contains btn_text "1. A");
+  Alcotest.(check bool)
+    "buttons fallback has 2. B" true (contains btn_text "2. B");
+  let poll_msg =
+    Rich_message.Poll
+      {
+        question = "Best?";
+        options = [ "X"; "Y"; "Z" ];
+        allows_multiple = false;
+      }
+  in
+  let poll_text = Rich_message.to_fallback_text poll_msg in
+  Alcotest.(check bool)
+    "poll fallback has question" true
+    (contains poll_text "Best?");
+  Alcotest.(check bool)
+    "poll fallback has 1. X" true
+    (contains poll_text "1. X");
+  Alcotest.(check bool)
+    "poll fallback has 3. Z" true
+    (contains poll_text "3. Z")
 
 let test_doc_write_known_file () =
   let dir = make_tmp_workspace () in
@@ -1168,6 +1398,17 @@ let suite =
       test_send_message_falls_back_to_notify_channel;
     Alcotest.test_case "send_message errors without notifier" `Quick
       test_send_message_errors_without_any_notifier;
+    Alcotest.test_case "send_message with buttons via rich notifier" `Quick
+      test_send_message_with_buttons_rich_notifier;
+    Alcotest.test_case "send_message with buttons text fallback" `Quick
+      test_send_message_with_buttons_text_fallback;
+    Alcotest.test_case "send_poll with rich notifier" `Quick
+      test_send_poll_rich_notifier;
+    Alcotest.test_case "send_poll text fallback" `Quick
+      test_send_poll_text_fallback;
+    Alcotest.test_case "send_poll validation" `Quick test_send_poll_validation;
+    Alcotest.test_case "rich_message to_fallback_text" `Quick
+      test_rich_message_to_fallback_text;
     Alcotest.test_case "doc_write creates file" `Quick test_doc_write_creates;
     Alcotest.test_case "doc_write appends" `Quick test_doc_write_appends;
     Alcotest.test_case "doc_write rejects traversal" `Quick
