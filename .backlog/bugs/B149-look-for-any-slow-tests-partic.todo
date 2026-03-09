@@ -1,10 +1,15 @@
 ---
+claimed_at: "2026-03-09T08:47:20Z"
+claimed_by: cli-user
+completed_at: "2026-03-09T09:20:29Z"
 complexity: medium
 depends_on: []
+duration_minutes: 33.1623946424
 estimate_hours: 1
 id: B149
 priority: high
-status: pending
+started_at: "2026-03-09T08:47:20Z"
+status: done
 tags: []
 title: Look for any slow tests (particularly any `sleep` type things) and see how we can optimize the tests so they all run *fast*. If we have necessarily slow tests, let's tag them so they don't run as part of main tests and require running integration tests. If we do that, make sure CI runs the integration tests. We should also update CLAUDE.md with like 1 or 2 lines about it.
 ---

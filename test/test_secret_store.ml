@@ -1,20 +1,30 @@
+let () = Secret_store.test_iterations_override := Some 1
+
 let test_derive_key () =
-  let key = Secret_store.derive_key ~passphrase:"test-passphrase" in
+  let key =
+    Secret_store.derive_key ~iterations:1 ~passphrase:"test-passphrase" ()
+  in
   Alcotest.(check int) "key length is 32 bytes" 32 (String.length key)
 
 let test_derive_key_deterministic () =
-  let key1 = Secret_store.derive_key ~passphrase:"same-phrase" in
-  let key2 = Secret_store.derive_key ~passphrase:"same-phrase" in
+  let key1 =
+    Secret_store.derive_key ~iterations:1 ~passphrase:"same-phrase" ()
+  in
+  let key2 =
+    Secret_store.derive_key ~iterations:1 ~passphrase:"same-phrase" ()
+  in
   Alcotest.(check string) "same passphrase same key" key1 key2
 
 let test_derive_key_different () =
-  let key1 = Secret_store.derive_key ~passphrase:"phrase-a" in
-  let key2 = Secret_store.derive_key ~passphrase:"phrase-b" in
+  let key1 = Secret_store.derive_key ~iterations:1 ~passphrase:"phrase-a" () in
+  let key2 = Secret_store.derive_key ~iterations:1 ~passphrase:"phrase-b" () in
   Alcotest.(check bool)
     "different passphrases different keys" true (key1 <> key2)
 
 let test_encrypt_decrypt_roundtrip () =
-  let key = Secret_store.derive_key ~passphrase:"roundtrip-test" in
+  let key =
+    Secret_store.derive_key ~iterations:1 ~passphrase:"roundtrip-test" ()
+  in
   let plaintext = "sk-my-secret-api-key-12345" in
   let encrypted = Secret_store.encrypt ~key plaintext in
   (* Encrypted should be base64, not equal to plaintext *)
@@ -25,21 +35,23 @@ let test_encrypt_decrypt_roundtrip () =
   | Error msg -> Alcotest.fail (Printf.sprintf "decrypt failed: %s" msg)
 
 let test_decrypt_wrong_key () =
-  let key1 = Secret_store.derive_key ~passphrase:"correct-key" in
-  let key2 = Secret_store.derive_key ~passphrase:"wrong-key" in
+  let key1 =
+    Secret_store.derive_key ~iterations:1 ~passphrase:"correct-key" ()
+  in
+  let key2 = Secret_store.derive_key ~iterations:1 ~passphrase:"wrong-key" () in
   let encrypted = Secret_store.encrypt ~key:key1 "secret-data" in
   match Secret_store.decrypt ~key:key2 encrypted with
   | Error _ -> () (* Expected: wrong key should fail *)
   | Ok _ -> Alcotest.fail "decrypt should fail with wrong key"
 
 let test_decrypt_corrupted () =
-  let key = Secret_store.derive_key ~passphrase:"test" in
+  let key = Secret_store.derive_key ~iterations:1 ~passphrase:"test" () in
   match Secret_store.decrypt ~key "not-valid-base64!!!" with
   | Error _ -> ()
   | Ok _ -> Alcotest.fail "should fail on corrupted data"
 
 let test_decrypt_too_short () =
-  let key = Secret_store.derive_key ~passphrase:"test" in
+  let key = Secret_store.derive_key ~iterations:1 ~passphrase:"test" () in
   let encoded = Base64.encode_exn "short" in
   match Secret_store.decrypt ~key encoded with
   | Error _ -> ()
@@ -54,7 +66,7 @@ let test_is_encrypted () =
   Alcotest.(check bool) "empty" false (Secret_store.is_encrypted "")
 
 let test_encrypt_secret_prefix () =
-  let key = Secret_store.derive_key ~passphrase:"test" in
+  let key = Secret_store.derive_key ~iterations:1 ~passphrase:"test" () in
   let result = Secret_store.encrypt_secret ~key "my-api-key" in
   Alcotest.(check bool)
     "has ENC prefix" true
@@ -62,7 +74,7 @@ let test_encrypt_secret_prefix () =
   Alcotest.(check bool) "is_encrypted" true (Secret_store.is_encrypted result)
 
 let test_decrypt_secret_prefix () =
-  let key = Secret_store.derive_key ~passphrase:"test" in
+  let key = Secret_store.derive_key ~iterations:1 ~passphrase:"test" () in
   let encrypted = Secret_store.encrypt_secret ~key "my-api-key" in
   match Secret_store.decrypt_secret ~key encrypted with
   | Ok plaintext ->
@@ -70,7 +82,7 @@ let test_decrypt_secret_prefix () =
   | Error msg -> Alcotest.fail (Printf.sprintf "decrypt_secret failed: %s" msg)
 
 let test_decrypt_secret_passthrough () =
-  let key = Secret_store.derive_key ~passphrase:"test" in
+  let key = Secret_store.derive_key ~iterations:1 ~passphrase:"test" () in
   match Secret_store.decrypt_secret ~key "not-encrypted" with
   | Ok result -> Alcotest.(check string) "passthrough" "not-encrypted" result
   | Error msg -> Alcotest.fail (Printf.sprintf "passthrough failed: %s" msg)
@@ -97,7 +109,7 @@ let test_resolve_secret_env_var () =
            "$CLAWQ_TEST_SECRET_ENV"))
 
 let test_resolve_secret_encrypted_passthrough_without_master_key () =
-  let key = Secret_store.derive_key ~passphrase:"test" in
+  let key = Secret_store.derive_key ~iterations:1 ~passphrase:"test" () in
   let encrypted = Secret_store.encrypt_secret ~key "my-api-key" in
   with_env "CLAWQ_MASTER_KEY" None (fun () ->
       Alcotest.(check string)
@@ -106,7 +118,7 @@ let test_resolve_secret_encrypted_passthrough_without_master_key () =
 
 let test_resolve_secret_encrypted_decrypts_with_master_key () =
   let passphrase = "master-secret-for-resolve" in
-  let key = Secret_store.derive_key ~passphrase in
+  let key = Secret_store.derive_key ~iterations:1 ~passphrase () in
   let encrypted = Secret_store.encrypt_secret ~key "resolved-secret" in
   with_env "CLAWQ_MASTER_KEY" (Some passphrase) (fun () ->
       Alcotest.(check string)
@@ -114,7 +126,9 @@ let test_resolve_secret_encrypted_decrypts_with_master_key () =
         (Secret_store.resolve_secret ~encrypt_secrets:true encrypted))
 
 let test_resolve_secret_encrypted_decrypt_failure_passthrough () =
-  let correct = Secret_store.derive_key ~passphrase:"correct-master" in
+  let correct =
+    Secret_store.derive_key ~iterations:1 ~passphrase:"correct-master" ()
+  in
   let encrypted = Secret_store.encrypt_secret ~key:correct "resolved-secret" in
   with_env "CLAWQ_MASTER_KEY" (Some "wrong-master") (fun () ->
       Alcotest.(check string)
@@ -122,7 +136,7 @@ let test_resolve_secret_encrypted_decrypt_failure_passthrough () =
         (Secret_store.resolve_secret ~encrypt_secrets:true encrypted))
 
 let test_encrypt_config_secrets () =
-  let key = Secret_store.derive_key ~passphrase:"test" in
+  let key = Secret_store.derive_key ~iterations:1 ~passphrase:"test" () in
   let json =
     Yojson.Safe.from_string
       {|{
@@ -157,7 +171,7 @@ let test_encrypt_config_secrets () =
       | Error msg -> Alcotest.fail msg)
 
 let test_encrypt_config_secrets_preserves_non_provider_fields () =
-  let key = Secret_store.derive_key ~passphrase:"test" in
+  let key = Secret_store.derive_key ~iterations:1 ~passphrase:"test" () in
   let json =
     Yojson.Safe.from_string
       {|{
@@ -175,7 +189,7 @@ let test_encrypt_config_secrets_preserves_non_provider_fields () =
       Alcotest.(check string) "unrelated fields preserved" "gpt-5.3-codex" model
 
 let test_encrypt_config_secrets_avoids_double_encrypt () =
-  let key = Secret_store.derive_key ~passphrase:"test" in
+  let key = Secret_store.derive_key ~iterations:1 ~passphrase:"test" () in
   let existing = Secret_store.encrypt_secret ~key "already-secret" in
   let json =
     `Assoc
@@ -203,14 +217,14 @@ let test_encrypt_config_secrets_avoids_double_encrypt () =
       Alcotest.(check string) "already encrypted key unchanged" existing after
 
 let test_empty_plaintext () =
-  let key = Secret_store.derive_key ~passphrase:"test" in
+  let key = Secret_store.derive_key ~iterations:1 ~passphrase:"test" () in
   let encrypted = Secret_store.encrypt ~key "" in
   match Secret_store.decrypt ~key encrypted with
   | Ok decrypted -> Alcotest.(check string) "empty roundtrip" "" decrypted
   | Error msg -> Alcotest.fail (Printf.sprintf "empty decrypt failed: %s" msg)
 
 let test_encrypt_config_codex_oauth_secrets () =
-  let key = Secret_store.derive_key ~passphrase:"test" in
+  let key = Secret_store.derive_key ~iterations:1 ~passphrase:"test" () in
   let json =
     Yojson.Safe.from_string
       {|{

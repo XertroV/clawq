@@ -189,9 +189,38 @@ let query_single_text_option db sql =
           | _ -> None)
       | _ -> None)
 
+let fast_fail_config =
+  {
+    Runtime_config.default with
+    providers =
+      [
+        ( "test",
+          {
+            Runtime_config.api_key = "fake";
+            kind = None;
+            base_url = Some "http://127.0.0.1:1";
+            default_model = Some "test-model";
+            project_id = None;
+            location = None;
+            service_account_json = None;
+            thinking_budget_tokens = None;
+            oai_thinking_style = "none";
+            codex_oauth = None;
+          } );
+      ];
+    default_provider = Some "test";
+    resilience =
+      {
+        Runtime_config.default.resilience with
+        timeout_s = 1.0;
+        max_retries = 0;
+        base_delay_s = 0.0;
+      };
+  }
+
 let test_chat_error_marks_response_sent () =
   let db = Memory.init ~db_path:":memory:" () in
-  let config = Runtime_config.default in
+  let config = fast_fail_config in
   let session_manager = Session.create ~config ~db () in
   let req =
     Cohttp.Request.make ~meth:`POST (Uri.of_string "http://127.0.0.1/chat")
@@ -217,7 +246,7 @@ let test_chat_error_marks_response_sent () =
 
 let test_chat_stream_error_marks_response_sent () =
   let db = Memory.init ~db_path:":memory:" () in
-  let config = Runtime_config.default in
+  let config = fast_fail_config in
   let session_manager = Session.create ~config ~db () in
   let req =
     Cohttp.Request.make ~meth:`POST

@@ -16,6 +16,7 @@ let test_handle_hello () =
           dispatches := (name, d) :: !dispatches;
           Lwt.return_unit);
       on_close = (fun _ -> Lwt.return_unit);
+      backoff_s = (fun () -> 0.0);
     }
   in
   let hello_msg = {|{"op":10,"d":{"heartbeat_interval":41250}}|} in
@@ -42,6 +43,7 @@ let test_handle_heartbeat_ack () =
       intents = 513;
       on_dispatch = (fun _ _ -> Lwt.return_unit);
       on_close = (fun _ -> Lwt.return_unit);
+      backoff_s = (fun () -> 0.0);
     }
   in
   Lwt_main.run (Discord_gateway.handle_gateway_message gw {|{"op":11}|});
@@ -65,6 +67,7 @@ let test_handle_dispatch_ready () =
           dispatches := (name, d) :: !dispatches;
           Lwt.return_unit);
       on_close = (fun _ -> Lwt.return_unit);
+      backoff_s = (fun () -> 0.0);
     }
   in
   let ready_msg =
@@ -97,6 +100,7 @@ let test_handle_dispatch_message_create () =
           dispatches := (name, d) :: !dispatches;
           Lwt.return_unit);
       on_close = (fun _ -> Lwt.return_unit);
+      backoff_s = (fun () -> 0.0);
     }
   in
   let msg =
@@ -122,6 +126,7 @@ let test_handle_invalid_session_resumable () =
       intents = 513;
       on_dispatch = (fun _ _ -> Lwt.return_unit);
       on_close = (fun _ -> Lwt.return_unit);
+      backoff_s = (fun () -> 0.0);
     }
   in
   (* resumable=true: session_id should be preserved *)
@@ -144,6 +149,7 @@ let test_handle_invalid_session_not_resumable () =
       intents = 513;
       on_dispatch = (fun _ _ -> Lwt.return_unit);
       on_close = (fun _ -> Lwt.return_unit);
+      backoff_s = (fun () -> 0.0);
     }
   in
   (* resumable=false: session_id should be cleared *)
@@ -168,6 +174,7 @@ let test_handle_heartbeat_request () =
       intents = 513;
       on_dispatch = (fun _ _ -> Lwt.return_unit);
       on_close = (fun _ -> Lwt.return_unit);
+      backoff_s = (fun () -> 0.0);
     }
   in
   (* No ws connected so send is a no-op, just verify no crash *)
@@ -188,6 +195,7 @@ let test_handle_malformed_json () =
       intents = 513;
       on_dispatch = (fun _ _ -> Lwt.return_unit);
       on_close = (fun _ -> Lwt.return_unit);
+      backoff_s = (fun () -> 0.0);
     }
   in
   Lwt_main.run (Discord_gateway.handle_gateway_message gw "not json at all");
@@ -207,6 +215,7 @@ let test_seq_updates () =
       intents = 513;
       on_dispatch = (fun _ _ -> Lwt.return_unit);
       on_close = (fun _ -> Lwt.return_unit);
+      backoff_s = (fun () -> 0.0);
     }
   in
   Lwt_main.run
@@ -232,6 +241,7 @@ let test_handle_reconnect () =
       intents = 513;
       on_dispatch = (fun _ _ -> Lwt.return_unit);
       on_close = (fun _ -> Lwt.return_unit);
+      backoff_s = (fun () -> 0.0);
     }
   in
   (* No ws connected so close is a no-op, just verify no crash *)
@@ -252,6 +262,7 @@ let test_handle_unknown_opcode () =
       intents = 513;
       on_dispatch = (fun _ _ -> Lwt.return_unit);
       on_close = (fun _ -> Lwt.return_unit);
+      backoff_s = (fun () -> 0.0);
     }
   in
   Lwt_main.run (Discord_gateway.handle_gateway_message gw {|{"op":99}|});
@@ -271,6 +282,7 @@ let test_hello_with_existing_session_triggers_resume () =
       intents = 513;
       on_dispatch = (fun _ _ -> Lwt.return_unit);
       on_close = (fun _ -> Lwt.return_unit);
+      backoff_s = (fun () -> 0.0);
     }
   in
   let hello_msg = {|{"op":10,"d":{"heartbeat_interval":41250}}|} in
@@ -297,6 +309,7 @@ let test_dispatch_no_seq_field () =
       intents = 513;
       on_dispatch = (fun _ _ -> Lwt.return_unit);
       on_close = (fun _ -> Lwt.return_unit);
+      backoff_s = (fun () -> 0.0);
     }
   in
   (* Dispatch with no "s" field -- seq should remain unchanged *)
@@ -319,6 +332,7 @@ let test_hello_integer_heartbeat_interval () =
       intents = 513;
       on_dispatch = (fun _ _ -> Lwt.return_unit);
       on_close = (fun _ -> Lwt.return_unit);
+      backoff_s = (fun () -> 0.0);
     }
   in
   (* heartbeat_interval as integer instead of float *)
@@ -342,6 +356,7 @@ let test_accessor_functions () =
       intents = 513;
       on_dispatch = (fun _ _ -> Lwt.return_unit);
       on_close = (fun _ -> Lwt.return_unit);
+      backoff_s = (fun () -> 0.0);
     }
   in
   Alcotest.(check (option string))

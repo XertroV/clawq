@@ -1,3 +1,5 @@
+let () = Audit.test_iterations_override := Some 1
+
 let test_audit_schema_init () =
   let db = Memory.init ~db_path:":memory:" () in
   Audit.init_schema db;

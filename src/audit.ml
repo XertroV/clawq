@@ -127,9 +127,14 @@ let log_unsigned ~db event =
   ignore (Sqlite3.finalize stmt)
 
 (* Signing key derivation *)
-let derive_signing_key passphrase =
+let test_iterations_override = ref None
+
+let derive_signing_key ?(iterations = 100_000) passphrase =
+  let count =
+    match !test_iterations_override with Some n -> n | None -> iterations
+  in
   Pbkdf.pbkdf2 ~prf:`SHA256 ~password:passphrase ~salt:"clawq-audit-sign-v1"
-    ~count:100_000 ~dk_len:32l
+    ~count ~dk_len:32l
 
 let get_signing_key () =
   match Sys.getenv_opt "CLAWQ_MASTER_KEY" with

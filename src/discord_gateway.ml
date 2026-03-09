@@ -1,3 +1,5 @@
+let invalid_session_backoff_s () = 1.0 +. Random.float 4.0
+
 type t = {
   mutable ws : Ws_client.t option;
   mutable session_id : string option;
@@ -10,6 +12,7 @@ type t = {
   intents : int;
   on_dispatch : string -> Yojson.Safe.t -> unit Lwt.t;
   on_close : int option -> unit Lwt.t;
+  backoff_s : unit -> float;
 }
 
 let send_json t json =
@@ -157,7 +160,7 @@ let handle_gateway_message t msg =
           if resumable then begin
             Logs.info (fun m ->
                 m "Discord: Invalid Session (resumable), waiting before resume");
-            let* () = Lwt_unix.sleep (1.0 +. Random.float 4.0) in
+            let* () = Lwt_unix.sleep (t.backoff_s ()) in
             send_resume t
           end
           else begin
@@ -187,7 +190,7 @@ let get_gateway_url ~bot_token =
       (Printf.sprintf "Discord: gateway/bot returned HTTP %d: %s" status body)
 
 let connect ~bot_token ~intents ?resume_session_id ?resume_seq ?resume_url
-    ~on_dispatch ~on_close () =
+    ?(backoff_s = invalid_session_backoff_s) ~on_dispatch ~on_close () =
   let open Lwt.Syntax in
   let t =
     {
@@ -202,6 +205,7 @@ let connect ~bot_token ~intents ?resume_session_id ?resume_seq ?resume_url
       intents;
       on_dispatch;
       on_close;
+      backoff_s;
     }
   in
   let* url =

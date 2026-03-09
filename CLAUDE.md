@@ -39,8 +39,8 @@ Agent instructions for this repository. Keep changes minimal, verifiable, and al
 - Run UI asset watcher for dev mode: `make ui-dev`
 - Verify generated UI assets are current: `make ui-check`
 
-- Run all tests: `make test`
-- Direct test run: `dune runtest`
+- Run quick tests (default): `make test` (skips `Slow`-tagged integration tests)
+- Run all tests including slow/integration: `make test-all` (builds `main.exe` first)
 
 - Format code: `make fmt`
 - Format check: `make fmt-check`

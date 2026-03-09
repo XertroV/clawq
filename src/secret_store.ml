@@ -3,18 +3,22 @@
 
 let pbkdf2_salt = "clawq-secret-store-v1"
 let pbkdf2_iterations = 100_000
+let test_iterations_override = ref None
 
 (* Derive a 32-byte AES-256 key from a passphrase via PBKDF2-SHA256 *)
-let derive_key ~passphrase =
-  Pbkdf.pbkdf2 ~prf:`SHA256 ~password:passphrase ~salt:pbkdf2_salt
-    ~count:pbkdf2_iterations ~dk_len:32l
+let derive_key ?(iterations = pbkdf2_iterations) ~passphrase () =
+  let count =
+    match !test_iterations_override with Some n -> n | None -> iterations
+  in
+  Pbkdf.pbkdf2 ~prf:`SHA256 ~password:passphrase ~salt:pbkdf2_salt ~count
+    ~dk_len:32l
 
 (* Get the master key from CLAWQ_MASTER_KEY env var *)
 let get_master_key () =
   match Sys.getenv_opt "CLAWQ_MASTER_KEY" with
   | None -> Error "CLAWQ_MASTER_KEY environment variable is not set"
   | Some "" -> Error "CLAWQ_MASTER_KEY environment variable is empty"
-  | Some passphrase -> Ok (derive_key ~passphrase)
+  | Some passphrase -> Ok (derive_key ~passphrase ())
 
 (* Encrypt a plaintext string. Returns base64-encoded "nonce:ciphertext" *)
 let encrypt ~key plaintext =
