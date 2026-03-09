@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B159
+priority: high
+status: pending
+tags: []
+title: Running `clawq update` from the CLI on a machien that also has the daemon runnign should not require manual pairing, it should just work. All the stuff from localhost like that should just work and should do authentication automatically.
+---
+
+Running `clawq update` from the CLI on a machien that also has the daemon runnign should not require manual pairing, it should just work. All the stuff from localhost like that should just work and should do authentication automatically.
