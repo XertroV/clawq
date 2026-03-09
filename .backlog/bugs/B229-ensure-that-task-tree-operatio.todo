@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B229
+priority: high
+status: pending
+tags: []
+title: Ensure that task_tree operations (like ordering updates) are processed before we render the task tree for the runtime context
+---
+
+Ensure that task_tree operations (like ordering updates) are processed before we render the task tree for the runtime context
