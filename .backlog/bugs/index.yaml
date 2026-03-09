@@ -185,3 +185,4 @@ bugs:
     - file: B184-config-show-should-preserve-sc.todo
     - file: B185-telegram-typing-indicator-can.todo
     - file: B186-workspace-prompt-file-updates.todo
+    - file: B187-telegram-reaction-emojis-for-s.todo
