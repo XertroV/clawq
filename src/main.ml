@@ -144,6 +144,13 @@ let background_add_cmd =
     Arg.(required & pos 0 (some string) None & info [] ~docv:"RUNNER")
   in
   let repo = Arg.(required & pos 1 (some string) None & info [] ~docv:"REPO") in
+  let model =
+    Arg.(
+      value
+      & opt (some string) None
+      & info [ "model" ] ~docv:"MODEL"
+          ~doc:"Explicit runner model to use when supported.")
+  in
   let branch =
     Arg.(
       value
@@ -156,15 +163,20 @@ let background_add_cmd =
        ~doc:"Queue a Codex or Claude background task for a repository.")
     Term.(
       ret
-        (const (fun runner repo branch prompt ->
+        (const (fun runner repo model branch prompt ->
              let args = [ "add"; runner; repo ] in
+             let args =
+               match model with
+               | Some value -> args @ [ "--model"; value ]
+               | None -> args
+             in
              let args =
                match branch with
                | Some name -> args @ [ "--branch"; name ]
                | None -> args
              in
              run "background" (args @ prompt))
-        $ runner $ repo $ branch $ prompt))
+        $ runner $ repo $ model $ branch $ prompt))
 
 let background_wait_cmd =
   let id = Arg.(required & pos 0 (some string) None & info [] ~docv:"ID") in
@@ -250,6 +262,13 @@ let delegate_cmd =
       & opt (some string) None
       & info [ "repo" ] ~docv:"PATH" ~doc:"Repository path to queue against.")
   in
+  let model =
+    Arg.(
+      value
+      & opt (some string) None
+      & info [ "model" ] ~docv:"MODEL"
+          ~doc:"Explicit runner model to use when supported.")
+  in
   let branch =
     Arg.(
       value
@@ -280,11 +299,16 @@ let delegate_cmd =
          ])
     Term.(
       ret
-        (const (fun runner repo branch goal ->
+        (const (fun runner model repo branch goal ->
              let args = [] in
              let args =
                match runner with
                | Some value -> args @ [ "--runner"; value ]
+               | None -> args
+             in
+             let args =
+               match model with
+               | Some value -> args @ [ "--model"; value ]
                | None -> args
              in
              let args =
@@ -298,7 +322,7 @@ let delegate_cmd =
                | None -> args
              in
              run "delegate" (args @ goal))
-        $ runner $ repo $ branch $ goal))
+        $ runner $ model $ repo $ branch $ goal))
 
 let audit_list_cmd =
   let limit =
