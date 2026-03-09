@@ -1,10 +1,15 @@
 ---
+claimed_at: "2026-03-09T22:35:07Z"
+claimed_by: cli-user
+completed_at: "2026-03-09T22:44:35Z"
 complexity: medium
 depends_on: []
+duration_minutes: 9.472442075050001
 estimate_hours: 1
 id: B262
 priority: high
-status: pending
+started_at: "2026-03-09T22:35:07Z"
+status: done
 tags: []
 title: /compact slash cmd doesn't work at all or seem to do anything
 ---

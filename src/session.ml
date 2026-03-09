@@ -1447,19 +1447,16 @@ let reset mgr ~key =
 
 let compact mgr ~key =
   let open Lwt.Syntax in
-  (* Check if session exists before attempting compaction *)
-  match Hashtbl.find_opt mgr.sessions key with
-  | None -> Lwt.return (Error "Session not found")
-  | Some _ ->
-      with_session_lock mgr ~key (fun agent _interrupt ->
-          let* compaction_info =
-            Agent.force_compact_history agent ?db:mgr.db ()
-          in
-          match compaction_info with
-          | Some _ ->
-              persist_compacted_history mgr ~key agent;
-              Lwt.return (Ok true)
-          | None -> Lwt.return (Ok false))
+  (* Use with_session_lock which calls get_or_create_locked, ensuring the
+     session is loaded from DB if it exists but isn't in memory yet (e.g.
+     after daemon restart). *)
+  with_session_lock mgr ~key (fun agent _interrupt ->
+      let* compaction_info = Agent.force_compact_history agent ?db:mgr.db () in
+      match compaction_info with
+      | Some _ ->
+          persist_compacted_history mgr ~key agent;
+          Lwt.return (Ok true)
+      | None -> Lwt.return (Ok false))
 
 let rec schedule_autonomous_continuation
     ?(delay = default_autonomous_continuation_delay)

@@ -442,21 +442,25 @@ let handler ~session_manager ~require_pairing ~auth_token
             in
             if session_key = "" then bad_request "session_key is required"
             else
-              (* Check context usage before allowing compaction *)
+              (* Check context usage before allowing compaction.
+                 get_context_usage_percent may return None if the session
+                 is not yet loaded into memory (e.g. after daemon restart).
+                 In that case, proceed with compact which will lazily load
+                 the session from DB. *)
               let min_compaction_percent = 20 in
-              match
+              let usage =
                 Session.get_context_usage_percent session_manager
                   ~key:session_key
-              with
-              | None ->
-                  Cohttp_lwt_unix.Server.respond_string ~status:`Not_found
-                    ~headers:json_headers
-                    ~body:
-                      (Yojson.Safe.to_string
-                         (`Assoc [ ("error", `String "Session not found") ]))
-                    ()
-              | Some (percent, estimated_tokens, context_window)
-                when percent < min_compaction_percent ->
+              in
+              let skip_low_usage =
+                match usage with
+                | Some (percent, estimated_tokens, context_window)
+                  when percent < min_compaction_percent ->
+                    Some (percent, estimated_tokens, context_window)
+                | _ -> None
+              in
+              match skip_low_usage with
+              | Some (percent, estimated_tokens, context_window) ->
                   let message =
                     Printf.sprintf
                       "Context usage is only %d%% (%d/%d tokens). Compaction \
@@ -478,23 +482,30 @@ let handler ~session_manager ~require_pairing ~auth_token
                                   ("context_window", `Int context_window);
                                 ] );
                           ]))
-              | Some (percent, estimated_tokens, context_window) -> (
+              | None -> (
+                  let pre_stats = usage in
                   let* result =
                     Lwt.catch
                       (fun () ->
                         let* compaction_result =
                           Session.compact session_manager ~key:session_key
                         in
-                        Lwt.return
-                          (Ok
-                             ( compaction_result,
-                               percent,
-                               estimated_tokens,
-                               context_window )))
+                        Lwt.return (Ok compaction_result))
                       (fun exn -> Lwt.return (Error (Printexc.to_string exn)))
                   in
+                  let stats_json =
+                    match pre_stats with
+                    | Some (percent, estimated_tokens, context_window) ->
+                        `Assoc
+                          [
+                            ("context_usage_percent", `Int percent);
+                            ("estimated_tokens", `Int estimated_tokens);
+                            ("context_window", `Int context_window);
+                          ]
+                    | None -> `Assoc []
+                  in
                   match result with
-                  | Ok (Ok true, percent, estimated_tokens, context_window) ->
+                  | Ok (Ok true) ->
                       json_string_response
                         (Yojson.Safe.to_string
                            (`Assoc
@@ -504,15 +515,9 @@ let handler ~session_manager ~require_pairing ~auth_token
                                   `String
                                     "Session history compacted. Older messages \
                                      have been summarized." );
-                                ( "stats",
-                                  `Assoc
-                                    [
-                                      ("context_usage_percent", `Int percent);
-                                      ("estimated_tokens", `Int estimated_tokens);
-                                      ("context_window", `Int context_window);
-                                    ] );
+                                ("stats", stats_json);
                               ]))
-                  | Ok (Ok false, percent, estimated_tokens, context_window) ->
+                  | Ok (Ok false) ->
                       json_string_response
                         (Yojson.Safe.to_string
                            (`Assoc
@@ -522,15 +527,9 @@ let handler ~session_manager ~require_pairing ~auth_token
                                   `String
                                     "Nothing to compact — session history is \
                                      already short enough." );
-                                ( "stats",
-                                  `Assoc
-                                    [
-                                      ("context_usage_percent", `Int percent);
-                                      ("estimated_tokens", `Int estimated_tokens);
-                                      ("context_window", `Int context_window);
-                                    ] );
+                                ("stats", stats_json);
                               ]))
-                  | Ok (Error err, _, _, _) ->
+                  | Ok (Error err) ->
                       Cohttp_lwt_unix.Server.respond_string ~status:`Not_found
                         ~headers:json_headers
                         ~body:

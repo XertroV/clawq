@@ -2855,6 +2855,36 @@ let test_workspace_change_not_re_reported_on_subsequent_turn () =
            event_count_after_second;
          Lwt.return_unit))
 
+let test_compact_loads_session_from_db_when_not_in_memory () =
+  (* Simulate daemon restart: session has history in DB but the in-memory
+     sessions hashtable is empty. Session.compact should lazily load the
+     session from DB via get_or_create_locked rather than returning
+     "Session not found". *)
+  let db = Memory.init ~db_path:":memory:" () in
+  let config = Runtime_config.default in
+  (* Store enough messages in DB to exceed compaction_keep_recent (20) *)
+  for i = 1 to 25 do
+    Memory.store_message ~db ~session_key:"telegram:42:user1"
+      (Provider.make_message ~role:"user"
+         ~content:(Printf.sprintf "msg %02d" i))
+  done;
+  (* Create a fresh manager (simulating daemon restart — sessions hashtable
+     is empty even though DB has history) *)
+  let mgr = Session.create ~config ~db () in
+  Alcotest.(check bool)
+    "session not in memory before compact" false
+    (Hashtbl.mem mgr.sessions "telegram:42:user1");
+  let result = Lwt_main.run (Session.compact mgr ~key:"telegram:42:user1") in
+  (* Before the fix, this returned Error "Session not found".
+     Now it should load the session from DB and return Ok _. *)
+  match result with
+  | Ok _ ->
+      Alcotest.(check bool)
+        "session loaded into memory after compact" true
+        (Hashtbl.mem mgr.sessions "telegram:42:user1")
+  | Error msg ->
+      Alcotest.fail (Printf.sprintf "compact should not fail: %s" msg)
+
 let suite =
   [
     Alcotest.test_case "reset clears active session and history" `Quick
@@ -3021,4 +3051,6 @@ let suite =
       test_fresh_session_no_false_positive_on_first_turn;
     Alcotest.test_case "workspace change not re-reported on subsequent turn"
       `Quick test_workspace_change_not_re_reported_on_subsequent_turn;
+    Alcotest.test_case "compact loads session from db when not in memory" `Quick
+      test_compact_loads_session_from_db_when_not_in_memory;
   ]
