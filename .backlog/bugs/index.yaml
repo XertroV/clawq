@@ -140,3 +140,4 @@ bugs:
     - file: B139-test-and-verify-prompt-injecti.todo
     - file: B140-audit-tool-descriptions-help-s.todo
     - file: B141-add-cli-commands-to-list-sessi.todo
+    - file: B142-show-per-tool-concise-status-t.todo

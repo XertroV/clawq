@@ -1,0 +1,11 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B142
+priority: medium
+status: pending
+tags: []
+title: Show per-tool concise status/timing summary in Telegram progress messages
+---
+Improve the Telegram progress message so that before its final aggregate line (for example `4 tools · 41 s`) it also shows a concise dot-point list of the tool calls made during the turn. Each line should be brief and operationally useful, including at least: tool name, a short action summary if available, success/failure status, and execution time. Acceptance criteria: (1) progress messages remain compact enough for chat use; (2) each completed tool call contributes one concise bullet or equivalent line; (3) failures are visually distinguishable from successes; (4) the final aggregate summary line is preserved; (5) behavior is tested/verified for mixed success/failure tool sequences.
