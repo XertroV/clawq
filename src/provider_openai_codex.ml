@@ -450,8 +450,19 @@ let do_request ~provider_name ~provider ~model ~messages ?tools ~on_chunk () =
       if status < 200 || status >= 300 then begin
         let* chunks = Lwt_stream.to_list stream in
         let body = String.concat "" chunks in
-        Lwt.fail_with
-          (Printf.sprintf "OpenAI Codex error (HTTP %d): %s" status body)
+        (* Codex returns {"detail":"Bad Request"} (no further detail) when the
+           context window is exceeded.  Rewrite to include "context length" so
+           the generic is_context_exhaustion_error recovery path in agent.ml
+           fires instead of surfacing this as a hard failure. *)
+        let msg =
+          if status = 400 && string_contains body "Bad Request" then
+            Printf.sprintf
+              "OpenAI Codex error (HTTP %d): context length likely exceeded \
+               (%s)"
+              status body
+          else Printf.sprintf "OpenAI Codex error (HTTP %d): %s" status body
+        in
+        Lwt.fail_with msg
       end
       else process_stream stream ~on_chunk
 

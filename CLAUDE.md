@@ -32,7 +32,6 @@ Agent instructions for this repository. Keep changes minimal, verifiable, and al
 - If a command fails with a Dune lock error, the lock is actively held by another process. Wait for it to finish or find and stop the owning process.
 
 - Primary build: `make build`
-- Direct dune build: `dune build`
 - Run CLI help: `make run`
 - Run phase2 command: `make phase2`
 - Build embedded web UI assets: `make ui`
@@ -43,8 +42,7 @@ Agent instructions for this repository. Keep changes minimal, verifiable, and al
 - Run all tests including slow/integration: `make test-all` (builds `main.exe` first)
 
 - Format code: `make fmt`
-- Format check: `make fmt-check`
-- CI-equivalent format gate: `dune fmt && git diff --exit-code`
+- Format check (CI-equivalent): `make fmt-check`
 
 - Coq extraction refresh: `make extract`
 - Coq extraction drift check: `make extract-check`
@@ -54,13 +52,13 @@ Agent instructions for this repository. Keep changes minimal, verifiable, and al
 ## Running a Single Test (Important)
 
 - List all test suites/cases:
-  - `opam exec --switch=clawq-5.1 -- dune exec test/test_main.exe -- list`
+  - `make test-run ARGS="list"`
 - Run subset by suite regex:
-  - `opam exec --switch=clawq-5.1 -- dune exec test/test_main.exe -- test <SUITE_REGEX>`
+  - `make test-run ARGS="test <SUITE_REGEX>"`
 - Run one exact case index in a suite:
-  - `opam exec --switch=clawq-5.1 -- dune exec test/test_main.exe -- test command_bridge 20`
+  - `make test-run ARGS="test command_bridge 20"`
 - Run multiple indices/ranges:
-  - `... -- test scheduler 0,3,8-10`
+  - `make test-run ARGS="test scheduler 0,3,8-10"`
 
 Notes:
 - The test binary subcommand is `test` (not a direct suite name).
