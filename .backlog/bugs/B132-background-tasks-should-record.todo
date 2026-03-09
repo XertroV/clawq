@@ -1,0 +1,11 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B132
+priority: high
+status: pending
+tags: []
+title: Background tasks should record originating session/thread for reply delivery
+---
+Delegated/background tasks currently lack a durable link back to the session/thread that launched them, which makes automatic completion delivery unreliable. Proposed direction: plumb the launching session id (for example via runtime context or a `CLAWQ_SESSION_ID` env var for tool-launched subprocesses), persist it on the background task record as something like `reply_in_session`, and use it when emitting completion/system messages so delegate finishes can be delivered back to the initiating Telegram/Discord/etc session.
