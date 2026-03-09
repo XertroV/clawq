@@ -809,6 +809,69 @@ let test_shell_exec_timeout_kills_descendants () =
         (process_exists child_pid);
       Sys.remove pid_file)
 
+let test_extract_cd_prefix () =
+  let opt = Alcotest.option (Alcotest.pair Alcotest.string Alcotest.string) in
+  Alcotest.(check opt)
+    "simple cd && cmd"
+    (Some ("/home/user/project", "make build"))
+    (Tools_builtin.extract_cd_prefix "cd /home/user/project && make build");
+  Alcotest.(check opt)
+    "with extra spaces"
+    (Some ("/tmp/dir", "ls -la"))
+    (Tools_builtin.extract_cd_prefix "  cd   /tmp/dir   &&   ls -la  ");
+  Alcotest.(check opt)
+    "no cd prefix" None
+    (Tools_builtin.extract_cd_prefix "make build");
+  Alcotest.(check opt)
+    "relative cd path returns None" None
+    (Tools_builtin.extract_cd_prefix "cd relative/path && make build");
+  Alcotest.(check opt)
+    "empty rest returns None" None
+    (Tools_builtin.extract_cd_prefix "cd /tmp &&");
+  Alcotest.(check opt)
+    "cd with opam exec"
+    (Some
+       ( "/home/xertrov/src/clawq.b132",
+         "opam exec --switch=clawq-5.1 -- dune build" ))
+    (Tools_builtin.extract_cd_prefix
+       "cd /home/xertrov/src/clawq.b132 && opam exec --switch=clawq-5.1 -- \
+        dune build");
+  Alcotest.(check opt)
+    "just cd no &&" None
+    (Tools_builtin.extract_cd_prefix "cd /tmp")
+
+let test_shell_exec_cd_prefix_optimization () =
+  with_temp_workspace (fun workspace ->
+      let subdir = Filename.concat workspace "subdir" in
+      Unix.mkdir subdir 0o755;
+      let sandbox =
+        Sandbox.create ~backend:Sandbox.None ~workspace ~extra_allowed_paths:[]
+          ~workspace_only:false ()
+      in
+      let tool =
+        Tools_builtin.shell_exec ~workspace ~workspace_only:false
+          ~allowed_commands:[] ~extra_allowed_paths:[] ~sandbox
+      in
+      let command = Printf.sprintf "cd %s && pwd" subdir in
+      let result =
+        Lwt_main.run
+          (tool.Tool.invoke (`Assoc [ ("command", `String command) ]))
+      in
+      let has_substr s sub =
+        let slen = String.length s and nlen = String.length sub in
+        let rec loop i =
+          if i + nlen > slen then false
+          else if String.sub s i nlen = sub then true
+          else loop (i + 1)
+        in
+        nlen = 0 || loop 0
+      in
+      Alcotest.(check bool)
+        "output contains subdir path" true (has_substr result subdir);
+      Alcotest.(check bool)
+        "exit code 0" true
+        (has_substr result "exit_code: 0"))
+
 let suite =
   [
     Alcotest.test_case "normalize absolute" `Quick test_normalize_absolute;
@@ -898,4 +961,8 @@ let suite =
       test_shell_exec_interrupt_kills_descendants;
     Alcotest.test_case "shell_exec timeout kills descendants" `Quick
       test_shell_exec_timeout_kills_descendants;
+    Alcotest.test_case "extract_cd_prefix parses cd path && cmd" `Quick
+      test_extract_cd_prefix;
+    Alcotest.test_case "shell_exec cd prefix optimization sets cwd" `Quick
+      test_shell_exec_cd_prefix_optimization;
   ]

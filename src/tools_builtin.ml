@@ -321,6 +321,26 @@ let is_workspace_safe_command_token token =
 let resolve_path ~workspace path =
   if Filename.is_relative path then Filename.concat workspace path else path
 
+(* Detect "cd <path> && <rest>" command pattern for cwd optimization.
+   Returns Some (dir, rest_command) when the command starts with a simple
+   cd to an absolute path followed by &&. *)
+let extract_cd_prefix command =
+  let cmd = String.trim command in
+  let len = String.length cmd in
+  if len > 3 && String.sub cmd 0 3 = "cd " then
+    (* Find the && separator *)
+    let rec find_amp i =
+      if i + 1 >= len then None
+      else if cmd.[i] = '&' && cmd.[i + 1] = '&' then
+        let dir = String.trim (String.sub cmd 3 (i - 3)) in
+        let rest = String.trim (String.sub cmd (i + 2) (len - i - 2)) in
+        if dir <> "" && rest <> "" && dir.[0] = '/' then Some (dir, rest)
+        else None
+      else find_amp (i + 1)
+    in
+    find_amp 3
+  else None
+
 let resolve_shell_cwd ~workspace ~workspace_only ~extra_allowed_paths cwd_arg =
   let cwd_arg = String.trim cwd_arg in
   if cwd_arg = "" then Error "Error: cwd must not be empty"
@@ -655,7 +675,7 @@ let shell_exec ~workspace ~workspace_only ~allowed_commands ~extra_allowed_paths
       in
       match cwd_result with
       | Error msg -> Lwt.return msg
-      | Ok cwd ->
+      | Ok cwd -> (
           let env =
             if workspace_only then
               [|
@@ -688,7 +708,16 @@ let shell_exec ~workspace ~workspace_only ~allowed_commands ~extra_allowed_paths
                       "Error: command contains paths/targets disallowed in \
                        workspace_only mode"
                 | _ -> run_proc ("", Array.of_list argv))
-          else run_proc ("", [| "/bin/sh"; "-c"; command |])
+          else
+            match extract_cd_prefix command with
+            | Some (dir, rest) when Sys.file_exists dir && Sys.is_directory dir
+              ->
+                let cwd = Some dir in
+                run_process_with_timeout ?interrupt_check ?on_output_chunk ~cwd
+                  ~env
+                  ~cmd:("", [| "/bin/sh"; "-c"; rest |])
+                  ~timeout_secs ()
+            | _ -> run_proc ("", [| "/bin/sh"; "-c"; command |]))
   in
   {
     Tool.name = "shell_exec";
