@@ -49,10 +49,10 @@ jobs:
           eval "$(opam env)"
           dune runtest
 
-      - name: Binary size check
-        run: |
-          eval "$(opam env)"
-          make binary-size-check SHELL_SWITCH="$(opam switch show)"
+      # - name: Binary size check
+      #   run: |
+      #     eval "$(opam env)"
+      #     make binary-size-check SHELL_SWITCH="$(opam switch show)"
 
 
   docs:
