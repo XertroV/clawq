@@ -1,0 +1,14 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B246
+priority: high
+status: pending
+tags: []
+title: "log lines 'Injecting 1 queued message' and 'Queued inbound message for busy session' should have the session at the start like other log lines, eg: \n[07:52:33.472] INFO  [telegram:58495225:58495225] LLM native stream dispatch provider=openai-codex model=gpt-5.4 msgs=82\n[07:52:47.291] INFO  [telegram:58495225:58495225] Cost: model=gpt-5.4 prompt=61696 completion=535 cost=.000000 session_total=.0000"
+---
+
+log lines 'Injecting 1 queued message' and 'Queued inbound message for busy session' should have the session at the start like other log lines, eg: 
+[07:52:33.472] INFO  [telegram:58495225:58495225] LLM native stream dispatch provider=openai-codex model=gpt-5.4 msgs=82
+[07:52:47.291] INFO  [telegram:58495225:58495225] Cost: model=gpt-5.4 prompt=61696 completion=535 cost=.000000 session_total=.0000

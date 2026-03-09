@@ -244,3 +244,4 @@ bugs:
     - file: B243-add-new-runner-for-bg-coding-t.todo
     - file: B244-add-new-runner-for-bg-coding-t.todo
     - file: B245-runtime-context-should-have-ba.todo
+    - file: B246-log-lines-injecting-1-queued-m.todo
