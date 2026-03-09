@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B206
+priority: high
+status: pending
+tags: []
+title: when starting an agent with /delegate or /fork_and, we should encourage them to use telegram formatting (and give examples) in their response so that it fits in one message (eg using a collasible section(s) like /tools does)
+---
+
+when starting an agent with /delegate or /fork_and, we should encourage them to use telegram formatting (and give examples) in their response so that it fits in one message (eg using a collasible section(s) like /tools does)
