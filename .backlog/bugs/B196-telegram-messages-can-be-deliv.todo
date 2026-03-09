@@ -1,10 +1,15 @@
 ---
+claimed_at: "2026-03-09T15:30:36Z"
+claimed_by: cli-user
+completed_at: "2026-03-09T15:47:40Z"
 complexity: medium
 depends_on: []
+duration_minutes: 17.072807589516668
 estimate_hours: 1
 id: B196
 priority: high
-status: pending
+started_at: "2026-03-09T15:30:36Z"
+status: done
 tags: []
 title: Telegram messages can be delivered out of order, especially when queued messages are involved. Irrespective of injecting queued messages or not, we should always immediately forward messages destined for telegram to the user
 ---

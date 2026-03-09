@@ -1508,6 +1508,7 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
                     | None -> Lwt.return_unit);
               }
             in
+            let response_sent = ref false in
             let* result =
               Session.with_registered_notifier session_mgr ~key
                 ~notify:(fun text ->
@@ -1524,12 +1525,66 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
                 (fun () ->
                   Lwt.catch
                     (fun () ->
+                      let before_drain response =
+                        if Session.is_queued_message_response response then
+                          Lwt.return_unit
+                        else
+                          let open Lwt.Syntax in
+                          let* () =
+                            match status_msg with
+                            | Some sm -> Status_message.finalize sm
+                            | None -> Lwt.return_unit
+                          in
+                          let* () =
+                            if status_msg <> None && !current_turn_has_tools
+                            then
+                              let* _msg_id =
+                                send_message_with_keyboard
+                                  ~disable_notification:true ~bot_token
+                                  ~chat_id:update.chat_id
+                                  ~text:"\xF0\x9F\x93\x8B Tool output available"
+                                  ~buttons:[ ("Show Details", "show_details") ]
+                                  ()
+                              in
+                              Lwt.return_unit
+                            else Lwt.return_unit
+                          in
+                          let thinking =
+                            match status_msg with
+                            | Some _ -> Buffer.contents thinking_buf
+                            | None -> Stream_visibility.thinking_text visibility
+                          in
+                          let* () =
+                            if thinking <> "" then
+                              send_chunked ~parse_mode:"MarkdownV2" ~bot_token
+                                ~chat_id:update.chat_id
+                                ~text:
+                                  ("_"
+                                  ^ Telegram_format.escape_mdv2 thinking
+                                  ^ "_")
+                                ()
+                            else Lwt.return_unit
+                          in
+                          let* () =
+                            send_chunked ~parse_mode:"MarkdownV2" ~bot_token
+                              ~chat_id:update.chat_id
+                              ~text:(Telegram_format.markdown_to_mdv2 response)
+                              ()
+                          in
+                          let* () = set_reaction "\xE2\x9C\x85" in
+                          if
+                            not
+                              (Session.take_response_deferred session_mgr ~key)
+                          then Session.mark_response_sent session_mgr ~key;
+                          response_sent := true;
+                          Lwt.return_unit
+                      in
                       let turn_p =
                         Session.turn_stream session_mgr ~key ~message:msg
                           ~content_parts:!image_content_parts
                           ~channel_name:"telegram" ~channel_type:"dm"
                           ~channel:"telegram" ~channel_id:update.chat_id
-                          ~on_drain_progress ~on_chunk ()
+                          ~on_drain_progress ~before_drain ~on_chunk ()
                       in
                       let result_p, refresh =
                         with_typing_refreshable ~bot_token
@@ -1543,14 +1598,23 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
             in
             match result with
             | Ok response ->
-                let* () =
-                  match status_msg with
-                  | Some sm -> Status_message.finalize sm
-                  | None -> Lwt.return_unit
-                in
                 if Session.is_queued_message_response response then
                   Lwt.return_unit
+                else if !response_sent then begin
+                  Lwt.async (fun () ->
+                      Session.process_autonomous_turn_result
+                        ~around_turn:(fun f ->
+                          with_typing_deferred ~bot_token
+                            ~chat_id:update.chat_id ~grace:1.5 (f ()))
+                        ~on_response:send_to_chat session_mgr ~key ~response);
+                  Lwt.return_unit
+                end
                 else
+                  let* () =
+                    match status_msg with
+                    | Some sm -> Status_message.finalize sm
+                    | None -> Lwt.return_unit
+                  in
                   let* () =
                     if status_msg <> None && !current_turn_has_tools then
                       let* _msg_id =
@@ -1585,12 +1649,6 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
                   let* () = set_reaction "\xF0\x9F\x91\x8D" in
                   if not (Session.take_response_deferred session_mgr ~key) then
                     Session.mark_response_sent session_mgr ~key;
-                  (* Schedule autonomous continuation so agent pings itself
-                     after idle period; response delivered via persistent
-                     channel notifier.  Wrap each continuation turn with
-                     a deferred typing indicator: a 1.5 s grace period
-                     avoids a stale typing flash for quick STAY_IDLE
-                     responses that resolve almost instantly. *)
                   Lwt.async (fun () ->
                       Session.process_autonomous_turn_result
                         ~around_turn:(fun f ->

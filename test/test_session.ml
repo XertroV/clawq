@@ -1385,6 +1385,47 @@ let test_drain_progress_not_called_when_no_queued_messages () =
       Alcotest.(check int) "before_turn not called" 0 !before_count;
       Alcotest.(check int) "after_all not called" 0 !after_all_count)
 
+let test_before_drain_fires_before_drain_notifier () =
+  with_fake_chat_provider (fun config ->
+      let db = Memory.init ~db_path:":memory:" () in
+      let mgr = Session.create ~config ~db () in
+      let order = ref [] in
+      Lwt_main.run
+        (Session.with_registered_notifier mgr ~key:"telegram:1:u"
+           ~notify:(fun text ->
+             order := ("drain:" ^ text) :: !order;
+             Lwt.return_unit)
+           (fun () ->
+             Session.with_session_lock mgr ~key:"telegram:1:u"
+               (fun agent interrupt ->
+                 let open Lwt.Syntax in
+                 let* queued =
+                   Session.enqueue_message_if_busy mgr ~key:"telegram:1:u"
+                     (queued_message ~channel_name:"telegram" ~channel_type:"dm"
+                        ~channel:"telegram" ~channel_id:"1" "queued msg")
+                 in
+                 Alcotest.(check bool) "enqueued" true queued;
+                 let before_drain response =
+                   order := ("before_drain:" ^ response) :: !order;
+                   Lwt.return_unit
+                 in
+                 let* response = Agent.turn agent ~user_message:"hello" () in
+                 let* () = before_drain response in
+                 let* () =
+                   Session.drain_queued_messages mgr ~key:"telegram:1:u" agent
+                     interrupt ()
+                 in
+                 Lwt.return_unit)));
+      let order_list = List.rev !order in
+      Alcotest.(check int) "two events recorded" 2 (List.length order_list);
+      Alcotest.(check bool)
+        "before_drain fires first" true
+        (match order_list with
+        | [ a; b ] ->
+            String.starts_with ~prefix:"before_drain:" a
+            && String.starts_with ~prefix:"drain:" b
+        | _ -> false))
+
 let suite =
   [
     Alcotest.test_case "reset clears active session and history" `Quick
@@ -1481,4 +1522,6 @@ let suite =
       `Quick test_drain_progress_callbacks_fire_for_queued_messages;
     Alcotest.test_case "drain progress not called when no queued messages"
       `Quick test_drain_progress_not_called_when_no_queued_messages;
+    Alcotest.test_case "before_drain fires before drain notifier" `Quick
+      test_before_drain_fires_before_drain_notifier;
   ]

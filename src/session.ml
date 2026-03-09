@@ -838,8 +838,8 @@ let drain_queued_messages mgr ~key agent interrupt ?on_drain_progress () =
     ~drained_any:false ()
 
 let rec turn mgr ~key ~message ?(content_parts = []) ?(attachments = [])
-    ?channel_name ?channel_type ?sender_id ?sender_name ?channel ?channel_id ()
-    =
+    ?channel_name ?channel_type ?sender_id ?sender_name ?channel ?channel_id
+    ?before_drain () =
   let open Lwt.Syntax in
   let* () = mark_autonomous_activity_started mgr ~key in
   let* message = normalize_incoming_message mgr ~key ~message in
@@ -880,6 +880,11 @@ let rec turn mgr ~key ~message ?(content_parts = []) ?(attachments = [])
                   run_locked_turn mgr ~key agent interrupt ~message
                     ~content_parts ~attachments ?channel_name ?channel_type
                     ?sender_id ?sender_name ?channel ?channel_id ()
+                in
+                let* () =
+                  match before_drain with
+                  | Some f -> f response
+                  | None -> Lwt.return_unit
                 in
                 let* () = drain_queued_messages mgr ~key agent interrupt () in
                 Lwt.return response))
@@ -967,7 +972,7 @@ let update_config mgr config =
 
 let turn_stream mgr ~key ~message ?(content_parts = []) ?(attachments = [])
     ?channel_name ?channel_type ?sender_id ?sender_name ?channel ?channel_id
-    ?on_drain_progress ~on_chunk () =
+    ?on_drain_progress ?before_drain ~on_chunk () =
   let open Lwt.Syntax in
   let* () = mark_autonomous_activity_started mgr ~key in
   let* message = normalize_incoming_message mgr ~key ~message in
@@ -1116,6 +1121,11 @@ let turn_stream mgr ~key ~message ?(content_parts = []) ?(attachments = [])
                            })
                   | _ -> ()
                 end;
+                let* () =
+                  match before_drain with
+                  | Some f -> f response
+                  | None -> Lwt.return_unit
+                in
                 let* () =
                   drain_queued_messages mgr ~key agent interrupt
                     ?on_drain_progress ()

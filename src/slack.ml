@@ -509,6 +509,38 @@ let handle_event ~(config : Runtime_config.slack_config)
                         chunk
                 in
                 let* () = set_reaction "hourglass_flowing_sand" in
+                let response_sent = ref false in
+                let before_drain response =
+                  if Session.is_queued_message_response response then
+                    Lwt.return_unit
+                  else
+                    let open Lwt.Syntax in
+                    let* () =
+                      match status_msg with
+                      | Some sm -> Status_message.finalize sm
+                      | None -> Lwt.return_unit
+                    in
+                    let thinking =
+                      match status_msg with
+                      | Some _ -> Buffer.contents thinking_buf
+                      | None -> Stream_visibility.thinking_text visibility
+                    in
+                    let* () =
+                      if thinking <> "" then
+                        send_message_fn ~bot_token:config.bot_token ~channel_id
+                          ~text:("_" ^ thinking ^ "_")
+                      else Lwt.return_unit
+                    in
+                    let* () =
+                      send_message_fn ~bot_token:config.bot_token ~channel_id
+                        ~text:response
+                    in
+                    let* () = set_reaction "white_check_mark" in
+                    if not (Session.take_response_deferred session_manager ~key)
+                    then Session.mark_response_sent session_manager ~key;
+                    response_sent := true;
+                    Lwt.return_unit
+                in
                 let* result =
                   Session.with_registered_notifier session_manager ~key
                     ~notify:(fun text ->
@@ -521,21 +553,33 @@ let handle_event ~(config : Runtime_config.slack_config)
                             Session.turn_stream session_manager ~key
                               ~message:text ~channel_name:channel_id
                               ~channel_type:"group" ~sender_id:user_id
-                              ~channel:"slack" ~channel_id ~on_chunk ()
+                              ~channel:"slack" ~channel_id ~before_drain
+                              ~on_chunk ()
                           in
                           Lwt.return (Ok response))
                         (fun exn -> Lwt.return (Error (Printexc.to_string exn))))
                 in
                 match result with
                 | Ok response ->
-                    let* () =
-                      match status_msg with
-                      | Some sm -> Status_message.finalize sm
-                      | None -> Lwt.return_unit
-                    in
                     if Session.is_queued_message_response response then
                       Lwt.return "ok"
+                    else if !response_sent then begin
+                      let send_to_channel text =
+                        send_message_fn ~bot_token:config.bot_token ~channel_id
+                          ~text
+                      in
+                      Lwt.async (fun () ->
+                          Session.process_autonomous_turn_result
+                            ~on_response:send_to_channel session_manager ~key
+                            ~response);
+                      Lwt.return "ok"
+                    end
                     else
+                      let* () =
+                        match status_msg with
+                        | Some sm -> Status_message.finalize sm
+                        | None -> Lwt.return_unit
+                      in
                       let thinking =
                         match status_msg with
                         | Some _ -> Buffer.contents thinking_buf

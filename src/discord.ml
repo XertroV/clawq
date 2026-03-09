@@ -719,6 +719,38 @@ let handle_message ~(discord_config : Runtime_config.discord_config)
                   | None -> Lwt.return_unit);
             }
           in
+          let response_sent = ref false in
+          let before_drain response =
+            if Session.is_queued_message_response response then Lwt.return_unit
+            else
+              let open Lwt.Syntax in
+              let* () =
+                match status_msg with
+                | Some sm -> Status_message.finalize sm
+                | None -> Lwt.return_unit
+              in
+              let thinking =
+                match status_msg with
+                | Some _ -> Buffer.contents thinking_buf
+                | None -> Stream_visibility.thinking_text visibility
+              in
+              let* () =
+                if thinking <> "" then
+                  send_message_fn ~bot_token:discord_config.bot_token
+                    ~channel_id:msg.channel_id
+                    ~text:("_" ^ thinking ^ "_")
+                else Lwt.return_unit
+              in
+              let* () =
+                send_message_fn ~bot_token:discord_config.bot_token
+                  ~channel_id:msg.channel_id ~text:response
+              in
+              let* () = set_reaction "\xE2\x9C\x85" in
+              if not (Session.take_response_deferred session_mgr ~key) then
+                Session.mark_response_sent session_mgr ~key;
+              response_sent := true;
+              Lwt.return_unit
+          in
           let* result =
             Session.with_registered_notifier session_mgr ~key
               ~notify:(fun text ->
@@ -732,22 +764,46 @@ let handle_message ~(discord_config : Runtime_config.discord_config)
                         ~channel_name:msg.channel_id
                         ~channel_type:discord_channel_type
                         ~sender_id:msg.author_id ~channel:"discord"
-                        ~channel_id:msg.channel_id ~on_drain_progress ~on_chunk
-                        ()
+                        ~channel_id:msg.channel_id ~on_drain_progress
+                        ~before_drain ~on_chunk ()
                     in
                     Lwt.return (Ok response))
                   (fun exn -> Lwt.return (Error (Printexc.to_string exn))))
           in
           match result with
           | Ok response ->
-              let* () =
-                match status_msg with
-                | Some sm -> Status_message.finalize sm
-                | None -> Lwt.return_unit
-              in
               if Session.is_queued_message_response response then
                 Lwt.return_unit
+              else if !response_sent then begin
+                let send_to_channel text =
+                  send_message_fn ~bot_token:discord_config.bot_token
+                    ~channel_id:msg.channel_id ~text
+                in
+                if
+                  Option.is_none
+                    (Session.find_registered_notifier session_mgr ~key)
+                then begin
+                  Session.register_channel_notifier session_mgr ~key
+                    send_to_channel;
+                  Session.register_status_message_factory session_mgr ~key
+                    (fun () ->
+                      let notifier =
+                        make_status_notifier ~bot_token:discord_config.bot_token
+                          ~channel_id:msg.channel_id
+                      in
+                      Status_message.create ~notifier ~parse_mode:"Markdown" ())
+                end;
+                Lwt.async (fun () ->
+                    Session.process_autonomous_turn_result
+                      ~on_response:send_to_channel session_mgr ~key ~response);
+                Lwt.return_unit
+              end
               else
+                let* () =
+                  match status_msg with
+                  | Some sm -> Status_message.finalize sm
+                  | None -> Lwt.return_unit
+                in
                 let thinking =
                   match status_msg with
                   | Some _ -> Buffer.contents thinking_buf
