@@ -1,0 +1,11 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B141
+priority: medium
+status: pending
+tags: []
+title: Add CLI commands to list sessions and inject messages into a session
+---
+Add CLI support to inspect live/persisted sessions and inject messages into a chosen session. Desired capabilities: list sessions with useful filtering (for example by channel, active/inactive, session id prefix, or main/private distinctions), and inject a message into a selected session from the CLI for debugging/autonomous-control workflows. This would materially help testing continuation, restart-resume, and channel/session routing behavior.

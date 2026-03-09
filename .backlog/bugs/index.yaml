@@ -139,3 +139,4 @@ bugs:
     - file: B138-add-fork-and-to-spawn-an-ephem.todo
     - file: B139-test-and-verify-prompt-injecti.todo
     - file: B140-audit-tool-descriptions-help-s.todo
+    - file: B141-add-cli-commands-to-list-sessi.todo
