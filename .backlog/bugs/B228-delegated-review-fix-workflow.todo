@@ -1,0 +1,11 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B228
+priority: medium
+status: pending
+tags: []
+title: Delegated review/fix workflow should be standardized around review-and-fix skill with explicit PASS/FAIL contracts
+---
+Review/fix loops are currently orchestrated ad hoc even though a review-and-fix skill now exists for both clawq and Codex. We should standardize delegated review workflows so review agents and fix agents use a consistent PASS/FAIL contract, non-delegation rule, and reporting shape. Acceptance criteria: (1) there is a documented/default pattern for delegated review-and-fix loops; (2) prompts/contracts are standardized enough to reduce bespoke orchestration drift; (3) Codex and clawq skill usage is aligned where practical; (4) this improves trustworthiness of delegated merge decisions without excessive ceremony.

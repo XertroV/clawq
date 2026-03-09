@@ -226,3 +226,4 @@ bugs:
     - file: B225-task-tree-updates-should-produ.todo
     - file: B226-task-tree-should-support-templ.todo
     - file: B227-persistent-task-tree-should-su.todo
+    - file: B228-delegated-review-fix-workflow.todo
