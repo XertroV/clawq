@@ -1,10 +1,15 @@
 ---
+claimed_at: "2026-03-09T18:56:09Z"
+claimed_by: cli-user
+completed_at: "2026-03-09T18:59:10Z"
 complexity: medium
 depends_on: []
+duration_minutes: 3.0272400135333335
 estimate_hours: 1
 id: B236
 priority: high
-status: pending
+started_at: "2026-03-09T18:56:09Z"
+status: done
 tags: []
 title: task tree and background tasks are not shown in the runtime context via `clawq debug prompt`. They should be added to the actual runtime context (its a bug if theyre not) and they should be shown in the debug prompt output too (becaus ethat should use the real runtime context)
 ---

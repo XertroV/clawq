@@ -288,9 +288,11 @@ let format_debug_messages messages =
 
 let cmd_debug_prompt args =
   let cfg : Runtime_config.t = get_config () in
-  let tool_registry = build_tool_registry ~db:(Some (get_db ())) cfg in
+  let db = get_db () in
+  let tool_registry = build_tool_registry ~db:(Some db) cfg in
   let provider_name, _provider, model = Provider.select_provider ~config:cfg in
   let agent = Agent.create ~config:cfg ?tool_registry () in
+  let session_key = "__debug_prompt__" in
   let user_message =
     match String.concat " " args with "" -> "Hello!" | msg -> msg
   in
@@ -304,11 +306,39 @@ let cmd_debug_prompt args =
       let shell_policy_summary, shell_is_sandboxed =
         shell_policy_summary cfg sandbox
       in
+      let background_tasks =
+        begin
+          Background_task.init_schema db;
+          Background_task.list_tasks ~db
+          |> List.filter (fun t ->
+              match t.Background_task.status with
+              | Background_task.Queued | Background_task.Running -> true
+              | _ -> false)
+          |> List.sort (fun a b ->
+              compare a.Background_task.id b.Background_task.id)
+          |> List.map (fun t ->
+              {
+                Prompt_builder.id = t.Background_task.id;
+                runner = Background_task.string_of_runner t.runner;
+                repo_label = Filename.basename t.repo_path;
+                branch = (if t.branch = "" then "(auto)" else t.branch);
+                status = Background_task.string_of_status t.status;
+                elapsed = Background_task.elapsed_string t;
+              })
+        end
+      in
+      let task_tree_summary =
+        begin
+          Task_tree.init_schema db;
+          let main_key = "__main__" in
+          Some (Task_tree.render_tree_with_legend ~db ~session_key:main_key)
+        end
+      in
       let runtime_context =
         Prompt_builder.build_runtime_context ~config:cfg
           ~details:
             {
-              Prompt_builder.session_id = "__debug_prompt__";
+              Prompt_builder.session_id = session_key;
               session_name = Some "debug prompt";
               is_main_session = false;
               heartbeat_routing_applies = false;
@@ -320,12 +350,12 @@ let cmd_debug_prompt args =
               shell_is_sandboxed;
               shell_policy_summary;
               shell_visible_roots_summary = shell_visible_roots_summary cfg;
-              background_tasks = [];
+              background_tasks;
               context_usage =
                 Some
                   (Agent.runtime_context_usage agent
                      ~compacted_before_turn:compacted);
-              task_tree_summary = None;
+              task_tree_summary;
             }
           ()
       in
