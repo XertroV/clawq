@@ -1153,7 +1153,30 @@ let run ~(config : Runtime_config.t) =
            ~send_fn:
              (Some
                 (fun ~text ->
-                  Session.notify_channel_sessions session_manager text)))
+                  Session.notify_channel_sessions session_manager text)));
+      Tool_registry.register registry
+        (Tools_builtin.compact_history ~compact_fn:(fun ~session_key ->
+             match Hashtbl.find_opt session_manager.sessions session_key with
+             | None -> Lwt.return "Error: session not found"
+             | Some (agent, _mutex, _interrupt) -> (
+                 let open Lwt.Syntax in
+                 let* info =
+                   Agent.force_compact_history agent ?db:session_manager.db ()
+                 in
+                 match info with
+                 | Some info ->
+                     agent.Agent.compacted_mid_turn <- true;
+                     Session.persist_compacted_history session_manager
+                       ~key:session_key agent;
+                     Lwt.return
+                       (Printf.sprintf
+                          "Compacted: %dk -> %dk tokens (context window: %dk)"
+                          (info.pre_tokens / 1000) (info.post_tokens / 1000)
+                          (info.context_window / 1000))
+                 | None ->
+                     Lwt.return
+                       "Nothing to compact (history too short or already \
+                        compacted)")))
   | None -> ());
   (* Re-register task_tree with channel notification support *)
   (if !current_config.agent_defaults.task_tree_notifications then

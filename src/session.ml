@@ -87,8 +87,9 @@ let compaction_suggestion_for_prompt mgr ~key =
       Printf.sprintf
         "\n\n\
          [Context usage: %d%% (%d/%d tokens). Consider running compaction \
-         using the `/compact` command or `clawq session compact %s` to free up \
-         context space and avoid inefficient token usage.]"
+         using the `compact_history` tool, the `/compact` command, or `clawq \
+         session compact %s` to free up context space and avoid inefficient \
+         token usage.]"
         percent estimated_tokens context_window key
   | _ -> ""
 
@@ -794,7 +795,11 @@ let stream_turn_with_visibility mgr ~notify agent ~key ~effective_message
           notify (Stream_visibility.thinking_message thinking)
         else Lwt.return_unit
       in
-      persist_new_messages mgr ~key ~history_before:!persisted_up_to agent;
+      if agent.Agent.compacted_mid_turn then begin
+        persist_compacted_history mgr ~key agent;
+        agent.Agent.compacted_mid_turn <- false
+      end
+      else persist_new_messages mgr ~key ~history_before:!persisted_up_to agent;
       (match mgr.db with
       | Some db when mgr.config.security.audit_enabled ->
           Audit.log ~db
@@ -829,7 +834,11 @@ let stream_turn_with_visibility mgr ~notify agent ~key ~effective_message
           notify (Stream_visibility.thinking_message thinking)
         else Lwt.return_unit
       in
-      persist_new_messages mgr ~key ~history_before:!persisted_up_to agent;
+      if agent.Agent.compacted_mid_turn then begin
+        persist_compacted_history mgr ~key agent;
+        agent.Agent.compacted_mid_turn <- false
+      end
+      else persist_new_messages mgr ~key ~history_before:!persisted_up_to agent;
       (match mgr.db with
       | Some db when mgr.config.security.audit_enabled ->
           Audit.log ~db
@@ -959,7 +968,13 @@ let run_locked_turn mgr ~key agent interrupt ~message ?(content_parts = [])
                   ?runtime_context ~history_prepared:true ~on_history_update ()))
       (function
         | Agent.Restart_requested ->
-            persist_new_messages mgr ~key ~history_before:!persisted_up_to agent;
+            if agent.Agent.compacted_mid_turn then begin
+              persist_compacted_history mgr ~key agent;
+              agent.Agent.compacted_mid_turn <- false
+            end
+            else
+              persist_new_messages mgr ~key ~history_before:!persisted_up_to
+                agent;
             set_response_deferred mgr ~key;
             Lwt.return draining_message
         | exn -> Lwt.fail exn)
@@ -971,7 +986,12 @@ let run_locked_turn mgr ~key agent interrupt ~message ?(content_parts = [])
       ()
   | _ ->
       if not (response_deferred mgr ~key) then begin
-        persist_new_messages mgr ~key ~history_before:!persisted_up_to agent;
+        if agent.Agent.compacted_mid_turn then begin
+          persist_compacted_history mgr ~key agent;
+          agent.Agent.compacted_mid_turn <- false
+        end
+        else
+          persist_new_messages mgr ~key ~history_before:!persisted_up_to agent;
         match mgr.db with
         | Some db when mgr.config.security.audit_enabled ->
             Audit.log ~db
@@ -1334,8 +1354,13 @@ let turn_stream mgr ~key ~message ?(content_parts = []) ?(attachments = [])
                                 ~on_chunk ())
                         (function
                           | Agent.Restart_requested ->
-                              persist_new_messages mgr ~key
-                                ~history_before:!persisted_up_to agent;
+                              if agent.Agent.compacted_mid_turn then begin
+                                persist_compacted_history mgr ~key agent;
+                                agent.Agent.compacted_mid_turn <- false
+                              end
+                              else
+                                persist_new_messages mgr ~key
+                                  ~history_before:!persisted_up_to agent;
                               set_response_deferred mgr ~key;
                               let* () =
                                 on_chunk (Provider.Delta draining_message)
@@ -1345,8 +1370,13 @@ let turn_stream mgr ~key ~message ?(content_parts = []) ?(attachments = [])
                           | exn -> Lwt.fail exn)
                     in
                     if not (response_deferred mgr ~key) then begin
-                      persist_new_messages mgr ~key
-                        ~history_before:!persisted_up_to agent;
+                      if agent.Agent.compacted_mid_turn then begin
+                        persist_compacted_history mgr ~key agent;
+                        agent.Agent.compacted_mid_turn <- false
+                      end
+                      else
+                        persist_new_messages mgr ~key
+                          ~history_before:!persisted_up_to agent;
                       match mgr.db with
                       | Some db when mgr.config.security.audit_enabled ->
                           Audit.log ~db

@@ -4,6 +4,7 @@ type t = {
   mutable system_prompt : string;
   mutable observed_active_workspace_files : (string * string option) list;
   tool_registry : Tool_registry.t option;
+  mutable compacted_mid_turn : bool;
 }
 
 exception Interrupted of string
@@ -72,6 +73,7 @@ let create ~config ?tool_registry () =
     observed_active_workspace_files =
       capture_active_workspace_file_state_for_config config;
     tool_registry;
+    compacted_mid_turn = false;
   }
 
 let is_session_event_message (msg : Provider.message) = msg.role = "event"

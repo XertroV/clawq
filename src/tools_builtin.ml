@@ -3353,6 +3353,33 @@ let doc_write ~workspace ~workspace_files =
     deferred = false;
   }
 
+let compact_history ~compact_fn =
+  {
+    Tool.name = "compact_history";
+    description =
+      "Compact (summarize) older conversation history to free up context \
+       window space. Use when context usage is high and you need more room to \
+       continue working. Returns token usage before and after compaction.";
+    parameters_schema =
+      `Assoc
+        [
+          ("type", `String "object");
+          ("properties", `Assoc []);
+          ("additionalProperties", `Bool false);
+        ];
+    invoke =
+      (fun ?context _args ->
+        match context with
+        | Some { Tool.session_key = Some key; _ } -> compact_fn ~session_key:key
+        | _ ->
+            Lwt.return
+              "Error: compact_history requires a session context. This tool is \
+               only available during daemon sessions.");
+    invoke_stream = None;
+    risk_level = Low;
+    deferred = false;
+  }
+
 let register_all ~(config : Runtime_config.t) ~sandbox ?(db = None)
     ?(send_fn = None) ?(rich_send_fn = None) registry =
   let workspace_only = config.security.workspace_only in

@@ -381,6 +381,27 @@ let test_messages_to_json_list () =
   let open Yojson.Safe.Util in
   Alcotest.(check int) "2 messages" 2 (json |> to_list |> List.length)
 
+let test_compact_history_tool () =
+  let compact_fn ~session_key:_ = Lwt.return "compacted" in
+  let tool = Tools_builtin.compact_history ~compact_fn in
+  Alcotest.(check string) "name" "compact_history" tool.name;
+  Alcotest.(check bool) "not deferred" false tool.deferred;
+  (* Invoke without context returns error *)
+  let result = Lwt_main.run (tool.invoke (`Assoc [])) in
+  Alcotest.(check bool)
+    "no context error" true
+    (String.starts_with ~prefix:"Error:" result);
+  (* Invoke with session context calls compact_fn *)
+  let ctx =
+    {
+      Tool.session_key = Some "test-session";
+      send_progress = None;
+      interrupt_check = None;
+    }
+  in
+  let result = Lwt_main.run (tool.invoke ~context:ctx (`Assoc [])) in
+  Alcotest.(check string) "compaction result" "compacted" result
+
 let suite =
   [
     Alcotest.test_case "discord has name" `Quick test_discord_has_name;
@@ -411,6 +432,8 @@ let suite =
     Alcotest.test_case "tool openai json format" `Quick
       test_tool_openai_json_format;
     Alcotest.test_case "tool risk levels" `Quick test_tool_risk_levels;
+    Alcotest.test_case "compact_history tool exists" `Quick
+      test_compact_history_tool;
     Alcotest.test_case "message_to_json user role" `Quick
       test_message_to_json_user_role;
     Alcotest.test_case "message_to_json assistant role" `Quick

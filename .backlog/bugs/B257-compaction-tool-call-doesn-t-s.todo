@@ -1,10 +1,15 @@
 ---
+claimed_at: "2026-03-09T22:05:59Z"
+claimed_by: cli-user
+completed_at: "2026-03-09T22:14:52Z"
 complexity: medium
 depends_on: []
+duration_minutes: 8.88865127055
 estimate_hours: 1
 id: B257
 priority: high
-status: pending
+started_at: "2026-03-09T22:05:59Z"
+status: done
 tags: []
 title: compaction tool call doesn't show up in agents list of tools
 ---
