@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B240
+priority: high
+status: pending
+tags: []
+title: 'Add new runner for bg coding tasks: `kimi`'
+---
+
+Add new runner for bg coding tasks: `kimi`
