@@ -765,8 +765,12 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
           match run_update_command with
           | Some run_update_command -> run_update_command
           | None ->
-              fun ?prepare_restart ~send_progress () ->
-                Update_tool.run_update ?prepare_restart
+              fun ?(mode = Update_tool.Auto)
+                ?prepare_restart
+                ~send_progress
+                ()
+              ->
+                Update_tool.run_update ?prepare_restart ~mode
                   ~is_draining:(fun () -> Session.is_draining session_mgr)
                   ~send_progress ()
         in

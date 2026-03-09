@@ -284,6 +284,7 @@ let transcribe_cmd = disabled "transcribe" "Transcribe an audio file"
 let runtime_cmd = disabled "runtime" "Manage native and Docker runtimes"
 let tunnel_cmd = disabled "tunnel" "Manage public tunnel"
 let service_cmd = disabled "service" "Manage the clawq system service"
+let update_cmd = disabled "update" "Trigger a daemon update"
 let hardware_cmd = disabled "hardware" "Hardware integration (deferred)"
 let otp_show_cmd = disabled "otp-show" "Show pairing codes"
 
@@ -344,6 +345,7 @@ let () =
       runtime_cmd;
       tunnel_cmd;
       service_cmd;
+      update_cmd;
       otp_show_cmd;
       version_cmd;
       hardware_cmd;

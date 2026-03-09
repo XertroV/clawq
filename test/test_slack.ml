@@ -146,7 +146,8 @@ let test_handle_event_update_returns_before_restart_finishes () =
          ~send_message_fn:(fun ~bot_token:_ ~channel_id:_ ~text ->
            sent := text :: !sent;
            Lwt.return_unit)
-         ~run_update_command:(fun ?prepare_restart:_ ~send_progress () ->
+         ~run_update_command:(fun
+             ?mode:_ ?prepare_restart:_ ~send_progress () ->
            let open Lwt.Syntax in
            started := true;
            let* () = send_progress "Starting update..." in

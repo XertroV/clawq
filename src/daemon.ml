@@ -729,13 +729,15 @@ let run ~(config : Runtime_config.t) =
         update_in_progress := false;
         Lwt.return_unit)
   in
-  let run_update ?prepare_restart ~send_progress ~interrupt_check () =
-    Update_tool.run_update ?prepare_restart ~claim_update ~finish_update
+  let run_update ?(mode = Update_tool.Auto) ?prepare_restart ~send_progress
+      ~interrupt_check () =
+    Update_tool.run_update ~mode ?prepare_restart ~claim_update ~finish_update
       ~is_draining:(fun () -> Session.is_draining session_manager)
       ~send_progress ~interrupt_check ()
   in
-  let run_update_command ?prepare_restart ~send_progress () =
-    run_update ?prepare_restart ~send_progress ~interrupt_check:None ()
+  let run_update_command ?(mode = Update_tool.Auto) ?prepare_restart
+      ~send_progress () =
+    run_update ~mode ?prepare_restart ~send_progress ~interrupt_check:None ()
   in
   (match tool_registry with
   | Some registry ->
@@ -887,6 +889,8 @@ let run ~(config : Runtime_config.t) =
         Http_server.start ~port:config.gateway.port ~host:config.gateway.host
           ~require_pairing:config.gateway.require_pairing
           ~auth_token:config.gateway.auth_token ~session_manager
+          ~daemon_run_update_command:(fun ~mode ~send_progress () ->
+            run_update_command ~mode ~send_progress ())
           ?slack_config:config.channels.slack
           ?github_config:config.channels.github ~github_api_limiter ~ip_limiter
           ~session_limiter ~slack_event_limiter ?web_channel:web_channel_handler

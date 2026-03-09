@@ -16,6 +16,20 @@ let test_service_signal_restart_success_stays_zero () =
     (Cli_exit.should_error ~name:"service" ~args:[ "signal-restart" ]
        ~result:"Restart signal sent to daemon (PID 1234)")
 
+let test_update_missing_daemon_exits_nonzero () =
+  Alcotest.(check bool)
+    "missing live daemon update is treated as error" true
+    (Cli_exit.should_error ~name:"update" ~args:[]
+       ~result:
+         "Warning: no live daemon detected, so clawq cannot run the \
+          daemon-owned update flow right now.")
+
+let test_update_success_stays_zero () =
+  Alcotest.(check bool)
+    "successful update stays ok" false
+    (Cli_exit.should_error ~name:"update" ~args:[]
+       ~result:"Build complete. Sending restart signal...")
+
 let suite =
   [
     Alcotest.test_case "service signal restart missing daemon exits nonzero"
@@ -24,4 +38,8 @@ let suite =
       `Quick test_service_signal_restart_signal_failure_exits_nonzero;
     Alcotest.test_case "service signal restart success stays zero" `Quick
       test_service_signal_restart_success_stays_zero;
+    Alcotest.test_case "update missing daemon exits nonzero" `Quick
+      test_update_missing_daemon_exits_nonzero;
+    Alcotest.test_case "update success stays zero" `Quick
+      test_update_success_stays_zero;
   ]

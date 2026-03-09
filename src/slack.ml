@@ -228,8 +228,12 @@ let handle_event ~(config : Runtime_config.slack_config)
               match run_update_command with
               | Some run_update_command -> run_update_command
               | None ->
-                  fun ?prepare_restart:_ ~send_progress () ->
-                    Update_tool.run_update
+                  fun ?(mode = Update_tool.Auto)
+                    ?prepare_restart:_
+                    ~send_progress
+                    ()
+                  ->
+                    Update_tool.run_update ~mode
                       ~is_draining:(fun () ->
                         Session.is_draining session_manager)
                       ~send_progress ()

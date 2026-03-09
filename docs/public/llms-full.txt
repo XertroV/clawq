@@ -81,6 +81,7 @@ Every command below is invoked as `clawq COMMAND`. Run `clawq COMMAND --help` fo
 | `tunnel start` | Start a tunnel to the local gateway (provider set in config: cloudflare, tailscale, ngrok, or custom) |
 | `tunnel stop` | Stop the tunnel |
 | `tunnel status` | Show tunnel status |
+| `update [--mode auto|git|binary]` | Ask the live daemon to update itself and gracefully restart; currently warns if no live daemon is available because the offline fallback is still stubbed |
 | `version` | Print version and build info |
 | `workspace` | Print the current workspace directory |
 

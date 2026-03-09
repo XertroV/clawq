@@ -1,0 +1,11 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 2
+id: B150
+priority: high
+status: pending
+tags: []
+title: Implement offline fallback for 'clawq update' when no live daemon is running
+---
+`clawq update` now forwards to the live daemon and warns/errors when no daemon is running, but the offline fallback path is still only a stub. Implement the no-daemon path so a user can update the local checkout or binary anyway, ensuring that the next daemon start runs the latest version. Preserve the current warning UX, but make the fallback actually perform the update instead of exiting after the stub message. Add tests for offline git/binary behavior and document any restart semantics when no daemon is active.

@@ -1,10 +1,15 @@
 ---
+claimed_at: "2026-03-09T08:29:31Z"
+claimed_by: cli-user
+completed_at: "2026-03-09T09:01:46Z"
 complexity: medium
 depends_on: []
+duration_minutes: 32.2640736624
 estimate_hours: 1
 id: B148
 priority: high
-status: pending
+started_at: "2026-03-09T08:29:31Z"
+status: done
 tags: []
 title: 'We need to be able to trigger an update of the daemon from the cli (particularly the repo). Example solution: add a `clawq update` subcommand which updates the binary and triggers the deamon to update. If there''s already a CLI command to do this, let me know. Investigate the codebase for how we can most elegantly satisfy our requirement.'
 ---

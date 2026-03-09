@@ -442,6 +442,18 @@ let service_cmd =
       `I ("status", "Show service status (default).");
     ]
 
+let update_cmd =
+  with_args "update"
+    "Request a live daemon update, with an offline fallback stub when none is \
+     running."
+    [
+      `S "OPTIONS";
+      `I
+        ( "--mode auto|git|binary",
+          "Update mode. 'auto' prefers git rebuild when a repo is present, \
+           otherwise binary download if configured." );
+    ]
+
 let runtime_cmd =
   with_args "runtime" "Manage native and Docker runtimes for the clawq daemon."
     [
@@ -551,6 +563,7 @@ let () =
       audit_cmd;
       skills_cmd;
       service_cmd;
+      update_cmd;
       runtime_cmd;
       tunnel_cmd;
       migrate_cmd;

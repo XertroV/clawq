@@ -119,6 +119,64 @@ let test_session_inject_uses_session_turn () =
     "handler response preserved" "processed live"
     (payload |> member "response" |> to_string)
 
+let test_daemon_update_rejects_missing_auth_token () =
+  let config = Runtime_config.default in
+  let session_manager = Session.create ~config () in
+  let req =
+    Cohttp.Request.make ~meth:`POST
+      (Uri.of_string "http://127.0.0.1/daemon/update")
+  in
+  let body = Cohttp_lwt.Body.of_string {|{"mode":"git"}|} in
+  let resp, _body =
+    Lwt_main.run
+      (Http_server.handler ~session_manager ~require_pairing:false
+         ~auth_token:(Some "secret")
+         ~daemon_run_update_command:(fun ~mode:_ ~send_progress:_ () ->
+           Lwt.return "ok")
+         (Obj.magic ()) req body)
+  in
+  Alcotest.(check int)
+    "unauthorized" 401
+    (Cohttp.Code.code_of_status (Cohttp.Response.status resp))
+
+let test_daemon_update_uses_run_update_command () =
+  let config = Runtime_config.default in
+  let session_manager = Session.create ~config () in
+  let seen_mode = ref None in
+  let headers = Cohttp.Header.of_list [ ("Authorization", "Bearer secret") ] in
+  let req =
+    Cohttp.Request.make ~headers ~meth:`POST
+      (Uri.of_string "http://127.0.0.1/daemon/update")
+  in
+  let body = Cohttp_lwt.Body.of_string {|{"mode":"git"}|} in
+  let resp, body =
+    Lwt_main.run
+      (Http_server.handler ~session_manager ~require_pairing:false
+         ~auth_token:(Some "secret")
+         ~daemon_run_update_command:(fun ~mode ~send_progress () ->
+           let open Lwt.Syntax in
+           seen_mode := Some mode;
+           let* () = send_progress "Starting update..." in
+           let* () = send_progress "Running: git pull" in
+           Lwt.return "Build complete. Sending restart signal...")
+         (Obj.magic ()) req body)
+  in
+  Alcotest.(check int)
+    "ok" 200
+    (Cohttp.Code.code_of_status (Cohttp.Response.status resp));
+  Alcotest.(check (option string))
+    "mode forwarded" (Some "git")
+    (Option.map Update_tool.string_of_update_mode !seen_mode);
+  let payload = Yojson.Safe.from_string (body_string body) in
+  let open Yojson.Safe.Util in
+  Alcotest.(check string)
+    "result preserved" "Build complete. Sending restart signal..."
+    (payload |> member "result" |> to_string);
+  Alcotest.(check (list string))
+    "progress preserved"
+    [ "Starting update..."; "Running: git pull" ]
+    (payload |> member "progress" |> to_list |> List.map to_string)
+
 let query_single_text_option db sql =
   let stmt = Sqlite3.prepare db sql in
   Fun.protect
@@ -271,6 +329,10 @@ let suite =
       test_session_inject_rejects_missing_auth_token;
     Alcotest.test_case "session inject uses session turn" `Quick
       test_session_inject_uses_session_turn;
+    Alcotest.test_case "daemon update rejects missing auth token" `Quick
+      test_daemon_update_rejects_missing_auth_token;
+    Alcotest.test_case "daemon update uses run_update_command" `Quick
+      test_daemon_update_uses_run_update_command;
     Alcotest.test_case "chat error marks response sent" `Quick
       test_chat_error_marks_response_sent;
     Alcotest.test_case "chat stream error marks response sent" `Quick

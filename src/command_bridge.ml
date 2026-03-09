@@ -1668,6 +1668,95 @@ let cmd_service args =
       Service.cmd_restart ~config:cfg
   | _ -> "Usage: clawq service <start|stop|status|signal-restart|restart>"
 
+let parse_update_args args =
+  match args with
+  | [] -> Ok Update_tool.Auto
+  | [ "--mode"; value ] -> (
+      match
+        Update_tool.update_mode_of_string
+          (String.lowercase_ascii (String.trim value))
+      with
+      | Some mode -> Ok mode
+      | None ->
+          Error
+            (Printf.sprintf
+               "Invalid update mode '%s'. Use: clawq update [--mode \
+                auto|git|binary]"
+               value))
+  | _ -> Error "Usage: clawq update [--mode auto|git|binary]"
+
+let render_update_output ~progress ~result =
+  let progress = List.filter (fun line -> String.trim line <> "") progress in
+  match List.rev progress with
+  | last :: _ when last = result -> String.concat "\n" progress
+  | _ -> String.concat "\n" (progress @ [ result ])
+
+let offline_update_stub mode =
+  Printf.sprintf
+    "Warning: no live daemon detected, so clawq cannot run the daemon-owned \
+     update flow right now.\n\
+     Requested mode: %s\n\
+     Offline fallback stub: not implemented yet. Start the daemon and retry \
+     `clawq update`, or use `/update` from a connected channel."
+    (Update_tool.string_of_update_mode mode)
+
+let cmd_update args =
+  match parse_update_args args with
+  | Error msg -> msg
+  | Ok mode -> (
+      match read_live_daemon_gateway () with
+      | None -> offline_update_stub mode
+      | Some (host, port) -> (
+          let cfg = get_config () in
+          let url = Printf.sprintf "http://%s:%d/daemon/update" host port in
+          let body =
+            Yojson.Safe.to_string
+              (`Assoc
+                 [ ("mode", `String (Update_tool.string_of_update_mode mode)) ])
+          in
+          let result =
+            Lwt_main.run
+              (Lwt.catch
+                 (fun () ->
+                   let open Lwt.Syntax in
+                   let* status, resp_body =
+                     Http_client.post_json ~uri:url
+                       ~headers:(gateway_auth_headers cfg) ~body
+                   in
+                   Lwt.return (Ok (status, resp_body)))
+                 (fun exn -> Lwt.return (Error (Printexc.to_string exn))))
+          in
+          match result with
+          | Error msg -> Printf.sprintf "Update request failed: %s" msg
+          | Ok (status, resp_body) -> (
+              match status with
+              | 200 -> (
+                  try
+                    let json = Yojson.Safe.from_string resp_body in
+                    let open Yojson.Safe.Util in
+                    let progress =
+                      json |> member "progress" |> to_list |> List.map to_string
+                    in
+                    let result = json |> member "result" |> to_string in
+                    render_update_output ~progress ~result
+                  with _ ->
+                    Printf.sprintf
+                      "Update request succeeded but returned an unexpected \
+                       response: %s"
+                      resp_body)
+              | 401 | 403 ->
+                  Printf.sprintf
+                    "Update request was rejected by the live gateway (%d): %s"
+                    status
+                    (match parse_json_error_body resp_body with
+                    | Some msg -> msg
+                    | None -> resp_body)
+              | _ ->
+                  Printf.sprintf "Update request failed (%d): %s" status
+                    (match parse_json_error_body resp_body with
+                    | Some msg -> msg
+                    | None -> resp_body))))
+
 let cmd_runtime args =
   let cfg = get_config () in
   let docker_cfg =
@@ -2192,6 +2281,7 @@ let handle args =
   | "audit" :: rest -> cmd_audit rest
   | "runtime" :: rest -> cmd_runtime rest
   | "tunnel" :: rest -> cmd_tunnel rest
+  | "update" :: rest -> cmd_update rest
   | "hardware" :: _ -> "hardware: deferred to Phase 2"
   | "migrate" :: rest -> Migrate.cmd_migrate rest
   | "service" :: rest -> cmd_service rest

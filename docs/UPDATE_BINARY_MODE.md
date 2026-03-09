@@ -6,6 +6,13 @@
 - `git`: require a repo checkout and run `git pull` + `make build`
 - `binary`: require `CLAWQ_UPDATE_BINARY_URL` and replace the current executable directly
 
+The daemon-owned update flow is reachable from chat via `/update` and from the CLI via `clawq update [--mode auto|git|binary]`.
+
+Current CLI note:
+
+- `clawq update` targets a live daemon over the local gateway.
+- If no live daemon is available, the CLI currently warns and exits because the offline fallback path is still a stub.
+
 Binary mode uses this environment variable:
 
 ```bash

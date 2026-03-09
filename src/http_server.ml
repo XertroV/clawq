@@ -171,10 +171,11 @@ let lookup_github_repo path (gc : Runtime_config.github_config) =
     (fun (r : Runtime_config.github_repo_config) -> r.webhook_path = path)
     gc.repos
 
-let handler ~session_manager ~require_pairing ~auth_token ?slack_config
-    ?github_config ?github_api_limiter ?ip_limiter ?session_limiter
-    ?slack_event_limiter ?slack_run_update_command ?web_channel ?whatsapp_config
-    ?line_config ?lark_config ?pairing ?ui_server _conn req body =
+let handler ~session_manager ~require_pairing ~auth_token
+    ?daemon_run_update_command ?slack_config ?github_config ?github_api_limiter
+    ?ip_limiter ?session_limiter ?slack_event_limiter ?slack_run_update_command
+    ?web_channel ?whatsapp_config ?line_config ?lark_config ?pairing ?ui_server
+    _conn req body =
   let open Lwt.Syntax in
   let uri = Cohttp.Request.uri req in
   let path = Uri.path uri in
@@ -365,6 +366,84 @@ let handler ~session_manager ~require_pairing ~auth_token ?slack_config
                       (Yojson.Safe.to_string
                          (`Assoc [ ("error", `String err) ]))
                     ()))
+  | `POST, "/daemon/update" -> (
+      if require_pairing && not (pairing_auth_ok ~auth_token ?pairing req) then
+        let* _ = Cohttp_lwt.Body.drain_body body in
+        Cohttp_lwt_unix.Server.respond_string ~status:`Forbidden
+          ~headers:json_headers
+          ~body:
+            {|{"error":"pairing required; use a valid paired token to access this endpoint"}|}
+          ()
+      else if not (auth_ok ~auth_token ?pairing req) then
+        let* _ = Cohttp_lwt.Body.drain_body body in
+        Cohttp_lwt_unix.Server.respond_string ~status:`Unauthorized
+          ~headers:json_headers ~body:{|{"error":"unauthorized"}|} ()
+      else
+        let* body_str = Cohttp_lwt.Body.to_string body in
+        let json =
+          try Ok (Yojson.Safe.from_string body_str)
+          with exn -> Error (Printexc.to_string exn)
+        in
+        match json with
+        | Error msg -> bad_request ("invalid JSON: " ^ msg)
+        | Ok json -> (
+            let open Yojson.Safe.Util in
+            let mode_raw =
+              match json |> member "mode" with
+              | `Null -> "auto"
+              | value -> to_string value
+            in
+            match
+              Update_tool.update_mode_of_string
+                (String.lowercase_ascii (String.trim mode_raw))
+            with
+            | None ->
+                bad_request
+                  (Printf.sprintf
+                     "invalid update mode '%s'; expected auto, git, or binary"
+                     mode_raw)
+            | Some mode -> (
+                match daemon_run_update_command with
+                | None ->
+                    Cohttp_lwt_unix.Server.respond_string
+                      ~status:`Internal_server_error ~headers:json_headers
+                      ~body:{|{"error":"daemon update not available"}|} ()
+                | Some run_update_command -> (
+                    let progress = ref [] in
+                    let* result =
+                      Lwt.catch
+                        (fun () ->
+                          let open Lwt.Syntax in
+                          let* result =
+                            run_update_command ~mode
+                              ~send_progress:(fun text ->
+                                progress := !progress @ [ text ];
+                                Lwt.return_unit)
+                              ()
+                          in
+                          Lwt.return (Ok result))
+                        (fun exn -> Lwt.return (Error (Printexc.to_string exn)))
+                    in
+                    match result with
+                    | Ok result ->
+                        json_string_response
+                          (Yojson.Safe.to_string
+                             (`Assoc
+                                [
+                                  ( "progress",
+                                    `List
+                                      (List.map
+                                         (fun text -> `String text)
+                                         !progress) );
+                                  ("result", `String result);
+                                ]))
+                    | Error err ->
+                        Cohttp_lwt_unix.Server.respond_string
+                          ~status:`Internal_server_error ~headers:json_headers
+                          ~body:
+                            (Yojson.Safe.to_string
+                               (`Assoc [ ("error", `String err) ]))
+                          ()))))
   | `POST, "/chat/stream" -> (
       let* ip_ok =
         match ip_limiter with
@@ -745,15 +824,17 @@ let handler ~session_manager ~require_pairing ~auth_token ?slack_config
         ~headers:json_headers ~body:{|{"error":"not found"}|} ()
 
 let start ~port ~host ~require_pairing ~auth_token ~session_manager
-    ?slack_config ?github_config ?github_api_limiter ?ip_limiter
-    ?session_limiter ?slack_event_limiter ?slack_run_update_command ?web_channel
-    ?whatsapp_config ?line_config ?lark_config ?pairing ?ui_server ?stop () =
+    ?daemon_run_update_command ?slack_config ?github_config ?github_api_limiter
+    ?ip_limiter ?session_limiter ?slack_event_limiter ?slack_run_update_command
+    ?web_channel ?whatsapp_config ?line_config ?lark_config ?pairing ?ui_server
+    ?stop () =
   let open Lwt.Syntax in
   let callback =
-    handler ~session_manager ~require_pairing ~auth_token ?slack_config
-      ?github_config ?github_api_limiter ?ip_limiter ?session_limiter
-      ?slack_event_limiter ?slack_run_update_command ?web_channel
-      ?whatsapp_config ?line_config ?lark_config ?pairing ?ui_server
+    handler ~session_manager ~require_pairing ~auth_token
+      ?daemon_run_update_command ?slack_config ?github_config
+      ?github_api_limiter ?ip_limiter ?session_limiter ?slack_event_limiter
+      ?slack_run_update_command ?web_channel ?whatsapp_config ?line_config
+      ?lark_config ?pairing ?ui_server
   in
   let* ctx = Conduit_lwt_unix.init ~src:host () in
   let ctx = Cohttp_lwt_unix.Net.init ~ctx () in

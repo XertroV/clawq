@@ -588,6 +588,28 @@ let test_handle_service_signal_restart () =
     "service signal restart returns output" true
     (result = "Daemon is not running" || String.length result > 0)
 
+let test_handle_update_without_live_daemon_reports_stub () =
+  with_temp_home (fun _home ->
+      let result = Command_bridge.handle [ "update" ] in
+      Alcotest.(check bool)
+        "warns about missing live daemon" true
+        (try
+           ignore
+             (Str.search_forward
+                (Str.regexp_string "Warning: no live daemon detected")
+                result 0);
+           true
+         with Not_found -> false);
+      Alcotest.(check bool)
+        "mentions offline fallback stub" true
+        (try
+           ignore
+             (Str.search_forward
+                (Str.regexp_string "Offline fallback stub")
+                result 0);
+           true
+         with Not_found -> false))
+
 let test_handle_migrate_no_source () =
   let result = Command_bridge.handle [ "migrate" ] in
   Alcotest.(check bool) "migrate returns output" true (String.length result > 0)
@@ -990,6 +1012,8 @@ let suite =
     Alcotest.test_case "handle service" `Quick test_handle_service;
     Alcotest.test_case "handle service signal restart" `Quick
       test_handle_service_signal_restart;
+    Alcotest.test_case "handle update without live daemon reports stub" `Quick
+      test_handle_update_without_live_daemon_reports_stub;
     Alcotest.test_case "handle migrate no source" `Quick
       test_handle_migrate_no_source;
     Alcotest.test_case "handle skills" `Quick test_handle_skills;
