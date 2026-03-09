@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B250
+priority: high
+status: pending
+tags: []
+title: runtime context should say no bg tasks running when there are no gb tasks instead of saying nothing about them.
+---
+
+runtime context should say no bg tasks running when there are no gb tasks instead of saying nothing about them.
