@@ -182,6 +182,129 @@ let test_runtime_context_includes_session_details () =
            "- Compaction: before a turn when history > 500 messages or est \
             tokens > 96000; compacted before this turn: yes"))
 
+let remove_file path = try Sys.remove path with _ -> ()
+
+let test_build_messages_picks_up_workspace_file_changes () =
+  with_temp_workspace (fun workspace ->
+      let agents_path = Filename.concat workspace "AGENTS.md" in
+      write_file agents_path "ORIGINAL AGENTS CONTENT";
+      let prompt_cfg =
+        {
+          Runtime_config.default.prompt with
+          dynamic_enabled = true;
+          include_tools_section = false;
+          include_safety_section = false;
+          include_runtime_section = false;
+          include_datetime_section = false;
+          workspace_files = [ "AGENTS.md" ];
+        }
+      in
+      let cfg =
+        { Runtime_config.default with workspace; prompt = prompt_cfg }
+      in
+      let agent = Agent.create ~config:cfg () in
+      (* First build_messages: should contain original content *)
+      let msgs1 = Agent.build_messages agent in
+      let sys1 =
+        List.find (fun (m : Provider.message) -> m.role = "system") msgs1
+      in
+      Alcotest.(check bool)
+        "first build has original content" true
+        (contains sys1.content "ORIGINAL AGENTS CONTENT");
+      Alcotest.(check bool)
+        "first build lacks updated content" false
+        (contains sys1.content "UPDATED AGENTS CONTENT");
+      (* Mutate the workspace file on disk *)
+      write_file agents_path "UPDATED AGENTS CONTENT";
+      (* Second build_messages: should pick up the change *)
+      let msgs2 = Agent.build_messages agent in
+      let sys2 =
+        List.find (fun (m : Provider.message) -> m.role = "system") msgs2
+      in
+      Alcotest.(check bool)
+        "second build has updated content" true
+        (contains sys2.content "UPDATED AGENTS CONTENT");
+      Alcotest.(check bool)
+        "second build lacks original content" false
+        (contains sys2.content "ORIGINAL AGENTS CONTENT");
+      remove_file agents_path)
+
+let test_build_messages_picks_up_new_workspace_file () =
+  with_temp_workspace (fun workspace ->
+      let agents_path = Filename.concat workspace "AGENTS.md" in
+      let prompt_cfg =
+        {
+          Runtime_config.default.prompt with
+          dynamic_enabled = true;
+          include_tools_section = false;
+          include_safety_section = false;
+          include_runtime_section = false;
+          include_datetime_section = false;
+          workspace_files = [ "AGENTS.md" ];
+        }
+      in
+      let cfg =
+        { Runtime_config.default with workspace; prompt = prompt_cfg }
+      in
+      let agent = Agent.create ~config:cfg () in
+      (* First build: no AGENTS.md exists yet *)
+      let msgs1 = Agent.build_messages agent in
+      let sys1 =
+        List.find (fun (m : Provider.message) -> m.role = "system") msgs1
+      in
+      Alcotest.(check bool)
+        "no agents content before creation" false
+        (contains sys1.content "NEW AGENTS FILE");
+      (* Create the file *)
+      write_file agents_path "NEW AGENTS FILE";
+      (* Second build: should pick it up *)
+      let msgs2 = Agent.build_messages agent in
+      let sys2 =
+        List.find (fun (m : Provider.message) -> m.role = "system") msgs2
+      in
+      Alcotest.(check bool)
+        "picks up newly created file" true
+        (contains sys2.content "NEW AGENTS FILE");
+      remove_file agents_path)
+
+let test_build_messages_picks_up_deleted_workspace_file () =
+  with_temp_workspace (fun workspace ->
+      let agents_path = Filename.concat workspace "AGENTS.md" in
+      write_file agents_path "DOOMED CONTENT";
+      let prompt_cfg =
+        {
+          Runtime_config.default.prompt with
+          dynamic_enabled = true;
+          include_tools_section = false;
+          include_safety_section = false;
+          include_runtime_section = false;
+          include_datetime_section = false;
+          workspace_files = [ "AGENTS.md" ];
+        }
+      in
+      let cfg =
+        { Runtime_config.default with workspace; prompt = prompt_cfg }
+      in
+      let agent = Agent.create ~config:cfg () in
+      (* First build: file exists *)
+      let msgs1 = Agent.build_messages agent in
+      let sys1 =
+        List.find (fun (m : Provider.message) -> m.role = "system") msgs1
+      in
+      Alcotest.(check bool)
+        "has content before deletion" true
+        (contains sys1.content "DOOMED CONTENT");
+      (* Delete the file *)
+      Sys.remove agents_path;
+      (* Second build: content should be gone *)
+      let msgs2 = Agent.build_messages agent in
+      let sys2 =
+        List.find (fun (m : Provider.message) -> m.role = "system") msgs2
+      in
+      Alcotest.(check bool)
+        "content gone after deletion" false
+        (contains sys2.content "DOOMED CONTENT"))
+
 let suite =
   [
     Alcotest.test_case "dynamic prompt disabled uses base prompt" `Quick
@@ -196,4 +319,10 @@ let suite =
       test_runtime_context_includes_git_details;
     Alcotest.test_case "runtime context includes session details" `Quick
       test_runtime_context_includes_session_details;
+    Alcotest.test_case "build_messages picks up workspace file changes" `Quick
+      test_build_messages_picks_up_workspace_file_changes;
+    Alcotest.test_case "build_messages picks up new workspace file" `Quick
+      test_build_messages_picks_up_new_workspace_file;
+    Alcotest.test_case "build_messages picks up deleted workspace file" `Quick
+      test_build_messages_picks_up_deleted_workspace_file;
   ]
