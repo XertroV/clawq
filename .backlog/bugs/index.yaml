@@ -235,3 +235,4 @@ bugs:
     - file: B234-provide-a-first-class-recovery.todo
     - file: B235-session-event-inspection-shoul.todo
     - file: B236-task-tree-and-background-tasks.todo
+    - file: B237-agent-cannot-insert-into-task.todo
