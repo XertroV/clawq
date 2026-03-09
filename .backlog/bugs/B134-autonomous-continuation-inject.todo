@@ -1,0 +1,11 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B134
+priority: high
+status: pending
+tags: []
+title: Autonomous continuation injections should be visible and treated as user messages
+---
+Autonomous continuation/restart-resume nudges (for example the self-check prompt and STAY_IDLE loop) currently happen invisibly or ambiguously. Desired behavior: when clawq injects an autorestart/continuation message back into a session, it should be represented as a user-message injection in the session logic, and for channel-backed sessions like Telegram the user should also see that injected message, clearly labeled as an injected/system-originated user turn. This makes the autonomous loop legible and debuggable instead of silent magic.

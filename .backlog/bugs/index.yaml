@@ -132,3 +132,4 @@ bugs:
     - file: B131-cli-help-docs-claim-delegated.todo
     - file: B132-background-tasks-should-record.todo
     - file: B133-avoid-redundant-manual-workspa.todo
+    - file: B134-autonomous-continuation-inject.todo
