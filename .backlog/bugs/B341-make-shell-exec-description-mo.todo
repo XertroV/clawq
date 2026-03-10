@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B341
+priority: high
+status: pending
+tags: []
+title: Make shell_exec description more forceful about providing arguments. Possibly add something to tools.md
+---
+
+Make shell_exec description more forceful about providing arguments. Possibly add something to tools.md
