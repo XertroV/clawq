@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B335
+priority: high
+status: pending
+tags: []
+title: automatic restart-resume messages over telegram should have notification off (silent). we might also want to make other automated types silent
+---
+
+automatic restart-resume messages over telegram should have notification off (silent). we might also want to make other automated types silent
