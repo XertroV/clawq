@@ -279,3 +279,4 @@ bugs:
     - file: B278-item-not-found-store-true-or-r.todo
     - file: B279-clawq-cmd-h-should-work-like-h.todo
     - file: B280-clawq-auth-should-support-sett.todo
+    - file: B281-clawq-session-list-active-or-a.todo

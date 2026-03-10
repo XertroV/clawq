@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B281
+priority: high
+status: pending
+tags: []
+title: '''./clawq session list --active'' (or any other fulter for list) shows an error about not finding the arg even though it''s listed in `list --help`'
+---
+
+'./clawq session list --active' (or any other fulter for list) shows an error about not finding the arg even though it's listed in `list --help`
