@@ -327,7 +327,7 @@ let migrate_schema db current_version =
       init_quota_cache_schema db
   | n ->
       failwith
-        (Printf.sprintf "Unsupported schema version %d (current=%d)" n
+        (Printf.sprintf "DB uses future schema version %d (current=%d)" n
            schema_version)
 
 let init_core_schema db =
