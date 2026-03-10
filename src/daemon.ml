@@ -76,10 +76,8 @@ let restart_signal_duplicate_window_seconds = 5.0
 
 let restart_signal_duplicate_delta ~now ~last_signal_at =
   let delta = now -. last_signal_at in
-  if
-    delta >= 0.0
-    && delta < restart_signal_duplicate_window_seconds
-  then Some delta
+  if delta >= 0.0 && delta < restart_signal_duplicate_window_seconds then
+    Some delta
   else None
 
 let send_drain_warnings ?(schedule = drain_warning_schedule)
@@ -1512,7 +1510,8 @@ let run ~(config : Runtime_config.t) =
           restarting := true;
           Logs.info (fun m -> m "SIGUSR1 received, initiating graceful restart");
           write_runtime_state
-            ~components:[ ("gateway", "restarting"); ("telegram", "restarting") ];
+            ~components:
+              [ ("gateway", "restarting"); ("telegram", "restarting") ];
           Lwt.wakeup_later restart_resolver ()
     end
   in

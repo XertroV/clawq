@@ -528,12 +528,10 @@ let test_restart_signal_duplicate_delta_recent () =
   let now = 100.0 in
   let expected = Daemon.restart_signal_duplicate_window_seconds /. 2.0 in
   let actual =
-    Daemon.restart_signal_duplicate_delta ~now
-      ~last_signal_at:(now -. expected)
+    Daemon.restart_signal_duplicate_delta ~now ~last_signal_at:(now -. expected)
   in
   Alcotest.(check (option (float 1e-6)))
-    "recent SIGUSR1 is treated as duplicate"
-    (Some expected) actual
+    "recent SIGUSR1 is treated as duplicate" (Some expected) actual
 
 let test_restart_signal_duplicate_delta_outside_window () =
   let now = 100.0 in
@@ -1436,12 +1434,10 @@ let suite =
       test_send_drain_warnings_sends_scheduled_messages;
     Alcotest.test_case "restart signal duplicate delta detects recent signal"
       `Quick test_restart_signal_duplicate_delta_recent;
-    Alcotest.test_case
-      "restart signal duplicate delta ignores older signal" `Quick
-      test_restart_signal_duplicate_delta_outside_window;
-    Alcotest.test_case
-      "restart signal duplicate delta ignores future timestamp" `Quick
-      test_restart_signal_duplicate_delta_negative_delta;
+    Alcotest.test_case "restart signal duplicate delta ignores older signal"
+      `Quick test_restart_signal_duplicate_delta_outside_window;
+    Alcotest.test_case "restart signal duplicate delta ignores future timestamp"
+      `Quick test_restart_signal_duplicate_delta_negative_delta;
     Alcotest.test_case "restart notify write/read roundtrip" `Quick
       test_restart_notify_write_read_roundtrip;
     Alcotest.test_case "restart notify expired marker" `Quick

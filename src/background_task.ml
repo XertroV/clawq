@@ -175,10 +175,11 @@ let parse_sqlite_datetime s =
         (* Convert to day number using Julian day calculation for UTC *)
         let a = (14 - month) / 12 in
         let yy = year + 4800 - a in
-        let mm = month + 12 * a - 3 in
+        let mm = month + (12 * a) - 3 in
         let day_num =
-          day + ((153 * mm + 2) / 5) + (365 * yy) + (yy / 4) - (yy / 100)
-          + (yy / 400) - 32045
+          day
+          + (((153 * mm) + 2) / 5)
+          + (365 * yy) + (yy / 4) - (yy / 100) + (yy / 400) - 32045
         in
         (* Julian day 2451545 is 2000-01-01, Unix epoch 1970-01-01 is JD 2440588 *)
         let unix_day = day_num - 2440588 in

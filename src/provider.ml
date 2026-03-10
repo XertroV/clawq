@@ -157,7 +157,7 @@ let estimate_messages_tokens messages =
           (fun a (tc : tool_call) -> a + String.length tc.arguments)
           0 m.tool_calls
       in
-      acc + (cc + tc + 3) / 4)
+      acc + ((cc + tc + 3) / 4))
     0 messages
 
 type stream_event =

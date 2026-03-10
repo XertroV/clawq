@@ -216,10 +216,23 @@ let trim_history agent =
 let force_compress_history agent =
   let len = List.length agent.history in
   if len > context_recovery_min_history then begin
-    let recent =
-      List.filteri (fun i _ -> i < force_compress_keep) agent.history
+    (* Work in chronological order so expand_keep_for_tool_groups can pull
+       the assistant message in when the slice boundary falls mid-group.
+       Without this, if the last force_compress_keep messages are all tool
+       results, ensure_tool_group_integrity strips them (no matching call
+       in the kept set), producing an empty history and a subsequent
+       "missing_required_parameter" error from the API. *)
+    let history_chrono = List.rev agent.history in
+    let to_compact =
+      List.filteri (fun i _ -> i < len - force_compress_keep) history_chrono
     in
-    let bounded_recent =
+    let to_keep_raw =
+      List.filteri (fun i _ -> i >= len - force_compress_keep) history_chrono
+    in
+    let to_keep =
+      Message_history.expand_keep_for_tool_groups to_compact to_keep_raw
+    in
+    let bounded =
       List.map
         (fun (m : Provider.message) ->
           if String.length m.content <= max_tool_result_chars then m
@@ -230,9 +243,9 @@ let force_compress_history agent =
                 String.sub m.content 0 max_tool_result_chars
                 ^ "\n\n[truncated during emergency context recovery]";
             })
-        recent
+        to_keep
     in
-    agent.history <- ensure_tool_group_integrity bounded_recent;
+    agent.history <- List.rev (ensure_tool_group_integrity bounded);
     assert_history_bound ~where:"force_compress_history" agent;
     true
   end
