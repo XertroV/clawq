@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B280
+priority: high
+status: pending
+tags: []
+title: '`clawq auth` should support setting API keys for supported providers like zai-coding, kimi, opencode zen, etc.'
+---
+
+`clawq auth` should support setting API keys for supported providers like zai-coding, kimi, opencode zen, etc.
