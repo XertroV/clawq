@@ -277,3 +277,4 @@ bugs:
     - file: B276-calling-model-glm-5-in-telegra.todo
     - file: B277-when-setting-model-via-telegra.todo
     - file: B278-item-not-found-store-true-or-r.todo
+    - file: B279-clawq-cmd-h-should-work-like-h.todo
