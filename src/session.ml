@@ -665,7 +665,7 @@ let runtime_context_details mgr ~agent ~key ~compacted_before_turn =
       (match mgr.db with
       | Some db ->
           Task_tree.init_schema db;
-          let summary = Task_tree.render_compact ~db ~session_key:key in
+          let summary = Task_tree.render_focus ~db ~session_key:key in
           Some summary
       | None -> None);
   }

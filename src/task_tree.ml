@@ -554,6 +554,130 @@ let render_compact ~db ~session_key =
         (Printf.sprintf "\n(%d done — archive to save tokens)" n_archivable);
     Buffer.contents buf
 
+let render_focus ~db ~session_key =
+  let tasks = load_tasks ~db ~session_key () in
+  if tasks = [] then
+    "No tasks tracked. Use the task_tree tool to plan and track your work.\n\
+     Breaking complex goals into subtasks helps maintain focus across long \
+     sessions."
+  else
+    let buf = Buffer.create 256 in
+    (* --- counts --- *)
+    let n_pending = ref 0 in
+    let n_active = ref 0 in
+    let n_done = ref 0 in
+    let n_error = ref 0 in
+    let n_cancelled = ref 0 in
+    List.iter
+      (fun t ->
+        match t.status with
+        | Pending -> incr n_pending
+        | In_progress -> incr n_active
+        | Done -> incr n_done
+        | Task_error -> incr n_error
+        | Cancelled -> incr n_cancelled)
+      tasks;
+    let total = List.length tasks in
+    let counts =
+      List.filter_map
+        (fun (n, label) ->
+          if n > 0 then Some (Printf.sprintf "%d %s" n label) else None)
+        [
+          (!n_pending, "pending");
+          (!n_active, "active");
+          (!n_done, "done");
+          (!n_error, "error");
+          (!n_cancelled, "cancelled");
+        ]
+    in
+    Buffer.add_string buf
+      (Printf.sprintf "Tasks: %d total (%s)" total (String.concat ", " counts));
+    (* --- active with path --- *)
+    let active_tasks =
+      List.filter (fun t -> t.status = In_progress) tasks
+      |> List.sort (fun a b -> compare a.sort_order b.sort_order)
+    in
+    if active_tasks <> [] then begin
+      Buffer.add_string buf "\nActive:";
+      List.iter
+        (fun t ->
+          let note_str =
+            match t.note with Some n -> " (" ^ n ^ ")" | None -> ""
+          in
+          let ancs = get_ancestors ~tasks ~id:t.id in
+          let path_ancs =
+            match List.rev ancs with _ :: rest -> List.rev rest | [] -> []
+          in
+          let path_str =
+            if path_ancs = [] then ""
+            else
+              "\n    path: "
+              ^ String.concat " > " (List.map (fun a -> a.title) path_ancs)
+          in
+          Buffer.add_string buf
+            (Printf.sprintf "\n  [>] #%s — %s%s%s" t.id t.title note_str
+               path_str))
+        active_tasks
+    end;
+    (* --- blocked --- *)
+    let error_tasks =
+      List.filter (fun t -> t.status = Task_error) tasks
+      |> List.sort (fun a b -> compare a.sort_order b.sort_order)
+    in
+    if error_tasks <> [] then begin
+      Buffer.add_string buf "\nBlocked:";
+      List.iter
+        (fun t ->
+          let note_str = match t.note with Some n -> " — " ^ n | None -> "" in
+          Buffer.add_string buf
+            (Printf.sprintf "\n  [!] #%s — %s%s" t.id t.title note_str))
+        error_tasks
+    end;
+    (* --- next: children of active first, then actionable pending --- *)
+    let pending_tasks =
+      List.filter (fun t -> t.status = Pending) tasks
+      |> List.sort (fun a b -> compare a.sort_order b.sort_order)
+    in
+    let active_ids = List.map (fun t -> t.id) active_tasks in
+    let children_of_active =
+      List.filter
+        (fun t ->
+          match t.parent_id with
+          | Some pid -> List.mem pid active_ids
+          | None -> false)
+        pending_tasks
+    in
+    let actionable =
+      List.filter
+        (fun t ->
+          let ancestors = get_ancestors ~tasks ~id:t.id in
+          not
+            (List.exists
+               (fun a -> a.id <> t.id && a.status = Pending)
+               ancestors))
+        pending_tasks
+    in
+    let next_tasks =
+      if children_of_active <> [] then children_of_active else actionable
+    in
+    if next_tasks <> [] then begin
+      let show = List.filteri (fun i _ -> i < 3) next_tasks in
+      let overflow = List.length next_tasks - 3 in
+      Buffer.add_string buf "\nNext:";
+      List.iter
+        (fun t ->
+          Buffer.add_string buf (Printf.sprintf "\n  [ ] #%s — %s" t.id t.title))
+        show;
+      if overflow > 0 then
+        Buffer.add_string buf (Printf.sprintf "\n  (+%d more)" overflow)
+    end;
+    (* --- archive nudge --- *)
+    let n_archivable = !n_done + !n_cancelled in
+    if n_archivable > 0 then
+      Buffer.add_string buf
+        (Printf.sprintf "\n(%d done — archive to save tokens)" n_archivable);
+    Buffer.contents buf
+
 let format_notification ~connector ~db ~session_key (ops : Yojson.Safe.t list) =
   let open Yojson.Safe.Util in
   let lines = Buffer.create 128 in
@@ -628,22 +752,80 @@ let format_notification ~connector ~db ~session_key (ops : Yojson.Safe.t list) =
   if not !meaningful then None
   else begin
     let tasks = load_tasks ~db ~session_key () in
-    let in_progress = List.filter (fun t -> t.status = In_progress) tasks in
-    (match in_progress with
-    | [ t ] ->
+    let in_progress =
+      List.filter (fun t -> t.status = In_progress) tasks
+      |> List.sort (fun a b -> compare a.sort_order b.sort_order)
+    in
+    (* Focus lines: each active task with ancestor path *)
+    List.iter
+      (fun t ->
+        let ancs = get_ancestors ~tasks ~id:t.id in
+        let path_ancs =
+          match List.rev ancs with _ :: rest -> List.rev rest | [] -> []
+        in
+        let path_str =
+          if path_ancs = [] then ""
+          else
+            "\n  " ^ String.concat " > " (List.map (fun a -> a.title) path_ancs)
+        in
+        let note_str =
+          match t.note with Some n -> Printf.sprintf " (%s)" n | None -> ""
+        in
         Buffer.add_string lines
-          (Printf.sprintf "Focus: %s %s\n"
+          (Printf.sprintf "Focus: %s %s%s%s\n"
+             (Format_adapter.code connector ("#" ^ t.id))
+             t.title note_str path_str))
+      in_progress;
+    (* Blocked lines *)
+    let error_tasks =
+      List.filter (fun t -> t.status = Task_error) tasks
+      |> List.sort (fun a b -> compare a.sort_order b.sort_order)
+    in
+    List.iter
+      (fun t ->
+        let note_str = match t.note with Some n -> " — " ^ n | None -> "" in
+        Buffer.add_string lines
+          (Printf.sprintf "Blocked: %s %s%s\n"
+             (Format_adapter.code connector ("#" ^ t.id))
+             t.title note_str))
+      error_tasks;
+    (* One next actionable task *)
+    let pending_tasks =
+      List.filter (fun t -> t.status = Pending) tasks
+      |> List.sort (fun a b -> compare a.sort_order b.sort_order)
+    in
+    let active_ids = List.map (fun t -> t.id) in_progress in
+    let children_of_active =
+      List.filter
+        (fun t ->
+          match t.parent_id with
+          | Some pid -> List.mem pid active_ids
+          | None -> false)
+        pending_tasks
+    in
+    let actionable =
+      List.filter
+        (fun t ->
+          let ancestors = get_ancestors ~tasks ~id:t.id in
+          not
+            (List.exists
+               (fun a -> a.id <> t.id && a.status = Pending)
+               ancestors))
+        pending_tasks
+    in
+    let next_task =
+      match (children_of_active, actionable) with
+      | h :: _, _ -> Some h
+      | [], h :: _ -> Some h
+      | [], [] -> None
+    in
+    (match next_task with
+    | Some t ->
+        Buffer.add_string lines
+          (Printf.sprintf "Next: %s %s\n"
              (Format_adapter.code connector ("#" ^ t.id))
              t.title)
-    | _ :: _ ->
-        let ids =
-          String.concat ", "
-            (List.map
-               (fun t -> Format_adapter.code connector ("#" ^ t.id))
-               in_progress)
-        in
-        Buffer.add_string lines (Printf.sprintf "Active: %s\n" ids)
-    | [] -> ());
+    | None -> ());
     let content = Buffer.contents lines in
     let header = Format_adapter.bold connector "Task tree updated" ^ "\n" in
     Some (header ^ content)

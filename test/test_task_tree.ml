@@ -1656,7 +1656,7 @@ let test_format_notification_multiple_active () =
   match result with
   | None -> Alcotest.fail "Expected Some notification"
   | Some text ->
-      Alcotest.(check bool) "contains Active" true (contains text "Active:");
+      Alcotest.(check bool) "contains Focus" true (contains text "Focus:");
       Alcotest.(check bool) "contains #a" true (contains text "#a");
       Alcotest.(check bool) "contains #b" true (contains text "#b")
 
@@ -2426,6 +2426,178 @@ let test_render_compact_archive_nudge () =
        true
      with Not_found -> false)
 
+let test_render_focus_empty () =
+  let db = fresh_db () in
+  let result = Task_tree.render_focus ~db ~session_key:"s1" in
+  Alcotest.(check bool)
+    "contains no tasks message" true
+    (try
+       ignore
+         (Str.search_forward (Str.regexp_string "No tasks tracked") result 0);
+       true
+     with Not_found -> false)
+
+let test_render_focus_active_with_path () =
+  let db = fresh_db () in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [
+            ("op", `String "add"); ("title", `String "Root"); ("depth", `Int 0);
+          ];
+        `Assoc
+          [
+            ("op", `String "add"); ("title", `String "Child"); ("depth", `Int 1);
+          ];
+        `Assoc
+          [
+            ("op", `String "update");
+            ("id", `String "2");
+            ("status", `String "in_progress");
+          ];
+      ]
+  in
+  let result = Task_tree.render_focus ~db ~session_key:"s1" in
+  Alcotest.(check bool)
+    "shows path line" true
+    (try
+       ignore (Str.search_forward (Str.regexp_string "path:") result 0);
+       true
+     with Not_found -> false);
+  Alcotest.(check bool)
+    "path contains Root" true
+    (try
+       ignore (Str.search_forward (Str.regexp_string "Root") result 0);
+       true
+     with Not_found -> false)
+
+let test_render_focus_root_active_no_path () =
+  let db = fresh_db () in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc [ ("op", `String "add"); ("title", `String "Root task") ];
+        `Assoc
+          [
+            ("op", `String "update");
+            ("id", `String "1");
+            ("status", `String "in_progress");
+          ];
+      ]
+  in
+  let result = Task_tree.render_focus ~db ~session_key:"s1" in
+  Alcotest.(check bool)
+    "root active has no path line" true
+    (not
+       (try
+          ignore (Str.search_forward (Str.regexp_string "path:") result 0);
+          true
+        with Not_found -> false));
+  Alcotest.(check bool)
+    "root active shown in Active section" true
+    (try
+       ignore (Str.search_forward (Str.regexp_string "Root task") result 0);
+       true
+     with Not_found -> false)
+
+let test_render_focus_blocked_with_note () =
+  let db = fresh_db () in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc [ ("op", `String "add"); ("title", `String "Stuck task") ];
+        `Assoc
+          [
+            ("op", `String "update");
+            ("id", `String "1");
+            ("status", `String "error");
+            ("note", `String "waiting on API");
+          ];
+      ]
+  in
+  let result = Task_tree.render_focus ~db ~session_key:"s1" in
+  Alcotest.(check bool)
+    "Blocked section present" true
+    (try
+       ignore (Str.search_forward (Str.regexp_string "Blocked:") result 0);
+       true
+     with Not_found -> false);
+  Alcotest.(check bool)
+    "note shown in blocked" true
+    (try
+       ignore (Str.search_forward (Str.regexp_string "waiting on API") result 0);
+       true
+     with Not_found -> false)
+
+let test_render_focus_no_active_shows_next () =
+  let db = fresh_db () in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc [ ("op", `String "add"); ("title", `String "Pending A") ];
+        `Assoc [ ("op", `String "add"); ("title", `String "Pending B") ];
+      ]
+  in
+  let result = Task_tree.render_focus ~db ~session_key:"s1" in
+  Alcotest.(check bool)
+    "Next section shown" true
+    (try
+       ignore (Str.search_forward (Str.regexp_string "Next:") result 0);
+       true
+     with Not_found -> false);
+  Alcotest.(check bool)
+    "Pending A in Next" true
+    (try
+       ignore (Str.search_forward (Str.regexp_string "Pending A") result 0);
+       true
+     with Not_found -> false)
+
+let test_render_focus_prefers_children_of_active () =
+  let db = fresh_db () in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [
+            ("op", `String "add");
+            ("title", `String "Parent task");
+            ("depth", `Int 0);
+          ];
+        `Assoc
+          [
+            ("op", `String "add");
+            ("title", `String "Child task");
+            ("depth", `Int 1);
+          ];
+        `Assoc
+          [
+            ("op", `String "add");
+            ("title", `String "Other root");
+            ("depth", `Int 0);
+          ];
+        `Assoc
+          [
+            ("op", `String "update");
+            ("id", `String "1");
+            ("status", `String "in_progress");
+          ];
+      ]
+  in
+  let result = Task_tree.render_focus ~db ~session_key:"s1" in
+  let child_pos =
+    try Str.search_forward (Str.regexp_string "Child task") result 0
+    with Not_found -> max_int
+  in
+  let other_pos =
+    try Str.search_forward (Str.regexp_string "Other root") result 0
+    with Not_found -> max_int
+  in
+  (* Child task (child of active) should appear before Other root *)
+  Alcotest.(check bool)
+    "child of active appears before other pending root" true
+    (child_pos < other_pos)
+
 let test_process_operations_compact_output () =
   let db = fresh_db () in
   let result =
@@ -3107,6 +3279,17 @@ let suite =
       test_render_compact_limits_pending;
     Alcotest.test_case "render_compact archive nudge" `Quick
       test_render_compact_archive_nudge;
+    Alcotest.test_case "render_focus empty" `Quick test_render_focus_empty;
+    Alcotest.test_case "render_focus active with path" `Quick
+      test_render_focus_active_with_path;
+    Alcotest.test_case "render_focus root active no path" `Quick
+      test_render_focus_root_active_no_path;
+    Alcotest.test_case "render_focus blocked with note" `Quick
+      test_render_focus_blocked_with_note;
+    Alcotest.test_case "render_focus no active shows next" `Quick
+      test_render_focus_no_active_shows_next;
+    Alcotest.test_case "render_focus prefers children of active" `Quick
+      test_render_focus_prefers_children_of_active;
     Alcotest.test_case "process_operations compact output" `Quick
       test_process_operations_compact_output;
     (* B293: bulk ops, soft delete, restore *)
