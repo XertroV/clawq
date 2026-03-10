@@ -477,7 +477,8 @@ let cmd_doctor () =
     (fun (name, (p : Runtime_config.provider_config)) ->
       if not (Runtime_config.provider_has_auth p) then
         add
-          (Printf.sprintf "WARNING: Provider '%s' has no configured auth" name))
+          (Printf.sprintf "WARNING: Provider '%s' has no configured auth" name);
+      List.iter add (Openai_codex_oauth.doctor_warnings ~provider_name:name p))
     cfg.providers;
   (match cfg.default_provider with
   | Some name when not (List.exists (fun (n, _) -> n = name) cfg.providers) ->

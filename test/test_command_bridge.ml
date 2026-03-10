@@ -102,6 +102,66 @@ let write_json_file path json =
   output_string oc (Yojson.Safe.to_string json);
   close_out oc
 
+let write_config_json home json =
+  let clawq_dir = Filename.concat home ".clawq" in
+  if not (Sys.file_exists clawq_dir) then Unix.mkdir clawq_dir 0o755;
+  write_json_file (Filename.concat clawq_dir "config.json") json
+
+let contains s sub =
+  let sl = String.length s and subl = String.length sub in
+  if subl > sl then false
+  else if subl = 0 then true
+  else
+    let found = ref false in
+    for i = 0 to sl - subl do
+      if String.sub s i subl = sub then found := true
+    done;
+    !found
+
+let test_handle_doctor_flags_codex_provider_with_api_key_only () =
+  with_temp_home (fun home ->
+      write_config_json home
+        (Yojson.Safe.from_string
+           {|{
+  "providers": {
+    "openai-codex": {
+      "kind": "openai-codex",
+      "api_key": "sk-test"
+    }
+  }
+}|});
+      let result = Command_bridge.handle [ "doctor" ] in
+      Alcotest.(check bool)
+        "mentions codex oauth requirement" true
+        (contains result "Codex providers require Codex OAuth");
+      Alcotest.(check bool)
+        "mentions api key insufficiency" true
+        (contains result "API key auth alone is insufficient"))
+
+let test_handle_doctor_flags_expired_refreshable_codex_oauth () =
+  with_temp_home (fun home ->
+      write_config_json home
+        (Yojson.Safe.from_string
+           {|{
+  "providers": {
+    "openai-codex": {
+      "kind": "openai-codex",
+      "codex_oauth": {
+        "access_token": "tok",
+        "refresh_token": "ref",
+        "expires_at_ms": 0
+      }
+    }
+  }
+}|});
+      let result = Command_bridge.handle [ "doctor" ] in
+      Alcotest.(check bool)
+        "mentions expired codex token" true
+        (contains result "Codex OAuth access token is expired");
+      Alcotest.(check bool)
+        "mentions refresh possible" true
+        (contains result "refresh token is present, so clawq should refresh on next use"))
+
 let with_fake_gateway_server ~port ~callback f =
   let stop, stopper = Lwt.wait () in
   let server =
@@ -2316,6 +2376,10 @@ let suite =
     Alcotest.test_case "handle unknown" `Quick test_handle_unknown;
     Alcotest.test_case "handle status" `Quick test_handle_status;
     Alcotest.test_case "handle doctor" `Quick test_handle_doctor;
+    Alcotest.test_case "handle doctor flags codex api key only" `Quick
+      test_handle_doctor_flags_codex_provider_with_api_key_only;
+    Alcotest.test_case "handle doctor flags expired refreshable codex oauth"
+      `Quick test_handle_doctor_flags_expired_refreshable_codex_oauth;
     Alcotest.test_case "handle models" `Quick test_handle_models;
     Alcotest.test_case "models set-default rejects unknown plain model" `Quick
       test_models_set_default_rejects_unknown_plain;

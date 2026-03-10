@@ -60,6 +60,23 @@ let test_extract_account_id_from_access_token () =
     "account id extracted" (Some "acct_123")
     (Openai_codex_oauth.extract_account_id ~access_token:token ~id_token:None)
 
+let test_inspect_credentials_expired_refreshable () =
+  let creds =
+    {
+      Runtime_config.access_token = "access-token";
+      refresh_token = "refresh-token";
+      expires_at_ms = 1_000;
+      account_id = None;
+      email = None;
+    }
+  in
+  let health = Openai_codex_oauth.inspect_credentials ~now_ms:400_000 creds in
+  Alcotest.(check bool) "has access token" true health.has_access_token;
+  Alcotest.(check bool) "has refresh token" true health.has_refresh_token;
+  Alcotest.(check bool) "refresh possible" true health.refresh_possible;
+  Alcotest.(check bool) "expired" true health.expired;
+  Alcotest.(check int) "expires in ms" (-399_000) health.expires_in_ms
+
 let test_validate_provider_name_rejects_non_codex_provider () =
   with_temp_home (fun home ->
       let clawq_dir = Filename.concat home ".clawq" in
@@ -282,6 +299,8 @@ let suite =
       test_parse_callback_input_state_mismatch;
     Alcotest.test_case "extract account id from access token" `Quick
       test_extract_account_id_from_access_token;
+    Alcotest.test_case "inspect credentials expired refreshable" `Quick
+      test_inspect_credentials_expired_refreshable;
     Alcotest.test_case "validate provider name rejects non-codex provider"
       `Quick test_validate_provider_name_rejects_non_codex_provider;
     Alcotest.test_case "save provider credentials encrypts when enabled" `Quick

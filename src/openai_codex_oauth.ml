@@ -14,6 +14,15 @@ let default_model = "openai-codex/gpt-5.3-codex"
 
 type token_bundle = Runtime_config.codex_oauth_config
 
+type credential_health = {
+  has_access_token : bool;
+  has_refresh_token : bool;
+  refresh_possible : bool;
+  expires_at_ms : int;
+  expires_in_ms : int;
+  expired : bool;
+}
+
 let now_ms () = int_of_float (Unix.gettimeofday () *. 1000.)
 
 let base64url_encode s =
@@ -228,14 +237,115 @@ let is_codex_provider_name name =
   let lname = String.lowercase_ascii name in
   lname = "openai-codex" || lname = "codex"
 
+let provider_is_codex_provider ~provider_name
+    (provider : Runtime_config.provider_config) =
+  match Option.map String.lowercase_ascii provider.kind with
+  | Some "openai-codex" | Some "codex" -> true
+  | _ -> is_codex_provider_name provider_name
+
+let describe_duration_ms ms =
+  let abs_ms = if ms < 0 then -ms else ms in
+  let minutes = abs_ms / 60000 in
+  if minutes < 120 then Printf.sprintf "%d min" minutes
+  else
+    let hours = minutes / 60 in
+    if hours < 48 then Printf.sprintf "%d h" hours
+    else Printf.sprintf "%d d" (hours / 24)
+
+let is_expired_at ~now_ms (creds : token_bundle) =
+  now_ms >= creds.Runtime_config.expires_at_ms - 300000
+
+let inspect_credentials ?(now_ms = now_ms ()) (creds : token_bundle) =
+  let has_access_token =
+    Runtime_config.is_key_set creds.Runtime_config.access_token
+  in
+  let has_refresh_token =
+    Runtime_config.is_key_set creds.Runtime_config.refresh_token
+  in
+  {
+    has_access_token;
+    has_refresh_token;
+    refresh_possible = has_refresh_token;
+    expires_at_ms = creds.Runtime_config.expires_at_ms;
+    expires_in_ms = creds.Runtime_config.expires_at_ms - now_ms;
+    expired = is_expired_at ~now_ms creds;
+  }
+
+let doctor_warnings ?(now_ms = now_ms ()) ~provider_name
+    (provider : Runtime_config.provider_config) =
+  let warnings = ref [] in
+  let add warning = warnings := warning :: !warnings in
+  let is_codex_provider = provider_is_codex_provider ~provider_name provider in
+  let has_api_key = Runtime_config.is_key_set provider.api_key in
+  (match provider.codex_oauth with
+  | Some _ when not is_codex_provider ->
+      add
+        (Printf.sprintf
+           "WARNING: Provider '%s' stores Codex OAuth credentials but is not \
+            configured as kind='openai-codex'; Codex auth may be ignored."
+           provider_name)
+  | _ -> ());
+  if is_codex_provider then (
+    match provider.codex_oauth with
+    | None ->
+        if has_api_key then
+          add
+            (Printf.sprintf
+               "WARNING: Provider '%s' is configured for OpenAI Codex but only \
+                has an API key. Codex providers require Codex OAuth; API key \
+                auth alone is insufficient."
+               provider_name)
+        else
+          add
+            (Printf.sprintf
+               "WARNING: Provider '%s' is configured for OpenAI Codex but has \
+                no Codex OAuth credentials. Run 'clawq auth codex-login %s'."
+               provider_name provider_name)
+    | Some creds ->
+        let health = inspect_credentials ~now_ms creds in
+        if not health.has_access_token then
+          add
+            (Printf.sprintf
+               "WARNING: Provider '%s' is configured for Codex OAuth but has \
+                no access token%s."
+               provider_name
+               (if health.refresh_possible then
+                  "; a refresh token is present, so clawq should refresh on \
+                   next use"
+                else
+                  " and no refresh token is stored"));
+        if health.has_access_token && health.expired then
+          add
+            (Printf.sprintf
+               "WARNING: Provider '%s' Codex OAuth access token is expired (%s \
+                ago); %s."
+               provider_name
+               (describe_duration_ms health.expires_in_ms)
+               (if health.refresh_possible then
+                  "a refresh token is present, so clawq should refresh on next \
+                   use"
+                else
+                  "no refresh token is stored, so clawq cannot refresh it \
+                   automatically"));
+        if health.has_access_token && (not health.expired)
+           && not health.refresh_possible
+        then
+          add
+            (Printf.sprintf
+               "WARNING: Provider '%s' Codex OAuth access token expires in %s \
+                and no refresh token is stored; refresh will not be possible \
+                after expiry."
+               provider_name
+               (describe_duration_ms health.expires_in_ms)));
+  List.rev !warnings
+
 let validate_provider_name ~provider_name =
   let cfg = Config_loader.load () in
   match List.assoc_opt provider_name cfg.providers with
   | None -> Ok ()
   | Some provider ->
       if
-        provider.kind = Some "openai-codex"
-        || is_codex_provider_name provider_name
+        provider_is_codex_provider ~provider_name provider
         || Runtime_config.provider_has_codex_oauth provider
       then Ok ()
       else
@@ -412,7 +522,7 @@ let refresh_tokens creds =
         }
     with exn -> Lwt.return_error (Printexc.to_string exn)
 
-let is_expired creds = now_ms () >= creds.Runtime_config.expires_at_ms - 300000
+let is_expired creds = is_expired_at ~now_ms:(now_ms ()) creds
 
 let parse_callback_input ~expected_state input =
   let trimmed = String.trim input in
