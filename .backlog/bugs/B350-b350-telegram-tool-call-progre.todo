@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B350
+priority: high
+status: pending
+tags: []
+title: 'B350: Telegram tool call progress message handling on user interruption'
+---
+
+B350: Telegram tool call progress message handling on user interruption
