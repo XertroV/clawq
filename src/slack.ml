@@ -505,9 +505,9 @@ let handle_event ~(config : Runtime_config.slack_config)
                             ~channel_id
                             ~text:
                               (Printf.sprintf
-                                 "Model set to: %s (provider: %s)%s%s\nSession-only \
-                                  change; use /model set-default to persist for \
-                                  new sessions and restarts."
+                                 "Model set to: %s (provider: %s)%s%s\n\
+                                  Session-only change; use /model set-default \
+                                  to persist for new sessions and restarts."
                                  model_id provider hint warn)
                         in
                         Lwt.return "ok"

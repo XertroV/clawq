@@ -2275,7 +2275,9 @@ let test_models_set_default_accepts_unknown_with_provider () =
 
 let test_models_set_usage_excludes_session_only_set_without_live_session () =
   with_temp_home (fun _dir ->
-      let result = Command_bridge.handle [ "models"; "set"; "zai_coding:glm-5" ] in
+      let result =
+        Command_bridge.handle [ "models"; "set"; "zai_coding:glm-5" ]
+      in
       let contains s sub =
         let re = Re.(compile (str sub)) in
         Re.execp re s

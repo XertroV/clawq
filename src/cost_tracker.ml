@@ -82,6 +82,14 @@ let pricing_table =
     ("minimax-m2.5", (0.30, 1.20));
     ("minimax-m1", (0.40, 1.76));
     ("minimax-text-01", (0.20, 1.10));
+    (* Z.ai - Source: https://docs.z.ai/guides/overview/pricing *)
+    ("glm-5", (1.0, 3.2));
+    ("glm-4.7", (0.60, 2.20));
+    ("glm-4.6", (0.60, 2.20));
+    (* Z.ai Coding endpoint - Source: https://docs.z.ai/guides/overview/pricing *)
+    ("zai_coding/glm-5", (1.20, 5.0));
+    ("zai_coding/glm-4.7", (0.60, 2.20));
+    ("zai_coding/glm-4.6", (0.60, 2.20));
     (* Xiaomi MiMo *)
     ("mimo-v2-flash", (0.10, 0.30));
   ]
@@ -110,17 +118,24 @@ let normalize_model s =
   strip_date (strip_provider s)
 
 let lookup_pricing model =
+  let raw = String.lowercase_ascii (String.trim model) in
   let norm = normalize_model model in
   let find_prefix hay needle =
     String.length hay >= String.length needle
     && String.sub hay 0 (String.length needle) = needle
   in
-  match List.find_opt (fun (k, _) -> norm = k) pricing_table with
+  (* Try exact match on raw first to preserve provider-qualified names like zai_coding/glm-5 *)
+  match List.find_opt (fun (k, _) -> raw = k) pricing_table with
   | Some (_, v) -> Some v
   | None -> (
-      match List.find_opt (fun (k, _) -> find_prefix norm k) pricing_table with
+      match List.find_opt (fun (k, _) -> norm = k) pricing_table with
       | Some (_, v) -> Some v
-      | None -> None)
+      | None -> (
+          match
+            List.find_opt (fun (k, _) -> find_prefix norm k) pricing_table
+          with
+          | Some (_, v) -> Some v
+          | None -> None))
 
 let calculate_cost ~model ~prompt_tokens ~completion_tokens =
   match lookup_pricing model with
