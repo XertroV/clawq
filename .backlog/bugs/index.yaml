@@ -363,3 +363,4 @@ bugs:
     - file: B362-incoming-webhooks-should-be-lo.todo
     - file: B363-groq-doesn-t-like-when-we-don.todo
     - file: B364-tests-still-trigger-sigusr1-si.todo
+    - file: B365-autorestart-resumes-session-wi.todo
