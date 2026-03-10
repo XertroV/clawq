@@ -1,0 +1,17 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B327
+priority: high
+status: pending
+tags: []
+title: failure to connect to zai mcp error 400
+---
+
+[21:31:12.943] INFO  Boot: mcp-setup start
+[21:31:12.944] INFO  MCP client connecting to zai-web-search (https://api.z.ai/api/mcp/web_search_prime/mcp)
+[21:31:13.439] WARN  MCP client zai-web-search failed to connect: Failure("MCP client: HTTP 400 from https://api.z.ai/api/mcp/web_search_prime/mcp")
+[21:31:13.439] INFO  MCP client connecting to zai-web-reader (https://api.z.ai/api/mcp/web_reader/mcp)
+[21:31:13.856] WARN  MCP client zai-web-reader failed to connect: Failure("MCP client: HTTP 400 from https://api.z.ai/api/mcp/web_reader/mcp")
+[21:31:13.856] INFO  Boot: mcp-setup done elapsed=0.913s
