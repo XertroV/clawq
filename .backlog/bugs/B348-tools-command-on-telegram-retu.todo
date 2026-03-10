@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B348
+priority: high
+status: pending
+tags: []
+title: /tools command on telegram returns nothing
+---
+
+/tools command on telegram returns nothing
