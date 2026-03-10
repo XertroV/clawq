@@ -344,3 +344,4 @@ bugs:
     - file: B343-setup-wizard-for-cloudflare-tu.todo
     - file: B344-setup-wizard-for-ms-teams.todo
     - file: B345-setup-wizard-for-github-webhoo.todo
+    - file: B346-setup-wizard-for-discord.todo
