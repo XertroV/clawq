@@ -658,7 +658,9 @@ let cmd_models args =
       Lwt_main.run (Model_discovery.maybe_refresh ~db ~force:true ~config ());
       "Model discovery force-refresh complete. Run 'clawq models list' to see \
        updated models."
-  | [ "refresh"; "--provider"; pname ] -> (
+  | [ "refresh"; "--provider"; pname ]
+  | [ "refresh"; "--provider"; pname; "--force" ]
+  | [ "refresh"; "--force"; "--provider"; pname ] -> (
       let config = get_config () in
       match List.assoc_opt pname config.providers with
       | None -> Printf.sprintf "Provider '%s' not found in config." pname

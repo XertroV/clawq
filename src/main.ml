@@ -54,28 +54,92 @@ let onboard_cmd =
   simple "onboard"
     "Create a starter config file at ~/.clawq/config.json if none exists."
 
+let models_list_cmd =
+  let provider =
+    Arg.(
+      value
+      & opt (some string) None
+      & info [ "provider" ] ~docv:"P" ~doc:"Filter by provider name.")
+  in
+  let json = Arg.(value & flag & info [ "json" ] ~doc:"Output as JSON.") in
+  Cmd.v
+    (Cmd.info "list"
+       ~doc:
+         "List known models from the catalog (optionally filter by provider).")
+    Term.(
+      ret
+        (const (fun provider json ->
+             let args = [ "list" ] in
+             let args =
+               match provider with
+               | Some p -> args @ [ "--provider"; p ]
+               | None -> args
+             in
+             let args = if json then args @ [ "--json" ] else args in
+             run "models" args)
+        $ provider $ json))
+
+let models_set_default_cmd =
+  let model =
+    Arg.(required & pos 0 (some string) None & info [] ~docv:"MODEL")
+  in
+  Cmd.v
+    (Cmd.info "set-default"
+       ~doc:"Set default model (e.g. anthropic:claude-sonnet-4-6).")
+    Term.(
+      ret (const (fun model -> run "models" [ "set-default"; model ]) $ model))
+
+let models_refresh_cmd =
+  let force =
+    Arg.(
+      value & flag
+      & info [ "force" ] ~doc:"Force refresh, ignoring the cache TTL.")
+  in
+  let provider =
+    Arg.(
+      value
+      & opt (some string) None
+      & info [ "provider" ] ~docv:"PNAME"
+          ~doc:"Refresh models for a specific provider only.")
+  in
+  Cmd.v
+    (Cmd.info "refresh" ~doc:"Refresh model list from provider APIs.")
+    Term.(
+      ret
+        (const (fun force provider ->
+             let args = [ "refresh" ] in
+             let args =
+               match provider with
+               | Some p -> args @ [ "--provider"; p ]
+               | None -> args
+             in
+             let args = if force then args @ [ "--force" ] else args in
+             run "models" args)
+        $ force $ provider))
+
 let models_cmd =
-  with_args "models" "List known models and set default model."
-    [
-      `S "SUBCOMMANDS";
-      `I
-        ( "list [--provider P]",
-          "List known models from the catalog (optionally filter by provider)."
-        );
-      `I
-        ( "set-default MODEL",
-          "Set default model (e.g. anthropic/claude-sonnet-4-6)." );
-    ]
+  Cmd.group
+    ~default:Term.(ret (const (run "models") $ const []))
+    (Cmd.info "models" ~doc:"List known models and set default model.")
+    [ models_list_cmd; models_set_default_cmd; models_refresh_cmd ]
 
 let usage_cmd =
-  with_args "usage" "Show provider quota/usage status."
-    [
-      `S "OPTIONS";
-      `I
-        ( "--refresh, -r",
-          "Force refresh quota data from all configured providers (uses cache \
-           if < TTL)." );
-    ]
+  let refresh =
+    Arg.(
+      value & flag
+      & info [ "refresh"; "r" ]
+          ~doc:
+            "Force refresh quota data from all configured providers (uses \
+             cache if < TTL).")
+  in
+  Cmd.v
+    (Cmd.info "usage" ~doc:"Show provider quota/usage status.")
+    Term.(
+      ret
+        (const (fun refresh ->
+             let args = if refresh then [ "--refresh" ] else [] in
+             run "usage" args)
+        $ refresh))
 
 let provider_cmd =
   with_args "provider"
@@ -582,21 +646,176 @@ let delegate_cmd =
              run "delegate" (args @ goal))
         $ runner $ model $ repo $ branch $ goal))
 
+let plan_list_cmd =
+  Cmd.v
+    (Cmd.info "list" ~doc:"List all pipelines (default).")
+    Term.(ret (const (run "plan") $ const [ "list" ]))
+
+let plan_start_cmd =
+  let prompt = rest_args "PROMPT" in
+  let repo =
+    Arg.(
+      value
+      & opt (some string) None
+      & info [ "repo" ] ~docv:"PATH" ~doc:"Repository path to plan against.")
+  in
+  let runner =
+    Arg.(
+      value
+      & opt (some string) None
+      & info [ "runner" ] ~docv:"NAME"
+          ~doc:"Runner: auto, kimi, opencode, codex, claude, gemini, cursor.")
+  in
+  let planner_model =
+    Arg.(
+      value
+      & opt (some string) None
+      & info [ "planner-model" ] ~docv:"M" ~doc:"Model for the planner stage.")
+  in
+  let reviewer_model =
+    Arg.(
+      value
+      & opt (some string) None
+      & info [ "reviewer-model" ] ~docv:"M" ~doc:"Model for the reviewer stage.")
+  in
+  let coder_model =
+    Arg.(
+      value
+      & opt (some string) None
+      & info [ "coder-model" ] ~docv:"M" ~doc:"Model for the coder stage.")
+  in
+  let max_plan_review =
+    Arg.(
+      value
+      & opt (some int) None
+      & info
+          [ "max-plan-review-iters" ]
+          ~docv:"N" ~doc:"Maximum plan-review iterations (default 3).")
+  in
+  let max_code_review =
+    Arg.(
+      value
+      & opt (some int) None
+      & info
+          [ "max-code-review-iters" ]
+          ~docv:"N" ~doc:"Maximum code-review iterations (default 3).")
+  in
+  let no_plan_review =
+    Arg.(value & flag & info [ "no-plan-review" ] ~doc:"Skip plan review.")
+  in
+  let no_code_review =
+    Arg.(value & flag & info [ "no-code-review" ] ~doc:"Skip code review.")
+  in
+  Cmd.v
+    (Cmd.info "start"
+       ~doc:"Start a new planning pipeline (foreground, blocking).")
+    Term.(
+      ret
+        (const
+           (fun
+             prompt
+             repo
+             runner
+             planner_model
+             reviewer_model
+             coder_model
+             max_plan_review
+             max_code_review
+             no_plan_review
+             no_code_review
+           ->
+             let args = [ "start" ] @ prompt in
+             let args =
+               match repo with Some p -> args @ [ "--repo"; p ] | None -> args
+             in
+             let args =
+               match runner with
+               | Some r -> args @ [ "--runner"; r ]
+               | None -> args
+             in
+             let args =
+               match planner_model with
+               | Some m -> args @ [ "--planner-model"; m ]
+               | None -> args
+             in
+             let args =
+               match reviewer_model with
+               | Some m -> args @ [ "--reviewer-model"; m ]
+               | None -> args
+             in
+             let args =
+               match coder_model with
+               | Some m -> args @ [ "--coder-model"; m ]
+               | None -> args
+             in
+             let args =
+               match max_plan_review with
+               | Some n -> args @ [ "--max-plan-review-iters"; string_of_int n ]
+               | None -> args
+             in
+             let args =
+               match max_code_review with
+               | Some n -> args @ [ "--max-code-review-iters"; string_of_int n ]
+               | None -> args
+             in
+             let args =
+               if no_plan_review then args @ [ "--no-plan-review" ] else args
+             in
+             let args =
+               if no_code_review then args @ [ "--no-code-review" ] else args
+             in
+             run "plan" args)
+        $ prompt $ repo $ runner $ planner_model $ reviewer_model $ coder_model
+        $ max_plan_review $ max_code_review $ no_plan_review $ no_code_review))
+
+let plan_show_cmd =
+  let id = Arg.(required & pos 0 (some string) None & info [] ~docv:"ID") in
+  Cmd.v
+    (Cmd.info "show" ~doc:"Show pipeline status and details.")
+    Term.(ret (const (fun id -> run "plan" [ "show"; id ]) $ id))
+
+let plan_logs_cmd =
+  let id = Arg.(required & pos 0 (some string) None & info [] ~docv:"ID") in
+  let lines =
+    Arg.(
+      value
+      & opt (some int) None
+      & info [ "lines" ] ~docv:"N"
+          ~doc:"Number of log lines to show (default 50).")
+  in
+  Cmd.v
+    (Cmd.info "logs" ~doc:"Show logs for the current stage.")
+    Term.(
+      ret
+        (const (fun id lines ->
+             let args = [ "logs"; id ] in
+             let args =
+               match lines with
+               | Some n -> args @ [ "--lines"; string_of_int n ]
+               | None -> args
+             in
+             run "plan" args)
+        $ id $ lines))
+
+let plan_cancel_cmd =
+  let id = Arg.(required & pos 0 (some string) None & info [] ~docv:"ID") in
+  Cmd.v
+    (Cmd.info "cancel" ~doc:"Cancel a running pipeline.")
+    Term.(ret (const (fun id -> run "plan" [ "cancel"; id ]) $ id))
+
 let plan_cmd =
-  with_args "plan"
-    "Run multi-stage planning pipelines: planner → plan-review loop → coder → \
-     code-review loop."
+  Cmd.group
+    ~default:Term.(ret (const (run "plan") $ const []))
+    (Cmd.info "plan"
+       ~doc:
+         "Run multi-stage planning pipelines: planner → plan-review loop → \
+          coder → code-review loop.")
     [
-      `S "SUBCOMMANDS";
-      `I
-        ( "start <PROMPT> [--repo PATH] [--runner NAME] [--planner-model M] \
-           [--reviewer-model M] [--coder-model M] [--max-plan-review-iters N] \
-           [--max-code-review-iters N] [--no-plan-review] [--no-code-review]",
-          "Start a new planning pipeline (foreground, blocking)." );
-      `I ("list", "List all pipelines (default).");
-      `I ("show <id>", "Show pipeline status and details.");
-      `I ("logs <id> [--lines N]", "Show logs for the current stage.");
-      `I ("cancel <id>", "Cancel a running pipeline.");
+      plan_list_cmd;
+      plan_start_cmd;
+      plan_show_cmd;
+      plan_logs_cmd;
+      plan_cancel_cmd;
     ]
 
 let audit_list_cmd =
@@ -699,16 +918,28 @@ let service_cmd =
     ]
 
 let update_cmd =
-  with_args "update"
-    "Request a live daemon update, with an offline fallback stub when none is \
-     running."
-    [
-      `S "OPTIONS";
-      `I
-        ( "--mode auto|git|binary",
-          "Update mode. 'auto' prefers git rebuild when a repo is present, \
-           otherwise binary download if configured." );
-    ]
+  let mode =
+    Arg.(
+      value
+      & opt (some string) None
+      & info [ "mode" ] ~docv:"auto|git|binary"
+          ~doc:
+            "Update mode. 'auto' prefers git rebuild when a repo is present, \
+             otherwise binary download if configured.")
+  in
+  Cmd.v
+    (Cmd.info "update"
+       ~doc:
+         "Request a live daemon update, with an offline fallback stub when \
+          none is running.")
+    Term.(
+      ret
+        (const (fun mode ->
+             let args =
+               match mode with Some m -> [ "--mode"; m ] | None -> []
+             in
+             run "update" args)
+        $ mode))
 
 let runtime_cmd =
   with_args "runtime" "Manage native and Docker runtimes for the clawq daemon."
