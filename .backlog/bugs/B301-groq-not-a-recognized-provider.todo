@@ -1,10 +1,15 @@
 ---
+claimed_at: "2026-03-10T11:30:43Z"
+claimed_by: cli-user
+completed_at: "2026-03-10T11:30:48Z"
 complexity: medium
 depends_on: []
+duration_minutes: 0.09466842523333334
 estimate_hours: 1
 id: B301
 priority: high
-status: pending
+started_at: "2026-03-10T11:30:43Z"
+status: done
 tags: []
 title: groq not a recognized provider through `clawq auth set-key groq`
 ---
