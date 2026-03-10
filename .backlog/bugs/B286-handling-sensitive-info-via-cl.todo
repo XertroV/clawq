@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B286
+priority: high
+status: pending
+tags: []
+title: handling sensitive info via cli
+---
+
+commands like `./clawq config set providers.PROVIDER.api_key` and `./clawq auth set-key PROVIDER` should allow an empty key to be passed. In that case, they should show a nice TUI prompt to enter a password (the API key) which should be dots not plaintext. When printing the result out afterwards, the key should be censored, only showing the first few and last few chars.
