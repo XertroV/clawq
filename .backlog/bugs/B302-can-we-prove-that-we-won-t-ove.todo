@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B302
+priority: high
+status: pending
+tags: []
+title: Can we prove that we won't overwrite wholesale the providers object except in very specific ways that we can easily search for?
+---
+
+Can we prove that we won't overwrite wholesale the providers object except in very specific ways that we can easily search for?
