@@ -97,6 +97,71 @@ let test_validate_codex_input_items_valid_pair () =
   let result = Provider_openai_codex.validate_codex_input_items items in
   Alcotest.(check int) "all three items kept" 3 (List.length result)
 
+let test_sanitize_function_call_strips_metadata () =
+  let item =
+    `Assoc
+      [
+        ("id", `String "fc_abc123");
+        ("type", `String "function_call");
+        ("status", `String "completed");
+        ("arguments", `String "{\"cmd\":\"test\"}");
+        ("call_id", `String "call_xyz");
+        ("name", `String "shell_exec");
+      ]
+  in
+  let result = Provider_openai_codex.sanitize_input_item item in
+  let keys =
+    match result with
+    | `Assoc fields -> List.map fst fields |> List.sort String.compare
+    | _ -> Alcotest.fail "expected Assoc"
+  in
+  Alcotest.(check (list string))
+    "only input-valid fields"
+    [ "arguments"; "call_id"; "name"; "type" ]
+    keys
+
+let test_sanitize_message_strips_metadata () =
+  let item =
+    `Assoc
+      [
+        ("id", `String "msg_abc123");
+        ("type", `String "message");
+        ("status", `String "completed");
+        ( "content",
+          `List
+            [
+              `Assoc
+                [
+                  ("type", `String "output_text");
+                  ("annotations", `List []);
+                  ("logprobs", `List []);
+                  ("text", `String "hello");
+                ];
+            ] );
+        ("phase", `String "final_answer");
+        ("role", `String "assistant");
+      ]
+  in
+  let result = Provider_openai_codex.sanitize_input_item item in
+  match result with
+  | `Assoc fields -> (
+      let keys = List.map fst fields |> List.sort String.compare in
+      Alcotest.(check (list string))
+        "message becomes role+content" [ "content"; "role" ] keys;
+      (* Check content parts are also sanitized *)
+      let content =
+        match List.assoc "content" fields with `List l -> l | _ -> []
+      in
+      match content with
+      | [ `Assoc part_fields ] ->
+          let part_keys =
+            List.map fst part_fields |> List.sort String.compare
+          in
+          Alcotest.(check (list string))
+            "content part only type+text" [ "text"; "type" ] part_keys
+      | _ -> Alcotest.fail "expected single content part")
+  | _ -> Alcotest.fail "expected Assoc"
+
 let test_force_compress_history_fallback_nonempty () =
   (* When force_compress_history is called and the entire history consists of
      orphaned tool results (no matching assistant tool_calls message anywhere),
@@ -144,6 +209,10 @@ let suite =
       test_validate_codex_input_items_orphaned_call;
     Alcotest.test_case "validate_codex_input_items valid pair" `Quick
       test_validate_codex_input_items_valid_pair;
+    Alcotest.test_case "sanitize function_call strips metadata" `Quick
+      test_sanitize_function_call_strips_metadata;
+    Alcotest.test_case "sanitize message strips metadata" `Quick
+      test_sanitize_message_strips_metadata;
     Alcotest.test_case "force_compress_history fallback nonempty" `Quick
       test_force_compress_history_fallback_nonempty;
   ]

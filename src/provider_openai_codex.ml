@@ -25,13 +25,61 @@ let strip_provider_prefix model =
     | _ -> model
   else model
 
+let sanitize_content_part part =
+  match part with
+  | `Assoc fields ->
+      let kept =
+        List.filter
+          (fun (k, _) -> match k with "type" | "text" -> true | _ -> false)
+          fields
+      in
+      `Assoc kept
+  | other -> other
+
+let sanitize_input_item item =
+  match item with
+  | `Assoc fields -> (
+      let item_type =
+        match List.assoc_opt "type" fields with
+        | Some (`String t) -> t
+        | _ -> ""
+      in
+      match item_type with
+      | "function_call" ->
+          (* Keep only fields accepted by the Responses API input *)
+          let kept =
+            List.filter
+              (fun (k, _) ->
+                match k with
+                | "type" | "call_id" | "name" | "arguments" -> true
+                | _ -> false)
+              fields
+          in
+          `Assoc kept
+      | "message" ->
+          (* Rebuild as a clean assistant message *)
+          let role =
+            match List.assoc_opt "role" fields with
+            | Some (`String r) -> r
+            | _ -> "assistant"
+          in
+          let content =
+            match List.assoc_opt "content" fields with
+            | Some (`List parts) -> `List (List.map sanitize_content_part parts)
+            | Some other -> other
+            | None -> `List []
+          in
+          `Assoc [ ("role", `String role); ("content", content) ]
+      | _ -> item)
+  | other -> other
+
 let restore_provider_response_items msg =
   match msg.Provider.provider_response_items_json with
   | Some raw -> (
       try
         match Yojson.Safe.from_string raw with
-        | `List items -> Some (`List items)
-        | item -> Some item
+        | `List items -> Some (`List (List.map sanitize_input_item items))
+        | item -> Some (sanitize_input_item item)
       with _ -> None)
   | None -> None
 
