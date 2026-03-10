@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B326
+priority: high
+status: pending
+tags: []
+title: thinking doesn't seem to work for zai_coding glm-5. check the zai api docs because we need special support for it. if you get really stuck, get a subagent to search ~/src/pag-server for the zai-coding stuff and see what it does for thinking.
+---
+
+thinking doesn't seem to work for zai_coding glm-5. check the zai api docs because we need special support for it. if you get really stuck, get a subagent to search ~/src/pag-server for the zai-coding stuff and see what it does for thinking.

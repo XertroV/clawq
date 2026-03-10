@@ -324,3 +324,4 @@ bugs:
     - file: B323-watch-ci-after-push-should-be.todo
     - file: B324-in-the-tools-output-telegram-e.todo
     - file: B325-deadlock-on-load.todo
+    - file: B326-thinking-doesn-t-seem-to-work.todo
