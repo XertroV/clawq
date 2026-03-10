@@ -1364,23 +1364,20 @@ let test_handle_update_without_live_daemon_reports_stub () =
   with_temp_home (fun _home ->
       let result = Command_bridge.handle [ "update" ] in
       Alcotest.(check bool)
-        "warns about no live daemon" true
-        (try
-           ignore
-             (Str.search_forward
-                (Str.regexp_string "no live daemon detected")
-                result 0);
-           true
-         with Not_found -> false);
+        "reports update start" true
+        (contains result "Starting update...");
       Alcotest.(check bool)
-        "runs offline update (not stub)" true
-        (try
-           ignore
-             (Str.search_forward
-                (Str.regexp_string "Running update offline")
-                result 0);
-           true
-         with Not_found -> false))
+        "reports git mode" true
+        (contains result "Mode: git");
+      Alcotest.(check bool)
+        "runs git pull" true
+        (contains result "Running: git pull");
+      Alcotest.(check bool)
+        "runs build" true
+        (contains result "Running: make build");
+      Alcotest.(check bool)
+        "reports build completion" true
+        (contains result "Build complete. Sending restart signal...") )
 
 let test_handle_update_auto_pairs_with_live_gateway () =
   with_temp_home (fun home ->
