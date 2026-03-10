@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B329
+priority: high
+status: pending
+tags: []
+title: When model discovery fails, we should not try it again later
+---
+
+When model discovery fails, we should not try it again later
