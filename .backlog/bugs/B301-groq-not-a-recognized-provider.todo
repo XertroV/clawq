@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B301
+priority: high
+status: pending
+tags: []
+title: groq not a recognized provider through `clawq auth set-key groq`
+---
+
+groq not a recognized provider through `clawq auth set-key groq`
