@@ -326,3 +326,4 @@ bugs:
     - file: B325-deadlock-on-load.todo
     - file: B326-thinking-doesn-t-seem-to-work.todo
     - file: B327-failure-to-connect-to-zai-mcp.todo
+    - file: B328-telegram-is-no-longer-responsi.todo

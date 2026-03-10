@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B328
+priority: high
+status: pending
+tags: []
+title: Telegram is no longer responsive. I restart the server, send a message, and nothing in logs
+---
+
+Telegram is no longer responsive. I restart the server, send a message, and nothing in logs
