@@ -1,10 +1,15 @@
 ---
+claimed_at: "2026-03-10T09:34:24Z"
+claimed_by: cli-user
+completed_at: "2026-03-10T09:35:18Z"
 complexity: medium
 depends_on: []
+duration_minutes: 0.9002375865333333
 estimate_hours: 1
 id: B293
 priority: medium
-status: pending
+started_at: "2026-03-10T09:34:24Z"
+status: done
 tags: []
 title: background_task_wait silently caps timeout_seconds at 110s with no LLM feedback
 ---
