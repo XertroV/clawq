@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B274
+priority: high
+status: pending
+tags: []
+title: When listing models (eg via /model in telegram et al), we should list all models that are either included (known at compile time) or that are listed in our DB. Right now, it feels like there are other models we are including that we shouldn't, but I'm not 100% sure.
+---
+
+When listing models (eg via /model in telegram et al), we should list all models that are either included (known at compile time) or that are listed in our DB. Right now, it feels like there are other models we are including that we shouldn't, but I'm not 100% sure.
