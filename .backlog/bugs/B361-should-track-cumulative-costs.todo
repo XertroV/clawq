@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B361
+priority: high
+status: pending
+tags: []
+title: Should track cumulative costs and associated metrics in DB.
+---
+
+Should track cumulative costs and associated metrics in DB.
