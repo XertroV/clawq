@@ -230,7 +230,7 @@ let post_live_gateway_json ~cfg ~host ~port ~path ~body =
   let url = Printf.sprintf "http://%s:%d%s" host port path in
   let headers = gateway_auth_headers cfg in
   match post_json_sync ~uri:url ~headers ~body with
-  | Ok ((401 | 403), _) as rejected when headers = [] -> (
+  | Ok ((401 | 403), _) as rejected -> (
       match try_auto_pair_live_gateway ~host ~port with
       | Paired token ->
           let retry_headers = [ ("Authorization", "Bearer " ^ token) ] in
