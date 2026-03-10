@@ -167,20 +167,25 @@ let status_summary = function
 let parse_sqlite_datetime s =
   try
     Scanf.sscanf s "%d-%d-%d %d:%d:%d" (fun y mo d h mi s ->
-        let tm =
-          {
-            Unix.tm_sec = s;
-            tm_min = mi;
-            tm_hour = h;
-            tm_mday = d;
-            tm_mon = mo - 1;
-            tm_year = y - 1900;
-            tm_wday = 0;
-            tm_yday = 0;
-            tm_isdst = false;
-          }
+        (* Parse SQLite datetime as UTC (not local time) to get correct elapsed
+           time regardless of system timezone. SQLite datetime('now') returns UTC. *)
+        let year = y in
+        let month = mo in
+        let day = d in
+        (* Convert to day number using Julian day calculation for UTC *)
+        let a = (14 - month) / 12 in
+        let yy = year + 4800 - a in
+        let mm = month + 12 * a - 3 in
+        let day_num =
+          day + ((153 * mm + 2) / 5) + (365 * yy) + (yy / 4) - (yy / 100)
+          + (yy / 400) - 32045
         in
-        fst (Unix.mktime tm))
+        (* Julian day 2451545 is 2000-01-01, Unix epoch 1970-01-01 is JD 2440588 *)
+        let unix_day = day_num - 2440588 in
+        let seconds_since_epoch =
+          (unix_day * 86400) + (h * 3600) + (mi * 60) + s
+        in
+        float_of_int seconds_since_epoch)
   with _ -> 0.0
 
 let log_mtime path =

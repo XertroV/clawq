@@ -986,7 +986,8 @@ let make_task ?(id = 1) ?(runner = Background_task.Claude)
 
 let test_elapsed_string_recent () =
   let now = Unix.gettimeofday () in
-  let tm = Unix.localtime now in
+  (* Use gmtime for UTC since parse_sqlite_datetime now parses as UTC *)
+  let tm = Unix.gmtime now in
   let ts =
     Printf.sprintf "%04d-%02d-%02d %02d:%02d:%02d" (tm.Unix.tm_year + 1900)
       (tm.Unix.tm_mon + 1) tm.Unix.tm_mday tm.Unix.tm_hour tm.Unix.tm_min
@@ -1000,7 +1001,8 @@ let test_elapsed_string_recent () =
 let test_elapsed_string_minutes () =
   let now = Unix.gettimeofday () in
   let past = now -. 300.0 in
-  let tm = Unix.localtime past in
+  (* Use gmtime for UTC since parse_sqlite_datetime now parses as UTC *)
+  let tm = Unix.gmtime past in
   let ts =
     Printf.sprintf "%04d-%02d-%02d %02d:%02d:%02d" (tm.Unix.tm_year + 1900)
       (tm.Unix.tm_mon + 1) tm.Unix.tm_mday tm.Unix.tm_hour tm.Unix.tm_min
@@ -1015,7 +1017,8 @@ let test_elapsed_string_minutes () =
 let test_elapsed_string_hours () =
   let now = Unix.gettimeofday () in
   let past = now -. 3900.0 in
-  let tm = Unix.localtime past in
+  (* Use gmtime for UTC since parse_sqlite_datetime now parses as UTC *)
+  let tm = Unix.gmtime past in
   let ts =
     Printf.sprintf "%04d-%02d-%02d %02d:%02d:%02d" (tm.Unix.tm_year + 1900)
       (tm.Unix.tm_mon + 1) tm.Unix.tm_mday tm.Unix.tm_hour tm.Unix.tm_min
@@ -1029,7 +1032,8 @@ let test_elapsed_string_hours () =
 let test_elapsed_string_two_hours_plus () =
   let now = Unix.gettimeofday () in
   let past = now -. 8000.0 in
-  let tm = Unix.localtime past in
+  (* Use gmtime for UTC since parse_sqlite_datetime now parses as UTC *)
+  let tm = Unix.gmtime past in
   let ts =
     Printf.sprintf "%04d-%02d-%02d %02d:%02d:%02d" (tm.Unix.tm_year + 1900)
       (tm.Unix.tm_mon + 1) tm.Unix.tm_mday tm.Unix.tm_hour tm.Unix.tm_min
@@ -1964,7 +1968,8 @@ let test_health_running_alive_fresh () =
       let oc = open_out log_path in
       output_string oc "test output\n";
       close_out oc;
-      let tm = Unix.localtime now in
+      (* Use gmtime for UTC since parse_sqlite_datetime now parses as UTC *)
+      let tm = Unix.gmtime now in
       let started =
         Printf.sprintf "%04d-%02d-%02d %02d:%02d:%02d" (tm.Unix.tm_year + 1900)
           (tm.Unix.tm_mon + 1) tm.Unix.tm_mday tm.Unix.tm_hour tm.Unix.tm_min
@@ -1997,7 +2002,8 @@ let test_health_running_stale_log () =
       close_out oc;
       (* started 130s ago from fake_now, log written at real now *)
       let started_time = now -. 10.0 in
-      let tm = Unix.localtime started_time in
+      (* Use gmtime for UTC since parse_sqlite_datetime now parses as UTC *)
+      let tm = Unix.gmtime started_time in
       let started =
         Printf.sprintf "%04d-%02d-%02d %02d:%02d:%02d" (tm.Unix.tm_year + 1900)
           (tm.Unix.tm_mon + 1) tm.Unix.tm_mday tm.Unix.tm_hour tm.Unix.tm_min
@@ -2034,7 +2040,8 @@ let test_health_running_stalled () =
       output_string oc "old output\n";
       close_out oc;
       let started_time = now -. 10.0 in
-      let tm = Unix.localtime started_time in
+      (* Use gmtime for UTC since parse_sqlite_datetime now parses as UTC *)
+      let tm = Unix.gmtime started_time in
       let started =
         Printf.sprintf "%04d-%02d-%02d %02d:%02d:%02d" (tm.Unix.tm_year + 1900)
           (tm.Unix.tm_mon + 1) tm.Unix.tm_mday tm.Unix.tm_hour tm.Unix.tm_min
