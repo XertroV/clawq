@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B287
+priority: high
+status: pending
+tags: []
+title: ./clawq auth set-key should error when a provider is not found (and it should print a CSV list of valid providers)
+---
+
+./clawq auth set-key should error when a provider is not found (and it should print a CSV list of valid providers)
