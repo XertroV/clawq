@@ -1367,6 +1367,26 @@ let inject_search_context agent ~db ~user_message =
       (fun _ -> Lwt.return_unit)
   else Lwt.return_unit
 
+let filter_content_parts_for_model config content_parts =
+  let model_id = config.Runtime_config.agent_defaults.primary_model in
+  match Models_catalog.find_by_id model_id with
+  | Some model_info when not model_info.Models_catalog.supports_vision ->
+      let filtered =
+        List.filter
+          (function
+            | Provider.Image_base64 _ -> false | Provider.Text _ -> true)
+          content_parts
+      in
+      if List.length filtered < List.length content_parts then
+        Logs.info (fun m ->
+            m
+              "Model %s does not support vision; filtering out %d image(s) \
+               from message"
+              model_id
+              (List.length content_parts - List.length filtered));
+      filtered
+  | _ -> content_parts
+
 let prepare_turn_history agent ~user_message ?(content_parts = [])
     ?(workspace_refresh_checked = false) ?db () =
   let open Lwt.Syntax in
@@ -1381,8 +1401,11 @@ let prepare_turn_history agent ~user_message ?(content_parts = [])
     | Some db -> inject_search_context agent ~db ~user_message
     | None -> Lwt.return_unit
   in
+  let filtered_content_parts =
+    filter_content_parts_for_model agent.config content_parts
+  in
   let user_msg =
-    match content_parts with
+    match filtered_content_parts with
     | [] -> Provider.make_message ~role:"user" ~content:user_message
     | parts ->
         Provider.make_message_with_parts ~role:"user" ~content:user_message

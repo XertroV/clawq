@@ -3031,6 +3031,52 @@ let test_turn_stream_forwards_tool_events_to_on_chunk () =
             (String.length result > 0)
       | _ -> Alcotest.fail "expected ToolResult event")
 
+let test_non_vision_model_filters_images () =
+  let config =
+    {
+      Runtime_config.default with
+      agent_defaults =
+        {
+          Runtime_config.default.agent_defaults with
+          primary_model = "gpt-5.3-codex-spark";
+        };
+    }
+  in
+  let content_parts =
+    [
+      Provider.Image_base64 { data = "img1"; media_type = "image/jpeg" };
+      Provider.Text "some text";
+      Provider.Image_base64 { data = "img2"; media_type = "image/png" };
+    ]
+  in
+  let filtered = Agent.filter_content_parts_for_model config content_parts in
+  Alcotest.(check int) "only text remains" 1 (List.length filtered);
+  match filtered with
+  | [ Provider.Text txt ] ->
+      Alcotest.(check string) "text preserved" "some text" txt
+  | _ -> Alcotest.fail "expected only text content"
+
+let test_vision_model_keeps_images () =
+  let config =
+    {
+      Runtime_config.default with
+      agent_defaults =
+        {
+          Runtime_config.default.agent_defaults with
+          primary_model = "claude-opus-4-6";
+        };
+    }
+  in
+  let content_parts =
+    [
+      Provider.Image_base64 { data = "img1"; media_type = "image/jpeg" };
+      Provider.Text "some text";
+      Provider.Image_base64 { data = "img2"; media_type = "image/png" };
+    ]
+  in
+  let filtered = Agent.filter_content_parts_for_model config content_parts in
+  Alcotest.(check int) "all parts kept" 3 (List.length filtered)
+
 let suite =
   [
     Alcotest.test_case "reset clears active session and history" `Quick
@@ -3203,4 +3249,8 @@ let suite =
       test_compact_loads_session_from_db_when_not_in_memory;
     Alcotest.test_case "turn_stream forwards tool events to on_chunk" `Quick
       test_turn_stream_forwards_tool_events_to_on_chunk;
+    Alcotest.test_case "non-vision model filters images" `Quick
+      test_non_vision_model_filters_images;
+    Alcotest.test_case "vision model keeps images" `Quick
+      test_vision_model_keeps_images;
   ]
