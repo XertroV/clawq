@@ -31,7 +31,11 @@
   stt
   tool
   tool_registry
+  tools_builtin_util
+  tools_builtin_io
+  tools_builtin_net
   tools_builtin
+  task_tree_core
   memory
   rate_limiter
   scheduler
@@ -106,9 +110,13 @@
  (name clawq_runtime_integrations)
  (modules
   http_server
+  telegram_api
   telegram
   telegram_format
+  daemon_util
   daemon
+  command_bridge_helpers
+  command_bridge_session
   mcp_server
   service
   runtime_native

@@ -87,6 +87,13 @@ Required output contract:
   - `release-speed`: `-O3`
   - `release-size`: `-O2 -compact`
 
+## File Size Guidelines
+
+- Ideal file size: under 1000 lines.
+- Hard limit: 2000 lines. Files must not exceed 2000 lines.
+- When a file approaches or exceeds the limit, split it into focused sub-modules by concern (e.g., `foo_util.ml`, `foo_core.ml`, `foo.ml`).
+- The original module re-exports its public API for backward compatibility using `include Sub_module` (preferred) or explicit `let f = Sub_module.f` aliases.
+
 ## Code Style Guidelines
 
 Formatting:

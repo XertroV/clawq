@@ -496,7 +496,9 @@ let dispatch_flush_tool_call ~db (tc : Provider.tool_call) =
     try Yojson.Safe.from_string tc.arguments
     with _ ->
       Logs.warn (fun m ->
-          m "dispatch_flush_tool_call '%s': failed to parse arguments as JSON (raw: %s)"
+          m
+            "dispatch_flush_tool_call '%s': failed to parse arguments as JSON \
+             (raw: %s)"
             tc.function_name tc.arguments);
       `Assoc []
   in
