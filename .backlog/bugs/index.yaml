@@ -283,3 +283,4 @@ bugs:
     - file: B282-if-the-user-tries-to-set-an-un.todo
     - file: B283-uncaught-exception-eaccess-exe.todo
     - file: B284-add-support-for-kimi-coding-su.todo
+    - file: B285-zai-coding-json-parse-errors.todo

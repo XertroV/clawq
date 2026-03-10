@@ -1,0 +1,33 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B285
+priority: high
+status: pending
+tags: []
+title: zai coding json parse errors
+---
+
+zai coding json parse errors
+
+use `./clawq session show telegram:58495225:58495225` to list the messages in that thread
+
+
+[14:48:02.466] INFO Telegram polling stable, suppressing routine poll logs for 'default' [14:48:18.204] INFO Primary 
+model changed from 'openai-codex/gpt-5.4' to 'zai_coding:glm-5' [source: telegram] [14:48:25.909] INFO Restored 27 
+messages for session telegram:58495225:58495225 [14:48:25.938] INFO [telegram:58495225:58495225] -> LLM 
+provider=zai_coding model=glm-5 msgs=29 ~20k tok [14:48:26.798] WARN Attempt 1/3 failed (Failure("LLM API error (HTTP 
+400): {\"error\":{\"message\":\"JSON parse error: Invalid UTF-8 start byte 0x9c; nested exception is 
+com.fasterxml.jackson.databind.JsonMappingException: Invalid UTF-8 start byte 0x9c\\n at [Source: 
+(org.springframework.util.StreamUtils$NonClosingInputStream); line: 1, column: 83757] (through reference chain: 
+com.wd.paas.api.domain.v4.chat.ChatCompletionRequest[\\\"messages\\\"]->java.util.ArrayList[17]->com.wd.paas.api.domain.v4.chat.ChatMessage[\\\"content\\\"])\",\"code\":\"400\"}}")), 
+retrying in 1.0s [14:48:27.799] INFO [telegram:58495225:58495225] -> LLM provider=zai_coding model=glm-5 msgs=29 ~20k 
+tok [14:48:28.328] WARN Attempt 2/3 failed (Failure("LLM API error (HTTP 400): {\"error\":{\"message\":\"JSON parse 
+error: Invalid UTF-8 start byte 0x9c; nested exception is com.fasterxml.jackson.databind.JsonMappingException: Invalid 
+UTF-8 start byte 0x9c\\n at [Source: (org.springframework.util.StreamUtils$NonClosingInputStream); line: 1, column: 
+83757] (through reference chain: 
+com.wd.paas.api.domain.v4.chat.ChatCompletionRequest[\\\"messages\\\"]->java.util.ArrayList[17]->com.wd.paas.api.domain.v4.chat.ChatMessage[\\\"content\\\"])\",\"code\":\"400\"}}")), 
+retrying in 2.0s [14:48:30.332] INFO [telegram:58495225:58495225] -> LLM provider=zai_coding model=glm-5 msgs=29 ~20k 
+tok
+[14:48:30.660] ERROR Agent error for chat_id=58495225: Failure("LLM API error (HTTP 400): {\"error\":{\"message\":\"JSON parse error: Invalid UTF-8 start byte 0x9c; nested exception is com.fasterxml.jackson.databind.JsonMappingException: Invalid UTF-8 start byte 0x9c\\n at [Source: (org.springframework.util.StreamUtils$NonClosingInputStream); line: 1, column: 83757] (through reference chain: com.wd.paas.api.domain.v4.chat.ChatCompletionRequest[\\\"messages\\\"]->java.util.ArrayList[17]->com.wd.paas.api.domain.v4.chat.ChatMessage[\\\"content\\\"])\",\"code\":\"400\"}}")
