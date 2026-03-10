@@ -29,7 +29,6 @@ type task = {
   deleted_at : string option;
 }
 
-let max_active_tasks = 50
 let max_depth = 5
 let warn_concurrent_in_progress = 5
 let max_batch_size = 50
@@ -839,10 +838,6 @@ let do_add ~db ~session_key ~id ~parent_id ~title ~status ~note =
          max_title_length)
   else if String.length title = 0 then
     Error "Title is required for add. Provide a 'title' field."
-  else if count_tasks ~db ~session_key >= max_active_tasks then
-    Error
-      (Printf.sprintf "Too many active tasks (max %d). Archive or clear first."
-         max_active_tasks)
   else begin
     let actual_id =
       match id with Some i -> i | None -> next_auto_id ~db ~session_key

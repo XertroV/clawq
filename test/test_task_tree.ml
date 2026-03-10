@@ -773,32 +773,48 @@ let test_reopen_task () =
     "reopened to pending" "pending"
     (Task_tree.string_of_status (List.hd tasks).status)
 
-let test_max_tasks_guardrail () =
+let test_in_progress_adds_can_exceed_old_live_cap () =
   let db = fresh_db () in
   for i = 1 to 50 do
-    ignore
-      (Task_tree.process_operations ~db ~session_key:"s1"
-         [
-           `Assoc
-             [
-               ("op", `String "add");
-               ("title", `String (Printf.sprintf "Task %d" i));
-             ];
-         ])
+    match
+      Task_tree.process_operations ~db ~session_key:"s1"
+        [
+          `Assoc
+            [
+              ("op", `String "add");
+              ("title", `String (Printf.sprintf "Task %d" i));
+              ("status", `String "in_progress");
+            ];
+        ]
+    with
+    | Ok _ -> ()
+    | Error e -> Alcotest.failf "Setup failed at task %d: %s" i e
   done;
   let result =
     Task_tree.process_operations ~db ~session_key:"s1"
-      [ `Assoc [ ("op", `String "add"); ("title", `String "Task 51") ] ]
+      [
+        `Assoc
+          [
+            ("op", `String "add");
+            ("title", `String "Task 51");
+            ("status", `String "in_progress");
+          ];
+      ]
   in
-  match result with
-  | Error msg ->
-      Alcotest.(check bool)
-        "mentions max" true
-        (try
-           ignore (Str.search_forward (Str.regexp_string "max") msg 0);
-           true
-         with Not_found -> false)
-  | Ok _ -> Alcotest.fail "Expected error for exceeding max tasks"
+  let output =
+    match result with
+    | Ok output -> output
+    | Error e -> Alcotest.fail ("Expected success past old live cap: " ^ e)
+  in
+  Alcotest.(check bool)
+    "warns once threshold exceeded" true
+    (try
+       ignore (Str.search_forward (Str.regexp_string "WARNING") output 0);
+       true
+     with Not_found -> false);
+  let tasks = Task_tree.load_tasks ~db ~session_key:"s1" () in
+  Alcotest.(check int) "51 live in_progress tasks allowed" 51
+    (List.length tasks)
 
 let test_max_depth_guardrail () =
   let db = fresh_db () in
@@ -3185,7 +3201,8 @@ let suite =
     Alcotest.test_case "auto-ID skips agent-chosen" `Quick
       test_auto_id_skips_agent_chosen;
     Alcotest.test_case "re-open task" `Quick test_reopen_task;
-    Alcotest.test_case "max tasks guardrail" `Quick test_max_tasks_guardrail;
+    Alcotest.test_case "in_progress adds can exceed old live cap" `Quick
+      test_in_progress_adds_can_exceed_old_live_cap;
     Alcotest.test_case "max depth guardrail" `Quick test_max_depth_guardrail;
     Alcotest.test_case "max concurrent in_progress" `Quick
       test_max_concurrent_in_progress;
