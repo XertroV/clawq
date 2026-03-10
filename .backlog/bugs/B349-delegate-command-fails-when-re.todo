@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B349
+priority: high
+status: pending
+tags: []
+title: delegate command fails when repo_path is not a git repository (e.g. workspace directory)
+---
+
+delegate command fails when repo_path is not a git repository (e.g. workspace directory)

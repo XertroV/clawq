@@ -347,3 +347,4 @@ bugs:
     - file: B346-setup-wizard-for-discord.todo
     - file: B347-setup-wizard-for-slack.todo
     - file: B348-tools-command-on-telegram-retu.todo
+    - file: B349-delegate-command-fails-when-re.todo
