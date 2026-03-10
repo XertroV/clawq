@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B268
+priority: high
+status: pending
+tags: []
+title: For the OpenAI 400 errors in the logs, it's likely something to do with our request payload and likely changed recetnyl. Investigate by comparing git commit timestamps to our logs (look for the earliest 'OpenAI Codex error (HTTP 400)' message')
+---
+
+For the OpenAI 400 errors in the logs, it's likely something to do with our request payload and likely changed recetnyl. Investigate by comparing git commit timestamps to our logs (look for the earliest 'OpenAI Codex error (HTTP 400)' message')
