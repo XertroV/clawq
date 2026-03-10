@@ -438,6 +438,9 @@ let default_base_url_for name =
   | "xai" | "x_ai" -> "https://api.x.ai/v1"
   | "deepseek" -> "https://api.deepseek.com/v1"
   | "cohere" -> "https://api.cohere.com"
+  | "kimi_coding" | "kimi-code" -> "https://api.kimi.com/coding/v1"
+  | "kimi" -> "https://api.moonshot.cn/v1"
+  | "moonshot" -> "https://api.moonshot.cn/v1"
   | _ -> "https://openrouter.ai/api/v1"
 
 let strip_date_suffix s =

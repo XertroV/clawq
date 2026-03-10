@@ -558,12 +558,63 @@ let known_models : model_info list =
       supports_thinking = false;
       deprecated = false;
     };
-    (* Kimi *)
+    (* Kimi via Moonshot platform *)
     {
       provider = "kimi";
       id = "kimi-k2.5";
       display_name = None;
+      context_window = Some 262144;
+      supports_vision = false;
+      supports_tools = true;
+      supports_thinking = false;
+      deprecated = false;
+    };
+    {
+      provider = "kimi";
+      id = "kimi-k2";
+      display_name = None;
       context_window = Some 128000;
+      supports_vision = false;
+      supports_tools = true;
+      supports_thinking = false;
+      deprecated = false;
+    };
+    {
+      provider = "kimi";
+      id = "kimi-k2-thinking";
+      display_name = None;
+      context_window = Some 128000;
+      supports_vision = false;
+      supports_tools = true;
+      supports_thinking = true;
+      deprecated = false;
+    };
+    (* Kimi Coding subscription *)
+    {
+      provider = "kimi_coding";
+      id = "kimi-for-coding";
+      display_name = Some "Kimi for Coding";
+      context_window = Some 262144;
+      supports_vision = false;
+      supports_tools = true;
+      supports_thinking = false;
+      deprecated = false;
+    };
+    {
+      provider = "kimi_coding";
+      id = "kimi-k2.5";
+      display_name = None;
+      context_window = Some 262144;
+      supports_vision = false;
+      supports_tools = true;
+      supports_thinking = false;
+      deprecated = false;
+    };
+    {
+      provider = "kimi_coding";
+      id = "kimi-k2";
+      display_name = None;
+      context_window = Some 262144;
       supports_vision = false;
       supports_tools = true;
       supports_thinking = false;

@@ -702,7 +702,10 @@ let fetch_for_provider ~(config : Runtime_config.provider_config) ~name () =
     let is_zai =
       lname = "zai" || lname = "zai_coding" || string_has_substring lurl "z.ai"
     in
-    let is_kimi = lname = "kimi" || string_has_substring lurl "kimi" in
+    let is_kimi =
+      lname = "kimi" || lname = "kimi_coding" || lname = "kimi-code"
+      || string_has_substring lurl "kimi"
+    in
     let is_cursor = lname = "cursor" in
     if is_anthropic then (
       let* pq =

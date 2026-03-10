@@ -6,6 +6,7 @@ let skip_kinds =
     "cohere";
     "mistral";
     "kimi";
+    "kimi_coding";
     "zai";
     "minimax";
     "mimo";

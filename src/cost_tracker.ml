@@ -73,6 +73,8 @@ let pricing_table =
     (* Moonshot/Kimi *)
     ("kimi-k2.5", (0.60, 3.0));
     ("kimi-k2", (0.60, 2.50));
+    ("kimi-k2-thinking", (0.60, 2.50));
+    ("kimi-for-coding", (0.60, 2.50));
     ("moonshot-v1-128k", (2.0, 5.0));
     ("moonshot-v1-32k", (1.0, 3.0));
     ("moonshot-v1-8k", (0.20, 2.0));

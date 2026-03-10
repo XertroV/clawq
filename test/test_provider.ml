@@ -502,6 +502,64 @@ let test_select_provider_quota_fallback_respects_user_model () =
     "routes to alternative" "alternative-provider" provider_name;
   Alcotest.(check string) "uses user model not alt default" "gpt-5.4" model
 
+let test_find_provider_kimi_coding_via_default_model () =
+  (* When kimi_coding is the only kimi-family provider, default_model match
+     routes kimi-for-coding correctly. *)
+  let providers =
+    [
+      ( "kimi_coding",
+        {
+          Runtime_config.default_provider_config with
+          api_key = "sk-kimi-xyz";
+          default_model = Some "kimi-for-coding";
+        } );
+    ]
+  in
+  let result =
+    Provider.find_provider_for_model ~providers ~model_name:"kimi-for-coding"
+  in
+  (match result with
+  | Some (name, _) ->
+      Alcotest.(check string) "matched kimi_coding" "kimi_coding" name
+  | None -> Alcotest.fail "expected match for kimi_coding via default_model");
+  (* When both kimi and kimi_coding are present, prefix match on "kimi" wins
+     for bare model names; use canonical format for explicit routing. *)
+  let providers_both =
+    [
+      ( "kimi",
+        { Runtime_config.default_provider_config with api_key = "sk-moon-abc" }
+      );
+      ( "kimi_coding",
+        {
+          Runtime_config.default_provider_config with
+          api_key = "sk-kimi-xyz";
+          default_model = Some "kimi-for-coding";
+        } );
+    ]
+  in
+  let result2 =
+    Provider.find_provider_for_model ~providers:providers_both
+      ~model_name:"kimi-for-coding"
+  in
+  match result2 with
+  | Some (name, _) ->
+      Alcotest.(check string) "kimi prefix wins for bare model" "kimi" name
+  | None -> Alcotest.fail "expected some match"
+
+let test_default_base_url_kimi_coding () =
+  Alcotest.(check string)
+    "kimi_coding url" "https://api.kimi.com/coding/v1"
+    (Provider.default_base_url_for "kimi_coding");
+  Alcotest.(check string)
+    "kimi-code url" "https://api.kimi.com/coding/v1"
+    (Provider.default_base_url_for "kimi-code");
+  Alcotest.(check string)
+    "kimi url" "https://api.moonshot.cn/v1"
+    (Provider.default_base_url_for "kimi");
+  Alcotest.(check string)
+    "moonshot url" "https://api.moonshot.cn/v1"
+    (Provider.default_base_url_for "moonshot")
+
 let test_sanitize_utf8_valid_ascii () =
   Alcotest.(check string)
     "ascii unchanged" "hello world"
@@ -621,6 +679,10 @@ let suite =
       test_detect_mime_type_fallback;
     Alcotest.test_case "anthropic content parts" `Quick
       test_anthropic_content_parts;
+    Alcotest.test_case "find provider kimi_coding via default_model" `Quick
+      test_find_provider_kimi_coding_via_default_model;
+    Alcotest.test_case "default base url kimi coding" `Quick
+      test_default_base_url_kimi_coding;
     Alcotest.test_case "select_provider bare model overrides default" `Quick
       test_select_provider_bare_model_overrides_default;
     Alcotest.test_case "select_provider quota fallback respects user model"
