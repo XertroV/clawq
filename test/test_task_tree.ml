@@ -1895,7 +1895,7 @@ let test_seed_unresolved_vars () =
 let test_seed_exceeds_batch_limit () =
   let db = fresh_db () in
   let many_tasks =
-    List.init 21 (fun i ->
+    List.init 51 (fun i ->
         `Assoc
           [ ("title", `String (Printf.sprintf "Task %d" i)); ("depth", `Int 0) ])
   in

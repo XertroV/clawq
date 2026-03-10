@@ -1,10 +1,15 @@
 ---
+claimed_at: "2026-03-10T14:25:47Z"
+claimed_by: cli-user
+completed_at: "2026-03-10T14:28:11Z"
 complexity: medium
 depends_on: []
+duration_minutes: 2.4075331132833333
 estimate_hours: 1
 id: B352
 priority: high
-status: pending
+started_at: "2026-03-10T14:25:47Z"
+status: done
 tags: []
 title: Increase task_tree max operations limit (currently 20)
 ---

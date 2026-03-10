@@ -32,7 +32,7 @@ type task = {
 let max_active_tasks = 50
 let max_depth = 5
 let warn_concurrent_in_progress = 5
-let max_batch_size = 20
+let max_batch_size = 50
 let max_title_length = 200
 
 let init_schema db =
