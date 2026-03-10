@@ -236,6 +236,19 @@ let thinking_style_of_provider (provider : Runtime_config.provider_config) =
   | "tags" -> TaggedThinking
   | _ -> NoThinking
 
+(* Returns provider-specific extra body fields to inject into every request.
+   ZAI/ZAI_coding require {"thinking":{"type":"enabled"}} to activate thinking
+   when oai_thinking_style = "reasoning_content". Without this the API returns
+   no reasoning_content regardless of client-side parsing config. *)
+let provider_extra_body_fields ~provider_name
+    ~(provider : Runtime_config.provider_config) =
+  match
+    (String.lowercase_ascii provider_name, thinking_style_of_provider provider)
+  with
+  | ("zai" | "zai_coding"), ReasoningContent ->
+      [ ("thinking", `Assoc [ ("type", `String "enabled") ]) ]
+  | _ -> []
+
 type tagged_piece = Visible of string | Thinking of string
 type tagged_state = { mutable in_thinking : bool; mutable pending : string }
 
@@ -666,6 +679,9 @@ let complete ~(config : Runtime_config.t) ~messages ?tools ?session_key
         | Some re -> body_fields @ [ ("reasoning_effort", `String re) ]
         | None -> body_fields
       in
+      let body_fields =
+        body_fields @ provider_extra_body_fields ~provider_name ~provider
+      in
       let body = `Assoc body_fields |> Yojson.Safe.to_string in
       let headers = [ ("Authorization", "Bearer " ^ provider.api_key) ] in
       Logs.info (fun m ->
@@ -1033,6 +1049,9 @@ let complete_stream ~(config : Runtime_config.t) ~messages ?tools ?session_key
         match config.agent_defaults.reasoning_effort with
         | Some re -> body_fields @ [ ("reasoning_effort", `String re) ]
         | None -> body_fields
+      in
+      let body_fields =
+        body_fields @ provider_extra_body_fields ~provider_name ~provider
       in
       let body = `Assoc body_fields |> Yojson.Safe.to_string in
       let headers = [ ("Authorization", "Bearer " ^ provider.api_key) ] in

@@ -601,6 +601,52 @@ let test_sanitize_utf8_surrogate () =
 let test_sanitize_utf8_empty () =
   Alcotest.(check string) "empty unchanged" "" (Provider.sanitize_utf8 "")
 
+let test_zai_thinking_extra_fields_enabled () =
+  let provider =
+    {
+      Runtime_config.default_provider_config with
+      api_key = "sk-zai";
+      oai_thinking_style = "reasoning_content";
+    }
+  in
+  let fields =
+    Provider.provider_extra_body_fields ~provider_name:"zai" ~provider
+  in
+  (match fields with
+  | [ ("thinking", `Assoc [ ("type", `String "enabled") ]) ] -> ()
+  | _ -> Alcotest.fail "expected thinking:enabled field for zai");
+  let fields2 =
+    Provider.provider_extra_body_fields ~provider_name:"zai_coding" ~provider
+  in
+  match fields2 with
+  | [ ("thinking", `Assoc [ ("type", `String "enabled") ]) ] -> ()
+  | _ -> Alcotest.fail "expected thinking:enabled field for zai_coding"
+
+let test_zai_thinking_extra_fields_none_without_style () =
+  let provider =
+    { Runtime_config.default_provider_config with api_key = "sk-zai" }
+  in
+  let fields =
+    Provider.provider_extra_body_fields ~provider_name:"zai_coding" ~provider
+  in
+  Alcotest.(check bool)
+    "no extra fields when oai_thinking_style is none" true (fields = [])
+
+let test_zai_thinking_extra_fields_none_for_other_providers () =
+  let provider =
+    {
+      Runtime_config.default_provider_config with
+      api_key = "sk-xyz";
+      oai_thinking_style = "reasoning_content";
+    }
+  in
+  let fields =
+    Provider.provider_extra_body_fields ~provider_name:"deepseek" ~provider
+  in
+  Alcotest.(check bool)
+    "no extra fields for non-zai provider with reasoning_content" true
+    (fields = [])
+
 let test_sanitize_utf8_message_to_json () =
   let m = Provider.make_message ~role:"user" ~content:"hello\x9Cworld" in
   let json = Provider.message_to_json m in
@@ -703,4 +749,10 @@ let suite =
       test_sanitize_utf8_empty;
     Alcotest.test_case "sanitize_utf8 in message_to_json" `Quick
       test_sanitize_utf8_message_to_json;
+    Alcotest.test_case "zai thinking extra fields enabled" `Quick
+      test_zai_thinking_extra_fields_enabled;
+    Alcotest.test_case "zai thinking extra fields none without style" `Quick
+      test_zai_thinking_extra_fields_none_without_style;
+    Alcotest.test_case "zai thinking extra fields none for other providers"
+      `Quick test_zai_thinking_extra_fields_none_for_other_providers;
   ]
