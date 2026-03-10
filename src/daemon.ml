@@ -1700,6 +1700,18 @@ let run ~(config : Runtime_config.t) =
   | Some _ | None -> ());
   let* () = resume_sessions_after_channels () in
   let* () = replay_durable_inbound_queue ~session_manager ~config () in
+  (* Background model discovery refresh at startup *)
+  (match db with
+  | Some db ->
+      Lwt.async (fun () ->
+          Lwt.catch
+            (fun () -> Model_discovery.maybe_refresh ~db ~config ())
+            (fun exn ->
+              Logs.warn (fun m ->
+                  m "Model discovery startup refresh failed: %s"
+                    (Printexc.to_string exn));
+              Lwt.return_unit))
+  | None -> ());
   (* Config file watcher: stat every 10s, reload on mtime change *)
   let last_config_mtime = ref 0.0 in
   let config_watch_path = Config_loader.default_path () in

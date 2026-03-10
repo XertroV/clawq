@@ -1,10 +1,15 @@
 ---
+claimed_at: "2026-03-10T01:13:04Z"
+claimed_by: cli-user
+completed_at: "2026-03-10T01:53:55Z"
 complexity: medium
 depends_on: []
+duration_minutes: 40.8589457459
 estimate_hours: 1
 id: B275
 priority: high
-status: pending
+started_at: "2026-03-10T01:13:04Z"
+status: done
 tags: []
 title: Need to search the web for accurate up to date stats on models for each provider. Also need to use APIs to list models wherever possible to cache in the DB. We should gather pricing data for each model too (even if they're part of a sub) so that we can get a sense for what things would cost. Naturally we want to track that data along with requests/msgs in the session/chat log. Anyway we should use a spreadsheet to fill out the info for providers, models, capabilities (multimodal? reasoning? reasoning levels? etc), price, sources for info (each bit of info should have it's own source, naturally mostly this will be on one page though).
 ---

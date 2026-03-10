@@ -53,6 +53,8 @@
   slash_commands
   totp
   cost_tracker
+  model_discovery
+  request_stats
   agent_router
   command_bridge_min
   sandbox

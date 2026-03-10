@@ -1,4 +1,4 @@
-let schema_version = 5
+let schema_version = 6
 
 type session_activity = Active | Inactive | Any
 
@@ -145,6 +145,44 @@ let init_inbound_queue_schema db =
     "CREATE INDEX IF NOT EXISTS idx_inbound_queue_session_state ON \
      inbound_queue (session_key, state, id ASC)"
 
+let init_models_cache_schema db =
+  exec_exn db
+    "CREATE TABLE IF NOT EXISTS models_cache (\n\
+    \     id INTEGER PRIMARY KEY AUTOINCREMENT,\n\
+    \     provider TEXT NOT NULL,\n\
+    \     model_id TEXT NOT NULL,\n\
+    \     display_name TEXT,\n\
+    \     context_window INTEGER,\n\
+    \     supports_vision INTEGER NOT NULL DEFAULT 0,\n\
+    \     supports_tools INTEGER NOT NULL DEFAULT 1,\n\
+    \     supports_thinking INTEGER NOT NULL DEFAULT 0,\n\
+    \     input_price_per_m REAL,\n\
+    \     output_price_per_m REAL,\n\
+    \     source TEXT,\n\
+    \     fetched_at TEXT NOT NULL DEFAULT (datetime('now')),\n\
+    \     UNIQUE(provider, model_id)\n\
+    \   )"
+
+let init_request_stats_schema db =
+  exec_exn db
+    "CREATE TABLE IF NOT EXISTS request_stats (\n\
+    \     id INTEGER PRIMARY KEY AUTOINCREMENT,\n\
+    \     session_key TEXT NOT NULL,\n\
+    \     message_id INTEGER,\n\
+    \     provider TEXT NOT NULL,\n\
+    \     model TEXT NOT NULL,\n\
+    \     prompt_tokens INTEGER NOT NULL,\n\
+    \     completion_tokens INTEGER NOT NULL,\n\
+    \     cost_usd REAL,\n\
+    \     requested_at TEXT NOT NULL DEFAULT (datetime('now'))\n\
+    \   )";
+  exec_exn db
+    "CREATE INDEX IF NOT EXISTS idx_request_stats_session ON \
+     request_stats(session_key)";
+  exec_exn db
+    "CREATE INDEX IF NOT EXISTS idx_request_stats_model ON \
+     request_stats(model, requested_at)"
+
 let init_epoch_schema db =
   exec_exn db
     "CREATE TABLE IF NOT EXISTS session_log_epochs (\n\
@@ -205,10 +243,20 @@ let migrate_schema db current_version =
   | 4 ->
       init_session_schema db;
       init_inbound_queue_schema db;
+      init_models_cache_schema db;
+      init_request_stats_schema db;
+      set_schema_version db schema_version
+  | 5 ->
+      init_session_schema db;
+      init_inbound_queue_schema db;
+      init_models_cache_schema db;
+      init_request_stats_schema db;
       set_schema_version db schema_version
   | n when n = schema_version ->
       init_session_schema db;
-      init_inbound_queue_schema db
+      init_inbound_queue_schema db;
+      init_models_cache_schema db;
+      init_request_stats_schema db
   | n ->
       failwith
         (Printf.sprintf "Unsupported schema version %d (current=%d)" n
@@ -284,6 +332,8 @@ let init ~db_path ?(search_enabled = false) () =
        VALUES('delete', old.id, old.content, old.session_key); END"
   end;
   init_core_schema db;
+  init_models_cache_schema db;
+  init_request_stats_schema db;
   db
 
 let store_message ~db ~session_key (msg : Provider.message) =

@@ -572,7 +572,58 @@ let cmd_models args =
   match args with
   | [] | [ "list" ] ->
       let provider_filter = None in
-      Models_catalog.to_plain_list ~provider_filter ()
+      let catalog_lines = Models_catalog.to_plain_list ~provider_filter () in
+      let db_extra =
+        try
+          let db = get_db () in
+          let stmt =
+            Sqlite3.prepare db
+              "SELECT provider, model_id FROM models_cache ORDER BY provider, \
+               model_id"
+          in
+          let rows = ref [] in
+          Fun.protect
+            ~finally:(fun () -> ignore (Sqlite3.finalize stmt))
+            (fun () ->
+              while Sqlite3.step stmt = Sqlite3.Rc.ROW do
+                let provider =
+                  match Sqlite3.column stmt 0 with
+                  | Sqlite3.Data.TEXT s -> s
+                  | _ -> ""
+                in
+                let model_id =
+                  match Sqlite3.column stmt 1 with
+                  | Sqlite3.Data.TEXT s -> s
+                  | _ -> ""
+                in
+                if provider <> "" && model_id <> "" then
+                  rows := (provider, model_id) :: !rows
+              done);
+          let catalog_set =
+            let tbl = Hashtbl.create 64 in
+            List.iter
+              (fun m ->
+                Hashtbl.replace tbl
+                  (m.Models_catalog.provider ^ "/" ^ m.Models_catalog.id)
+                  ())
+              Models_catalog.known_models;
+            tbl
+          in
+          let db_only =
+            List.filter
+              (fun (p, m) -> not (Hashtbl.mem catalog_set (p ^ "/" ^ m)))
+              (List.rev !rows)
+          in
+          if db_only = [] then ""
+          else
+            "\n"
+            ^ String.concat "\n"
+                (List.map
+                   (fun (p, m) -> Printf.sprintf "%s/%s [db]" p m)
+                   db_only)
+        with _ -> ""
+      in
+      catalog_lines ^ db_extra
   | [ "list"; "--json" ] -> Yojson.Safe.to_string (Models_catalog.to_json ())
   | [ "list"; "--provider"; p ] ->
       Models_catalog.to_plain_list ~provider_filter:(Some p) ()
@@ -614,13 +665,42 @@ let cmd_models args =
                 Printf.sprintf "%s\n%s" display set_result)
       in
       confirm
+  | [ "refresh" ] ->
+      let db = get_db () in
+      let config = get_config () in
+      Lwt_main.run (Model_discovery.maybe_refresh ~db ~config ());
+      "Model discovery refresh complete. Run 'clawq models list' to see \
+       updated models."
+  | [ "refresh"; "--force" ] ->
+      let db = get_db () in
+      let config = get_config () in
+      Lwt_main.run (Model_discovery.maybe_refresh ~db ~force:true ~config ());
+      "Model discovery force-refresh complete. Run 'clawq models list' to see \
+       updated models."
+  | [ "refresh"; "--provider"; pname ] -> (
+      let config = get_config () in
+      match List.assoc_opt pname config.providers with
+      | None -> Printf.sprintf "Provider '%s' not found in config." pname
+      | Some pc -> (
+          let db = get_db () in
+          let result =
+            Lwt_main.run
+              (Model_discovery.refresh_provider ~db ~provider_name:pname
+                 ~provider_config:pc)
+          in
+          match result with
+          | Ok n ->
+              Printf.sprintf "Refreshed %d model(s) for provider '%s'." n pname
+          | Error e ->
+              Printf.sprintf "Refresh failed for provider '%s': %s" pname e))
   | _ ->
       "Usage: clawq models <subcommand>\n\n\
        Subcommands:\n\
-      \  list [--provider P] [--json]  List known models (optionally filter by \
-       provider)\n\
+      \  list [--provider P] [--json]  List known models (catalog + DB cache)\n\
       \  set-default MODEL            Set default model (e.g. \
-       anthropic:claude-sonnet-4-6)"
+       anthropic:claude-sonnet-4-6)\n\
+      \  refresh [--force]            Refresh model list from provider APIs\n\
+      \  refresh --provider PNAME     Refresh models for a specific provider"
 
 let cmd_usage refresh =
   let cfg = get_config () in

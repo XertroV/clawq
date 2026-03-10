@@ -4,7 +4,7 @@ let test_calculate_cost_known () =
       ~completion_tokens:500
   in
   let expected =
-    (1000.0 *. 15.0 /. 1_000_000.0) +. (500.0 *. 75.0 /. 1_000_000.0)
+    (1000.0 *. 5.0 /. 1_000_000.0) +. (500.0 *. 25.0 /. 1_000_000.0)
   in
   Alcotest.(check (float 0.0001)) "claude cost" expected cost
 

@@ -87,10 +87,10 @@ let test_init_double_call () =
   ignore db1;
   ignore db2
 
-let test_init_schema_version_is_5 () =
+let test_init_schema_version_is_6 () =
   let db = Memory.init ~db_path:":memory:" () in
   Alcotest.(check int)
-    "schema version is 5" 5
+    "schema version is 6" 6
     (query_single_int db "SELECT version FROM schema_version")
 
 let test_init_creates_session_persistence_tables () =
@@ -112,7 +112,13 @@ let test_init_creates_session_persistence_tables () =
     (table_exists db "session_log_epoch_messages");
   Alcotest.(check bool)
     "inbound_queue exists" true
-    (table_exists db "inbound_queue")
+    (table_exists db "inbound_queue");
+  Alcotest.(check bool)
+    "models_cache exists" true
+    (table_exists db "models_cache");
+  Alcotest.(check bool)
+    "request_stats exists" true
+    (table_exists db "request_stats")
 
 let test_migrates_v1_db_to_v4_without_data_loss () =
   with_temp_db (fun db_path ->
@@ -136,7 +142,7 @@ let test_migrates_v1_db_to_v4_without_data_loss () =
       ignore (Sqlite3.db_close db);
       let migrated = Memory.init ~db_path () in
       Alcotest.(check int)
-        "schema version migrated" 5
+        "schema version migrated" 6
         (query_single_int migrated "SELECT version FROM schema_version");
       Alcotest.(check bool)
         "session_state exists after migration" true
@@ -156,6 +162,12 @@ let test_migrates_v1_db_to_v4_without_data_loss () =
       Alcotest.(check bool)
         "inbound_queue exists after migration" true
         (table_exists migrated "inbound_queue");
+      Alcotest.(check bool)
+        "models_cache exists after migration" true
+        (table_exists migrated "models_cache");
+      Alcotest.(check bool)
+        "request_stats exists after migration" true
+        (table_exists migrated "request_stats");
       let msgs = Memory.load_history ~db:migrated ~session_key:"legacy" in
       Alcotest.(check int) "legacy row preserved" 1 (List.length msgs);
       Alcotest.(check string)
@@ -853,11 +865,17 @@ let test_queue_migrate_v4_to_v5 () =
       ignore (Sqlite3.db_close db);
       let migrated = Memory.init ~db_path () in
       Alcotest.(check int)
-        "schema version is 5" 5
+        "schema version is 6" 6
         (query_single_int migrated "SELECT version FROM schema_version");
       Alcotest.(check bool)
         "inbound_queue exists after v4->v5" true
         (table_exists migrated "inbound_queue");
+      Alcotest.(check bool)
+        "models_cache exists after v4->v5" true
+        (table_exists migrated "models_cache");
+      Alcotest.(check bool)
+        "request_stats exists after v4->v5" true
+        (table_exists migrated "request_stats");
       let msgs = Memory.load_history ~db:migrated ~session_key:"s1" in
       Alcotest.(check int) "pre-migration data preserved" 1 (List.length msgs);
       Alcotest.(check string)
@@ -871,8 +889,8 @@ let suite =
     Alcotest.test_case "init search enabled" `Quick test_init_search_enabled;
     Alcotest.test_case "init search disabled" `Quick test_init_search_disabled;
     Alcotest.test_case "init double call" `Quick test_init_double_call;
-    Alcotest.test_case "init schema version is 5" `Quick
-      test_init_schema_version_is_5;
+    Alcotest.test_case "init schema version is 6" `Quick
+      test_init_schema_version_is_6;
     Alcotest.test_case "init creates session persistence tables" `Quick
       test_init_creates_session_persistence_tables;
     Alcotest.test_case "migrates v1 db to v4 without data loss" `Quick

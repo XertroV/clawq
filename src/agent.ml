@@ -1476,9 +1476,25 @@ let turn agent ~user_message ?db ?session_key ?interrupt_check ?inject_messages
       | Provider.ToolCalls { usage; model; _ } -> (usage, model)
     in
     match (usage, session_key) with
-    | Some (pt, ct), Some sid ->
+    | Some (pt, ct), Some sid -> (
         Cost_tracker.record_turn ~model ~prompt_tokens:pt ~completion_tokens:ct
-          ~session_id:sid
+          ~session_id:sid;
+        match db with
+        | Some db ->
+            let pname, _, _ =
+              Provider.select_provider ~config:agent.config ()
+            in
+            let cost_usd_opt =
+              match Cost_tracker.lookup_pricing model with
+              | None -> None
+              | Some _ ->
+                  Some
+                    (Cost_tracker.calculate_cost ~model ~prompt_tokens:pt
+                       ~completion_tokens:ct)
+            in
+            Request_stats.record ~db ~session_key:sid ~provider:pname ~model
+              ~prompt_tokens:pt ~completion_tokens:ct ?cost_usd:cost_usd_opt ()
+        | None -> ())
     | _ -> ()
   in
   let fire_history_update len_before =
@@ -1705,9 +1721,25 @@ let turn_stream agent ~user_message ?db ?session_key ?interrupt_check
       | Provider.ToolCalls { usage; model; _ } -> (usage, model)
     in
     match (usage, session_key) with
-    | Some (pt, ct), Some sid ->
+    | Some (pt, ct), Some sid -> (
         Cost_tracker.record_turn ~model ~prompt_tokens:pt ~completion_tokens:ct
-          ~session_id:sid
+          ~session_id:sid;
+        match db with
+        | Some db ->
+            let pname, _, _ =
+              Provider.select_provider ~config:agent.config ()
+            in
+            let cost_usd_opt =
+              match Cost_tracker.lookup_pricing model with
+              | None -> None
+              | Some _ ->
+                  Some
+                    (Cost_tracker.calculate_cost ~model ~prompt_tokens:pt
+                       ~completion_tokens:ct)
+            in
+            Request_stats.record ~db ~session_key:sid ~provider:pname ~model
+              ~prompt_tokens:pt ~completion_tokens:ct ?cost_usd:cost_usd_opt ()
+        | None -> ())
     | _ -> ()
   in
   let fire_history_update len_before =

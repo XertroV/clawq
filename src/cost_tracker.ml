@@ -1,35 +1,87 @@
 let pricing_table =
   [
-    ("claude-opus-4-6", (15.0, 75.0));
+    (* Anthropic - current *)
+    ("claude-opus-4-6", (5.0, 25.0));
+    ("claude-opus-4-5", (5.0, 25.0));
+    ("claude-opus-4-1", (15.0, 75.0));
+    ("claude-opus-4-0", (15.0, 75.0));
     ("claude-sonnet-4-6", (3.0, 15.0));
-    ("claude-haiku-4-5", (0.80, 4.0));
-    ("claude-3.5-sonnet", (3.0, 15.0));
-    ("claude-3.5-haiku", (0.80, 4.0));
+    ("claude-sonnet-4-5", (3.0, 15.0));
+    ("claude-sonnet-4-0", (3.0, 15.0));
+    ("claude-haiku-4-5", (1.0, 5.0));
+    (* Anthropic - legacy/deprecated *)
+    ("claude-3-7-sonnet", (3.0, 15.0));
+    ("claude-3-5-sonnet", (3.0, 15.0));
+    ("claude-3-5-haiku", (0.80, 4.0));
     ("claude-3-opus", (15.0, 75.0));
     ("claude-3-sonnet", (3.0, 15.0));
     ("claude-3-haiku", (0.25, 1.25));
-    ("gpt-4o", (2.50, 10.0));
+    (* OpenAI - GPT-5 family *)
+    ("gpt-5.4-pro", (30.0, 180.0));
+    ("gpt-5.4", (2.50, 15.0));
+    ("gpt-5.2-pro", (21.0, 168.0));
+    ("gpt-5.2", (1.75, 14.0));
+    ("gpt-5-pro", (15.0, 120.0));
+    ("gpt-5-mini", (0.25, 2.0));
+    ("gpt-5-nano", (0.05, 0.40));
+    ("gpt-5", (1.25, 10.0));
+    (* OpenAI - GPT-4.1 family *)
+    ("gpt-4.1-nano", (0.10, 0.40));
+    ("gpt-4.1-mini", (0.40, 1.60));
+    ("gpt-4.1", (2.0, 8.0));
+    (* OpenAI - GPT-4o family *)
     ("gpt-4o-mini", (0.15, 0.60));
+    ("gpt-4o", (2.50, 10.0));
+    (* OpenAI - legacy *)
     ("gpt-4-turbo", (10.0, 30.0));
     ("gpt-4", (30.0, 60.0));
     ("gpt-3.5-turbo", (0.50, 1.50));
-    ("o1", (15.0, 60.0));
-    ("o1-mini", (3.0, 12.0));
-    ("o3", (10.0, 40.0));
+    (* OpenAI - reasoning *)
+    ("o4-mini", (1.10, 4.40));
+    ("o3-pro", (20.0, 80.0));
     ("o3-mini", (1.10, 4.40));
+    ("o3", (2.0, 8.0));
+    ("o1-pro", (150.0, 600.0));
+    ("o1-mini", (3.0, 12.0));
+    ("o1", (15.0, 60.0));
+    (* Google Gemini *)
+    ("gemini-2.5-pro", (1.25, 10.0));
+    ("gemini-2.5-flash", (0.30, 2.50));
+    ("gemini-2.0-flash", (0.10, 0.40));
+    ("gemini-1.5-pro", (1.25, 5.0));
+    ("gemini-1.5-flash", (0.075, 0.30));
+    (* DeepSeek *)
+    ("deepseek-reasoner", (0.28, 0.42));
+    ("deepseek-chat", (0.28, 0.42));
+    ("deepseek-v3", (0.28, 0.42));
+    ("deepseek-r1", (0.28, 0.42));
+    (* Mistral *)
+    ("mistral-large", (0.50, 1.50));
+    ("mistral-medium", (0.40, 2.0));
+    ("mistral-small", (0.06, 0.18));
+    ("codestral", (0.30, 0.90));
+    ("mixtral-8x7b", (0.24, 0.24));
+    (* Cohere *)
+    ("command-a", (2.50, 10.0));
+    ("command-r-plus", (2.50, 10.0));
+    ("command-r", (0.15, 0.60));
+    (* Meta Llama via Groq *)
     ("llama-3.3-70b", (0.59, 0.79));
     ("llama-3.1-405b", (3.0, 3.0));
     ("llama-3.1-70b", (0.59, 0.79));
     ("llama-3.1-8b", (0.05, 0.08));
-    ("mistral-large", (2.0, 6.0));
-    ("mixtral-8x7b", (0.24, 0.24));
-    ("gemini-2.0-flash", (0.10, 0.40));
-    ("gemini-1.5-pro", (1.25, 5.0));
-    ("gemini-1.5-flash", (0.075, 0.30));
-    ("deepseek-v3", (0.27, 1.10));
-    ("deepseek-r1", (0.55, 2.19));
-    ("command-r-plus", (2.50, 10.0));
-    ("command-r", (0.15, 0.60));
+    (* Moonshot/Kimi *)
+    ("kimi-k2.5", (0.60, 3.0));
+    ("kimi-k2", (0.60, 2.50));
+    ("moonshot-v1-128k", (2.0, 5.0));
+    ("moonshot-v1-32k", (1.0, 3.0));
+    ("moonshot-v1-8k", (0.20, 2.0));
+    (* MiniMax *)
+    ("minimax-m2.5", (0.30, 1.20));
+    ("minimax-m1", (0.40, 1.76));
+    ("minimax-text-01", (0.20, 1.10));
+    (* Xiaomi MiMo *)
+    ("mimo-v2-flash", (0.10, 0.30));
   ]
 
 let normalize_model s =
