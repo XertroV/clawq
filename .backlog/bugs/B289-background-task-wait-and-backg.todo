@@ -4,9 +4,20 @@ depends_on: []
 estimate_hours: 1
 id: B289
 priority: high
-status: pending
+status: done
 tags: []
 title: background_task_wait and background_task_logs should be structured to be more token friendly. Eg _logs by default tails the last 20 lines. as for _wait, well IDK what it's doing sending 300 tokens so i might have to see that to know what to do. Oh and of course _logs takes arguments so that the agent can choose how mcuh to recieve. Particularly we should support psuedo pagination with a line number offset and when we return logs we should include surrounding metadata about where it starts in line count and ends, etc.
+---
+
+## Fixed (2026-03-10)
+
+Changes made:
+1. `background_task_logs` default lines reduced from 40 to 20
+2. `background_task_wait` timeout/interrupted messages now show compact one-line status instead of full task summary:
+   - Before: ~300 tokens with full task dump including model, branch, timestamps, worktree, log path, result preview, prompt preview
+   - After: `runner: opencode | runtime: 15m | repo: /home/xertrov/src/clawq`
+3. Logs already had offset-based pagination with metadata showing line ranges and total count
+
 ---
 
 background_task_wait and background_task_logs should be structured to be more token friendly. Eg _logs by default tails the last 20 lines. as for _wait, well IDK what it's doing sending 300 tokens so i might have to see that to know what to do. Oh and of course _logs takes arguments so that the agent can choose how mcuh to recieve. Particularly we should support psuedo pagination with a line number offset and when we return logs we should include surrounding metadata about where it starts in line count and ends, etc.

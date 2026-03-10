@@ -574,7 +574,7 @@ let read_lines_window path ~offset ~limit =
           loop 1 [] 0)
     with Sys_error msg -> Error msg
 
-let log_excerpt ?(offset = 0) ?(lines = 40) task =
+let log_excerpt ?(offset = 0) ?(lines = 20) task =
   match task.log_path with
   | None -> Error (Printf.sprintf "Task %d has no log file yet" task.id)
   | Some path when not (Sys.file_exists path) ->
@@ -1639,22 +1639,28 @@ let wait_tool ~db =
                 (Printf.sprintf
                    "Task %d is still %s after waiting. To continue waiting, \
                     call background_task_wait again with {\"id\": %d}. You can \
-                    also check progress with background_task_logs.\n\n\
-                    %s"
+                    also check progress with background_task_logs.\n\
+                    runner: %s | runtime: %s | repo: %s"
                    id
                    (string_of_status task.status)
-                   id (format_task_summary task))
+                   id
+                   (string_of_runner task.runner)
+                   (runtime_string task)
+                   task.repo_path)
           | Interrupted task ->
               Lwt.return
                 (Printf.sprintf
                    "Task %d is still %s. Waiting was interrupted to process a \
                     new incoming message. Call background_task_wait again with \
                     {\"id\": %d} to resume waiting. You can also check \
-                    progress with background_task_logs.\n\n\
-                    %s"
+                    progress with background_task_logs.\n\
+                    runner: %s | runtime: %s | repo: %s"
                    id
                    (string_of_status task.status)
-                   id (format_task_summary task))
+                   id
+                   (string_of_runner task.runner)
+                   (runtime_string task)
+                   task.repo_path)
           | Not_found ->
               Lwt.return
                 (Printf.sprintf "Error: No background task found with id %d" id));
@@ -1699,7 +1705,7 @@ let logs_tool ~db =
                       ("type", `String "integer");
                       ( "description",
                         `String
-                          "Max lines to return (default 40). In paged mode, \
+                          "Max lines to return (default 20). In paged mode, \
                            controls window size. In tail mode, controls how \
                            many trailing lines." );
                     ] );
@@ -1731,7 +1737,7 @@ let logs_tool ~db =
           match (limit_explicit, lines_explicit) with
           | Some l, _ -> l
           | None, Some l -> l
-          | None, None -> 40
+          | None, None -> 20
         in
         if id < 0 then Lwt.return "Error: id is required"
         else if offset < 0 then Lwt.return "Error: offset must be >= 1"
