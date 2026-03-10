@@ -687,7 +687,7 @@ let with_typing ~bot_token ~chat_id p =
   typing_loop
     ~send_action:(fun () ->
       send_chat_action ~bot_token ~chat_id ~action:"typing")
-    ~interval:4.0 p
+    ~interval:3.0 p
 
 (* Typing wrapper that returns a refresh function.
    Call [refresh ()] after any outbound message to immediately re-assert
@@ -696,7 +696,7 @@ let with_typing_refreshable ~bot_token ~chat_id p =
   typing_loop_refreshable
     ~send_action:(fun () ->
       send_chat_action ~bot_token ~chat_id ~action:"typing")
-    ~interval:4.0 p
+    ~interval:3.0 p
 
 (* Typing loop with a grace period before the indicator appears.
    If [p] resolves within [grace] seconds, no typing is shown at all.
@@ -719,7 +719,7 @@ let with_typing_deferred ~bot_token ~chat_id ~grace p =
   typing_loop_deferred
     ~send_action:(fun () ->
       send_chat_action ~bot_token ~chat_id ~action:"typing")
-    ~interval:4.0 ~grace p
+    ~interval:3.0 ~grace p
 
 let rec typing_loop_live_activity ~current_activity ~wait_for_change
     ~wait_for_refresh ~send_action ~interval ~idle_timeout () =
@@ -790,7 +790,7 @@ let ensure_session_typing_watcher ~(session_mgr : Session.t) ~key ~bot_token
                 ~wait_for_refresh:(fun () -> Lwt_condition.wait refresh_trigger)
                 ~send_action:(fun () ->
                   send_chat_action ~bot_token ~chat_id ~action:"typing")
-                ~interval:4.0 ~idle_timeout:300.0 ())
+                ~interval:3.0 ~idle_timeout:300.0 ())
             (fun () ->
               Hashtbl.remove typing_watchers key;
               Lwt.return_unit));

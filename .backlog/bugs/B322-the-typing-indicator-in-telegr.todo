@@ -1,10 +1,15 @@
 ---
+claimed_at: "2026-03-10T08:51:13Z"
+claimed_by: cli-user
+completed_at: "2026-03-10T08:54:41Z"
 complexity: medium
 depends_on: []
+duration_minutes: 3.4745831609166666
 estimate_hours: 1
 id: B322
 priority: high
-status: pending
+started_at: "2026-03-10T08:51:13Z"
+status: done
 tags: []
 title: the typing indicator in telegram updates too infrequenlty. Increase the frequency of checking if we need to update it.
 ---
