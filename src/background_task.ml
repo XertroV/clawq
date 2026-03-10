@@ -254,7 +254,7 @@ let runtime_string (task : task) =
         in
         format_elapsed_seconds (end_time -. start_time)
 
-let format_task_summary (task : task) =
+let format_task_summary ?(full = false) (task : task) =
   let branch = if task.branch = "" then "(auto)" else task.branch in
   let lines = ref [] in
   let add line = lines := line :: !lines in
@@ -289,7 +289,9 @@ let format_task_summary (task : task) =
   | Some text when String.trim text <> "" ->
       add (Printf.sprintf "result: %s" (preview_text text))
   | _ -> ());
-  add (Printf.sprintf "prompt: %s" task.prompt);
+  add
+    (Printf.sprintf "prompt: %s"
+       (if full then task.prompt else preview_text task.prompt));
   String.concat "\n" (List.rev !lines)
 
 let max_inactive_shown = 3
@@ -1507,7 +1509,9 @@ let list_tool ~db =
     Tool.name = "background_task_list";
     description =
       "List background coding tasks or inspect one task by id, including \
-       current status, repo, branch, log path, and result preview.";
+       current status, repo, branch, log path, and result preview. The prompt \
+       is truncated by default; pass full:true to include the complete \
+       original prompt when needed.";
     parameters_schema =
       `Assoc
         [
@@ -1524,6 +1528,15 @@ let list_tool ~db =
                           "Optional task id to inspect. When omitted, returns \
                            the full task list." );
                     ] );
+                ( "full",
+                  `Assoc
+                    [
+                      ("type", `String "boolean");
+                      ( "description",
+                        `String
+                          "When true and an id is provided, include the full \
+                           untruncated prompt. Defaults to false." );
+                    ] );
               ] );
           ("additionalProperties", `Bool false);
         ];
@@ -1533,10 +1546,11 @@ let list_tool ~db =
         let task_id =
           try Some (args |> member "id" |> to_int) with _ -> None
         in
+        let full = try args |> member "full" |> to_bool with _ -> false in
         match task_id with
         | Some id -> (
             match get_task ~db ~id with
-            | Some task -> Lwt.return (format_task_summary task)
+            | Some task -> Lwt.return (format_task_summary ~full task)
             | None ->
                 Lwt.return
                   (Printf.sprintf "No background task found with id %d" id))
