@@ -155,6 +155,11 @@ let auth_cmd =
       `S "SUBCOMMANDS";
       `I ("(no args)", "Print redacted provider auth status for all providers.");
       `I
+        ( "set-key PROVIDER API_KEY",
+          "Set the API key for a named provider (e.g. anthropic, zai-coding, \
+           kimi, opencode-zen)." );
+      `I ("providers", "List known provider names and their configured status.");
+      `I
         ("encrypt", "Encrypt plaintext API keys in config using the master key.");
       `I ("codex-login [PROVIDER]", "Start ChatGPT/Codex OAuth login flow.");
       `I ("codex-status [PROVIDER]", "Show stored Codex OAuth status.");

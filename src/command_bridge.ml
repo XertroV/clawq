@@ -2212,6 +2212,57 @@ let cmd_auth args =
   | [ "codex-logout" ] | [ "logout"; "codex" ] -> Openai_codex_oauth.logout ()
   | [ "codex-logout"; provider_name ] ->
       Openai_codex_oauth.logout ~provider_name ()
+  | [ "set-key"; provider_name; api_key ] -> (
+      let key = Printf.sprintf "providers.%s.api_key" provider_name in
+      match Config_set.set_json_value key (`String api_key) with
+      | Ok () -> Printf.sprintf "API key set for provider '%s'." provider_name
+      | Error err -> err)
+  | [ "set-key" ] | [ "set-key"; _ ] ->
+      "Usage: clawq auth set-key PROVIDER API_KEY\n\
+       Example: clawq auth set-key anthropic sk-ant-...\n\
+       Example: clawq auth set-key zai-coding <key>"
+  | [ "providers" ] | [ "list-providers" ] ->
+      let known =
+        [
+          ("anthropic", "Anthropic Claude (native)");
+          ("openai", "OpenAI (native)");
+          ("gemini", "Google Gemini (native)");
+          ("openai-codex", "OpenAI Codex / ChatGPT (OAuth or key)");
+          ("zai_coding", "Z.AI coding endpoint");
+          ("zai", "Z.AI general endpoint");
+          ("mistral", "Mistral AI");
+          ("xai", "xAI / Grok");
+          ("deepseek", "DeepSeek");
+          ("cohere", "Cohere");
+          ("ollama", "Ollama (local, no key required)");
+        ]
+      in
+      let cfg = get_config () in
+      let configured_names = List.map fst cfg.providers in
+      let extra =
+        List.filter_map
+          (fun name ->
+            if List.mem_assoc name known then None else Some (name, "configured"))
+          configured_names
+      in
+      let all = known @ extra in
+      let lines =
+        List.map
+          (fun (name, desc) ->
+            let suffix =
+              if List.mem name configured_names then
+                let p = List.assoc name cfg.providers in
+                if Runtime_config.is_key_set p.api_key then " [key set]"
+                else if Runtime_config.provider_has_codex_oauth p then
+                  " [oauth]"
+                else " [configured]"
+              else ""
+            in
+            Printf.sprintf "  %-20s %s%s" name desc suffix)
+          all
+      in
+      "Known providers (use with 'clawq auth set-key'):\n"
+      ^ String.concat "\n" lines
   | [ "encrypt" ] ->
       if not (get_config ()).security.encrypt_secrets then
         "Secret encryption is disabled. Set security.encrypt_secrets to true \
