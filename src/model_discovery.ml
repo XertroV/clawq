@@ -178,3 +178,55 @@ let maybe_refresh ?db ?(force = false) ~(config : Runtime_config.t) () =
           providers
       in
       Lwt.return_unit
+
+(* Returns (provider, model_id) pairs from models_cache that are not already in
+   the compile-time catalog. Pass ~provider_filter to restrict to one provider. *)
+let get_db_only_models ~db ~provider_filter =
+  let rows = ref [] in
+  (try
+     let sql, bind_p =
+       match provider_filter with
+       | None ->
+           ( "SELECT provider, model_id FROM models_cache ORDER BY provider, \
+              model_id",
+             None )
+       | Some p ->
+           ( "SELECT provider, model_id FROM models_cache WHERE provider = ? \
+              ORDER BY provider, model_id",
+             Some p )
+     in
+     let stmt = Sqlite3.prepare db sql in
+     Fun.protect
+       ~finally:(fun () -> ignore (Sqlite3.finalize stmt))
+       (fun () ->
+         (match bind_p with
+         | Some p -> ignore (Sqlite3.bind stmt 1 (Sqlite3.Data.TEXT p))
+         | None -> ());
+         while Sqlite3.step stmt = Sqlite3.Rc.ROW do
+           let provider =
+             match Sqlite3.column stmt 0 with
+             | Sqlite3.Data.TEXT s -> s
+             | _ -> ""
+           in
+           let model_id =
+             match Sqlite3.column stmt 1 with
+             | Sqlite3.Data.TEXT s -> s
+             | _ -> ""
+           in
+           if provider <> "" && model_id <> "" then
+             rows := (provider, model_id) :: !rows
+         done)
+   with _ -> ());
+  let catalog_set =
+    let tbl = Hashtbl.create 64 in
+    List.iter
+      (fun m ->
+        Hashtbl.replace tbl
+          (m.Models_catalog.provider ^ "/" ^ m.Models_catalog.id)
+          ())
+      Models_catalog.known_models;
+    tbl
+  in
+  List.filter
+    (fun (p, m) -> not (Hashtbl.mem catalog_set (p ^ "/" ^ m)))
+    (List.rev !rows)

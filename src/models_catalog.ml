@@ -687,24 +687,29 @@ let format_context_window = function
         Printf.sprintf "%.1fM" (float_of_int n /. 1_000_000.0)
       else Printf.sprintf "%dK" (n / 1000)
 
-let to_plain_list ?(provider_filter = None) () =
+let to_plain_list ?(provider_filter = None) ?(db_extras = []) () =
   let filtered =
     match provider_filter with None -> known_models | Some p -> by_provider p
   in
   let non_deprecated = List.filter (fun m -> not m.deprecated) filtered in
-  List.map
-    (fun m ->
-      let full = Printf.sprintf "%s/%s" m.provider m.id in
-      let ctx = format_context_window m.context_window in
-      let badges = Buffer.create 16 in
-      if m.supports_vision then Buffer.add_string badges " vision";
-      if m.supports_thinking then Buffer.add_string badges " thinking";
-      let badge_str = Buffer.contents badges in
-      if ctx = "" then full
-      else if badge_str = "" then Printf.sprintf "%s (%s)" full ctx
-      else Printf.sprintf "%s (%s%s)" full ctx badge_str)
-    non_deprecated
-  |> String.concat "\n"
+  let catalog_lines =
+    List.map
+      (fun m ->
+        let full = Printf.sprintf "%s/%s" m.provider m.id in
+        let ctx = format_context_window m.context_window in
+        let badges = Buffer.create 16 in
+        if m.supports_vision then Buffer.add_string badges " vision";
+        if m.supports_thinking then Buffer.add_string badges " thinking";
+        let badge_str = Buffer.contents badges in
+        if ctx = "" then full
+        else if badge_str = "" then Printf.sprintf "%s (%s)" full ctx
+        else Printf.sprintf "%s (%s%s)" full ctx badge_str)
+      non_deprecated
+  in
+  let extra_lines =
+    List.map (fun (p, m) -> Printf.sprintf "%s/%s [db]" p m) db_extras
+  in
+  String.concat "\n" (catalog_lines @ extra_lines)
 
 let to_json ?(provider_filter = None) () : Yojson.Safe.t =
   let filtered =

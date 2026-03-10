@@ -1001,9 +1001,16 @@ let handler ~session_manager ~require_pairing ~auth_token
                         sse_reply
                           (Printf.sprintf "Removed from favorites: %s" name)
                     | ModelList provider ->
+                        let db_extras =
+                          match Session.get_db session_manager with
+                          | None -> []
+                          | Some db ->
+                              Model_discovery.get_db_only_models ~db
+                                ~provider_filter:provider
+                        in
                         let models =
                           Models_catalog.to_plain_list ~provider_filter:provider
-                            ()
+                            ~db_extras ()
                           |> String.split_on_char '\n'
                           |> List.filter (fun s -> s <> "")
                         in

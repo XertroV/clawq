@@ -571,62 +571,22 @@ let cmd_config args =
 let cmd_models args =
   match args with
   | [] | [ "list" ] ->
-      let provider_filter = None in
-      let catalog_lines = Models_catalog.to_plain_list ~provider_filter () in
-      let db_extra =
+      let db_extras =
         try
-          let db = get_db () in
-          let stmt =
-            Sqlite3.prepare db
-              "SELECT provider, model_id FROM models_cache ORDER BY provider, \
-               model_id"
-          in
-          let rows = ref [] in
-          Fun.protect
-            ~finally:(fun () -> ignore (Sqlite3.finalize stmt))
-            (fun () ->
-              while Sqlite3.step stmt = Sqlite3.Rc.ROW do
-                let provider =
-                  match Sqlite3.column stmt 0 with
-                  | Sqlite3.Data.TEXT s -> s
-                  | _ -> ""
-                in
-                let model_id =
-                  match Sqlite3.column stmt 1 with
-                  | Sqlite3.Data.TEXT s -> s
-                  | _ -> ""
-                in
-                if provider <> "" && model_id <> "" then
-                  rows := (provider, model_id) :: !rows
-              done);
-          let catalog_set =
-            let tbl = Hashtbl.create 64 in
-            List.iter
-              (fun m ->
-                Hashtbl.replace tbl
-                  (m.Models_catalog.provider ^ "/" ^ m.Models_catalog.id)
-                  ())
-              Models_catalog.known_models;
-            tbl
-          in
-          let db_only =
-            List.filter
-              (fun (p, m) -> not (Hashtbl.mem catalog_set (p ^ "/" ^ m)))
-              (List.rev !rows)
-          in
-          if db_only = [] then ""
-          else
-            "\n"
-            ^ String.concat "\n"
-                (List.map
-                   (fun (p, m) -> Printf.sprintf "%s/%s [db]" p m)
-                   db_only)
-        with _ -> ""
+          Model_discovery.get_db_only_models ~db:(get_db ())
+            ~provider_filter:None
+        with _ -> []
       in
-      catalog_lines ^ db_extra
+      Models_catalog.to_plain_list ~db_extras ()
   | [ "list"; "--json" ] -> Yojson.Safe.to_string (Models_catalog.to_json ())
   | [ "list"; "--provider"; p ] ->
-      Models_catalog.to_plain_list ~provider_filter:(Some p) ()
+      let db_extras =
+        try
+          Model_discovery.get_db_only_models ~db:(get_db ())
+            ~provider_filter:(Some p)
+        with _ -> []
+      in
+      Models_catalog.to_plain_list ~provider_filter:(Some p) ~db_extras ()
   | [ "list"; "--provider"; p; "--json" ] ->
       Yojson.Safe.to_string
         (Models_catalog.to_json ~provider_filter:(Some p) ())

@@ -679,8 +679,16 @@ let handle_message ~(discord_config : Runtime_config.discord_config)
                 ~channel_id:msg.channel_id
                 ~text:(Printf.sprintf "Removed from favorites: %s" name)
           | ModelList provider ->
+              let db_extras =
+                match Session.get_db session_mgr with
+                | None -> []
+                | Some db ->
+                    Model_discovery.get_db_only_models ~db
+                      ~provider_filter:provider
+              in
               let text =
-                Models_catalog.to_plain_list ~provider_filter:provider ()
+                Models_catalog.to_plain_list ~provider_filter:provider
+                  ~db_extras ()
               in
               send_message_fn ~bot_token:discord_config.bot_token
                 ~channel_id:msg.channel_id ~text
