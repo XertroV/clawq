@@ -267,3 +267,4 @@ bugs:
     - file: B266-when-we-restart-it-seems-to-ha.todo
     - file: B267-reported-bg-task-runtime-can-b.todo
     - file: B268-for-the-openai-400-errors-in-t.todo
+    - file: B269-compact-history-tool-leaves-or.todo

@@ -1,0 +1,27 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B269
+priority: high
+status: pending
+tags: []
+title: compact_history tool leaves orphaned tool call in DB when next LLM call fails
+---
+Root cause identified in daemon.log analysis:
+
+When the `compact_history` tool runs, `daemon.ml`'s `compact_fn` calls `Session.persist_compacted_history` BEFORE the tool result message is appended to `agent.history`. If the subsequent LLM call in that same turn fails (for any reason — 400, timeout, etc.), the DB is left with an orphaned assistant message containing a `function_call` for `compact_history` with no matching `function_call_output` tool result.
+
+On the next interaction (or after restart), the session loads from this corrupt DB state and every LLM call fails permanently with:
+  "No tool output found for function call <call_id>"
+
+This is a session-killer: once it happens the session is stuck and only a manual `/reset` or `session reset` can recover it.
+
+Observed in daemon.log at 09:50:42 → 09:51:48 sequence. The 400 that triggered it was an autonomous continuation call failing mid-turn after compaction.
+
+Fix: Remove the eager `persist_compacted_history` from `compact_fn`. Instead rely solely on the existing turn-completion persistence in `session.ml` (which already checks `compacted_mid_turn`). Also add persistence in the error path (currently `| exn -> Lwt.fail exn` at lines 983 and 1373 in session.ml) so that when a turn fails after compaction, the state (including the tool result) is still persisted correctly.
+
+Acceptance criteria:
+- compact_history tool call + result are always persisted atomically (both present or neither)
+- Session does not get stuck after a failed LLM call that follows compact_history
+- Existing compaction tests pass
