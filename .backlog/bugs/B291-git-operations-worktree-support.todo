@@ -1,0 +1,26 @@
+# B291: git_operations tool doesn't support worktree/repo path parameter
+
+## Summary
+The git_operations tool fails in worktree-based workflows because it defaults to workspace root (not the git repo). It lacks a `repo_path` or `cwd` parameter to specify which repo/worktree to operate on.
+
+## Problem
+When I used `git_operations` (operation: status, branch) without a path, it failed with:
+```
+fatal: not a git repository (or any parent up to mount point /)
+```
+
+The workspace root (`~/.clawq/workspace`) is not a git repo, and there's no way to tell the tool to use `~/src/clawq` or a worktree path instead.
+
+## Acceptance Criteria
+- git_operations tool accepts an optional `repo_path` or `cwd` parameter
+- When provided, operations run in that directory
+- Backwards compatible: if omitted, uses current default behavior
+- Shell_exec with explicit `git -C <path>` remains the reliable fallback for worktree workflows
+
+## Investigation
+The tool schema shows `paths` for add/diff/show but no general `cwd` or `repo_path` for status/log/branch operations.
+
+## Files
+- src/git_operations.ml (or wherever tool is implemented)
+- tool schema definition
+- test/test_git_operations.ml (if exists)

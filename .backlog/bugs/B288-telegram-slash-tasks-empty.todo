@@ -1,0 +1,19 @@
+# B288: /tasks in Telegram returns nothing
+
+## Summary
+The `/tasks` slash command in Telegram does not return anything (empty or no response).
+
+## Acceptance Criteria
+- `/tasks` in Telegram returns the current task tree for the session
+- Empty task trees produce a helpful "no tasks" message rather than nothing
+- Behavior matches other channels (Discord, Slack, HTTP) which handle Tasks correctly
+
+## Investigation
+- Slash_commands.handle "/tasks" returns Tasks (tested in test_slash_commands.ml)
+- Telegram handler at src/telegram.ml:1545-1553 calls Task_tree.render_tree_with_legend
+- Likely issue: empty tree produces empty string, or session_key mismatch, or render returns empty
+
+## Files
+- src/telegram.ml (handler)
+- src/task_tree.ml (render_tree_with_legend)
+- src/slash_commands.ml (command parsing)

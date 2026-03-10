@@ -1,0 +1,16 @@
+# B289: Add /runtime-ctx slash command
+
+## Summary
+Add a `/runtime-ctx` (or `/runtime_ctx`) slash command that shows the user their current runtime context in full — the same information injected into the system prompt (session id, main session, workspace, git branch, timezone, shell policy, etc).
+
+## Acceptance Criteria
+- `/runtime-ctx` command parses and returns a formatted runtime context summary
+- Output includes: session id, main session flag, workspace, git repo/branch, timezone, shell policy, context usage, background tasks summary
+- Works across all channels (Telegram, Discord, Slack, CLI)
+- Slash_commands module extended with RuntimeCtx variant
+- Channel handlers (telegram.ml, discord.ml, slack.ml, http_server.ml) updated to handle the new command
+
+## Files
+- src/slash_commands.ml
+- src/telegram.ml, src/discord.ml, src/slack.ml, src/http_server.ml
+- test/test_slash_commands.ml
