@@ -1014,6 +1014,11 @@ let shell_exec_with_hooks ~workspace ~workspace_only ~allowed_commands
       match context with Some c -> c.Tool.interrupt_check | None -> None
     in
     let command = try args |> member "command" |> to_string with _ -> "" in
+    if String.trim command = "" then
+      Lwt.return
+        "Error: shell_exec requires a non-empty 'command' parameter. The \
+         'command' field is required in the tool call arguments."
+    else
     let cwd_arg =
       try
         match args |> member "cwd" with
