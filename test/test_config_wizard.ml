@@ -51,22 +51,22 @@ let check_action =
 
 let test_welcome_to_provider_select () =
   let m = initial_model Onboard in
-  let m', _ = update KeyEnter m in
+  let m', _ = update (Key Enter) m in
   Alcotest.check check_step "after welcome" ProviderSelect m'.step
 
 let test_provider_select_navigation () =
   let m = initial_model Onboard in
-  let m, _ = update KeyEnter m in
+  let m, _ = update (Key Enter) m in
   (* Should be at ProviderSelect *)
-  let m, _ = update KeyDown m in
+  let m, _ = update (Key Down) m in
   match m.widget with
   | Select si -> Alcotest.(check int) "moved to 1" 1 si.selected
   | _ -> Alcotest.fail "expected Select widget"
 
 let test_provider_select_wraps () =
   let m = initial_model Onboard in
-  let m, _ = update KeyEnter m in
-  let m, _ = update KeyUp m in
+  let m, _ = update (Key Enter) m in
+  let m, _ = update (Key Up) m in
   match m.widget with
   | Select si ->
       Alcotest.(check int)
@@ -78,56 +78,56 @@ let test_provider_select_wraps () =
 let test_full_onboard_flow () =
   let m = initial_model Onboard in
   (* Welcome -> ProviderSelect *)
-  let m, _ = update KeyEnter m in
+  let m, _ = update (Key Enter) m in
   Alcotest.check check_step "provider select" ProviderSelect m.step;
   (* Select openrouter (second option) -> ProviderApiKey *)
-  let m, _ = update KeyDown m in
-  let m, _ = update KeyEnter m in
+  let m, _ = update (Key Down) m in
+  let m, _ = update (Key Enter) m in
   Alcotest.check check_step "api key" ProviderApiKey m.step;
   (* Type a key *)
-  let m, _ = update (KeyChar 'k') m in
-  let m, _ = update KeyEnter m in
+  let m, _ = update (Key (Char 'k')) m in
+  let m, _ = update (Key Enter) m in
   Alcotest.check check_step "base url" ProviderBaseUrl m.step;
   (* Accept default url *)
-  let m, _ = update KeyEnter m in
+  let m, _ = update (Key Enter) m in
   Alcotest.check check_step "test offer" ProviderTestOffer m.step;
   (* Decline test *)
-  let m, _ = update (KeyChar 'n') m in
-  let m, _ = update KeyEnter m in
+  let m, _ = update (Key (Char 'n')) m in
+  let m, _ = update (Key Enter) m in
   Alcotest.check check_step "model select" ModelSelect m.step;
   (* Accept default model *)
-  let m, _ = update KeyEnter m in
+  let m, _ = update (Key Enter) m in
   Alcotest.check check_step "security tools" SecurityTools m.step;
   (* Accept tools enabled *)
-  let m, _ = update KeyEnter m in
+  let m, _ = update (Key Enter) m in
   Alcotest.check check_step "tool search config" ToolSearchConfig m.step;
   (* Accept tool search default *)
-  let m, _ = update KeyEnter m in
+  let m, _ = update (Key Enter) m in
   Alcotest.check check_step "security workspace" SecurityWorkspace m.step;
   (* Accept workspace_only *)
-  let m, _ = update KeyEnter m in
+  let m, _ = update (Key Enter) m in
   Alcotest.check check_step "review" Review m.step;
   (* Confirm *)
-  let m, _ = update KeyEnter m in
+  let m, _ = update (Key Enter) m in
   Alcotest.check check_step "confirm" Confirm m.step;
-  let m, action = update KeyEnter m in
+  let m, action = update (Key Enter) m in
   Alcotest.check check_step "done" Done m.step;
   Alcotest.check check_action "write" WriteConfig action
 
 let test_back_navigation () =
   let m = initial_model Onboard in
-  let m, _ = update KeyEnter m in
+  let m, _ = update (Key Enter) m in
   Alcotest.check check_step "at provider select" ProviderSelect m.step;
-  let m, _ = update KeyEsc m in
+  let m, _ = update (Key Escape) m in
   Alcotest.check check_step "back to welcome" Welcome m.step
 
 let test_text_input_typing () =
   let ti =
     { label = "test"; value = ""; cursor = 0; secret = false; placeholder = "" }
   in
-  let ti = text_input_update (KeyChar 'a') ti in
-  let ti = text_input_update (KeyChar 'b') ti in
-  let ti = text_input_update (KeyChar 'c') ti in
+  let ti = text_input_update (Key (Char 'a')) ti in
+  let ti = text_input_update (Key (Char 'b')) ti in
+  let ti = text_input_update (Key (Char 'c')) ti in
   Alcotest.(check string) "typed abc" "abc" ti.value;
   Alcotest.(check int) "cursor at 3" 3 ti.cursor
 
@@ -141,69 +141,69 @@ let test_text_input_backspace () =
       placeholder = "";
     }
   in
-  let ti = text_input_update KeyBackspace ti in
+  let ti = text_input_update (Key Backspace) ti in
   Alcotest.(check string) "after backspace" "ab" ti.value;
   Alcotest.(check int) "cursor at 2" 2 ti.cursor
 
 let test_confirm_toggle () =
   let ci = { label = "test"; value = true } in
-  let ci = confirm_update (KeyChar 'n') ci in
+  let ci = confirm_update (Key (Char 'n')) ci in
   Alcotest.(check bool) "toggled to no" false ci.value;
-  let ci = confirm_update (KeyChar 'y') ci in
+  let ci = confirm_update (Key (Char 'y')) ci in
   Alcotest.(check bool) "toggled to yes" true ci.value
 
 let test_test_provider_action () =
   let m = initial_model Onboard in
-  let m, _ = update KeyEnter m in
-  let m, _ = update KeyDown m in
-  let m, _ = update KeyEnter m in
+  let m, _ = update (Key Enter) m in
+  let m, _ = update (Key Down) m in
+  let m, _ = update (Key Enter) m in
   (* Type key *)
-  let m, _ = update (KeyChar 'k') m in
-  let m, _ = update KeyEnter m in
+  let m, _ = update (Key (Char 'k')) m in
+  let m, _ = update (Key Enter) m in
   (* Accept url *)
-  let m, _ = update KeyEnter m in
+  let m, _ = update (Key Enter) m in
   (* Accept test offer (default yes) *)
-  let m, action = update KeyEnter m in
+  let m, action = update (Key Enter) m in
   Alcotest.check check_step "test result" ProviderTestResult m.step;
   Alcotest.check check_action "test action" (TestProvider ("", "", "")) action
 
 let test_full_wizard_has_channel_menu () =
   let m = initial_model FullWizard in
-  let m, _ = update KeyEnter m in
-  let m, _ = update KeyDown m in
-  let m, _ = update KeyEnter m in
-  let m, _ = update (KeyChar 'k') m in
-  let m, _ = update KeyEnter m in
-  let m, _ = update KeyEnter m in
-  let m, _ = update (KeyChar 'n') m in
-  let m, _ = update KeyEnter m in
-  let m, _ = update KeyEnter m in
-  let m, _ = update KeyEnter m in
-  let m, _ = update KeyEnter m in
-  let m, _ = update KeyEnter m in
+  let m, _ = update (Key Enter) m in
+  let m, _ = update (Key Down) m in
+  let m, _ = update (Key Enter) m in
+  let m, _ = update (Key (Char 'k')) m in
+  let m, _ = update (Key Enter) m in
+  let m, _ = update (Key Enter) m in
+  let m, _ = update (Key (Char 'n')) m in
+  let m, _ = update (Key Enter) m in
+  let m, _ = update (Key Enter) m in
+  let m, _ = update (Key Enter) m in
+  let m, _ = update (Key Enter) m in
+  let m, _ = update (Key Enter) m in
   Alcotest.check check_step "channel menu" ChannelMenu m.step
 
 let test_openai_codex_skips_api_key_prompt () =
   let m = initial_model Onboard in
-  let m, _ = update KeyEnter m in
-  let m, _ = update KeyEnter m in
+  let m, _ = update (Key Enter) m in
+  let m, _ = update (Key Enter) m in
   Alcotest.check check_step "codex goes to base url" ProviderBaseUrl m.step;
   Alcotest.(check string) "provider name" "openai-codex" m.current_provider.name
 
 let test_prepopulated_model_preserves_tools_enabled () =
   (* Simulate a model pre-populated from existing config with tools disabled *)
   let m = { (initial_model FullWizard) with tools_enabled = false } in
-  let m, _ = update KeyEnter m in
+  let m, _ = update (Key Enter) m in
   (* Navigate through provider flow *)
-  let m, _ = update KeyDown m in
-  let m, _ = update KeyEnter m in
-  let m, _ = update (KeyChar 'k') m in
-  let m, _ = update KeyEnter m in
-  let m, _ = update KeyEnter m in
-  let m, _ = update (KeyChar 'n') m in
-  let m, _ = update KeyEnter m in
+  let m, _ = update (Key Down) m in
+  let m, _ = update (Key Enter) m in
+  let m, _ = update (Key (Char 'k')) m in
+  let m, _ = update (Key Enter) m in
+  let m, _ = update (Key Enter) m in
+  let m, _ = update (Key (Char 'n')) m in
+  let m, _ = update (Key Enter) m in
   (* Accept default model *)
-  let m, _ = update KeyEnter m in
+  let m, _ = update (Key Enter) m in
   Alcotest.check check_step "security tools" SecurityTools m.step;
   (* The confirm widget should reflect the pre-populated tools_enabled=false *)
   match m.widget with
@@ -213,17 +213,17 @@ let test_prepopulated_model_preserves_tools_enabled () =
 
 let test_prepopulated_model_preserves_workspace_only () =
   let m = { (initial_model FullWizard) with workspace_only = false } in
-  let m, _ = update KeyEnter m in
-  let m, _ = update KeyDown m in
-  let m, _ = update KeyEnter m in
-  let m, _ = update (KeyChar 'k') m in
-  let m, _ = update KeyEnter m in
-  let m, _ = update KeyEnter m in
-  let m, _ = update (KeyChar 'n') m in
-  let m, _ = update KeyEnter m in
-  let m, _ = update KeyEnter m in
-  let m, _ = update KeyEnter m in
-  let m, _ = update KeyEnter m in
+  let m, _ = update (Key Enter) m in
+  let m, _ = update (Key Down) m in
+  let m, _ = update (Key Enter) m in
+  let m, _ = update (Key (Char 'k')) m in
+  let m, _ = update (Key Enter) m in
+  let m, _ = update (Key Enter) m in
+  let m, _ = update (Key (Char 'n')) m in
+  let m, _ = update (Key Enter) m in
+  let m, _ = update (Key Enter) m in
+  let m, _ = update (Key Enter) m in
+  let m, _ = update (Key Enter) m in
   Alcotest.check check_step "security workspace" SecurityWorkspace m.step;
   match m.widget with
   | ConfirmInput ci ->
@@ -241,12 +241,12 @@ let test_prepopulated_existing_provider_prefills_api_key () =
     }
   in
   let m = { (initial_model Onboard) with providers = [ existing_provider ] } in
-  let m, _ = update KeyEnter m in
+  let m, _ = update (Key Enter) m in
   (* Select openrouter — skip "skip (keep existing)" at index 0, "openai-codex"
      at index 1, then "openrouter" at index 2 *)
-  let m, _ = update KeyDown m in
-  let m, _ = update KeyDown m in
-  let m, _ = update KeyEnter m in
+  let m, _ = update (Key Down) m in
+  let m, _ = update (Key Down) m in
+  let m, _ = update (Key Enter) m in
   Alcotest.check check_step "api key" ProviderApiKey m.step;
   match m.widget with
   | TextInput ti ->
@@ -264,36 +264,36 @@ let test_prepopulated_provider_replaces_not_duplicates () =
     }
   in
   let m = { (initial_model Onboard) with providers = [ existing_provider ] } in
-  let m, _ = update KeyEnter m in
+  let m, _ = update (Key Enter) m in
   (* Select openrouter — skip past "skip (keep existing)" and "openai-codex" *)
-  let m, _ = update KeyDown m in
-  let m, _ = update KeyDown m in
-  let m, _ = update KeyEnter m in
+  let m, _ = update (Key Down) m in
+  let m, _ = update (Key Down) m in
+  let m, _ = update (Key Enter) m in
   (* Clear and type new key *)
-  let m, _ = update KeyBackspace m in
-  let m, _ = update KeyBackspace m in
-  let m, _ = update KeyBackspace m in
-  let m, _ = update KeyBackspace m in
-  let m, _ = update KeyBackspace m in
-  let m, _ = update KeyBackspace m in
-  let m, _ = update KeyBackspace m in
-  let m, _ = update KeyBackspace m in
-  let m, _ = update KeyBackspace m in
-  let m, _ = update KeyBackspace m in
-  let m, _ = update KeyBackspace m in
-  let m, _ = update KeyBackspace m in
-  let m, _ = update KeyBackspace m in
-  let m, _ = update KeyBackspace m in
-  let m, _ = update KeyBackspace m in
-  let m, _ = update (KeyChar 'n') m in
-  let m, _ = update (KeyChar 'e') m in
-  let m, _ = update (KeyChar 'w') m in
-  let m, _ = update KeyEnter m in
+  let m, _ = update (Key Backspace) m in
+  let m, _ = update (Key Backspace) m in
+  let m, _ = update (Key Backspace) m in
+  let m, _ = update (Key Backspace) m in
+  let m, _ = update (Key Backspace) m in
+  let m, _ = update (Key Backspace) m in
+  let m, _ = update (Key Backspace) m in
+  let m, _ = update (Key Backspace) m in
+  let m, _ = update (Key Backspace) m in
+  let m, _ = update (Key Backspace) m in
+  let m, _ = update (Key Backspace) m in
+  let m, _ = update (Key Backspace) m in
+  let m, _ = update (Key Backspace) m in
+  let m, _ = update (Key Backspace) m in
+  let m, _ = update (Key Backspace) m in
+  let m, _ = update (Key (Char 'n')) m in
+  let m, _ = update (Key (Char 'e')) m in
+  let m, _ = update (Key (Char 'w')) m in
+  let m, _ = update (Key Enter) m in
   (* Accept base url *)
-  let m, _ = update KeyEnter m in
+  let m, _ = update (Key Enter) m in
   (* Decline test *)
-  let m, _ = update (KeyChar 'n') m in
-  let m, _ = update KeyEnter m in
+  let m, _ = update (Key (Char 'n')) m in
+  let m, _ = update (Key Enter) m in
   Alcotest.check check_step "model select" ModelSelect m.step;
   (* Should have exactly 1 provider, not 2 *)
   Alcotest.(check int) "one provider" 1 (List.length m.providers);
@@ -308,21 +308,21 @@ let test_prepopulated_channel_token_prefills () =
       channel_sel = { telegram = true; discord = false; slack = false };
     }
   in
-  let m, _ = update KeyEnter m in
-  let m, _ = update KeyDown m in
-  let m, _ = update KeyEnter m in
-  let m, _ = update (KeyChar 'k') m in
-  let m, _ = update KeyEnter m in
-  let m, _ = update KeyEnter m in
-  let m, _ = update (KeyChar 'n') m in
-  let m, _ = update KeyEnter m in
-  let m, _ = update KeyEnter m in
-  let m, _ = update KeyEnter m in
-  let m, _ = update KeyEnter m in
-  let m, _ = update KeyEnter m in
+  let m, _ = update (Key Enter) m in
+  let m, _ = update (Key Down) m in
+  let m, _ = update (Key Enter) m in
+  let m, _ = update (Key (Char 'k')) m in
+  let m, _ = update (Key Enter) m in
+  let m, _ = update (Key Enter) m in
+  let m, _ = update (Key (Char 'n')) m in
+  let m, _ = update (Key Enter) m in
+  let m, _ = update (Key Enter) m in
+  let m, _ = update (Key Enter) m in
+  let m, _ = update (Key Enter) m in
+  let m, _ = update (Key Enter) m in
   Alcotest.check check_step "channel menu" ChannelMenu m.step;
   (* Select Telegram *)
-  let m, _ = update KeyEnter m in
+  let m, _ = update (Key Enter) m in
   Alcotest.check check_step "channel telegram" ChannelTelegram m.step;
   match m.widget with
   | TextInput ti ->
@@ -460,9 +460,9 @@ let test_skip_option_goes_to_review () =
     }
   in
   let m = { (initial_model Onboard) with providers = [ existing_provider ] } in
-  let m, _ = update KeyEnter m in
+  let m, _ = update (Key Enter) m in
   (* "skip (keep existing)" is first option — just press Enter *)
-  let m, _ = update KeyEnter m in
+  let m, _ = update (Key Enter) m in
   Alcotest.check check_step "goes to review" Review m.step;
   (* Provider list unchanged *)
   Alcotest.(check int) "provider count" 1 (List.length m.providers);
@@ -471,7 +471,7 @@ let test_skip_option_goes_to_review () =
 
 let test_skip_option_absent_without_providers () =
   let m = initial_model Onboard in
-  let m, _ = update KeyEnter m in
+  let m, _ = update (Key Enter) m in
   (* No skip option — first option should be "openai-codex" *)
   Alcotest.check check_step "provider select" ProviderSelect m.step;
   match m.widget with
@@ -484,28 +484,28 @@ let test_skip_option_absent_without_providers () =
 let test_full_wizard_tunnel_config () =
   (* Navigate a full wizard to ChannelMenu, skip channels, land on TunnelConfig *)
   let m = initial_model FullWizard in
-  let m, _ = update KeyEnter m in
-  let m, _ = update KeyDown m in
-  let m, _ = update KeyEnter m in
-  let m, _ = update (KeyChar 'k') m in
-  let m, _ = update KeyEnter m in
-  let m, _ = update KeyEnter m in
-  let m, _ = update (KeyChar 'n') m in
-  let m, _ = update KeyEnter m in
-  let m, _ = update KeyEnter m in
-  let m, _ = update KeyEnter m in
-  let m, _ = update KeyEnter m in
-  let m, _ = update KeyEnter m in
+  let m, _ = update (Key Enter) m in
+  let m, _ = update (Key Down) m in
+  let m, _ = update (Key Enter) m in
+  let m, _ = update (Key (Char 'k')) m in
+  let m, _ = update (Key Enter) m in
+  let m, _ = update (Key Enter) m in
+  let m, _ = update (Key (Char 'n')) m in
+  let m, _ = update (Key Enter) m in
+  let m, _ = update (Key Enter) m in
+  let m, _ = update (Key Enter) m in
+  let m, _ = update (Key Enter) m in
+  let m, _ = update (Key Enter) m in
   Alcotest.check check_step "channel menu" ChannelMenu m.step;
   (* Skip channels -> TunnelConfig *)
-  let m, _ = update KeyDown m in
-  let m, _ = update KeyDown m in
-  let m, _ = update KeyDown m in
-  let m, _ = update KeyEnter m in
+  let m, _ = update (Key Down) m in
+  let m, _ = update (Key Down) m in
+  let m, _ = update (Key Down) m in
+  let m, _ = update (Key Enter) m in
   Alcotest.check check_step "tunnel config" TunnelConfig m.step;
   (* Decline tunnel -> GatewayConfig *)
-  let m, _ = update (KeyChar 'n') m in
-  let m, _ = update KeyEnter m in
+  let m, _ = update (Key (Char 'n')) m in
+  let m, _ = update (Key Enter) m in
   Alcotest.check check_step "gateway config" GatewayConfig m.step
 
 let test_tunnel_enabled_flow () =
@@ -518,8 +518,8 @@ let test_tunnel_enabled_flow () =
     }
   in
   (* Enable tunnel *)
-  let m, _ = update (KeyChar 'y') m in
-  let m, _ = update KeyEnter m in
+  let m, _ = update (Key (Char 'y')) m in
+  let m, _ = update (Key Enter) m in
   Alcotest.check check_step "still tunnel config (provider select)" TunnelConfig
     m.step;
   (match m.widget with
@@ -528,7 +528,7 @@ let test_tunnel_enabled_flow () =
         "first option is cloudflare" "cloudflare" (List.hd si.options)
   | _ -> Alcotest.fail "expected Select widget for provider");
   (* Select cloudflare *)
-  let m, _ = update KeyEnter m in
+  let m, _ = update (Key Enter) m in
   Alcotest.check check_step "still tunnel config (name input)" TunnelConfig
     m.step;
   (* Verify secret input for tunnel name *)
@@ -537,10 +537,10 @@ let test_tunnel_enabled_flow () =
       Alcotest.(check bool) "tunnel name input is secret" true ti.secret
   | _ -> Alcotest.fail "expected TextInput widget for tunnel name");
   (* Type a tunnel name *)
-  let m, _ = update (KeyChar 't') m in
-  let m, _ = update (KeyChar 'u') m in
-  let m, _ = update (KeyChar 'n') m in
-  let m, _ = update KeyEnter m in
+  let m, _ = update (Key (Char 't')) m in
+  let m, _ = update (Key (Char 'u')) m in
+  let m, _ = update (Key (Char 'n')) m in
+  let m, _ = update (Key Enter) m in
   Alcotest.(check string) "tunnel name stored" "tun" m.tunnel_name;
   (* Now at tunnel URL input *)
   Alcotest.check check_step "still tunnel config (url input)" TunnelConfig
@@ -549,7 +549,7 @@ let test_tunnel_enabled_flow () =
   | TextInput ti ->
       Alcotest.(check bool) "tunnel url is not secret" false ti.secret
   | _ -> Alcotest.fail "expected TextInput widget for tunnel url");
-  let m, _ = update KeyEnter m in
+  let m, _ = update (Key Enter) m in
   Alcotest.check check_step "gateway config" GatewayConfig m.step
 
 let test_build_config_json_includes_tunnel () =

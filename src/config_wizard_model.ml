@@ -24,15 +24,7 @@ type step =
   | Confirm
   | Done
 
-type msg =
-  | KeyChar of char
-  | KeyEnter
-  | KeyBackspace
-  | KeyUp
-  | KeyDown
-  | KeyEsc
-  | KeyTab
-  | ValidationResult of (string, string) result
+type msg = Key of Tui_input.key | ValidationResult of (string, string) result
 
 type action =
   | Noop

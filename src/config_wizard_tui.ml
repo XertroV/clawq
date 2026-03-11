@@ -6,52 +6,9 @@ open Config_wizard_view
 
 let clear_screen () = print_string "\027[2J\027[H"
 
-let set_raw_mode () =
-  let open Unix in
-  let attr = tcgetattr stdin in
-  let raw =
-    {
-      attr with
-      c_icanon = false;
-      c_echo = false;
-      c_isig = false;
-      c_vmin = 1;
-      c_vtime = 0;
-    }
-  in
-  tcsetattr stdin TCSAFLUSH raw;
-  attr
-
-let restore_mode attr = Unix.tcsetattr Unix.stdin Unix.TCSAFLUSH attr
-
 let read_key () =
-  let buf = Bytes.create 1 in
-  let _ = Unix.read Unix.stdin buf 0 1 in
-  let c = Bytes.get buf 0 in
-  if c = '\027' then begin
-    (* Check for escape sequence *)
-    let ready, _, _ = Unix.select [ Unix.stdin ] [] [] 0.05 in
-    if ready <> [] then begin
-      let buf2 = Bytes.create 2 in
-      let n = Unix.read Unix.stdin buf2 0 2 in
-      if n = 2 then
-        match (Bytes.get buf2 0, Bytes.get buf2 1) with
-        | '[', 'A' -> KeyUp
-        | '[', 'B' -> KeyDown
-        | '[', 'C' -> KeyChar ' ' (* right arrow - ignore *)
-        | '[', 'D' -> KeyChar ' ' (* left arrow - ignore *)
-        | _ -> KeyEsc
-      else KeyEsc
-    end
-    else KeyEsc
-  end
-  else if c = '\n' || c = '\r' then KeyEnter
-  else if c = '\127' || c = '\b' then KeyBackspace
-  else if c = '\t' then KeyTab
-  else if c = '\003' then
-    (* Ctrl-C *)
-    raise Exit
-  else KeyChar c
+  let k = Tui_input.read_key_raw () in
+  match k with Tui_input.Ctrl_c -> raise Exit | _ -> Key k
 
 let build_config_json (m : model) : Yojson.Safe.t =
   let providers =
@@ -297,39 +254,32 @@ let run_wizard mode =
     print_endline
       "Config wizard requires an interactive terminal.\n\
        Use 'clawq config set KEY VALUE' for non-interactive configuration."
-  else begin
-    let old_attr = set_raw_mode () in
-    let m = ref (load_initial_model mode) in
-    (try
-       while !m.step <> Done do
-         clear_screen ();
-         print_string (view !m);
-         flush stdout;
-         let key = read_key () in
-         let new_m, action = update key !m in
-         m := new_m;
-         match action with
-         | WriteConfig ->
-             let path = write_wizard_config !m in
-             m := { !m with messages = [ "Saved to " ^ path ] }
-         | TestProvider (_name, _key, _url) ->
-             (* Synchronous placeholder — real validation in config_validate.ml *)
-             let result_m, _ =
-               update
-                 (ValidationResult
-                    (Ok "Provider test: skipped (use clawq doctor)")) !m
-             in
-             m := result_m
-         | Quit -> m := { !m with step = Done }
-         | Noop -> ()
-       done;
-       clear_screen ();
-       print_string (view !m);
-       flush stdout
-     with
-    | Exit -> ()
-    | exn ->
-        restore_mode old_attr;
-        raise exn);
-    restore_mode old_attr
-  end
+  else
+    Tui_input.with_raw_mode ~isig:false (fun () ->
+        let m = ref (load_initial_model mode) in
+        try
+          while !m.step <> Done do
+            clear_screen ();
+            print_string (view !m);
+            flush stdout;
+            let key = read_key () in
+            let new_m, action = update key !m in
+            m := new_m;
+            match action with
+            | WriteConfig ->
+                let path = write_wizard_config !m in
+                m := { !m with messages = [ "Saved to " ^ path ] }
+            | TestProvider (_name, _key, _url) ->
+                let result_m, _ =
+                  update
+                    (ValidationResult
+                       (Ok "Provider test: skipped (use clawq doctor)")) !m
+                in
+                m := result_m
+            | Quit -> m := { !m with step = Done }
+            | Noop -> ()
+          done;
+          clear_screen ();
+          print_string (view !m);
+          flush stdout
+        with Exit | Tui_input.Eof -> ())

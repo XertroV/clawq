@@ -56,7 +56,7 @@ let make_select_at label options selected = Select { label; options; selected }
 
 let text_input_update msg (ti : text_input) : text_input =
   match msg with
-  | KeyChar c ->
+  | Key (Char c) ->
       let v = ti.value in
       let before = String.sub v 0 ti.cursor in
       let after = String.sub v ti.cursor (String.length v - ti.cursor) in
@@ -65,7 +65,7 @@ let text_input_update msg (ti : text_input) : text_input =
         value = before ^ String.make 1 c ^ after;
         cursor = ti.cursor + 1;
       }
-  | KeyBackspace when ti.cursor > 0 ->
+  | Key Backspace when ti.cursor > 0 ->
       let v = ti.value in
       let before = String.sub v 0 (ti.cursor - 1) in
       let after = String.sub v ti.cursor (String.length v - ti.cursor) in
@@ -75,16 +75,16 @@ let text_input_update msg (ti : text_input) : text_input =
 let select_update msg (si : select_input) : select_input =
   let n = List.length si.options in
   match msg with
-  | KeyUp -> { si with selected = (si.selected - 1 + n) mod n }
-  | KeyDown -> { si with selected = (si.selected + 1) mod n }
-  | KeyTab -> { si with selected = (si.selected + 1) mod n }
+  | Key Up -> { si with selected = (si.selected - 1 + n) mod n }
+  | Key Down -> { si with selected = (si.selected + 1) mod n }
+  | Key Tab -> { si with selected = (si.selected + 1) mod n }
   | _ -> si
 
 let confirm_update msg (ci : confirm_input) : confirm_input =
   match msg with
-  | KeyChar 'y' | KeyChar 'Y' -> { ci with value = true }
-  | KeyChar 'n' | KeyChar 'N' -> { ci with value = false }
-  | KeyUp | KeyDown | KeyTab -> { ci with value = not ci.value }
+  | Key (Char 'y') | Key (Char 'Y') -> { ci with value = true }
+  | Key (Char 'n') | Key (Char 'N') -> { ci with value = false }
+  | Key Up | Key Down | Key Tab -> { ci with value = not ci.value }
   | _ -> ci
 
 let skip_option = "skip (keep existing)"
@@ -405,12 +405,12 @@ let go_back m =
 
 let update msg (m : model) : model * action =
   match msg with
-  | KeyEsc -> (go_back m, Noop)
+  | Key Escape -> (go_back m, Noop)
   | _ -> (
       match m.step with
       | Welcome -> (
           match msg with
-          | KeyEnter -> (transition_from_welcome m, Noop)
+          | Key Enter -> (transition_from_welcome m, Noop)
           | _ ->
               let w =
                 match m.widget with
@@ -420,25 +420,25 @@ let update msg (m : model) : model * action =
               ({ m with widget = w }, Noop))
       | ProviderSelect -> (
           match (msg, m.widget) with
-          | KeyEnter, Select si -> (transition_from_provider_select m si, Noop)
+          | Key Enter, Select si -> (transition_from_provider_select m si, Noop)
           | _, Select si ->
               ({ m with widget = Select (select_update msg si) }, Noop)
           | _ -> (m, Noop))
       | ProviderApiKey -> (
           match (msg, m.widget) with
-          | KeyEnter, TextInput ti -> (transition_from_api_key m ti, Noop)
+          | Key Enter, TextInput ti -> (transition_from_api_key m ti, Noop)
           | _, TextInput ti ->
               ({ m with widget = TextInput (text_input_update msg ti) }, Noop)
           | _ -> (m, Noop))
       | ProviderBaseUrl -> (
           match (msg, m.widget) with
-          | KeyEnter, TextInput ti -> (transition_from_base_url m ti, Noop)
+          | Key Enter, TextInput ti -> (transition_from_base_url m ti, Noop)
           | _, TextInput ti ->
               ({ m with widget = TextInput (text_input_update msg ti) }, Noop)
           | _ -> (m, Noop))
       | ProviderTestOffer -> (
           match (msg, m.widget) with
-          | KeyEnter, ConfirmInput ci -> transition_from_test_offer m ci
+          | Key Enter, ConfirmInput ci -> transition_from_test_offer m ci
           | _, ConfirmInput ci ->
               ({ m with widget = ConfirmInput (confirm_update msg ci) }, Noop)
           | _ -> (m, Noop))
@@ -458,14 +458,14 @@ let update msg (m : model) : model * action =
                 }
               in
               (transition_from_test_result m, Noop)
-          | KeyEnter ->
+          | Key Enter ->
               (* Skip waiting *)
               (transition_from_test_result m, Noop)
           | _ -> (m, Noop))
       | ModelSelect -> (
           match (msg, m.widget) with
-          | KeyEnter, Select si -> (transition_from_model_select m si, Noop)
-          | KeyEnter, TextInput ti ->
+          | Key Enter, Select si -> (transition_from_model_select m si, Noop)
+          | Key Enter, TextInput ti ->
               let m = { m with primary_model = ti.value } in
               ( goto SecurityTools
                   (make_confirm ~value:true "Enable tool use?")
@@ -478,54 +478,54 @@ let update msg (m : model) : model * action =
           | _ -> (m, Noop))
       | SecurityTools -> (
           match (msg, m.widget) with
-          | KeyEnter, ConfirmInput ci ->
+          | Key Enter, ConfirmInput ci ->
               (transition_from_security_tools m ci, Noop)
           | _, ConfirmInput ci ->
               ({ m with widget = ConfirmInput (confirm_update msg ci) }, Noop)
           | _ -> (m, Noop))
       | ToolSearchConfig -> (
           match (msg, m.widget) with
-          | KeyEnter, ConfirmInput ci ->
+          | Key Enter, ConfirmInput ci ->
               (transition_from_tool_search_config m ci, Noop)
           | _, ConfirmInput ci ->
               ({ m with widget = ConfirmInput (confirm_update msg ci) }, Noop)
           | _ -> (m, Noop))
       | SecurityWorkspace -> (
           match (msg, m.widget) with
-          | KeyEnter, ConfirmInput ci ->
+          | Key Enter, ConfirmInput ci ->
               (transition_from_security_workspace m ci, Noop)
           | _, ConfirmInput ci ->
               ({ m with widget = ConfirmInput (confirm_update msg ci) }, Noop)
           | _ -> (m, Noop))
       | ChannelMenu -> (
           match (msg, m.widget) with
-          | KeyEnter, Select si -> (transition_from_channel_menu m si, Noop)
+          | Key Enter, Select si -> (transition_from_channel_menu m si, Noop)
           | _, Select si ->
               ({ m with widget = Select (select_update msg si) }, Noop)
           | _ -> (m, Noop))
       | ChannelTelegram -> (
           match (msg, m.widget) with
-          | KeyEnter, TextInput ti ->
+          | Key Enter, TextInput ti ->
               (transition_from_channel_telegram m ti, Noop)
           | _, TextInput ti ->
               ({ m with widget = TextInput (text_input_update msg ti) }, Noop)
           | _ -> (m, Noop))
       | ChannelDiscord -> (
           match (msg, m.widget) with
-          | KeyEnter, TextInput ti ->
+          | Key Enter, TextInput ti ->
               (transition_from_channel_discord m ti, Noop)
           | _, TextInput ti ->
               ({ m with widget = TextInput (text_input_update msg ti) }, Noop)
           | _ -> (m, Noop))
       | ChannelSlack -> (
           match (msg, m.widget) with
-          | KeyEnter, TextInput ti -> (transition_from_channel_slack m ti, Noop)
+          | Key Enter, TextInput ti -> (transition_from_channel_slack m ti, Noop)
           | _, TextInput ti ->
               ({ m with widget = TextInput (text_input_update msg ti) }, Noop)
           | _ -> (m, Noop))
       | TunnelConfig -> (
           match (msg, m.widget) with
-          | KeyEnter, _ -> (transition_from_tunnel m, Noop)
+          | Key Enter, _ -> (transition_from_tunnel m, Noop)
           | _, ConfirmInput ci ->
               ({ m with widget = ConfirmInput (confirm_update msg ci) }, Noop)
           | _, Select si ->
@@ -534,19 +534,19 @@ let update msg (m : model) : model * action =
               ({ m with widget = TextInput (text_input_update msg ti) }, Noop))
       | GatewayConfig -> (
           match (msg, m.widget) with
-          | KeyEnter, TextInput ti -> (transition_from_gateway m ti, Noop)
+          | Key Enter, TextInput ti -> (transition_from_gateway m ti, Noop)
           | _, TextInput ti ->
               ({ m with widget = TextInput (text_input_update msg ti) }, Noop)
           | _ -> (m, Noop))
       | MemoryConfig -> (
           match (msg, m.widget) with
-          | KeyEnter, ConfirmInput ci -> (transition_from_memory m ci, Noop)
+          | Key Enter, ConfirmInput ci -> (transition_from_memory m ci, Noop)
           | _, ConfirmInput ci ->
               ({ m with widget = ConfirmInput (confirm_update msg ci) }, Noop)
           | _ -> (m, Noop))
       | Review -> (
           match (msg, m.widget) with
-          | KeyEnter, ConfirmInput ci ->
+          | Key Enter, ConfirmInput ci ->
               if ci.value then
                 (goto Confirm (make_confirm "Write config now?") m, Noop)
               else (m, Quit)
@@ -555,7 +555,7 @@ let update msg (m : model) : model * action =
           | _ -> (m, Noop))
       | Confirm -> (
           match (msg, m.widget) with
-          | KeyEnter, ConfirmInput ci ->
+          | Key Enter, ConfirmInput ci ->
               if ci.value then ({ m with step = Done }, WriteConfig)
               else (go_back m, Noop)
           | _, ConfirmInput ci ->
