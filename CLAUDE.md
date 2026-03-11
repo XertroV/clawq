@@ -113,6 +113,10 @@ Subdirectory-specific guidelines exist in `docs/CLAUDE.md`, `src/CLAUDE.md`, and
 - Build config: `dune-project`, `dune-workspace`, `src/dune`, `test/dune`
 - Tests: `test/test_main.ml` and `test/test_*.ml`
 
+## Misc Notes
+
+- When implementing or updating features, have a background subagent check `docs/*` to see if anything requires updating. Claude code agents: Use haiku for the model when creating the agent task.
+
 ## Recommended Agent Workflow
 
 1. Read relevant modules and adjacent tests first.
