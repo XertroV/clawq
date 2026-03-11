@@ -112,6 +112,16 @@ let test_context_window_unknown () =
 let make_provider ?(base_url = None) api_key =
   { Runtime_config.default_provider_config with api_key; base_url }
 
+let make_codex_oauth ?(access_token = "access-token")
+    ?(refresh_token = "refresh-token") ?(expires_at_ms = 1730000000000) () =
+  {
+    Runtime_config.access_token;
+    refresh_token;
+    expires_at_ms;
+    account_id = None;
+    email = None;
+  }
+
 let test_detect_kind_anthropic () =
   let cfg = make_provider "sk-ant-abc123" in
   Alcotest.(check bool)
@@ -247,15 +257,7 @@ let test_find_provider_with_codex_oauth_auth () =
           kind = Some "openai-codex";
           base_url = Some "https://chatgpt.com/backend-api/codex";
           default_model = Some "openai-codex/gpt-5-codex";
-          codex_oauth =
-            Some
-              {
-                Runtime_config.access_token = "access-token";
-                refresh_token = "refresh-token";
-                expires_at_ms = 1730000000000;
-                account_id = None;
-                email = None;
-              };
+          codex_oauth = Some (make_codex_oauth ());
         } );
     ]
   in
@@ -276,15 +278,7 @@ let test_find_provider_codex_associated_models () =
           kind = Some "openai-codex";
           base_url = Some "https://chatgpt.com/backend-api/codex";
           default_model = Some "openai-codex/gpt-5.3-codex";
-          codex_oauth =
-            Some
-              {
-                Runtime_config.access_token = "access-token";
-                refresh_token = "refresh-token";
-                expires_at_ms = 1730000000000;
-                account_id = None;
-                email = None;
-              };
+          codex_oauth = Some (make_codex_oauth ());
         } );
     ]
   in
@@ -305,6 +299,65 @@ let test_find_provider_codex_associated_models () =
   check "gpt-5.4-pro routes to codex" "gpt-5.4-pro";
   check "gpt-5-mini routes to codex" "gpt-5-mini"
 
+let test_find_provider_ignores_codex_api_key_only_auth () =
+  let providers =
+    [
+      ( "openai-codex",
+        {
+          Runtime_config.default_provider_config with
+          kind = Some "openai-codex";
+          api_key = "sk-test";
+          base_url = Some "https://chatgpt.com/backend-api/codex";
+          default_model = Some "openai-codex/gpt-5-codex";
+        } );
+    ]
+  in
+  match Provider.find_provider_for_model ~providers ~model_name:"gpt-5.4" with
+  | Some _ ->
+      Alcotest.fail "did not expect match for codex provider with API key only"
+  | None -> ()
+
+let test_find_provider_ignores_expired_unrefreshable_codex_oauth () =
+  let providers =
+    [
+      ( "openai-codex",
+        {
+          Runtime_config.default_provider_config with
+          kind = Some "openai-codex";
+          base_url = Some "https://chatgpt.com/backend-api/codex";
+          default_model = Some "openai-codex/gpt-5-codex";
+          codex_oauth =
+            Some
+              (make_codex_oauth ~refresh_token:"" ~expires_at_ms:0 ());
+        } );
+    ]
+  in
+  match Provider.find_provider_for_model ~providers ~model_name:"gpt-5.4" with
+  | Some _ ->
+      Alcotest.fail
+        "did not expect match for expired unrefreshable codex oauth"
+  | None -> ()
+
+let test_find_provider_accepts_expired_refreshable_codex_oauth () =
+  let providers =
+    [
+      ( "openai-codex",
+        {
+          Runtime_config.default_provider_config with
+          kind = Some "openai-codex";
+          base_url = Some "https://chatgpt.com/backend-api/codex";
+          default_model = Some "openai-codex/gpt-5-codex";
+          codex_oauth = Some (make_codex_oauth ~expires_at_ms:0 ());
+        } );
+    ]
+  in
+  match Provider.find_provider_for_model ~providers ~model_name:"gpt-5.4" with
+  | Some (name, _) ->
+      Alcotest.(check string)
+        "refreshable expired codex oauth remains routable" "openai-codex" name
+  | None ->
+      Alcotest.fail "expected refreshable expired codex oauth to remain routable"
+
 let test_find_provider_ignores_empty_codex_oauth_tokens () =
   let providers =
     [
@@ -316,13 +369,8 @@ let test_find_provider_ignores_empty_codex_oauth_tokens () =
           default_model = Some "openai-codex/gpt-5-codex";
           codex_oauth =
             Some
-              {
-                Runtime_config.access_token = "";
-                refresh_token = "";
-                expires_at_ms = 0;
-                account_id = None;
-                email = None;
-              };
+              (make_codex_oauth ~access_token:"" ~refresh_token:""
+                 ~expires_at_ms:0 ());
         } );
     ]
   in
@@ -431,15 +479,7 @@ let test_select_provider_bare_model_overrides_default () =
               kind = Some "openai-codex";
               base_url = Some "https://chatgpt.com/backend-api/codex";
               default_model = Some "openai-codex/gpt-5-codex";
-              codex_oauth =
-                Some
-                  {
-                    Runtime_config.access_token = "access-token";
-                    refresh_token = "refresh-token";
-                    expires_at_ms = 1730000000000;
-                    account_id = None;
-                    email = None;
-                  };
+              codex_oauth = Some (make_codex_oauth ());
             } );
         ];
       agent_defaults =
@@ -449,6 +489,32 @@ let test_select_provider_bare_model_overrides_default () =
   let provider_name, _provider, model = Provider.select_provider ~config () in
   Alcotest.(check string) "routes to codex" "openai-codex" provider_name;
   Alcotest.(check string) "uses user model not default" "gpt-5.4" model
+
+let test_select_provider_skips_codex_api_key_only_default () =
+  let config =
+    {
+      Runtime_config.default with
+      default_provider = Some "openai-codex";
+      providers =
+        [
+          ( "openai-codex",
+            {
+              Runtime_config.default_provider_config with
+              kind = Some "openai-codex";
+              api_key = "sk-test";
+              base_url = Some "https://chatgpt.com/backend-api/codex";
+            } );
+          ( "openrouter",
+            { Runtime_config.default_provider_config with api_key = "sk-or" } );
+        ];
+      agent_defaults =
+        { Runtime_config.default.agent_defaults with primary_model = "gpt-5.4" };
+    }
+  in
+  let provider_name, _provider, model = Provider.select_provider ~config () in
+  Alcotest.(check string)
+    "falls back to non-codex provider" "openrouter" provider_name;
+  Alcotest.(check string) "user model preserved" "gpt-5.4" model
 
 let test_select_provider_quota_fallback_respects_user_model () =
   let config =
@@ -781,6 +847,14 @@ let suite =
       test_find_provider_with_codex_oauth_auth;
     Alcotest.test_case "find provider codex associated models" `Quick
       test_find_provider_codex_associated_models;
+    Alcotest.test_case "find provider ignores codex api key only auth" `Quick
+      test_find_provider_ignores_codex_api_key_only_auth;
+    Alcotest.test_case
+      "find provider ignores expired unrefreshable codex oauth"
+      `Quick test_find_provider_ignores_expired_unrefreshable_codex_oauth;
+    Alcotest.test_case
+      "find provider accepts expired refreshable codex oauth"
+      `Quick test_find_provider_accepts_expired_refreshable_codex_oauth;
     Alcotest.test_case "find provider ignores empty codex oauth tokens" `Quick
       test_find_provider_ignores_empty_codex_oauth_tokens;
     Alcotest.test_case "message_to_json text only" `Quick
@@ -801,6 +875,8 @@ let suite =
       test_default_base_url_kimi_coding;
     Alcotest.test_case "select_provider bare model overrides default" `Quick
       test_select_provider_bare_model_overrides_default;
+    Alcotest.test_case "select_provider skips codex api key only default"
+      `Quick test_select_provider_skips_codex_api_key_only_default;
     Alcotest.test_case "select_provider quota fallback respects user model"
       `Quick test_select_provider_quota_fallback_respects_user_model;
     Alcotest.test_case "select_provider preferred provider forces failover"

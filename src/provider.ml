@@ -497,6 +497,20 @@ let is_codex_associated_model norm =
       && String.sub norm 0 (String.length prefix) = prefix)
     codex_associated_models
 
+(* Routing needs credentials that can satisfy the next request, not just
+   config-shaped auth. Codex providers require viable OAuth, and expired access
+   tokens only remain usable when a refresh token is present. *)
+let provider_has_routable_auth ~name (p : Runtime_config.provider_config) =
+  match detect_kind ~name p with
+  | OpenAICodex -> (
+      match p.codex_oauth with
+      | Some creds ->
+          let health = Openai_codex_oauth.inspect_credentials creds in
+          (health.has_access_token && not health.expired)
+          || health.refresh_possible
+      | None -> false)
+  | _ -> Runtime_config.is_key_set p.api_key
+
 let find_provider_for_model ~providers ~model_name =
   let norm = normalize_model_name model_name in
   let match_provider (name, (p : Runtime_config.provider_config)) =
@@ -504,7 +518,7 @@ let find_provider_for_model ~providers ~model_name =
     if
       String.length norm >= String.length norm_name
       && String.sub norm 0 (String.length norm_name) = norm_name
-      && Runtime_config.provider_has_auth p
+      && provider_has_routable_auth ~name p
     then Some (name, p)
     else
       let is_codex_kind =
@@ -516,14 +530,14 @@ let find_provider_for_model ~providers ~model_name =
         is_codex_kind
         && ((String.length norm >= 13 && String.sub norm 0 13 = "openai-codex")
            || is_codex_associated_model norm)
-        && Runtime_config.provider_has_auth p
+        && provider_has_routable_auth ~name p
       in
       if codex_match then Some (name, p)
       else
         match p.default_model with
         | Some dm ->
             let norm_dm = normalize_model_name dm in
-            if norm = norm_dm && Runtime_config.provider_has_auth p then
+            if norm = norm_dm && provider_has_routable_auth ~name p then
               Some (name, p)
             else None
         | None -> None
@@ -537,7 +551,7 @@ let select_provider ~(config : Runtime_config.t) ?preferred_provider
   in
   let with_key =
     List.filter
-      (fun (_, p) -> Runtime_config.provider_has_auth p)
+      (fun (name, p) -> provider_has_routable_auth ~name p)
       config.providers
   in
   let model_target =
@@ -553,7 +567,8 @@ let select_provider ~(config : Runtime_config.t) ?preferred_provider
     match config.default_provider with
     | Some name -> (
         match find_named name with
-        | Some (n, p) when Runtime_config.provider_has_auth p -> Some (n, p)
+        | Some (n, p) when provider_has_routable_auth ~name:n p ->
+            Some (n, p)
         | _ -> None)
     | None -> None
   in
@@ -568,7 +583,8 @@ let select_provider ~(config : Runtime_config.t) ?preferred_provider
     match preferred_provider with
     | Some name -> (
         match find_named name with
-        | Some (n, p) when Runtime_config.provider_has_auth p -> Some (n, p)
+        | Some (n, p) when provider_has_routable_auth ~name:n p ->
+            Some (n, p)
         | _ -> None)
     | None -> None
   in
@@ -629,7 +645,7 @@ let select_provider ~(config : Runtime_config.t) ?preferred_provider
           List.find_opt
             (fun (n, p) ->
               n <> provider_name
-              && Runtime_config.provider_has_auth p
+              && provider_has_routable_auth ~name:n p
               &&
               let t =
                 Option.value ~default:0.85 p.Runtime_config.quota_threshold
