@@ -148,6 +148,86 @@ let test_is_allowed_no_match () =
     "no match denied" false
     (Signal.is_allowed ~cfg ~from:"+999")
 
+
+let free_port () =
+  let sock = Unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
+  Fun.protect
+    ~finally:(fun () -> Unix.close sock)
+    (fun () ->
+      Unix.setsockopt sock Unix.SO_REUSEADDR true;
+      Unix.bind sock (Unix.ADDR_INET (Unix.inet_addr_loopback, 0));
+      match Unix.getsockname sock with
+      | Unix.ADDR_INET (_, port) -> port
+      | Unix.ADDR_UNIX _ -> Alcotest.fail "expected inet socket")
+
+let with_signal_sse_server ~delay_s ~payload f =
+  let port = free_port () in
+  let callback _conn _req _body =
+    let body_stream, push = Lwt_stream.create () in
+    Lwt.async (fun () ->
+        let open Lwt.Syntax in
+        let* () = Lwt_unix.sleep delay_s in
+        push (Some ("data: " ^ payload ^ "
+
+"));
+        push None;
+        Lwt.return_unit);
+    let headers =
+      Cohttp.Header.of_list [ ("Content-Type", "text/event-stream") ]
+    in
+    Cohttp_lwt_unix.Server.respond ~status:`OK ~headers
+      ~body:(Cohttp_lwt.Body.of_stream body_stream) ()
+  in
+  let stop, stopper = Lwt.wait () in
+  let server =
+    Cohttp_lwt_unix.Server.create ~mode:(`TCP (`Port port))
+      (Cohttp_lwt_unix.Server.make ~callback ())
+  in
+  Lwt.async (fun () -> Lwt.pick [ server; stop ]);
+  Fun.protect
+    ~finally:(fun () -> Lwt.wakeup_later stopper ())
+    (fun () -> f port)
+
+let test_receive_loop_jsonrpc_allows_delayed_sse_body () =
+  let payload =
+    {|{"jsonrpc":"2.0","method":"receive","params":{"envelope":{"source":"+1234","dataMessage":{"message":"hello from stream"}}}}|}
+  in
+  with_signal_sse_server ~delay_s:0.15 ~payload (fun port ->
+      let cfg : Runtime_config.signal_config =
+        {
+          base_url = Printf.sprintf "http://127.0.0.1:%d" port;
+          account = "+1000";
+          allow_from = [];
+          max_chunk_bytes = 1600;
+          api_mode = "jsonrpc";
+        }
+      in
+      let old_timeout = !(Http_client.default_timeout_s) in
+      Fun.protect
+        ~finally:(fun () -> Http_client.set_default_timeout_s old_timeout)
+        (fun () ->
+          Http_client.set_default_timeout_s 0.05;
+          let seen = ref None in
+          let finished = Lwt.wait () in
+          let stop, stopper = finished in
+          Lwt_main.run
+            (Lwt.pick
+               [
+                 (Signal.receive_loop_jsonrpc ~cfg ~on_message:(fun ~from ~group_id_opt:_ ~text ->
+                      seen := Some (from, text);
+                      if Lwt.is_sleeping stop then Lwt.wakeup_later stopper ();
+                      Lwt.return_unit));
+                 stop;
+                 (let open Lwt.Syntax in
+                  let* () = Lwt_unix.sleep 1.0 in
+                  Alcotest.fail "timed out waiting for SSE message");
+               ]);
+          match !seen with
+          | Some (from, _ts, text) ->
+              Alcotest.(check string) "from" "+1234" from;
+              Alcotest.(check string) "text" "hello from stream" text
+          | None -> Alcotest.fail "expected SSE-delivered message"))
+
 let suite =
   [
     Alcotest.test_case "chunk short" `Quick test_chunk_short;
@@ -180,4 +260,6 @@ let suite =
     Alcotest.test_case "is_allowed empty list" `Quick test_is_allowed_empty_list;
     Alcotest.test_case "is_allowed match" `Quick test_is_allowed_match;
     Alcotest.test_case "is_allowed no match" `Quick test_is_allowed_no_match;
+    Alcotest.test_case "jsonrpc loop allows delayed sse body" `Quick
+      test_receive_loop_jsonrpc_allows_delayed_sse_body;
   ]

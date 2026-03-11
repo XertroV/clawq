@@ -613,7 +613,7 @@ let get_or_create_locked mgr ~key =
       Hashtbl.replace mgr.sessions key triple;
       triple
 
-let with_session_lock mgr ~key f =
+let with_session_lock ?session_warn_timeout ?session_fatal_timeout mgr ~key f =
   let open Lwt.Syntax in
   (* Release sessions_lock before blocking on per-session mutex to avoid
      deadlock: other operations (message dispatch, draining, etc.) also need
@@ -628,6 +628,8 @@ let with_session_lock mgr ~key f =
   in
   let* () =
     Lwt_util.lock_with_timeout
+      ?warn_timeout:session_warn_timeout
+      ?fatal_timeout:session_fatal_timeout
       ~label:(Printf.sprintf "session_mutex/with_session_lock[%s]" key)
       mutex
   in

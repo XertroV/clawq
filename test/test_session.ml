@@ -19,6 +19,33 @@ let string_contains haystack needle =
   in
   needle_len = 0 || loop 0
 
+
+let with_captured_logs f =
+  let messages = ref [] in
+  let reporter =
+    { Logs.report = (fun _src level ~over k msgf ->
+          let k _ = over (); k () in
+          msgf @@ fun ?header ?tags:_ fmt ->
+          Format.kasprintf
+            (fun msg ->
+              let level = Logs.level_to_string (Some level) in
+              let full =
+                match header with
+                | Some h when h <> "" -> Printf.sprintf "[%s] %s" level (h ^ " " ^ msg)
+                | _ -> Printf.sprintf "[%s] %s" level msg
+              in
+              messages := full :: !messages;
+              k ())
+            fmt) }
+  in
+  let prev = Logs.reporter () in
+  Logs.set_reporter reporter;
+  Fun.protect
+    ~finally:(fun () -> Logs.set_reporter prev)
+    (fun () ->
+      let result = f () in
+      (result, List.rev !messages))
+
 let mock_status_notifier () =
   let sent = ref [] in
   let edited = ref [] in
@@ -3173,6 +3200,44 @@ let test_drain_queued_messages_deletes_sqlite_row () =
                    "0 rows after drain" 0
                    (Memory.queue_count ~db ~session_key:key);
                  Lwt.return_unit))))
+
+
+let test_with_session_lock_warns_on_slow_mutex_acquisition () =
+  let mgr = Session.create_manager () in
+  let key = "web:slow-lock" in
+  let agent = Agent.create ~config:Runtime_config.default () in
+  let mutex = Lwt_mutex.create () in
+  let interrupt = ref None in
+  Hashtbl.replace mgr.sessions key (agent, mutex, interrupt);
+  let seen =
+    Lwt_main.run
+      (let open Lwt.Syntax in
+       let* () = Lwt_mutex.lock mutex in
+       let waiter =
+         Lwt_preemptive.detach
+           (fun () ->
+             with_captured_logs (fun () ->
+                 Lwt_main.run
+                   (Session.with_session_lock ~session_warn_timeout:0.01
+                      ~session_fatal_timeout:0.2 mgr ~key (fun _ _ ->
+                        Lwt.return_unit))))
+           ()
+       in
+       let* () = Lwt_unix.sleep 0.03 in
+       Lwt_mutex.unlock mutex;
+       let* ((), logs) = waiter in
+       Lwt.return logs)
+  in
+  let joined = String.concat "
+" seen in
+  Alcotest.(check bool) "warns on slow acquisition" true
+    (String.contains joined 'M' && String.contains joined 's');
+  Alcotest.(check bool) "mentions slow retry" true
+    (try ignore (Str.search_forward (Str.regexp_string "Mutex acquisition slow") joined 0); true with Not_found -> false);
+  Alcotest.(check bool) "mentions eventual acquisition" true
+    (try ignore (Str.search_forward (Str.regexp_string "Mutex acquired after extended wait") joined 0); true with Not_found -> false);
+  Alcotest.(check bool) "mentions session label" true
+    (try ignore (Str.search_forward (Str.regexp_string "session_mutex/with_session_lock[web:slow-lock]") joined 0); true with Not_found -> false)
 
 let suite =
   [

@@ -2,7 +2,12 @@ name: ci
 
 on:
   push:
+    branches: [master]
   pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -24,8 +29,8 @@ jobs:
           opam install -y . --deps-only --with-test
           opam install -y ocamlformat.0.28.1
 
-      - name: Cache dune build artifacts
-        uses: actions/cache@v4
+      - name: Restore dune build cache
+        uses: actions/cache/restore@v4
         with:
           path: _build
           key: dune-build-${{ runner.os }}-${{ hashFiles('clawq.opam', 'dune-project', 'dune-workspace', 'src/dune', 'test/dune') }}-${{ hashFiles('src/**', 'test/**') }}
@@ -49,11 +54,12 @@ jobs:
           eval "$(opam env)"
           dune runtest
 
-      # - name: Binary size check
-      #   run: |
-      #     eval "$(opam env)"
-      #     make binary-size-check SHELL_SWITCH="$(opam switch show)"
-
+      - name: Save dune build cache
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: _build
+          key: dune-build-${{ runner.os }}-${{ hashFiles('clawq.opam', 'dune-project', 'dune-workspace', 'src/dune', 'test/dune') }}-${{ hashFiles('src/**', 'test/**') }}
 
   docs:
     runs-on: ubuntu-latest
