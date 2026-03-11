@@ -974,8 +974,13 @@ let handle_message ~(discord_config : Runtime_config.discord_config)
           | Ok response ->
               if Session.is_queued_message_response response then
                 Lwt.return_unit
-              else if !response_sent then begin
-                ignore (Reaction_tracker.cleanup reactions ~key);
+              else if !response_sent then (
+                let* () =
+                  Reaction_tracker.cleanup_with_remove reactions ~key
+                    ~remove:(fun mid emoji ->
+                      delete_own_reaction ~bot_token:discord_config.bot_token
+                        ~channel_id:msg.channel_id ~message_id:mid ~emoji)
+                in
                 let send_to_channel text =
                   send_message_fn ~bot_token:discord_config.bot_token
                     ~channel_id:msg.channel_id ~text
@@ -997,8 +1002,7 @@ let handle_message ~(discord_config : Runtime_config.discord_config)
                 Lwt.async (fun () ->
                     Session.process_autonomous_turn_result
                       ~on_response:send_to_channel session_mgr ~key ~response);
-                Lwt.return_unit
-              end
+                Lwt.return_unit)
               else
                 let* () =
                   match status_msg with
@@ -1024,7 +1028,12 @@ let handle_message ~(discord_config : Runtime_config.discord_config)
                 let* () =
                   set_reaction (Connector_status.Discord.phase_emoji Completed)
                 in
-                ignore (Reaction_tracker.cleanup reactions ~key);
+                let* () =
+                  Reaction_tracker.cleanup_with_remove reactions ~key
+                    ~remove:(fun mid emoji ->
+                      delete_own_reaction ~bot_token:discord_config.bot_token
+                        ~channel_id:msg.channel_id ~message_id:mid ~emoji)
+                in
                 if not (Session.take_response_deferred session_mgr ~key) then
                   Session.mark_response_sent session_mgr ~key;
                 let send_to_channel text =
@@ -1069,7 +1078,12 @@ let handle_message ~(discord_config : Runtime_config.discord_config)
               let* () =
                 set_reaction (Connector_status.Discord.phase_emoji Failed)
               in
-              ignore (Reaction_tracker.cleanup reactions ~key);
+              let* () =
+                Reaction_tracker.cleanup_with_remove reactions ~key
+                  ~remove:(fun mid emoji ->
+                    delete_own_reaction ~bot_token:discord_config.bot_token
+                      ~channel_id:msg.channel_id ~message_id:mid ~emoji)
+              in
               if not (Session.take_response_deferred session_mgr ~key) then
                 Session.mark_response_sent session_mgr ~key;
               Lwt.return_unit)

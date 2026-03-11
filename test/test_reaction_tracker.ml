@@ -118,6 +118,69 @@ let test_cleanup_nonexistent_key () =
   let peer_ids = Reaction_tracker.cleanup rt ~key:"nonexistent" in
   Alcotest.(check (list string)) "empty list" [] peer_ids
 
+let test_cleanup_with_remove () =
+  let rt = Reaction_tracker.create () in
+  let _peers =
+    Reaction_tracker.get_or_create_peers rt ~key:"k1" ~initial:"m1"
+  in
+  Reaction_tracker.add_peer rt ~key:"k1" ~message_id:"m2";
+  Lwt_main.run
+    (Reaction_tracker.set_reaction_on_single rt ~message_id:"m1"
+       ~remove_previous:(fun _ _ -> Lwt.return_unit)
+       ~add:(fun _ _ -> Lwt.return_unit)
+       ~emoji:"star");
+  Lwt_main.run
+    (Reaction_tracker.set_reaction_on_single rt ~message_id:"m2"
+       ~remove_previous:(fun _ _ -> Lwt.return_unit)
+       ~add:(fun _ _ -> Lwt.return_unit)
+       ~emoji:"check");
+  let removed = ref [] in
+  Lwt_main.run
+    (Reaction_tracker.cleanup_with_remove rt ~key:"k1" ~remove:(fun mid emoji ->
+         removed := (mid, emoji) :: !removed;
+         Lwt.return_unit));
+  let sorted = List.sort compare !removed in
+  Alcotest.(check (list (pair string string)))
+    "removed both reactions"
+    [ ("m1", "star"); ("m2", "check") ]
+    sorted;
+  let new_peers =
+    Reaction_tracker.get_or_create_peers rt ~key:"k1" ~initial:"m3"
+  in
+  Alcotest.(check (list string)) "fresh after cleanup" [ "m3" ] !new_peers
+
+let test_cleanup_with_remove_handles_errors () =
+  let rt = Reaction_tracker.create () in
+  let _peers =
+    Reaction_tracker.get_or_create_peers rt ~key:"k1" ~initial:"m1"
+  in
+  Lwt_main.run
+    (Reaction_tracker.set_reaction_on_single rt ~message_id:"m1"
+       ~remove_previous:(fun _ _ -> Lwt.return_unit)
+       ~add:(fun _ _ -> Lwt.return_unit)
+       ~emoji:"star");
+  Lwt_main.run
+    (Reaction_tracker.cleanup_with_remove rt ~key:"k1"
+       ~remove:(fun _mid _emoji -> Lwt.fail_with "API error"));
+  let new_peers =
+    Reaction_tracker.get_or_create_peers rt ~key:"k1" ~initial:"m2"
+  in
+  Alcotest.(check (list string))
+    "fresh after failed cleanup" [ "m2" ] !new_peers
+
+let test_cleanup_with_remove_no_state () =
+  let rt = Reaction_tracker.create () in
+  let _peers =
+    Reaction_tracker.get_or_create_peers rt ~key:"k1" ~initial:"m1"
+  in
+  let removed = ref [] in
+  Lwt_main.run
+    (Reaction_tracker.cleanup_with_remove rt ~key:"k1" ~remove:(fun mid emoji ->
+         removed := (mid, emoji) :: !removed;
+         Lwt.return_unit));
+  Alcotest.(check (list (pair string string)))
+    "no removes when no state" [] !removed
+
 let suite =
   [
     Alcotest.test_case "get_or_create_peers creates new" `Quick
@@ -135,4 +198,10 @@ let suite =
     Alcotest.test_case "cleanup removes tracking" `Quick test_cleanup;
     Alcotest.test_case "cleanup nonexistent key" `Quick
       test_cleanup_nonexistent_key;
+    Alcotest.test_case "cleanup_with_remove calls remove for each" `Quick
+      test_cleanup_with_remove;
+    Alcotest.test_case "cleanup_with_remove handles errors" `Quick
+      test_cleanup_with_remove_handles_errors;
+    Alcotest.test_case "cleanup_with_remove no-op without state" `Quick
+      test_cleanup_with_remove_no_state;
   ]

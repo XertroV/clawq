@@ -1072,6 +1072,25 @@ let set_message_reaction ~bot_token ~chat_id ~message_id ~emoji () =
           status chat_id message_id);
   Lwt.return_unit
 
+let clear_message_reaction ~bot_token ~chat_id ~message_id () =
+  let open Lwt.Syntax in
+  let uri = Printf.sprintf "%s%s/setMessageReaction" api_base bot_token in
+  let body =
+    `Assoc
+      [
+        ("chat_id", `String chat_id);
+        ("message_id", `Int message_id);
+        ("reaction", `List []);
+      ]
+    |> Yojson.Safe.to_string
+  in
+  let* status, _body = Http_client.post_json ~uri ~headers:[] ~body in
+  if status < 200 || status >= 300 then
+    Logs.warn (fun m ->
+        m "Telegram clear reaction failed: status=%d chat_id=%s message_id=%d"
+          status chat_id message_id);
+  Lwt.return_unit
+
 let send_message ?(disable_notification = true) ?parse_mode ~bot_token ~chat_id
     ~text () =
   let open Lwt.Syntax in

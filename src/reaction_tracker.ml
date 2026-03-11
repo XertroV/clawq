@@ -52,3 +52,22 @@ let cleanup t ~key =
   Hashtbl.remove t.peers key;
   List.iter (fun mid -> Hashtbl.remove t.state mid) peer_ids;
   peer_ids
+
+let cleanup_with_remove t ~key ~remove =
+  let peer_ids =
+    match Hashtbl.find_opt t.peers key with Some p -> !p | None -> []
+  in
+  let to_remove =
+    List.filter_map
+      (fun mid ->
+        match Hashtbl.find_opt t.state mid with
+        | Some emoji -> Some (mid, emoji)
+        | None -> None)
+      peer_ids
+  in
+  Hashtbl.remove t.peers key;
+  List.iter (fun mid -> Hashtbl.remove t.state mid) peer_ids;
+  Lwt_list.iter_p
+    (fun (mid, emoji) ->
+      Lwt.catch (fun () -> remove mid emoji) (fun _exn -> Lwt.return_unit))
+    to_remove

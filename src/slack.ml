@@ -881,8 +881,13 @@ let handle_event ~(config : Runtime_config.slack_config)
                 | Ok response ->
                     if Session.is_queued_message_response response then
                       Lwt.return "ok"
-                    else if !response_sent then begin
-                      ignore (Reaction_tracker.cleanup reactions ~key);
+                    else if !response_sent then (
+                      let* () =
+                        Reaction_tracker.cleanup_with_remove reactions ~key
+                          ~remove:(fun timestamp emoji_name ->
+                            remove_reaction ~bot_token:config.bot_token
+                              ~channel_id ~timestamp ~emoji_name)
+                      in
                       let send_to_channel text =
                         send_message_fn ~bot_token:config.bot_token ~channel_id
                           ~text
@@ -891,8 +896,7 @@ let handle_event ~(config : Runtime_config.slack_config)
                           Session.process_autonomous_turn_result
                             ~on_response:send_to_channel session_manager ~key
                             ~response);
-                      Lwt.return "ok"
-                    end
+                      Lwt.return "ok")
                     else
                       let* () =
                         match status_msg with
@@ -919,7 +923,12 @@ let handle_event ~(config : Runtime_config.slack_config)
                         set_reaction
                           (Connector_status.Slack.phase_emoji Completed)
                       in
-                      ignore (Reaction_tracker.cleanup reactions ~key);
+                      let* () =
+                        Reaction_tracker.cleanup_with_remove reactions ~key
+                          ~remove:(fun timestamp emoji_name ->
+                            remove_reaction ~bot_token:config.bot_token
+                              ~channel_id ~timestamp ~emoji_name)
+                      in
                       if
                         not
                           (Session.take_response_deferred session_manager ~key)
@@ -953,7 +962,12 @@ let handle_event ~(config : Runtime_config.slack_config)
                     let* () =
                       set_reaction (Connector_status.Slack.phase_emoji Failed)
                     in
-                    ignore (Reaction_tracker.cleanup reactions ~key);
+                    let* () =
+                      Reaction_tracker.cleanup_with_remove reactions ~key
+                        ~remove:(fun timestamp emoji_name ->
+                          remove_reaction ~bot_token:config.bot_token
+                            ~channel_id ~timestamp ~emoji_name)
+                    in
                     if not (Session.take_response_deferred session_manager ~key)
                     then Session.mark_response_sent session_manager ~key;
                     Lwt.return "ok")

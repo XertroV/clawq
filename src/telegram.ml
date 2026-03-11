@@ -1046,13 +1046,17 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
               | Ok response ->
                   if Session.is_queued_message_response response then
                     Lwt.return_unit
-                  else if !response_sent then begin
-                    ignore (Reaction_tracker.cleanup reactions ~key);
+                  else if !response_sent then (
+                    let* () =
+                      Reaction_tracker.cleanup_with_remove reactions ~key
+                        ~remove:(fun mid _emoji ->
+                          clear_message_reaction ~bot_token
+                            ~chat_id:update.chat_id ~message_id:mid ())
+                    in
                     Lwt.async (fun () ->
                         Session.process_autonomous_turn_result
                           ~on_response:send_to_chat session_mgr ~key ~response);
-                    Lwt.return_unit
-                  end
+                    Lwt.return_unit)
                   else
                     let* () =
                       match status_msg with
@@ -1105,7 +1109,12 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
                         ()
                     in
                     let* () = set_reaction reaction_emoji_done in
-                    ignore (Reaction_tracker.cleanup reactions ~key);
+                    let* () =
+                      Reaction_tracker.cleanup_with_remove reactions ~key
+                        ~remove:(fun mid _emoji ->
+                          clear_message_reaction ~bot_token
+                            ~chat_id:update.chat_id ~message_id:mid ())
+                    in
                     if not (Session.take_response_deferred session_mgr ~key)
                     then Session.mark_response_sent session_mgr ~key;
                     Lwt.async (fun () ->
@@ -1131,7 +1140,12 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
                       ()
                   in
                   let* () = set_reaction reaction_emoji_error in
-                  ignore (Reaction_tracker.cleanup reactions ~key);
+                  let* () =
+                    Reaction_tracker.cleanup_with_remove reactions ~key
+                      ~remove:(fun mid _emoji ->
+                        clear_message_reaction ~bot_token
+                          ~chat_id:update.chat_id ~message_id:mid ())
+                  in
                   if not (Session.take_response_deferred session_mgr ~key) then
                     Session.mark_response_sent session_mgr ~key;
                   Lwt.return_unit)
