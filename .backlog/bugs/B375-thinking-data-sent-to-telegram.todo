@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B375
+priority: high
+status: pending
+tags: []
+title: thinking data sent to telegram should show as italics or in a markdown quote box or both
+---
+
+thinking data sent to telegram should show as italics or in a markdown quote box or both

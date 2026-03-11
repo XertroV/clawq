@@ -373,3 +373,4 @@ bugs:
     - file: B372-setup-wizard-tui-inputs-and-ct.todo
     - file: B373-consider-new-pmodel-field-s-we.todo
     - file: B374-add-to-runtime-context-ls-outp.todo
+    - file: B375-thinking-data-sent-to-telegram.todo
