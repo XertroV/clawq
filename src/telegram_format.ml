@@ -153,6 +153,43 @@ let format_verbose_result ?(visible_lines = 3) ~name result =
         if total > 10 then Some (expandable_blockquote ~visible_lines trimmed)
         else None
 
+let format_thinking text =
+  let lines = String.split_on_char '\n' text in
+  let total = List.length lines in
+  let buf = Buffer.create (String.length text + 64) in
+  let () =
+    if total <= 3 then
+      List.iteri
+        (fun i line ->
+          if i > 0 then Buffer.add_char buf '\n';
+          Buffer.add_string buf (">_" ^ escape_mdv2 line ^ "_"))
+        lines
+    else
+      let rec take n = function
+        | [] -> []
+        | _ :: _ when n <= 0 -> []
+        | x :: rest -> x :: take (n - 1) rest
+      in
+      let rec drop n = function
+        | [] -> []
+        | _ :: rest when n > 0 -> drop (n - 1) rest
+        | l -> l
+      in
+      let visible = take 3 lines in
+      let hidden = drop 3 lines in
+      List.iter
+        (fun line -> Buffer.add_string buf (">_" ^ escape_mdv2 line ^ "_\n"))
+        visible;
+      Buffer.add_string buf "**>";
+      List.iteri
+        (fun i line ->
+          if i > 0 then Buffer.add_char buf '\n';
+          Buffer.add_string buf ("_" ^ escape_mdv2 line ^ "_"))
+        hidden;
+      Buffer.add_string buf "||"
+  in
+  Buffer.contents buf
+
 let spoiler text = "||" ^ escape_mdv2 text ^ "||"
 
 let is_sensitive_content ~name result =

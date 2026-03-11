@@ -122,6 +122,30 @@ let contains s sub =
     true
   with Not_found -> false
 
+let test_format_thinking_single_line () =
+  let result = Telegram_format.format_thinking "hello world" in
+  Alcotest.(check string)
+    "single line blockquote+italic" ">_hello world_" result
+
+let test_format_thinking_short_multiline () =
+  let result = Telegram_format.format_thinking "line1\nline2\nline3" in
+  Alcotest.(check string)
+    "3 lines blockquote+italic" ">_line1_\n>_line2_\n>_line3_" result
+
+let test_format_thinking_long_expandable () =
+  let text = "a\nb\nc\nd\ne" in
+  let result = Telegram_format.format_thinking text in
+  assert (contains result ">_a_");
+  assert (contains result ">_b_");
+  assert (contains result ">_c_");
+  assert (contains result "**>");
+  assert (String.sub result (String.length result - 2) 2 = "||")
+
+let test_format_thinking_escapes_specials () =
+  let result = Telegram_format.format_thinking "price is 10.5!" in
+  Alcotest.(check string)
+    "specials escaped in thinking" ">_price is 10\\.5\\!_" result
+
 let test_format_error_standalone () =
   let result =
     Telegram_format.format_error_standalone ~emoji:"X" ~name:"shell_exec"
@@ -182,6 +206,14 @@ let suite =
       test_format_sensitive_result_some;
     Alcotest.test_case "format_sensitive_result none" `Quick
       test_format_sensitive_result_none;
+    Alcotest.test_case "format_thinking single line" `Quick
+      test_format_thinking_single_line;
+    Alcotest.test_case "format_thinking short multiline" `Quick
+      test_format_thinking_short_multiline;
+    Alcotest.test_case "format_thinking long expandable" `Quick
+      test_format_thinking_long_expandable;
+    Alcotest.test_case "format_thinking escapes specials" `Quick
+      test_format_thinking_escapes_specials;
     Alcotest.test_case "format_error_standalone" `Quick
       test_format_error_standalone;
   ]

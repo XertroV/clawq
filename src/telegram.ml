@@ -998,9 +998,8 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
                                       send_chunked ~parse_mode:"MarkdownV2"
                                         ~bot_token ~chat_id:update.chat_id
                                         ~text:
-                                          ("_"
-                                          ^ Telegram_format.escape_mdv2 thinking
-                                          ^ "_")
+                                          (Telegram_format.format_thinking
+                                             thinking)
                                         ()
                                     in
                                     refresh_typing ();
@@ -1092,8 +1091,7 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
                         let* () =
                           send_chunked ~parse_mode:"MarkdownV2" ~bot_token
                             ~chat_id:update.chat_id
-                            ~text:
-                              ("_" ^ Telegram_format.escape_mdv2 thinking ^ "_")
+                            ~text:(Telegram_format.format_thinking thinking)
                             ()
                         in
                         refresh_typing ();
