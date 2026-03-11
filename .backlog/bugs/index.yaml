@@ -368,3 +368,4 @@ bugs:
     - file: B367-restrict-background-task-logs.todo
     - file: B368-background-tasks-should-persis.todo
     - file: B369-model-usage-stats-should-count.todo
+    - file: B370-telegram-notifications-should.todo

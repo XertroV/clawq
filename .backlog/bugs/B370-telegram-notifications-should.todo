@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B370
+priority: high
+status: pending
+tags: []
+title: Telegram notifications should default silent; only direct replies / explicit notify requests / blocking questions should alert
+---
+
+Telegram notifications should default silent; only direct replies / explicit notify requests / blocking questions should alert
