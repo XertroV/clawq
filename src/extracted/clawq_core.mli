@@ -39,17 +39,17 @@ module N :
   val of_nat : int -> int
  end
 
-val map : ('a1 -> 'a2) -> 'a1 list -> 'a2 list
-
-val firstn : int -> 'a1 list -> 'a1 list
-
 val rev : 'a1 list -> 'a1 list
+
+val map : ('a1 -> 'a2) -> 'a1 list -> 'a2 list
 
 val existsb : ('a1 -> bool) -> 'a1 list -> bool
 
 val forallb : ('a1 -> bool) -> 'a1 list -> bool
 
 val filter : ('a1 -> bool) -> 'a1 list -> 'a1 list
+
+val firstn : int -> 'a1 list -> 'a1 list
 
 module Z :
  sig
