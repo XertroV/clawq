@@ -1,10 +1,15 @@
 ---
+claimed_at: "2026-03-11T15:11:08Z"
+claimed_by: cli-user
+completed_at: "2026-03-11T15:25:25Z"
 complexity: medium
 depends_on: []
+duration_minutes: 14.286846640683333
 estimate_hours: 1
 id: B380
 priority: high
-status: pending
+started_at: "2026-03-11T15:11:08Z"
+status: done
 tags: []
 title: When a connector is missing an API key (or it has length <= 6 (because we have a placeholder value of abc123)) it should be counted as disabled and reported as such. It should only report enabled if it has proper credentials AND .enabled is true (if it has a .enabled or equivalent)
 ---

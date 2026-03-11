@@ -12,11 +12,31 @@ let write_state ~pairing_code ~(tunnel_json : Yojson.Safe.t option)
       );
       ("gateway_port", `Int config.gateway.port);
       ("gateway_host", `String config.gateway.host);
-      ("telegram_enabled", `Bool (config.channels.telegram <> None));
-      ("discord_enabled", `Bool (config.channels.discord <> None));
-      ("slack_enabled", `Bool (config.channels.slack <> None));
-      ("github_enabled", `Bool (config.channels.github <> None));
-      ("teams_enabled", `Bool (config.channels.teams <> None));
+      ( "telegram_enabled",
+        `Bool
+          (match config.channels.telegram with
+          | None -> false
+          | Some tg -> Runtime_config.telegram_has_valid_credentials tg) );
+      ( "discord_enabled",
+        `Bool
+          (match config.channels.discord with
+          | None -> false
+          | Some d -> Runtime_config.discord_has_valid_credentials d) );
+      ( "slack_enabled",
+        `Bool
+          (match config.channels.slack with
+          | None -> false
+          | Some s -> Runtime_config.slack_has_valid_credentials s) );
+      ( "github_enabled",
+        `Bool
+          (match config.channels.github with
+          | None -> false
+          | Some g -> Runtime_config.github_has_valid_credentials g) );
+      ( "teams_enabled",
+        `Bool
+          (match config.channels.teams with
+          | None -> false
+          | Some t -> Runtime_config.teams_has_valid_credentials t) );
       ("pid", `Int (Unix.getpid ()));
     ]
   in

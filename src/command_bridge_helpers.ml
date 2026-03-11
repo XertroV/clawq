@@ -431,22 +431,92 @@ let cmd_status () =
     (Printf.sprintf "  telegram: %s"
        (match cfg.channels.telegram with
        | None -> "not configured"
-       | Some tg -> Printf.sprintf "%d account(s)" (List.length tg.accounts)));
+       | Some tg ->
+           if Runtime_config.telegram_has_valid_credentials tg then
+             Printf.sprintf "enabled (%d account(s))" (List.length tg.accounts)
+           else "disabled (no auth)"));
   add
     (Printf.sprintf "  discord: %s"
        (match cfg.channels.discord with
        | None -> "not configured"
        | Some d ->
-           Printf.sprintf "configured (guilds=%d users=%d)"
-             (List.length d.allow_guilds)
-             (List.length d.allow_users)));
+           if Runtime_config.discord_has_valid_credentials d then
+             Printf.sprintf "enabled (guilds=%d users=%d)"
+               (List.length d.allow_guilds)
+               (List.length d.allow_users)
+           else "disabled (no auth)"));
   add
     (Printf.sprintf "  slack: %s"
        (match cfg.channels.slack with
        | None -> "not configured"
        | Some s ->
-           Printf.sprintf "configured (path=%s socket_mode=%b)" s.events_path
-             s.socket_mode));
+           if Runtime_config.slack_has_valid_credentials s then
+             Printf.sprintf "enabled (path=%s socket_mode=%b)" s.events_path
+               s.socket_mode
+           else "disabled (no auth)"));
+  add
+    (Printf.sprintf "  teams: %s"
+       (match cfg.channels.teams with
+       | None -> "not configured"
+       | Some t ->
+           if Runtime_config.teams_has_valid_credentials t then
+             Printf.sprintf "enabled (teams=%d users=%d)"
+               (List.length t.allow_teams)
+               (List.length t.allow_users)
+           else "disabled (no auth)"));
+  add
+    (Printf.sprintf "  github: %s"
+       (match cfg.channels.github with
+       | None -> "not configured"
+       | Some g ->
+           if Runtime_config.github_has_valid_credentials g then
+             Printf.sprintf "enabled (repos=%d)" (List.length g.repos)
+           else "disabled (no auth)"));
+  let other_channel_status =
+    let enabled = ref [] in
+    let disabled = ref [] in
+    let check_channel name opt valid_fn =
+      match opt with
+      | None -> disabled := name :: !disabled
+      | Some c ->
+          if valid_fn c then enabled := name :: !enabled
+          else disabled := name :: !disabled
+    in
+    check_channel "mattermost" cfg.channels.mattermost
+      Runtime_config.mattermost_has_valid_credentials;
+    check_channel "dingtalk" cfg.channels.dingtalk
+      Runtime_config.dingtalk_has_valid_credentials;
+    check_channel "matrix" cfg.channels.matrix
+      Runtime_config.matrix_has_valid_credentials;
+    check_channel "email" cfg.channels.email
+      Runtime_config.email_has_valid_credentials;
+    check_channel "whatsapp" cfg.channels.whatsapp
+      Runtime_config.whatsapp_has_valid_credentials;
+    check_channel "nostr" cfg.channels.nostr
+      Runtime_config.nostr_has_valid_credentials;
+    check_channel "lark" cfg.channels.lark
+      Runtime_config.lark_has_valid_credentials;
+    check_channel "line" cfg.channels.line
+      Runtime_config.line_has_valid_credentials;
+    check_channel "onebot" cfg.channels.onebot
+      Runtime_config.onebot_has_valid_credentials;
+    check_channel "irc" cfg.channels.irc
+      Runtime_config.irc_has_valid_credentials;
+    check_channel "signal" cfg.channels.signal
+      Runtime_config.signal_has_valid_credentials;
+    check_channel "imessage" cfg.channels.imessage
+      Runtime_config.imessage_has_valid_credentials;
+    (List.rev !enabled, List.rev !disabled)
+  in
+  let enabled_others, disabled_others = other_channel_status in
+  List.iter
+    (fun name -> add (Printf.sprintf "  %s: enabled" name))
+    enabled_others;
+  if disabled_others <> [] then
+    add
+      (Printf.sprintf "  Disabled: %d others (%s)"
+         (List.length disabled_others)
+         (String.concat ", " disabled_others));
   add (Printf.sprintf "  memory backend: %s" cfg.memory.backend);
   add (Printf.sprintf "  providers: %d configured" (List.length cfg.providers));
   (match read_daemon_state () with

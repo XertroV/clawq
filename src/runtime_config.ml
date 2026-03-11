@@ -653,6 +653,70 @@ let provider_has_codex_oauth (p : provider_config) =
 let provider_has_auth (p : provider_config) =
   is_key_set p.api_key || provider_has_codex_oauth p
 
+let is_credential_valid cred =
+  String.length cred > 6
+  && not (String.length cred > 4 && String.sub cred 0 4 = "YOUR")
+
+let telegram_account_has_valid_credentials (acct : telegram_account) =
+  is_credential_valid acct.bot_token
+
+let telegram_has_valid_credentials (cfg : telegram_config) =
+  List.exists
+    (fun (_, acct) -> telegram_account_has_valid_credentials acct)
+    cfg.accounts
+
+let discord_has_valid_credentials (cfg : discord_config) =
+  is_credential_valid cfg.bot_token
+
+let slack_has_valid_credentials (cfg : slack_config) =
+  is_credential_valid cfg.bot_token && is_credential_valid cfg.signing_secret
+
+let github_has_valid_credentials (cfg : github_config) =
+  match cfg.auth with GithubPat token -> is_credential_valid token
+
+let mattermost_has_valid_credentials (cfg : mattermost_config) =
+  is_credential_valid cfg.access_token
+
+let dingtalk_has_valid_credentials (cfg : dingtalk_config) =
+  is_credential_valid cfg.app_key && is_credential_valid cfg.app_secret
+
+let matrix_has_valid_credentials (cfg : matrix_config) =
+  is_credential_valid cfg.access_token
+
+let email_has_valid_credentials (cfg : email_config) =
+  is_credential_valid cfg.username && is_credential_valid cfg.password
+
+let whatsapp_has_valid_credentials (cfg : whatsapp_config) =
+  is_credential_valid cfg.access_token
+
+let nostr_has_valid_credentials (cfg : nostr_config) =
+  is_credential_valid cfg.private_key
+
+let lark_has_valid_credentials (cfg : lark_config) =
+  cfg.enabled
+  && is_credential_valid cfg.app_id
+  && is_credential_valid cfg.app_secret
+
+let line_has_valid_credentials (cfg : line_config) =
+  is_credential_valid cfg.channel_access_token
+  && is_credential_valid cfg.channel_secret
+
+let onebot_has_valid_credentials (cfg : onebot_config) =
+  match cfg.access_token with
+  | None -> true
+  | Some token -> is_credential_valid token
+
+let teams_has_valid_credentials (cfg : teams_config) =
+  is_credential_valid cfg.app_id
+  && is_credential_valid cfg.app_secret
+  && is_credential_valid cfg.tenant_id
+
+let irc_has_valid_credentials (cfg : irc_config) =
+  match cfg.password with None -> true | Some pw -> is_credential_valid pw
+
+let signal_has_valid_credentials (_cfg : signal_config) = true
+let imessage_has_valid_credentials (_cfg : imessage_config) = true
+
 let effective_compaction_threshold_percent (memory : memory_config) =
   let p = memory.compaction_threshold_percent in
   if p <= 0 || p >= 100 then default.memory.compaction_threshold_percent else p

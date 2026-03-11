@@ -204,6 +204,108 @@ let test_config_parse_model_priority () =
     "model_priority config parsed ok" true
     (String.length cfg.agent_defaults.primary_model >= 0)
 
+let test_is_credential_valid () =
+  Alcotest.(check bool)
+    "empty is invalid" false
+    (Runtime_config.is_credential_valid "");
+  Alcotest.(check bool)
+    "short is invalid" false
+    (Runtime_config.is_credential_valid "abc123");
+  Alcotest.(check bool)
+    "placeholder is invalid" false
+    (Runtime_config.is_credential_valid "YOUR_API_KEY");
+  Alcotest.(check bool)
+    "valid credential" true
+    (Runtime_config.is_credential_valid "sk-proper-key-12345")
+
+let test_telegram_credential_validation () =
+  let valid_account =
+    {
+      Runtime_config.bot_token = "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11";
+      allow_from = [];
+      totp = None;
+    }
+  in
+  let invalid_account =
+    { valid_account with Runtime_config.bot_token = "abc123" }
+  in
+  Alcotest.(check bool)
+    "valid telegram account" true
+    (Runtime_config.telegram_account_has_valid_credentials valid_account);
+  Alcotest.(check bool)
+    "invalid telegram account" false
+    (Runtime_config.telegram_account_has_valid_credentials invalid_account)
+
+let test_slack_credential_validation () =
+  let valid_slack =
+    {
+      Runtime_config.bot_token = "xoxb-valid-token-12345";
+      signing_secret = "valid-secret-12345";
+      events_path = "/slack/events";
+      allow_channels = [];
+      allow_users = [];
+      app_token = "";
+      socket_mode = false;
+    }
+  in
+  let invalid_slack = { valid_slack with Runtime_config.bot_token = "abc" } in
+  Alcotest.(check bool)
+    "valid slack" true
+    (Runtime_config.slack_has_valid_credentials valid_slack);
+  Alcotest.(check bool)
+    "invalid slack token" false
+    (Runtime_config.slack_has_valid_credentials invalid_slack);
+  let bad_secret =
+    { valid_slack with Runtime_config.signing_secret = "short" }
+  in
+  Alcotest.(check bool)
+    "invalid slack secret" false
+    (Runtime_config.slack_has_valid_credentials bad_secret)
+
+let test_lark_credential_validation () =
+  let valid_lark =
+    {
+      Runtime_config.enabled = true;
+      app_id = "cli_valid_app_id_12345";
+      app_secret = "valid_secret_12345";
+      verification_token = "";
+      endpoint = "";
+      mode = "webhook";
+      allow_users = [];
+    }
+  in
+  let disabled_lark = { valid_lark with Runtime_config.enabled = false } in
+  let bad_creds_lark = { valid_lark with Runtime_config.app_id = "abc" } in
+  Alcotest.(check bool)
+    "valid lark" true
+    (Runtime_config.lark_has_valid_credentials valid_lark);
+  Alcotest.(check bool)
+    "disabled lark" false
+    (Runtime_config.lark_has_valid_credentials disabled_lark);
+  Alcotest.(check bool)
+    "bad creds lark" false
+    (Runtime_config.lark_has_valid_credentials bad_creds_lark)
+
+let test_teams_credential_validation () =
+  let valid_teams =
+    {
+      Runtime_config.app_id = "valid-app-id-12345";
+      app_secret = "valid-secret-12345";
+      tenant_id = "valid-tenant-12345";
+      webhook_path = "/teams/webhook";
+      service_url = "";
+      allow_teams = [];
+      allow_users = [];
+    }
+  in
+  let invalid_teams = { valid_teams with Runtime_config.app_id = "abc" } in
+  Alcotest.(check bool)
+    "valid teams" true
+    (Runtime_config.teams_has_valid_credentials valid_teams);
+  Alcotest.(check bool)
+    "invalid teams" false
+    (Runtime_config.teams_has_valid_credentials invalid_teams)
+
 let suite =
   [
     Alcotest.test_case "help/version returns output" `Quick
@@ -249,4 +351,13 @@ let suite =
       test_config_parse_with_telegram;
     Alcotest.test_case "config parse model_priority" `Quick
       test_config_parse_model_priority;
+    Alcotest.test_case "is_credential_valid" `Quick test_is_credential_valid;
+    Alcotest.test_case "telegram credential validation" `Quick
+      test_telegram_credential_validation;
+    Alcotest.test_case "slack credential validation" `Quick
+      test_slack_credential_validation;
+    Alcotest.test_case "lark credential validation" `Quick
+      test_lark_credential_validation;
+    Alcotest.test_case "teams credential validation" `Quick
+      test_teams_credential_validation;
   ]
