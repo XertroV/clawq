@@ -1,4 +1,4 @@
-let schema_version = 13
+let schema_version = 14
 
 type session_activity = Active | Inactive | Any
 
@@ -206,6 +206,7 @@ let init_request_stats_schema db =
     \     prompt_tokens INTEGER NOT NULL,\n\
     \     completion_tokens INTEGER NOT NULL,\n\
     \     cost_usd REAL,\n\
+    \     added_prompt_tokens INTEGER,\n\
     \     requested_at TEXT NOT NULL DEFAULT (datetime('now'))\n\
     \   )";
   exec_exn db
@@ -377,6 +378,20 @@ let migrate_schema db current_version =
       init_postmortems_schema db;
       init_model_discovery_state_schema db;
       Summary_store.init_schema db;
+      set_schema_version db schema_version
+  | 13 ->
+      init_session_schema db;
+      init_inbound_queue_schema db;
+      init_models_cache_schema db;
+      init_request_stats_schema db;
+      init_quota_cache_schema db;
+      init_postmortems_schema db;
+      init_model_discovery_state_schema db;
+      Summary_store.init_schema db;
+      (try
+         exec_exn db
+           "ALTER TABLE request_stats ADD COLUMN added_prompt_tokens INTEGER"
+       with _ -> ());
       set_schema_version db schema_version
   | n when n = schema_version ->
       init_session_schema db;

@@ -1154,6 +1154,7 @@ let handle args =
   | "doctor" :: _ -> cmd_doctor ()
   | "onboard" :: _ -> cmd_onboard ()
   | "models" :: rest -> cmd_models rest
+  | "costs" :: rest -> cmd_costs rest
   | "usage" :: rest ->
       let refresh = List.mem "--refresh" rest || List.mem "-r" rest in
       cmd_usage refresh

@@ -109,6 +109,18 @@ let models_cmd =
     (Cmd.info "models" ~doc:"List known models and set default model.")
     [ models_list_cmd; models_set_default_cmd; models_refresh_cmd ]
 
+let costs_cmd =
+  with_args "costs" "Show cumulative LLM costs and token usage."
+    [
+      `S "SUBCOMMANDS";
+      `I ("(default)", "Cost summary by time period (today, 7d, 30d, all).");
+      `I ("session [KEY]", "Per-session cost breakdown.");
+      `I ("model", "Per-model cost breakdown.");
+      `I ("provider", "Per-provider cost breakdown.");
+      `S "OPTIONS";
+      `I ("--json", "Output as JSON.");
+    ]
+
 let usage_cmd =
   let refresh =
     Arg.(
@@ -1168,6 +1180,7 @@ let () =
       onboard_cmd;
       models_cmd;
       usage_cmd;
+      costs_cmd;
       provider_cmd;
       channel_cmd;
       memory_cmd;

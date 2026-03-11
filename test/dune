@@ -61,6 +61,7 @@
   test_provider_quota
   test_rate_limiter
   test_reaction_tracker
+  test_request_stats
   test_resilience
   test_restart
   test_sandbox

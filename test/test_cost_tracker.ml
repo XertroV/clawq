@@ -41,6 +41,42 @@ let test_get_session_cost_empty () =
   let cost = Cost_tracker.get_session_cost ~session_id:"nonexistent" in
   Alcotest.(check (float 0.0001)) "empty session = 0" 0.0 cost
 
+let test_lookup_pricing_record () =
+  let p = Cost_tracker.lookup_pricing "claude-opus-4-6" in
+  match p with
+  | Some pricing ->
+      Alcotest.(check (float 0.01)) "input" 5.0 pricing.input_per_m;
+      Alcotest.(check (float 0.01)) "output" 25.0 pricing.output_per_m;
+      Alcotest.(check bool) "has cache" true (pricing.cache_read_per_m <> None)
+  | None -> Alcotest.fail "expected pricing"
+
+let test_cache_cost_with_hit () =
+  let cost =
+    Cost_tracker.calculate_cost_with_cache ~model:"gpt-5.4" ~prompt_tokens:5000
+      ~completion_tokens:1000 ~added_prompt_tokens:1000 ~cache_hit:true
+  in
+  (* fresh: 1000 * 2.50/1M = 0.0025, cached: 4000 * 1.25/1M = 0.005,
+     output: 1000 * 15.0/1M = 0.015 => total = 0.0225 *)
+  Alcotest.(check (float 0.0001)) "cache hit cost" 0.0225 cost;
+  let cost_no_cache =
+    Cost_tracker.calculate_cost ~model:"gpt-5.4" ~prompt_tokens:5000
+      ~completion_tokens:1000
+  in
+  Alcotest.(check bool) "cache cheaper" true (cost < cost_no_cache)
+
+let test_cache_cost_no_cache_rate () =
+  let cost_cache =
+    Cost_tracker.calculate_cost_with_cache ~model:"gpt-4-turbo"
+      ~prompt_tokens:5000 ~completion_tokens:1000 ~added_prompt_tokens:1000
+      ~cache_hit:true
+  in
+  let cost_standard =
+    Cost_tracker.calculate_cost ~model:"gpt-4-turbo" ~prompt_tokens:5000
+      ~completion_tokens:1000
+  in
+  Alcotest.(check (float 0.0001))
+    "no cache rate = standard" cost_standard cost_cache
+
 let suite =
   [
     Alcotest.test_case "calculate known model" `Quick test_calculate_cost_known;
@@ -50,4 +86,8 @@ let suite =
     Alcotest.test_case "record and get session" `Quick
       test_record_and_get_session;
     Alcotest.test_case "empty session cost" `Quick test_get_session_cost_empty;
+    Alcotest.test_case "lookup returns record" `Quick test_lookup_pricing_record;
+    Alcotest.test_case "cache cost with hit" `Quick test_cache_cost_with_hit;
+    Alcotest.test_case "cache cost no cache rate" `Quick
+      test_cache_cost_no_cache_rate;
   ]

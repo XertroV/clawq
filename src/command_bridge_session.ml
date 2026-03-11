@@ -34,10 +34,20 @@ let cmd_session args =
                let keepalive_suffix =
                  if row.keepalive_enabled then "  [keepalive]" else ""
                in
+               let cost_info =
+                 Request_stats.summary_for_session ~db
+                   ~session_key:row.session_key
+               in
+               let cost_suffix =
+                 if cost_info.total_cost_usd > 0.0 then
+                   Printf.sprintf "  cost=$%.4f" cost_info.total_cost_usd
+                 else ""
+               in
                Printf.sprintf
-                 "%s  state=%s  channel=%s  messages=%d  archives=%d%s%s"
+                 "%s  state=%s  channel=%s  messages=%d  archives=%d%s%s%s"
                  row.session_key state channel row.message_count
-                 row.archived_epoch_count pending_suffix keepalive_suffix)
+                 row.archived_epoch_count pending_suffix keepalive_suffix
+                 cost_suffix)
              sessions)
   | "list" :: rest -> (
       match parse_session_list_args rest with
@@ -77,10 +87,20 @@ let cmd_session args =
                    let keepalive_suffix =
                      if row.keepalive_enabled then "  [keepalive]" else ""
                    in
+                   let cost_info =
+                     Request_stats.summary_for_session ~db
+                       ~session_key:row.session_key
+                   in
+                   let cost_suffix =
+                     if cost_info.total_cost_usd > 0.0 then
+                       Printf.sprintf "  cost=$%.4f" cost_info.total_cost_usd
+                     else ""
+                   in
                    Printf.sprintf
-                     "%s  state=%s  channel=%s  messages=%d  archives=%d%s%s"
+                     "%s  state=%s  channel=%s  messages=%d  archives=%d%s%s%s"
                      row.session_key state channel row.message_count
-                     row.archived_epoch_count pending_suffix keepalive_suffix)
+                     row.archived_epoch_count pending_suffix keepalive_suffix
+                     cost_suffix)
                  sessions))
   | [ "epochs"; session_key ] ->
       let epochs = Memory.list_session_epochs ~db ~session_key in

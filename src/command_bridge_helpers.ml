@@ -1391,6 +1391,200 @@ let raw_message_json config index (row : Memory.raw_message) =
       ("created_at", `String row.created_at);
     ]
 
+let format_summary_line label (s : Request_stats.summary) =
+  let cost_str = Printf.sprintf "$%.4f" s.total_cost_usd in
+  let turns_str = Printf.sprintf "%d turns" s.total_turns in
+  let tokens_str =
+    Printf.sprintf "%s prompt (%s added), %s completion"
+      (Request_stats.format_tokens s.total_prompt_tokens)
+      (Request_stats.format_tokens s.total_added_prompt_tokens)
+      (Request_stats.format_tokens s.total_completion_tokens)
+  in
+  Printf.sprintf "  %-14s %s    %s\n              %s" label
+    (Setup_common.green cost_str)
+    (Setup_common.dim turns_str)
+    (Setup_common.dim tokens_str)
+
+let summary_to_json label (s : Request_stats.summary) =
+  `Assoc
+    [
+      ("period", `String label);
+      ("cost_usd", `Float s.total_cost_usd);
+      ("prompt_tokens", `Int s.total_prompt_tokens);
+      ("completion_tokens", `Int s.total_completion_tokens);
+      ("added_prompt_tokens", `Int s.total_added_prompt_tokens);
+      ("turns", `Int s.total_turns);
+    ]
+
+let cmd_costs args =
+  let db = get_db () in
+  let json_mode = List.mem "--json" args in
+  let args = List.filter (fun a -> a <> "--json") args in
+  match args with
+  | [] ->
+      let today =
+        Request_stats.summary_for_period ~db
+          ~since:"datetime('now', 'start of day')"
+      in
+      let week =
+        Request_stats.summary_for_period ~db ~since:"datetime('now', '-7 days')"
+      in
+      let month =
+        Request_stats.summary_for_period ~db
+          ~since:"datetime('now', '-30 days')"
+      in
+      let all = Request_stats.total_summary ~db in
+      if json_mode then
+        Yojson.Safe.pretty_to_string
+          (`List
+             [
+               summary_to_json "today" today;
+               summary_to_json "7_days" week;
+               summary_to_json "30_days" month;
+               summary_to_json "all_time" all;
+             ])
+      else if all.total_turns = 0 then "No cost data recorded yet."
+      else
+        String.concat "\n"
+          [
+            Setup_common.bold "Cost Summary";
+            "";
+            format_summary_line "Today" today;
+            format_summary_line "Last 7 days" week;
+            format_summary_line "Last 30 days" month;
+            format_summary_line "All time" all;
+          ]
+  | [ "session" ] ->
+      let sessions = Request_stats.summary_by_session ~db in
+      if json_mode then
+        Yojson.Safe.pretty_to_string
+          (`List
+             (List.map
+                (fun (ss : Request_stats.session_summary) ->
+                  `Assoc
+                    [
+                      ("session_key", `String ss.session_key);
+                      ("cost_usd", `Float ss.summary.total_cost_usd);
+                      ("prompt_tokens", `Int ss.summary.total_prompt_tokens);
+                      ( "completion_tokens",
+                        `Int ss.summary.total_completion_tokens );
+                      ( "added_prompt_tokens",
+                        `Int ss.summary.total_added_prompt_tokens );
+                      ("turns", `Int ss.summary.total_turns);
+                      ("first_request", `String ss.first_request);
+                      ("last_request", `String ss.last_request);
+                    ])
+                sessions))
+      else if sessions = [] then "No cost data recorded yet."
+      else
+        let rows =
+          List.map
+            (fun (ss : Request_stats.session_summary) ->
+              let cost_str = Printf.sprintf "$%.4f" ss.summary.total_cost_usd in
+              let turns_str =
+                Printf.sprintf "%d turns" ss.summary.total_turns
+              in
+              let tokens_str =
+                Printf.sprintf "%s prompt (%s added), %s completion"
+                  (Request_stats.format_tokens ss.summary.total_prompt_tokens)
+                  (Request_stats.format_tokens
+                     ss.summary.total_added_prompt_tokens)
+                  (Request_stats.format_tokens
+                     ss.summary.total_completion_tokens)
+              in
+              Printf.sprintf "  %s\n    %s    %s\n    %s"
+                (Setup_common.cyan ss.session_key)
+                (Setup_common.green cost_str)
+                (Setup_common.dim turns_str)
+                (Setup_common.dim tokens_str))
+            sessions
+        in
+        String.concat "\n" (Setup_common.bold "Session Costs" :: "" :: rows)
+  | [ "session"; key ] ->
+      let s = Request_stats.summary_for_session ~db ~session_key:key in
+      if json_mode then Yojson.Safe.pretty_to_string (summary_to_json key s)
+      else if s.total_turns = 0 then
+        Printf.sprintf "No cost data for session '%s'." key
+      else
+        String.concat "\n"
+          [
+            Setup_common.bold (Printf.sprintf "Costs for %s" key);
+            "";
+            format_summary_line "Total" s;
+          ]
+  | [ "model" ] ->
+      let models = Request_stats.summary_by_model ~db in
+      if json_mode then
+        Yojson.Safe.pretty_to_string
+          (`List
+             (List.map
+                (fun (ms : Request_stats.model_summary) ->
+                  `Assoc
+                    [
+                      ("model", `String ms.model);
+                      ("provider", `String ms.provider);
+                      ("cost_usd", `Float ms.summary.total_cost_usd);
+                      ("prompt_tokens", `Int ms.summary.total_prompt_tokens);
+                      ( "completion_tokens",
+                        `Int ms.summary.total_completion_tokens );
+                      ("turns", `Int ms.summary.total_turns);
+                    ])
+                models))
+      else if models = [] then "No cost data recorded yet."
+      else
+        let rows =
+          List.map
+            (fun (ms : Request_stats.model_summary) ->
+              let cost_str = Printf.sprintf "$%.4f" ms.summary.total_cost_usd in
+              let turns_str =
+                Printf.sprintf "%d turns" ms.summary.total_turns
+              in
+              Printf.sprintf "  %s  %s    %s"
+                (Setup_common.cyan
+                   (Printf.sprintf "%-30s" (ms.provider ^ ":" ^ ms.model)))
+                (Setup_common.green cost_str)
+                (Setup_common.dim turns_str))
+            models
+        in
+        String.concat "\n" (Setup_common.bold "Model Costs" :: "" :: rows)
+  | [ "provider" ] ->
+      let providers = Request_stats.summary_by_provider ~db in
+      if json_mode then
+        Yojson.Safe.pretty_to_string
+          (`List
+             (List.map
+                (fun (prov, s) ->
+                  `Assoc
+                    [
+                      ("provider", `String prov);
+                      ("cost_usd", `Float s.Request_stats.total_cost_usd);
+                      ("prompt_tokens", `Int s.total_prompt_tokens);
+                      ("completion_tokens", `Int s.total_completion_tokens);
+                      ("turns", `Int s.total_turns);
+                    ])
+                providers))
+      else if providers = [] then "No cost data recorded yet."
+      else
+        let rows =
+          List.map
+            (fun (prov, (s : Request_stats.summary)) ->
+              let cost_str = Printf.sprintf "$%.4f" s.total_cost_usd in
+              let turns_str = Printf.sprintf "%d turns" s.total_turns in
+              Printf.sprintf "  %s  %s    %s"
+                (Setup_common.cyan (Printf.sprintf "%-20s" prov))
+                (Setup_common.green cost_str)
+                (Setup_common.dim turns_str))
+            providers
+        in
+        String.concat "\n" (Setup_common.bold "Provider Costs" :: "" :: rows)
+  | _ ->
+      "Usage: clawq costs [subcommand] [--json]\n\n\
+       Subcommands:\n\
+      \  (default)       Cost summary by time period\n\
+      \  session [KEY]   Per-session cost breakdown\n\
+      \  model           Per-model cost breakdown\n\
+      \  provider        Per-provider cost breakdown"
+
 let session_epoch_json (epoch : Memory.session_epoch) =
   `Assoc
     [

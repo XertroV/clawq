@@ -1607,16 +1607,46 @@ let turn agent ~user_message ?db ?session_key ?interrupt_check ?inject_messages
             let pname, _, _ =
               Provider.select_provider ~config:agent.config ()
             in
+            let prev = Request_stats.get_prev_totals ~db ~session_key:sid in
+            let added =
+              match prev with
+              | Some (prev_pt, prev_ct, _) -> max 0 (pt - (prev_pt + prev_ct))
+              | None -> pt
+            in
+            let cache_hit =
+              match prev with
+              | Some (_, _, ts) when ts <> "" -> (
+                  try
+                    let stmt =
+                      Sqlite3.prepare db
+                        "SELECT (strftime('%s', 'now') - strftime('%s', ?1)) < \
+                         300"
+                    in
+                    ignore (Sqlite3.bind stmt 1 (Sqlite3.Data.TEXT ts));
+                    Fun.protect
+                      ~finally:(fun () -> ignore (Sqlite3.finalize stmt))
+                      (fun () ->
+                        match Sqlite3.step stmt with
+                        | Sqlite3.Rc.ROW -> (
+                            match Sqlite3.column stmt 0 with
+                            | Sqlite3.Data.INT 1L -> true
+                            | _ -> false)
+                        | _ -> false)
+                  with _ -> false)
+              | _ -> false
+            in
             let cost_usd_opt =
               match Cost_tracker.lookup_pricing model with
               | None -> None
               | Some _ ->
                   Some
-                    (Cost_tracker.calculate_cost ~model ~prompt_tokens:pt
-                       ~completion_tokens:ct)
+                    (Cost_tracker.calculate_cost_with_cache ~model
+                       ~prompt_tokens:pt ~completion_tokens:ct
+                       ~added_prompt_tokens:added ~cache_hit)
             in
             Request_stats.record ~db ~session_key:sid ~provider:pname ~model
-              ~prompt_tokens:pt ~completion_tokens:ct ?cost_usd:cost_usd_opt ()
+              ~prompt_tokens:pt ~completion_tokens:ct ?cost_usd:cost_usd_opt
+              ~added_prompt_tokens:added ()
         | None -> ())
     | _ -> ()
   in
@@ -1872,16 +1902,46 @@ let turn_stream agent ~user_message ?db ?session_key ?interrupt_check
             let pname, _, _ =
               Provider.select_provider ~config:agent.config ()
             in
+            let prev = Request_stats.get_prev_totals ~db ~session_key:sid in
+            let added =
+              match prev with
+              | Some (prev_pt, prev_ct, _) -> max 0 (pt - (prev_pt + prev_ct))
+              | None -> pt
+            in
+            let cache_hit =
+              match prev with
+              | Some (_, _, ts) when ts <> "" -> (
+                  try
+                    let stmt =
+                      Sqlite3.prepare db
+                        "SELECT (strftime('%s', 'now') - strftime('%s', ?1)) < \
+                         300"
+                    in
+                    ignore (Sqlite3.bind stmt 1 (Sqlite3.Data.TEXT ts));
+                    Fun.protect
+                      ~finally:(fun () -> ignore (Sqlite3.finalize stmt))
+                      (fun () ->
+                        match Sqlite3.step stmt with
+                        | Sqlite3.Rc.ROW -> (
+                            match Sqlite3.column stmt 0 with
+                            | Sqlite3.Data.INT 1L -> true
+                            | _ -> false)
+                        | _ -> false)
+                  with _ -> false)
+              | _ -> false
+            in
             let cost_usd_opt =
               match Cost_tracker.lookup_pricing model with
               | None -> None
               | Some _ ->
                   Some
-                    (Cost_tracker.calculate_cost ~model ~prompt_tokens:pt
-                       ~completion_tokens:ct)
+                    (Cost_tracker.calculate_cost_with_cache ~model
+                       ~prompt_tokens:pt ~completion_tokens:ct
+                       ~added_prompt_tokens:added ~cache_hit)
             in
             Request_stats.record ~db ~session_key:sid ~provider:pname ~model
-              ~prompt_tokens:pt ~completion_tokens:ct ?cost_usd:cost_usd_opt ()
+              ~prompt_tokens:pt ~completion_tokens:ct ?cost_usd:cost_usd_opt
+              ~added_prompt_tokens:added ()
         | None -> ())
     | _ -> ()
   in

@@ -1,97 +1,217 @@
+type model_pricing = {
+  input_per_m : float;
+  output_per_m : float;
+  cache_read_per_m : float option;
+}
+
 let pricing_table =
   [
-    (* Anthropic - current *)
-    ("claude-opus-4-6", (5.0, 25.0));
-    ("claude-opus-4-5", (5.0, 25.0));
-    ("claude-opus-4-1", (15.0, 75.0));
-    ("claude-opus-4-0", (15.0, 75.0));
-    ("claude-sonnet-4-6", (3.0, 15.0));
-    ("claude-sonnet-4-5", (3.0, 15.0));
-    ("claude-sonnet-4-0", (3.0, 15.0));
-    ("claude-haiku-4-5", (1.0, 5.0));
+    (* Anthropic - current (cache_read = 10% of input) *)
+    ( "claude-opus-4-6",
+      { input_per_m = 5.0; output_per_m = 25.0; cache_read_per_m = Some 0.50 }
+    );
+    ( "claude-opus-4-5",
+      { input_per_m = 5.0; output_per_m = 25.0; cache_read_per_m = Some 0.50 }
+    );
+    ( "claude-opus-4-1",
+      { input_per_m = 15.0; output_per_m = 75.0; cache_read_per_m = Some 1.50 }
+    );
+    ( "claude-opus-4-0",
+      { input_per_m = 15.0; output_per_m = 75.0; cache_read_per_m = Some 1.50 }
+    );
+    ( "claude-sonnet-4-6",
+      { input_per_m = 3.0; output_per_m = 15.0; cache_read_per_m = Some 0.30 }
+    );
+    ( "claude-sonnet-4-5",
+      { input_per_m = 3.0; output_per_m = 15.0; cache_read_per_m = Some 0.30 }
+    );
+    ( "claude-sonnet-4-0",
+      { input_per_m = 3.0; output_per_m = 15.0; cache_read_per_m = Some 0.30 }
+    );
+    ( "claude-haiku-4-5",
+      { input_per_m = 1.0; output_per_m = 5.0; cache_read_per_m = Some 0.10 } );
     (* Anthropic - legacy/deprecated *)
-    ("claude-3-7-sonnet", (3.0, 15.0));
-    ("claude-3-5-sonnet", (3.0, 15.0));
-    ("claude-3-5-haiku", (0.80, 4.0));
-    ("claude-3-opus", (15.0, 75.0));
-    ("claude-3-sonnet", (3.0, 15.0));
-    ("claude-3-haiku", (0.25, 1.25));
-    (* OpenAI - GPT-5 family *)
-    ("gpt-5.4-pro", (30.0, 180.0));
-    ("gpt-5.4", (2.50, 15.0));
-    ("gpt-5.2-pro", (21.0, 168.0));
-    ("gpt-5.2", (1.75, 14.0));
-    ("gpt-5-pro", (15.0, 120.0));
-    ("gpt-5-mini", (0.25, 2.0));
-    ("gpt-5-nano", (0.05, 0.40));
-    ("gpt-5", (1.25, 10.0));
+    ( "claude-3-7-sonnet",
+      { input_per_m = 3.0; output_per_m = 15.0; cache_read_per_m = Some 0.30 }
+    );
+    ( "claude-3-5-sonnet",
+      { input_per_m = 3.0; output_per_m = 15.0; cache_read_per_m = Some 0.30 }
+    );
+    ( "claude-3-5-haiku",
+      { input_per_m = 0.80; output_per_m = 4.0; cache_read_per_m = Some 0.08 }
+    );
+    ( "claude-3-opus",
+      { input_per_m = 15.0; output_per_m = 75.0; cache_read_per_m = Some 1.50 }
+    );
+    ( "claude-3-sonnet",
+      { input_per_m = 3.0; output_per_m = 15.0; cache_read_per_m = Some 0.30 }
+    );
+    ( "claude-3-haiku",
+      { input_per_m = 0.25; output_per_m = 1.25; cache_read_per_m = Some 0.025 }
+    );
+    (* OpenAI - GPT-5 family (cache_read = 50% of input) *)
+    ( "gpt-5.4-pro",
+      { input_per_m = 30.0; output_per_m = 180.0; cache_read_per_m = Some 15.0 }
+    );
+    ( "gpt-5.4",
+      { input_per_m = 2.50; output_per_m = 15.0; cache_read_per_m = Some 1.25 }
+    );
+    ( "gpt-5.2-pro",
+      {
+        input_per_m = 21.0;
+        output_per_m = 168.0;
+        cache_read_per_m = Some 10.50;
+      } );
+    ( "gpt-5.2",
+      { input_per_m = 1.75; output_per_m = 14.0; cache_read_per_m = Some 0.875 }
+    );
+    ( "gpt-5-pro",
+      { input_per_m = 15.0; output_per_m = 120.0; cache_read_per_m = Some 7.50 }
+    );
+    ( "gpt-5-mini",
+      { input_per_m = 0.25; output_per_m = 2.0; cache_read_per_m = Some 0.125 }
+    );
+    ( "gpt-5-nano",
+      { input_per_m = 0.05; output_per_m = 0.40; cache_read_per_m = Some 0.025 }
+    );
+    ( "gpt-5",
+      { input_per_m = 1.25; output_per_m = 10.0; cache_read_per_m = Some 0.625 }
+    );
     (* OpenAI - GPT-4.1 family *)
-    ("gpt-4.1-nano", (0.10, 0.40));
-    ("gpt-4.1-mini", (0.40, 1.60));
-    ("gpt-4.1", (2.0, 8.0));
+    ( "gpt-4.1-nano",
+      { input_per_m = 0.10; output_per_m = 0.40; cache_read_per_m = Some 0.05 }
+    );
+    ( "gpt-4.1-mini",
+      { input_per_m = 0.40; output_per_m = 1.60; cache_read_per_m = Some 0.20 }
+    );
+    ( "gpt-4.1",
+      { input_per_m = 2.0; output_per_m = 8.0; cache_read_per_m = Some 1.0 } );
     (* OpenAI - GPT-4o family *)
-    ("gpt-4o-mini", (0.15, 0.60));
-    ("gpt-4o", (2.50, 10.0));
+    ( "gpt-4o-mini",
+      { input_per_m = 0.15; output_per_m = 0.60; cache_read_per_m = Some 0.075 }
+    );
+    ( "gpt-4o",
+      { input_per_m = 2.50; output_per_m = 10.0; cache_read_per_m = Some 1.25 }
+    );
     (* OpenAI - legacy *)
-    ("gpt-4-turbo", (10.0, 30.0));
-    ("gpt-4", (30.0, 60.0));
-    ("gpt-3.5-turbo", (0.50, 1.50));
+    ( "gpt-4-turbo",
+      { input_per_m = 10.0; output_per_m = 30.0; cache_read_per_m = None } );
+    ( "gpt-4",
+      { input_per_m = 30.0; output_per_m = 60.0; cache_read_per_m = None } );
+    ( "gpt-3.5-turbo",
+      { input_per_m = 0.50; output_per_m = 1.50; cache_read_per_m = None } );
     (* OpenAI - reasoning *)
-    ("o4-mini", (1.10, 4.40));
-    ("o3-pro", (20.0, 80.0));
-    ("o3-mini", (1.10, 4.40));
-    ("o3", (2.0, 8.0));
-    ("o1-pro", (150.0, 600.0));
-    ("o1-mini", (3.0, 12.0));
-    ("o1", (15.0, 60.0));
-    (* Google Gemini *)
-    ("gemini-2.5-pro", (1.25, 10.0));
-    ("gemini-2.5-flash", (0.30, 2.50));
-    ("gemini-2.0-flash", (0.10, 0.40));
-    ("gemini-1.5-pro", (1.25, 5.0));
-    ("gemini-1.5-flash", (0.075, 0.30));
+    ( "o4-mini",
+      { input_per_m = 1.10; output_per_m = 4.40; cache_read_per_m = Some 0.55 }
+    );
+    ( "o3-pro",
+      { input_per_m = 20.0; output_per_m = 80.0; cache_read_per_m = None } );
+    ( "o3-mini",
+      { input_per_m = 1.10; output_per_m = 4.40; cache_read_per_m = Some 0.55 }
+    );
+    ( "o3",
+      { input_per_m = 2.0; output_per_m = 8.0; cache_read_per_m = Some 1.0 } );
+    ( "o1-pro",
+      { input_per_m = 150.0; output_per_m = 600.0; cache_read_per_m = None } );
+    ( "o1-mini",
+      { input_per_m = 3.0; output_per_m = 12.0; cache_read_per_m = None } );
+    ("o1", { input_per_m = 15.0; output_per_m = 60.0; cache_read_per_m = None });
+    (* Google Gemini (cache_read = 25% of input) *)
+    ( "gemini-2.5-pro",
+      {
+        input_per_m = 1.25;
+        output_per_m = 10.0;
+        cache_read_per_m = Some 0.3125;
+      } );
+    ( "gemini-2.5-flash",
+      { input_per_m = 0.30; output_per_m = 2.50; cache_read_per_m = Some 0.075 }
+    );
+    ( "gemini-2.0-flash",
+      { input_per_m = 0.10; output_per_m = 0.40; cache_read_per_m = Some 0.025 }
+    );
+    ( "gemini-1.5-pro",
+      { input_per_m = 1.25; output_per_m = 5.0; cache_read_per_m = Some 0.3125 }
+    );
+    ( "gemini-1.5-flash",
+      {
+        input_per_m = 0.075;
+        output_per_m = 0.30;
+        cache_read_per_m = Some 0.01875;
+      } );
     (* DeepSeek *)
-    ("deepseek-reasoner", (0.28, 0.42));
-    ("deepseek-chat", (0.28, 0.42));
-    ("deepseek-v3", (0.28, 0.42));
-    ("deepseek-r1", (0.28, 0.42));
+    ( "deepseek-reasoner",
+      { input_per_m = 0.28; output_per_m = 0.42; cache_read_per_m = None } );
+    ( "deepseek-chat",
+      { input_per_m = 0.28; output_per_m = 0.42; cache_read_per_m = None } );
+    ( "deepseek-v3",
+      { input_per_m = 0.28; output_per_m = 0.42; cache_read_per_m = None } );
+    ( "deepseek-r1",
+      { input_per_m = 0.28; output_per_m = 0.42; cache_read_per_m = None } );
     (* Mistral *)
-    ("mistral-large", (0.50, 1.50));
-    ("mistral-medium", (0.40, 2.0));
-    ("mistral-small", (0.06, 0.18));
-    ("codestral", (0.30, 0.90));
-    ("mixtral-8x7b", (0.24, 0.24));
+    ( "mistral-large",
+      { input_per_m = 0.50; output_per_m = 1.50; cache_read_per_m = None } );
+    ( "mistral-medium",
+      { input_per_m = 0.40; output_per_m = 2.0; cache_read_per_m = None } );
+    ( "mistral-small",
+      { input_per_m = 0.06; output_per_m = 0.18; cache_read_per_m = None } );
+    ( "codestral",
+      { input_per_m = 0.30; output_per_m = 0.90; cache_read_per_m = None } );
+    ( "mixtral-8x7b",
+      { input_per_m = 0.24; output_per_m = 0.24; cache_read_per_m = None } );
     (* Cohere *)
-    ("command-a", (2.50, 10.0));
-    ("command-r-plus", (2.50, 10.0));
-    ("command-r", (0.15, 0.60));
+    ( "command-a",
+      { input_per_m = 2.50; output_per_m = 10.0; cache_read_per_m = None } );
+    ( "command-r-plus",
+      { input_per_m = 2.50; output_per_m = 10.0; cache_read_per_m = None } );
+    ( "command-r",
+      { input_per_m = 0.15; output_per_m = 0.60; cache_read_per_m = None } );
     (* Meta Llama via Groq *)
-    ("llama-3.3-70b", (0.59, 0.79));
-    ("llama-3.1-405b", (3.0, 3.0));
-    ("llama-3.1-70b", (0.59, 0.79));
-    ("llama-3.1-8b", (0.05, 0.08));
+    ( "llama-3.3-70b",
+      { input_per_m = 0.59; output_per_m = 0.79; cache_read_per_m = None } );
+    ( "llama-3.1-405b",
+      { input_per_m = 3.0; output_per_m = 3.0; cache_read_per_m = None } );
+    ( "llama-3.1-70b",
+      { input_per_m = 0.59; output_per_m = 0.79; cache_read_per_m = None } );
+    ( "llama-3.1-8b",
+      { input_per_m = 0.05; output_per_m = 0.08; cache_read_per_m = None } );
     (* Moonshot/Kimi *)
-    ("kimi-k2.5", (0.60, 3.0));
-    ("kimi-k2", (0.60, 2.50));
-    ("kimi-k2-thinking", (0.60, 2.50));
-    ("kimi-for-coding", (0.60, 2.50));
-    ("moonshot-v1-128k", (2.0, 5.0));
-    ("moonshot-v1-32k", (1.0, 3.0));
-    ("moonshot-v1-8k", (0.20, 2.0));
+    ( "kimi-k2.5",
+      { input_per_m = 0.60; output_per_m = 3.0; cache_read_per_m = None } );
+    ( "kimi-k2",
+      { input_per_m = 0.60; output_per_m = 2.50; cache_read_per_m = None } );
+    ( "kimi-k2-thinking",
+      { input_per_m = 0.60; output_per_m = 2.50; cache_read_per_m = None } );
+    ( "kimi-for-coding",
+      { input_per_m = 0.60; output_per_m = 2.50; cache_read_per_m = None } );
+    ( "moonshot-v1-128k",
+      { input_per_m = 2.0; output_per_m = 5.0; cache_read_per_m = None } );
+    ( "moonshot-v1-32k",
+      { input_per_m = 1.0; output_per_m = 3.0; cache_read_per_m = None } );
+    ( "moonshot-v1-8k",
+      { input_per_m = 0.20; output_per_m = 2.0; cache_read_per_m = None } );
     (* MiniMax *)
-    ("minimax-m2.5", (0.30, 1.20));
-    ("minimax-m1", (0.40, 1.76));
-    ("minimax-text-01", (0.20, 1.10));
+    ( "minimax-m2.5",
+      { input_per_m = 0.30; output_per_m = 1.20; cache_read_per_m = None } );
+    ( "minimax-m1",
+      { input_per_m = 0.40; output_per_m = 1.76; cache_read_per_m = None } );
+    ( "minimax-text-01",
+      { input_per_m = 0.20; output_per_m = 1.10; cache_read_per_m = None } );
     (* Z.ai - Source: https://docs.z.ai/guides/overview/pricing *)
-    ("glm-5", (1.0, 3.2));
-    ("glm-4.7", (0.60, 2.20));
-    ("glm-4.6", (0.60, 2.20));
+    ("glm-5", { input_per_m = 1.0; output_per_m = 3.2; cache_read_per_m = None });
+    ( "glm-4.7",
+      { input_per_m = 0.60; output_per_m = 2.20; cache_read_per_m = None } );
+    ( "glm-4.6",
+      { input_per_m = 0.60; output_per_m = 2.20; cache_read_per_m = None } );
     (* Z.ai Coding endpoint - Source: https://docs.z.ai/guides/overview/pricing *)
-    ("zai_coding/glm-5", (1.20, 5.0));
-    ("zai_coding/glm-4.7", (0.60, 2.20));
-    ("zai_coding/glm-4.6", (0.60, 2.20));
+    ( "zai_coding/glm-5",
+      { input_per_m = 1.20; output_per_m = 5.0; cache_read_per_m = None } );
+    ( "zai_coding/glm-4.7",
+      { input_per_m = 0.60; output_per_m = 2.20; cache_read_per_m = None } );
+    ( "zai_coding/glm-4.6",
+      { input_per_m = 0.60; output_per_m = 2.20; cache_read_per_m = None } );
     (* Xiaomi MiMo *)
-    ("mimo-v2-flash", (0.10, 0.30));
+    ( "mimo-v2-flash",
+      { input_per_m = 0.10; output_per_m = 0.30; cache_read_per_m = None } );
   ]
 
 let normalize_model s =
@@ -135,14 +255,41 @@ let lookup_pricing model =
 let calculate_cost ~model ~prompt_tokens ~completion_tokens =
   match lookup_pricing model with
   | None -> 0.0
-  | Some (input_per_m, output_per_m) ->
+  | Some p ->
       let input_cost =
-        float_of_int prompt_tokens *. input_per_m /. 1_000_000.0
+        float_of_int prompt_tokens *. p.input_per_m /. 1_000_000.0
       in
       let output_cost =
-        float_of_int completion_tokens *. output_per_m /. 1_000_000.0
+        float_of_int completion_tokens *. p.output_per_m /. 1_000_000.0
       in
       input_cost +. output_cost
+
+let calculate_cost_with_cache ~model ~prompt_tokens ~completion_tokens
+    ~added_prompt_tokens ~cache_hit =
+  match lookup_pricing model with
+  | None -> 0.0
+  | Some p -> (
+      match (cache_hit, p.cache_read_per_m) with
+      | true, Some cache_per_m ->
+          let cached_tokens = max 0 (prompt_tokens - added_prompt_tokens) in
+          let fresh_cost =
+            float_of_int added_prompt_tokens *. p.input_per_m /. 1_000_000.0
+          in
+          let cached_cost =
+            float_of_int cached_tokens *. cache_per_m /. 1_000_000.0
+          in
+          let output_cost =
+            float_of_int completion_tokens *. p.output_per_m /. 1_000_000.0
+          in
+          fresh_cost +. cached_cost +. output_cost
+      | _ ->
+          let input_cost =
+            float_of_int prompt_tokens *. p.input_per_m /. 1_000_000.0
+          in
+          let output_cost =
+            float_of_int completion_tokens *. p.output_per_m /. 1_000_000.0
+          in
+          input_cost +. output_cost)
 
 type session_stats = {
   mutable total_prompt_tokens : int;

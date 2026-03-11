@@ -76,6 +76,7 @@ let () =
        ("provider_quota", Test_provider_quota.suite);
        ("totp", Test_totp.suite);
        ("cost_tracker", Test_cost_tracker.suite);
+       ("request_stats", Test_request_stats.suite);
        ("agent_router", Test_agent_router.suite);
        ("signal", Test_signal.suite);
        ("matrix", Test_matrix.suite);
