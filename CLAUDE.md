@@ -2,159 +2,86 @@
 
 Agent instructions for this repository. Keep changes minimal, verifiable, and aligned with existing OCaml style.
 
+Subdirectory-specific guidelines exist in `docs/CLAUDE.md`, `src/CLAUDE.md`, and `test/CLAUDE.md`
+(loaded automatically when working in those directories).
+
 ## Project Snapshot
 
 - Language/toolchain: OCaml 5.1 (`opam` + `dune`), with Coq extraction artifacts in `src/extracted/`.
-- Main binary: `clawq` (`src/main.ml`).
-- Minimal binary: `clawq-min` (`src/main_min.ml`) for core-only builds.
-- Runtime split:
-  - `clawq_runtime_core` (core CLI/runtime behavior).
-  - `clawq_runtime_integrations` (network/server integrations).
-
-## Instruction Sources
-
-- Cursor rules: none found (`.cursor/rules/` missing, `.cursorrules` missing).
-- Copilot rules: none found (`.github/copilot-instructions.md` missing).
-- Therefore this file is the canonical agent guidance in-repo.
+- Main binary: `clawq` (`src/main.ml`); minimal binary: `clawq-min` (`src/main_min.ml`).
+- Runtime split: `clawq_runtime_core` (core CLI) / `clawq_runtime_integrations` (network/server).
 
 ## Environment and Setup
 
 - Default shell in `Makefile` runs through: `opam exec --switch=clawq-5.1 -- /usr/bin/env bash`.
 - Install deps (local): `opam install . --deps-only --with-test`.
 - CI also installs system package: `libsqlite3-dev`.
-- If commands fail due to env mismatch, prefix with:
-  - `opam exec --switch=clawq-5.1 -- <command>`
+- If commands fail due to env mismatch, prefix with `opam exec --switch=clawq-5.1 -- <command>`.
 
 ## Build, Test, Lint Commands
 
-- Do not run `dune` commands in parallel in this repo. Dune locks `_build`, and concurrent `dune`/`opam exec -- dune ...` commands can hang or fail on `_build/.lock`.
-- Stale locks are cleaned automatically by `scripts/clean_stale_dune_locks.sh` (called from the `check_dune_lock` macro before each build/test target). The script uses `flock --nonblock` to detect whether a lock is genuinely held; only unheld locks are removed.
-- If a command fails with a Dune lock error, the lock is actively held by another process. Wait for it to finish or find and stop the owning process.
+- Do not run `dune` commands in parallel — Dune locks `_build`; concurrent runs hang or fail on `_build/.lock`.
+- Stale locks are cleaned automatically by `scripts/clean_stale_dune_locks.sh`. If a lock error persists, the lock is actively held — wait for or stop the owning process.
 
 - Primary build: `make build`
 - Run CLI help: `make run`
 - Run phase2 command: `make phase2`
-- Build embedded web UI assets: `make ui`
-- Run UI asset watcher for dev mode: `make ui-dev`
-- Verify generated UI assets are current: `make ui-check`
+- Build embedded web UI assets: `make ui` (live iteration: `make ui-dev` + create `~/.clawq/ui/DEV`)
+- Verify generated UI assets: `make ui-check`
 
-- Run quick tests (default): `make test` (skips `Slow`-tagged integration tests)
-- Run all tests including slow/integration: `make test-all` (builds `main.exe` first)
+- Run quick tests: `make test` (skips `Slow`-tagged integration tests)
+- Run all tests: `make test-all` (builds `main.exe` first)
 
-- Format code: `make fmt`
-- Format check (CI-equivalent): `make fmt-check`
+- Format: `make fmt` / `make fmt-check`
 
-- Coq extraction refresh: `make extract`
-- Coq extraction drift check: `make extract-check`
-- Verify Coq proofs only: `make coq-verify`
-- Full Coq check (proofs + drift): `make coq-check`
+- Coq: `make extract`, `make extract-check`, `make coq-verify`, `make coq-check`
 
 ## Running a Single Test (Important)
 
-- List all test suites/cases:
-  - `make test-run ARGS="list"`
-- Run subset by suite regex:
-  - `make test-run ARGS="test <SUITE_REGEX>"`
-- Run one exact case index in a suite:
-  - `make test-run ARGS="test command_bridge 20"`
-- Run multiple indices/ranges:
-  - `make test-run ARGS="test scheduler 0,3,8-10"`
+- List all: `make test-run ARGS="list"`
+- By suite regex: `make test-run ARGS="test <SUITE_REGEX>"`
+- By case index: `make test-run ARGS="test command_bridge 20"`
+- Multiple indices/ranges: `make test-run ARGS="test scheduler 0,3,8-10"`
+- The test binary subcommand is `test` (not a direct suite name). Regex applies to suite names; case selection is numeric indexes.
 
-Notes:
-- The test binary subcommand is `test` (not a direct suite name).
-- Regex applies to suite names; case selection is numeric indexes from `list` output.
+## Optimization Commands
 
-## Optimization and Binary Size Commands
-
-- Optimized full build (choose mode): `make build-opt OPT=speed|size`
-- Explicit optimized full builds:
-  - `make build-opt-speed`
-  - `make build-opt-size`
-- Stripped optimized full builds:
-  - `make build-opt-speed-stripped`
-  - `make build-opt-size-stripped`
-- Minimal builds:
-  - `make build-minimal`
-  - `make build-opt-minimal`
-
-Required output contract:
-- Optimization targets must end with one line: `<relative/path/to/exe> <size_kb> KB`
-- Example: `_build_opt_size/default/src/main.exe 19434 KB`
-
-## Build Profiles
-
-- Defined in `dune-workspace`:
-  - `release-speed`: `-O3`
-  - `release-size`: `-O2 -compact`
+- Optimized builds: `make build-opt-speed`, `make build-opt-size`, `make build-opt-speed-stripped`, `make build-opt-size-stripped`
+- Minimal builds: `make build-minimal`, `make build-opt-minimal`
+- Build profiles in `dune-workspace`: `release-speed` (`-O3`), `release-size` (`-O2 -compact`)
+- Output contract: optimization targets must end with one line: `<path/to/exe> <size_kb> KB`
 
 ## File Size Guidelines
 
-- Ideal file size: under 1000 lines.
-- Hard limit: 2000 lines. Files must not exceed 2000 lines.
-- When a file approaches or exceeds the limit, split it into focused sub-modules by concern (e.g., `foo_util.ml`, `foo_core.ml`, `foo.ml`).
-- The original module re-exports its public API for backward compatibility using `include Sub_module` (preferred) or explicit `let f = Sub_module.f` aliases.
+- Ideal: under 1000 lines. Hard limit: 2000 lines.
+- Split into focused sub-modules by concern (e.g., `foo_util.ml`, `foo_core.ml`, `foo.ml`).
+- Re-export via `include Sub_module` (preferred) or explicit `let f = Sub_module.f` aliases.
 
 ## Code Style Guidelines
 
-Formatting:
-- Use `ocamlformat` (`.ocamlformat`: version `0.28.1`, profile `default`).
-- Never hand-format to fight formatter output.
-- Keep lines and layout formatter-friendly.
-
-Imports and module usage:
+- Formatter: `ocamlformat` v0.28.1, profile `default`. Never fight formatter output.
 - Prefer minimal `open`; use fully qualified modules where reasonable.
-- `open` at top is acceptable for narrow, obvious cases (for example `open Cmdliner`).
-- Avoid broad `open` chains that hide symbol origin.
-
-Naming:
-- Modules: `PascalCase` filenames (`runtime_config.ml` module `Runtime_config`).
-- Values/functions: `snake_case`.
-- Test names: concise behavior phrases (as seen in Alcotest case names).
-- Use clear command handler names: `cmd_<name>` pattern is established.
-
-Types and data modeling:
-- Prefer explicit records and algebraic types over ad-hoc tuples for complex values.
-- Add type annotations where they improve readability in callbacks/pattern matches.
-- Use `option`/`result` for expected failure paths; reserve exceptions for exceptional boundaries.
-
-Error handling:
-- Return user-facing error strings in command bridge paths.
-- Use `try ... with` around I/O and external boundaries; avoid exception-driven core flow.
-- Keep error messages actionable and specific.
-
-Control flow:
-- Prefer small helper functions for command-specific behavior.
-- Keep match branches direct and readable.
+- Command handlers: `cmd_<name>` pattern. Values/functions: `snake_case`.
+- Test names: concise behavior phrases (Alcotest case names).
+- Prefer explicit records/algebraic types over ad-hoc tuples for complex values.
+- Use `option`/`result` for expected failures; reserve exceptions for I/O boundaries.
+- Return user-facing error strings in command bridge paths. Keep errors actionable.
 - Preserve existing behavior unless task explicitly requests semantic changes.
-
-Comments:
-- Add comments only for non-obvious invariants/protocol details.
-- Do not add explanatory noise for straightforward code.
+- Comments only for non-obvious invariants/protocol details.
 
 ## Testing Expectations for Code Changes
 
 - Minimum after non-trivial OCaml edits: `make test`.
 - After formatting-sensitive edits: `make fmt-check`.
 - After extraction-related edits: `make extract-check`.
-- After runtime/library reshaping: run full tests and at least one optimized build command.
+- After runtime/library reshaping: full tests + at least one optimized build.
 
 ## Runtime Split Rules (Do Not Regress)
 
 1. Keep optional integrations out of `clawq_runtime_core` unless strictly required.
 2. New network/server features belong in `clawq_runtime_integrations`.
-3. Integration-only commands must not be exposed in minimal build as active behavior.
-4. In `src/command_bridge_min.ml`, return clear "disabled in minimal build" messages.
-5. Evaluate new dependencies for core vs integration placement before linking.
-
-## Durable Inbound Queue Semantics
-
-1. Offline `session inject` enqueues to the `inbound_queue` SQLite table (schema v5), not directly to chat history. At-least-once delivery: `attempt_count` and `last_error` track retries.
-2. Replay uses FIFO per-session ordering (`ORDER BY id ASC`).
-3. Bang messages (`!`-prefixed) are preserved through the queue/replay cycle via a `bang` JSON field.
-4. `replay_durable_inbound_queue` runs after `resume_sessions_after_channels` at daemon startup. Stale claims (>3600 s) and failed rows are reclaimed before replay begins.
-5. Empty messages are recorded as failures (`"empty message"`), not replayed.
-6. Both `Memory.clear_session` and `Session.reset` delete pending queue rows for the target session.
-7. `session pending SESSION` shows queue rows; `session list` appends `pending_inbound=N` when count > 0.
+3. Integration-only commands: return "disabled in minimal build" in `src/command_bridge_min.ml`.
+4. Evaluate new dependencies for core vs integration placement before linking.
 
 ## Safety and Change Boundaries
 
@@ -165,103 +92,33 @@ Comments:
 
 ## Proactive Completion
 
-- Do not stop at the narrowest possible interpretation if adjacent behavior is clearly required for the feature to be genuinely usable.
-- When a requested command or feature should mirror an existing runtime path, follow the real production path end-to-end rather than adding a debug-only shortcut that bypasses important semantics.
-- If a task uncovers an obvious missing piece, fix it in the same change when it is safe, local, and verifiable.
-- Prefer fully completed behavior plus tests over partial scaffolding, even when the user asked in shorthand.
-- In handoff, call out any deliberate gaps that remain; do not silently leave known functional mismatches.
+- Do not stop at the narrowest interpretation if adjacent behavior is clearly required.
+- Follow real production paths end-to-end rather than adding debug-only shortcuts.
+- If a task uncovers an obvious missing piece, fix it in the same change when safe and local.
+- Prefer fully completed behavior plus tests over partial scaffolding.
+- In handoff, call out deliberate gaps; do not silently leave known functional mismatches.
 
-## Model Format Convention (pmodel)
+## Model Format Convention
 
-- Canonical format: `provider:model` (colon separator), e.g. `openai:gpt-5.4`, `anthropic:claude-sonnet-4-5`.
-- Legacy format `provider/model` (slash) and bare `model` (no provider) are accepted but deprecated. Deprecation warnings are shown at config load, status, config set, and `models set-default`.
-- `models set-default` auto-normalizes legacy formats to canonical.
-- The `Pmodel` module (`src/pmodel.ml`) provides:
-  - `parse` / `parse_exn` — strict canonical-only parsing (`provider:model`).
-  - `parse_flexible` — accepts canonical, legacy (`/`), and bare formats, returning a `flexible` record with detected `format`.
-  - `flexible_to_canonical` — converts any `flexible` to canonical `t`, using `~default_provider` for bare models.
-  - `deprecation_warning` — returns a warning string for non-canonical formats.
-  - `format_to_string` — human-readable format label.
-- Default `primary_model` in `Runtime_config.default`: `"openai-codex:gpt-5.4"`.
+- Canonical format: `provider:model` (colon), e.g. `openai:gpt-5.4`. Default: `"openai-codex:gpt-5.4"`.
+- Legacy `provider/model` (slash) and bare `model` are accepted but deprecated; warnings shown at config load/status/set.
+- `models set-default` auto-normalizes to canonical. See `src/pmodel.ml` for parsing API.
 
 ## Quick File Map
 
-- Build/test orchestration: `Makefile`
-- UI source and Bun pipeline: `ui/`, `scripts/gen_chat_ui_assets.sh`
-- Dune project config: `dune-project`, `dune-workspace`, `src/dune`, `test/dune`
 - CLI entrypoints: `src/main.ml`, `src/main_min.ml`
-- Process spawning: `src/process_group.ml` (fork+setsid+execve, signal group lifecycle)
-- Model format parsing: `src/pmodel.ml` (canonical `provider:model` format, flexible parsing, deprecation warnings)
 - Command routing: `src/command_bridge.ml`, `src/command_bridge_min.ml`
-- Web UI serving/assets: `src/ui_server.ml`, `src/chat_ui_assets.ml`
+- Process spawning: `src/process_group.ml` (fork+setsid+execve, signal group lifecycle)
+- Web UI: `src/ui_server.ml`, `src/chat_ui_assets.ml`, `ui/`, `scripts/gen_chat_ui_assets.sh`
+- Build config: `dune-project`, `dune-workspace`, `src/dune`, `test/dune`
 - Tests: `test/test_main.ml` and `test/test_*.ml`
-
-## Web UI Dev Mode
-
-- Build embedded assets with `make ui`.
-- For live UI iteration, run `make ui-dev` and create `~/.clawq/ui/DEV`.
-- With DEV mode enabled, clawq serves files from `~/.clawq/ui/` without overwriting them on startup.
 
 ## Recommended Agent Workflow
 
 1. Read relevant modules and adjacent tests first.
-2. Implement the smallest change that still preserves the real runtime semantics users would expect.
-3. Use the todo tool to keep track of current tasks when it helps maintain progress.
+2. Implement the smallest change that preserves real runtime semantics.
+3. Use the todo tool to track current tasks when it helps maintain progress.
 4. Run focused test(s), then `make test`.
 5. Run formatting checks if OCaml files changed.
-6. Before handoff, quickly check for obvious follow-on fixes/docs/tests needed to make the task feel complete.
+6. Before handoff, check for obvious follow-on fixes/docs/tests.
 7. Summarize behavior changes and verification commands in final handoff.
-
-## Formal Verification Docs Maintenance
-
-Data pipeline: `coq/theories/Clawq/*.v` → `docs/src/data/formal_verification.yml` → `docs/src/data/fv-stats.json` → `docs/src/content/docs/formal-verification.mdx`.
-
-**Automated by `make update-fv`** (runs `scripts/update_fv_data.sh`):
-- Theorem/lemma counts in YAML (grepped from `.v` files)
-- All derived stats in JSON (totals, percentages, verified/in-progress/planned counts)
-- Validation that verified-phase YAML counts match actual `.v` file counts
-- Hardcoded counts in `.mdx` (ledger-n values, scroll-count N/N labels)
-
-**Full pipeline including Coq proof check**: `make fv-all` (runs `coq-check` + `update-fv` + `verify-report`).
-
-**Manual steps still required when adding/completing a phase**:
-- Update `status` field in `docs/src/data/formal_verification.yml` (e.g. `in_progress` → `verified`)
-- Update `extracted` field if extraction status changed
-- Add new phase entries to `formal_verification.yml` for new Coq modules
-- Add/update phase card, ledger row, and module breakdown accordion in `formal-verification.mdx` (structure and prose — counts are patched automatically)
-
-**When to run `make update-fv`**:
-- After adding, removing, or modifying any Theorem/Lemma in a `.v` file
-- After changing phase status in `formal_verification.yml`
-- Before committing FV-related changes
-
-## llms.txt Maintenance
-
-Two files in `docs/public/`:
-- `llms.txt` — spec-compliant index (follows llmstxt.org: H1, blockquote, H2 link-list sections only). Served at `clawq.org/llms.txt`.
-- `llms-full.txt` — full self-knowledge reference. Served at `clawq.org/llms-full.txt`. This is the detailed document clawq uses to understand itself: every CLI command, config field with defaults, all tools, channels, endpoints, setup guides.
-
-**When to update `docs/public/llms-full.txt`:**
-- Adding, removing, or renaming a CLI command or subcommand (`src/main.ml`, `src/command_bridge.ml`)
-- Adding or changing config fields or defaults (`src/runtime_config.ml`, `src/config_loader.ml`)
-- Adding, removing, or renaming a built-in tool (`src/tools_builtin.ml`)
-- Changing the shell allowlist or security mechanisms (`src/tools_builtin.ml`)
-- Adding or changing HTTP gateway endpoints (`src/http_server.ml`)
-- Adding or changing a channel implementation (`src/telegram.ml`, `src/discord.ml`, `src/slack.ml`, `src/slack_socket.ml`, etc.)
-- Changing tunnel provider support
-- Changing any user-facing behavior documented in the file
-
-**When to update `docs/public/llms.txt`:**
-- Adding new doc pages (add to the appropriate H2 link-list section)
-- Changing the project summary
-
-**How to update:**
-- Keep llms-full.txt factual, concise, and oriented toward clawq operating on itself — not a marketing overview.
-- Verify defaults against `Runtime_config.default` in `src/runtime_config.ml`.
-- Verify tool names and counts against `src/tools_builtin.ml` registrations.
-- Verify command names against `src/main.ml` command list.
-- Keep llms.txt spec-compliant: no headings in body, H2 sections are link lists only.
-
-## Research Source: nullclaw
-
-- See `nullclaw/` in this repo's root.

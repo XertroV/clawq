@@ -1,10 +1,15 @@
 ---
+claimed_at: "2026-03-11T07:17:23Z"
+claimed_by: cli-user
+completed_at: "2026-03-11T07:36:59Z"
 complexity: medium
 depends_on: []
+duration_minutes: 19.60734444935
 estimate_hours: 1
 id: B376
 priority: high
-status: pending
+started_at: "2026-03-11T07:17:23Z"
+status: done
 tags: []
 title: optimize CLAUDE.md
 ---
