@@ -66,6 +66,32 @@ let test_parse_jsonrpc_empty () =
   | None -> ()
   | Some _ -> Alcotest.fail "expected None for empty"
 
+let test_parse_sse_data_line_valid () =
+  match Signal.parse_sse_data_line {|data: {"method":"receive"}|} with
+  | Some payload ->
+      Alcotest.(check string) "payload" {|{"method":"receive"}|} payload
+  | None -> Alcotest.fail "expected SSE payload"
+
+let test_parse_sse_data_line_ignores_non_data () =
+  match Signal.parse_sse_data_line "event: message" with
+  | None -> ()
+  | Some _ -> Alcotest.fail "expected None for non-data line"
+
+let test_process_sse_chunk_handles_split_lines () =
+  let seen = ref [] in
+  let on_event line =
+    seen := line :: !seen;
+    Lwt.return_unit
+  in
+  Lwt_main.run
+    (let open Lwt.Syntax in
+     let buffer = Buffer.create 32 in
+     let* () = Signal.process_sse_chunk ~on_event buffer "data: {\"a\":" in
+     let* () = Signal.process_sse_chunk ~on_event buffer "1}\n\n" in
+     Signal.flush_sse_buffer ~on_event buffer);
+  Alcotest.(check (list string))
+    "assembled lines" [ "data: {\"a\":1}"; "" ] (List.rev !seen)
+
 (* --- parse_rest_messages tests --- *)
 
 let test_parse_rest_messages_valid () =
@@ -138,6 +164,12 @@ let suite =
       test_parse_jsonrpc_non_receive;
     Alcotest.test_case "parse jsonrpc invalid" `Quick test_parse_jsonrpc_invalid;
     Alcotest.test_case "parse jsonrpc empty" `Quick test_parse_jsonrpc_empty;
+    Alcotest.test_case "parse sse data line" `Quick
+      test_parse_sse_data_line_valid;
+    Alcotest.test_case "parse sse ignores non-data" `Quick
+      test_parse_sse_data_line_ignores_non_data;
+    Alcotest.test_case "process sse split lines" `Quick
+      test_process_sse_chunk_handles_split_lines;
     Alcotest.test_case "parse rest valid" `Quick test_parse_rest_messages_valid;
     Alcotest.test_case "parse rest empty list" `Quick
       test_parse_rest_messages_empty_list;

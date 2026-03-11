@@ -350,12 +350,15 @@ let parse_conflict_description body =
 
 let get_updates ~bot_token ~offset ~timeout =
   let open Lwt.Syntax in
+  let request_timeout_s = float_of_int (timeout + 10) in
   let uri =
     Printf.sprintf "%s%s/getUpdates?offset=%d&timeout=%d&allowed_updates=%s"
       api_base bot_token offset timeout
       "%5B%22message%22%2C%22callback_query%22%2C%22poll_answer%22%5D"
   in
-  let* status, body = Http_client.get ~uri ~headers:[] in
+  let* status, body =
+    Http_client.get_with_timeout ~timeout_s:request_timeout_s ~uri ~headers:[]
+  in
   if status >= 200 && status < 300 then
     let json =
       try Yojson.Safe.from_string body

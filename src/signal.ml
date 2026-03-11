@@ -130,6 +130,49 @@ let parse_jsonrpc_event line =
       Some (from_, group_id_opt, msg_text)
   with _ -> None
 
+let parse_sse_data_line line =
+  let prefix = "data:" in
+  if String.length line < String.length prefix then None
+  else if String.sub line 0 (String.length prefix) <> prefix then None
+  else
+    let payload =
+      String.trim
+        (String.sub line (String.length prefix)
+           (String.length line - String.length prefix))
+    in
+    if payload = "" then None else Some payload
+
+let process_sse_chunk ~on_event buffer chunk =
+  let open Lwt.Syntax in
+  Buffer.add_string buffer chunk;
+  let rec drain_lines () =
+    match String.index_opt (Buffer.contents buffer) '\n' with
+    | None -> Lwt.return_unit
+    | Some idx ->
+        let contents = Buffer.contents buffer in
+        let raw_line = String.sub contents 0 idx in
+        let remaining =
+          String.sub contents (idx + 1) (String.length contents - idx - 1)
+        in
+        Buffer.clear buffer;
+        Buffer.add_string buffer remaining;
+        let line =
+          if
+            String.length raw_line > 0
+            && raw_line.[String.length raw_line - 1] = '\r'
+          then String.sub raw_line 0 (String.length raw_line - 1)
+          else raw_line
+        in
+        let* () = on_event line in
+        drain_lines ()
+  in
+  drain_lines ()
+
+let flush_sse_buffer ~on_event buffer =
+  let line = Buffer.contents buffer |> String.trim in
+  Buffer.clear buffer;
+  if line = "" then Lwt.return_unit else on_event line
+
 (* Parse a REST receive response and extract messages *)
 let parse_rest_messages body =
   try
@@ -169,31 +212,36 @@ let receive_loop_jsonrpc ~(cfg : Runtime_config.signal_config) ~on_message () =
     let result =
       Lwt.catch
         (fun () ->
-          let* status, body = Http_client.get ~uri ~headers:[] in
+          let* status, body =
+            Http_client.get_stream ~uri
+              ~headers:[ ("Accept", "text/event-stream") ]
+          in
           if status >= 200 && status < 300 then begin
-            (* Body may contain multiple newline-separated JSON objects *)
-            let lines = String.split_on_char '\n' body in
-            let* () =
-              Lwt_list.iter_s
-                (fun line ->
-                  let line = String.trim line in
-                  if line = "" then Lwt.return_unit
-                  else
-                    match parse_jsonrpc_event line with
-                    | None -> Lwt.return_unit
-                    | Some (from_, group_id_opt, text) ->
-                        if is_allowed ~cfg ~from:from_ then
-                          on_message ~from:from_ ~group_id_opt ~text
-                        else begin
-                          Logs.debug (fun m ->
-                              m
-                                "Signal: ignoring message from %s (not in \
-                                 allow_from)"
-                                from_);
-                          Lwt.return_unit
-                        end)
-                lines
+            let process_line line =
+              match parse_sse_data_line line with
+              | None -> Lwt.return_unit
+              | Some payload -> (
+                  match parse_jsonrpc_event payload with
+                  | None -> Lwt.return_unit
+                  | Some (from_, group_id_opt, text) ->
+                      if is_allowed ~cfg ~from:from_ then
+                        on_message ~from:from_ ~group_id_opt ~text
+                      else begin
+                        Logs.debug (fun m ->
+                            m
+                              "Signal: ignoring message from %s (not in \
+                               allow_from)"
+                              from_);
+                        Lwt.return_unit
+                      end)
             in
+            let line_buffer = Buffer.create 256 in
+            let* () =
+              Lwt_stream.iter_s
+                (process_sse_chunk ~on_event:process_line line_buffer)
+                body
+            in
+            let* () = flush_sse_buffer ~on_event:process_line line_buffer in
             backoff := 5.0;
             Lwt.return `Ok
           end

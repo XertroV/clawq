@@ -150,10 +150,13 @@ let start ~(config : Runtime_config.t) ~(session_manager : Session.t) =
         let open Lwt.Syntax in
         let since = ref (load_sync_token ~cfg) in
         let backoff = ref 1.0 in
+        let sync_timeout_ms = 30000 in
+        let sync_request_timeout_s = 40.0 in
         let rec loop () =
           let sync_uri =
             let base =
-              cfg.homeserver_url ^ "/_matrix/client/v3/sync?timeout=30000"
+              Printf.sprintf "%s/_matrix/client/v3/sync?timeout=%d"
+                cfg.homeserver_url sync_timeout_ms
             in
             match !since with
             | None -> base
@@ -163,7 +166,8 @@ let start ~(config : Runtime_config.t) ~(session_manager : Session.t) =
             Lwt.catch
               (fun () ->
                 let* status, body =
-                  Http_client.get ~uri:sync_uri ~headers:(auth_header ~cfg)
+                  Http_client.get_with_timeout ~timeout_s:sync_request_timeout_s
+                    ~uri:sync_uri ~headers:(auth_header ~cfg)
                 in
                 if status >= 200 && status < 300 then begin
                   let json =

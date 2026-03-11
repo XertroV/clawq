@@ -17,10 +17,12 @@ Subdirectory-specific guidelines exist in `docs/CLAUDE.md`, `src/CLAUDE.md`, and
 - Install deps (local): `opam install . --deps-only --with-test`.
 - CI also installs system package: `libsqlite3-dev`.
 - If commands fail due to env mismatch, prefix with `opam exec --switch=clawq-5.1 -- <command>`.
+- Keep client/network timeouts strictly higher than any connector long-poll timeout, or normal long-poll waits can surface as `Lwt_unix.Timeout`.
 
 ## Build, Test, Lint Commands
 
 - Do not run `dune` commands in parallel — Dune locks `_build`; concurrent runs hang or fail on `_build/.lock`.
+- Never launch more than one `dune` command at a time in this repo.
 - Stale locks are cleaned automatically by `scripts/clean_stale_dune_locks.sh`. If a lock error persists, the lock is actively held — wait for or stop the owning process.
 
 - Primary build: `make build`

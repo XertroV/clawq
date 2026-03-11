@@ -139,7 +139,10 @@ let post_stream ~uri ~headers ~body =
       let stream = Cohttp_lwt.Body.to_stream body in
       Lwt.return (status, stream))
 
-let get ~uri ~headers =
+(** [get_stream] applies the timeout only to the initial connection and
+    response-header exchange, NOT to reading the body stream. Use this for
+    long-lived responses such as SSE or long-poll-like chunked streams. *)
+let get_stream ~uri ~headers =
   let open Lwt.Syntax in
   Lwt_unix.with_timeout !default_timeout_s (fun () ->
       let uri = Uri.of_string uri in
@@ -148,8 +151,23 @@ let get ~uri ~headers =
       let status =
         Cohttp.Response.status response |> Cohttp.Code.code_of_status
       in
+      let stream = Cohttp_lwt.Body.to_stream body in
+      Lwt.return (status, stream))
+
+let get_with_timeout ~timeout_s ~uri ~headers =
+  let open Lwt.Syntax in
+  Lwt_unix.with_timeout timeout_s (fun () ->
+      let uri = Uri.of_string uri in
+      let headers = Cohttp.Header.of_list headers in
+      let* response, body = Cohttp_lwt_unix.Client.get ~headers uri in
+      let status =
+        Cohttp.Response.status response |> Cohttp.Code.code_of_status
+      in
       let* body_str = Cohttp_lwt.Body.to_string body in
       Lwt.return (status, body_str))
+
+let get ~uri ~headers =
+  get_with_timeout ~timeout_s:!default_timeout_s ~uri ~headers
 
 let patch_json ~uri ~headers ~body =
   let open Lwt.Syntax in
