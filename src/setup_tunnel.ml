@@ -86,6 +86,8 @@ let post_setup_instructions ~(tc : Runtime_config.tunnel_config) ~gateway_port =
     1. %s
     2. Start the tunnel:  clawq tunnel start
     3. Verify with:       clawq tunnel status
+
+  Full documentation: https://clawq.org/configuration/#tunnel
 |}
     tc.provider mode_desc gateway_port
     (if tc.managed && tc.tunnel_name <> "" then
@@ -134,6 +136,7 @@ let draw_dashboard ~(tc : Runtime_config.tunnel_config) =
         (if tc.config_dir = "" then dim "(default)" else tc.config_dir);
       "";
     ];
+  print_docs_link "https://clawq.org/configuration/#tunnel";
   Printf.printf "\n";
   draw_separator ~width:w
 

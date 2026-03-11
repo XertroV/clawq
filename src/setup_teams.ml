@@ -90,8 +90,9 @@ let post_setup_instructions ~webhook_path ~gateway_port ~tunnel_url =
     | None ->
         "\n\
         \    Note: You are using localhost. For Teams to reach your server,\n\
-        \    set up a tunnel: clawq tunnel start\n"
-    | Some _ -> "")
+        \    set up a tunnel: clawq tunnel start\n\n\
+        \  Full documentation: https://clawq.org/channels/#ms-teams\n"
+    | Some _ -> "\n  Full documentation: https://clawq.org/channels/#ms-teams\n")
 
 (* -- Load existing config ---------------------------------------------- *)
 
@@ -128,6 +129,7 @@ let draw_dashboard ~app_id ~app_secret ~tenant_id ~webhook_path ~service_url
       Printf.sprintf "  Users:       %s" (String.concat ", " allow_users |> cyan);
       "";
     ];
+  print_docs_link "https://clawq.org/channels/#ms-teams";
   Printf.printf "\n";
   draw_separator ~width:w
 

@@ -94,8 +94,9 @@ let post_setup_instructions ~events_path ~socket_mode ~gateway_port ~tunnel_url
     | None when not socket_mode ->
         "\n\
         \    Note: You are using localhost. For Slack to reach your server,\n\
-        \    set up a tunnel: clawq tunnel start\n"
-    | _ -> "")
+        \    set up a tunnel: clawq tunnel start\n\n\
+        \  Full documentation: https://clawq.org/channels/#slack\n"
+    | _ -> "\n  Full documentation: https://clawq.org/channels/#slack\n")
 
 (* ── Load existing config ────────────────────────────────────────── *)
 
@@ -134,6 +135,7 @@ let draw_dashboard ~(cfg : Runtime_config.slack_config) =
         (if cfg.socket_mode then green "enabled" else dim "disabled");
       "";
     ];
+  print_docs_link "https://clawq.org/channels/#slack";
   Printf.printf "\n";
   draw_separator ~width:w
 

@@ -109,8 +109,9 @@ let post_setup_instructions ~repo_name ~webhook_path ~webhook_secret
     | None ->
         "\n\
         \    Note: You are using localhost. For GitHub to reach your server,\n\
-        \    set up a tunnel: clawq tunnel start\n"
-    | Some _ -> "")
+        \    set up a tunnel: clawq tunnel start\n\n\
+        \  Full documentation: https://clawq.org/channels/\n"
+    | Some _ -> "\n  Full documentation: https://clawq.org/channels/\n")
 
 (* ── Load existing config ────────────────────────────────────────── *)
 
@@ -136,6 +137,7 @@ let draw_dashboard ~pat_token ~repos =
          else green (Tui_input.redact pat_token));
       "";
     ];
+  print_docs_link "https://clawq.org/channels/";
   Printf.printf "\n";
   if repos = [] then (
     Printf.printf "  %s\n" (dim "  No repositories configured yet.");

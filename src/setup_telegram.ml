@@ -87,6 +87,8 @@ let post_setup_instructions ~account_name =
     - Send a message to your bot in Telegram
     - The bot will reply using your configured provider
 
+  Full documentation: https://clawq.org/channels/#telegram
+
   Account "%s" is ready. Run `clawq daemon start` to connect.
 |}
     account_name
@@ -114,6 +116,7 @@ let draw_dashboard ~accounts ~text_coalesce_ms =
         (cyan (Printf.sprintf "%d ms" text_coalesce_ms));
       "";
     ];
+  print_docs_link "https://clawq.org/channels/#telegram";
   Printf.printf "\n";
   if accounts = [] then (
     Printf.printf "  %s\n" (dim "  No accounts configured yet.");

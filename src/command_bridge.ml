@@ -1140,7 +1140,8 @@ let cmd_setup args =
       \  slack     Configure Slack integration\n\
       \  teams     Configure MS Teams bot integration\n\
       \  telegram  Configure Telegram bot integration\n\
-      \  tunnel    Configure Cloudflare tunnel\n"
+      \  tunnel    Configure Cloudflare tunnel\n\n\
+       Documentation: https://clawq.org/channels/\n"
 
 let handle args =
   match args with

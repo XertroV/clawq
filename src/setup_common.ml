@@ -238,6 +238,9 @@ let print_kv ?(indent = 4) key value =
   let pad = String.make indent ' ' in
   Printf.printf "%s%s  %s\n" pad (dim (pad_right (key ^ ":") 20)) value
 
+let print_docs_link url =
+  Printf.printf "  %s %s\n" (dim "Docs:") (underline url)
+
 let press_enter_to_continue () =
   let p = Printf.sprintf "\n  %s" (dim "Press Enter to continue...") in
   ignore (Tui_input.read_line_clean p)

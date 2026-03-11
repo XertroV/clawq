@@ -1,10 +1,15 @@
 ---
+claimed_at: "2026-03-11T04:24:50Z"
+claimed_by: cli-user
+completed_at: "2026-03-11T04:28:34Z"
 complexity: medium
 depends_on: []
+duration_minutes: 3.7414471739833335
 estimate_hours: 1
 id: B371
 priority: high
-status: pending
+started_at: "2026-03-11T04:24:50Z"
+status: done
 tags: []
 title: Setup wizards like ./clawq setup teams should link to the relevant https://clawq.org pages (which are built from docs/). Also add for the other setup wizards.
 ---

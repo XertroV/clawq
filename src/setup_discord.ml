@@ -77,6 +77,8 @@ let post_setup_instructions =
 
   Note: Replace YOUR_APP_ID with your application's Client ID
   from the "General Information" page.
+
+  Full documentation: https://clawq.org/channels/#discord
 |}
 
 (* ── Load existing config ────────────────────────────────────────── *)
@@ -113,6 +115,7 @@ let draw_dashboard ~bot_token ~allow_guilds ~allow_users ~intents =
         (dim ("(" ^ intents_str ^ ")"));
       "";
     ];
+  print_docs_link "https://clawq.org/channels/#discord";
   Printf.printf "\n";
   draw_separator ~width:w
 
