@@ -1,10 +1,15 @@
 ---
+claimed_at: "2026-03-11T14:35:04Z"
+claimed_by: cli-user
+completed_at: "2026-03-11T15:49:14Z"
 complexity: medium
 depends_on: []
+duration_minutes: 74.17319473341666
 estimate_hours: 1
 id: B379
 priority: high
-status: pending
+started_at: "2026-03-11T14:35:04Z"
+status: done
 tags: []
 title: Add environment variable to control dot-directory (default ~/.clawq). Must work with the service and daemon and update/restarts.
 ---
