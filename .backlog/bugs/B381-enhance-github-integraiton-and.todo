@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B381
+priority: high
+status: pending
+tags: []
+title: Enhance github integraiton and responses, eg to workflow_job so that it can investigate failed runs (no point notifying on successful runs, but we can put that in a github section of the config if we want.)
+---
+
+Enhance github integraiton and responses, eg to workflow_job so that it can investigate failed runs (no point notifying on successful runs, but we can put that in a github section of the config if we want.)
