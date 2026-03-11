@@ -1,6 +1,5 @@
 let postmortems_dir () =
-  let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
-  let dir = Filename.concat (Filename.concat home ".clawq") "postmortems" in
+  let dir = Dot_dir.sub "postmortems" in
   (try Unix.mkdir dir 0o755 with Unix.Unix_error (Unix.EEXIST, _, _) -> ());
   dir
 

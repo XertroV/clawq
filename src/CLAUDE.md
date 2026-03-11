@@ -28,9 +28,10 @@ When working on provider implementations, consult the relevant requirements docs
 
 ## Database Location
 
-- Main database: `~/.clawq/memory.db` (contains `messages`, `session_state`, `models_cache`, `request_stats`, `task_tree`, `cron_jobs`, `inbound_queue`, etc.)
-- Config: `~/.clawq/config.json`
-- Daemon state: `~/.clawq/daemon_state.json`
+- Data directory: `~/.clawq/` (override with `CLAWQ_HOME` env var; centralized in `src/dot_dir.ml`)
+- Main database: `<data_dir>/memory.db` (contains `messages`, `session_state`, `models_cache`, `request_stats`, `task_tree`, `cron_jobs`, `inbound_queue`, etc.)
+- Config: `<data_dir>/config.json`
+- Daemon state: `<data_dir>/daemon_state.json`
 
 ## Durable Inbound Queue Semantics
 

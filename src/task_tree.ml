@@ -99,9 +99,7 @@ let templates_dir () =
   let dir =
     match !_templates_dir_override with
     | Some d -> d
-    | None ->
-        let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
-        Filename.concat (Filename.concat home ".clawq") "task_templates"
+    | None -> Dot_dir.sub "task_templates"
   in
   (try Unix.mkdir dir 0o755 with Unix.Unix_error _ -> ());
   dir

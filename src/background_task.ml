@@ -145,11 +145,7 @@ let resolve_runner ?(check_available = true) ?preferred () =
          'kimi', 'cursor-agent', 'opencode', 'claude', 'codex', and 'gemini')"
 
 let default_branch_name id = Printf.sprintf "clawq-bg-%d" id
-
-let clawq_dir () =
-  let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
-  Filename.concat home ".clawq"
-
+let clawq_dir () = Dot_dir.path ()
 let ensure_dir path = if Sys.file_exists path then () else Unix.mkdir path 0o755
 
 let ensure_parent_dir path =

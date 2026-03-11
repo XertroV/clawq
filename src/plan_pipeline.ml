@@ -42,10 +42,7 @@ let default_model_config =
     max_code_review_iters = 3;
   }
 
-let pipeline_dir_root () =
-  let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
-  Filename.concat (Filename.concat home ".clawq") "plans"
-
+let pipeline_dir_root () = Dot_dir.sub "plans"
 let plan_file_path pipeline = Filename.concat pipeline.pipeline_dir "plan.md"
 
 let plan_hash_file pipeline =

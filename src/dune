@@ -9,6 +9,7 @@
  (name clawq_runtime_core)
  (modules
   build_info
+  dot_dir
   lwt_util
   process_group
   phase2

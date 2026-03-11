@@ -486,9 +486,7 @@ let default_workspace_files =
     "memory.md";
   ]
 
-let default_workspace () =
-  let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
-  Filename.concat (Filename.concat home ".clawq") "workspace"
+let default_workspace () = Dot_dir.sub "workspace"
 
 let default_prompt =
   {
@@ -605,9 +603,7 @@ let default =
             max_age_days = 90;
             max_entries = 100000;
             export_before_purge = false;
-            export_path =
-              (let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
-               Filename.concat (Filename.concat home ".clawq") "audit_exports");
+            export_path = Dot_dir.sub "audit_exports";
           };
         audit_signing_enabled = false;
         landlock_enabled = false;

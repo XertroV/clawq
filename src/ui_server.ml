@@ -105,8 +105,7 @@ let extract_assets t =
   write_file (version_file t) Chat_ui_assets.ui_version
 
 let init () =
-  let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
-  let ui_dir = Filename.concat (Filename.concat home ".clawq") "ui" in
+  let ui_dir = Dot_dir.sub "ui" in
   ensure_dir ui_dir;
   let dev_mode = Sys.file_exists (Filename.concat ui_dir "DEV") in
   let server = { ui_dir; dev_mode; version = "" } in

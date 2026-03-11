@@ -124,9 +124,8 @@ let build_config_json (m : model) : Yojson.Safe.t =
     @ channels @ tunnel @ gateway)
 
 let write_wizard_config (m : model) =
-  let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
-  let config_dir = Filename.concat home ".clawq" in
-  let config_path = Filename.concat config_dir "config.json" in
+  let config_dir = Dot_dir.path () in
+  let config_path = Dot_dir.config_path () in
   (try if not (Sys.file_exists config_dir) then Unix.mkdir config_dir 0o755
    with _ -> ());
   let json = build_config_json m in
@@ -235,10 +234,7 @@ let model_from_config mode (config : Runtime_config.t) =
   }
 
 let load_initial_model mode =
-  let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
-  let config_path =
-    Filename.concat (Filename.concat home ".clawq") "config.json"
-  in
+  let config_path = Dot_dir.config_path () in
   if Sys.file_exists config_path then
     try
       (* Load without resolving secrets so $ENC:/env-var references are

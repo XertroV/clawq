@@ -5,7 +5,7 @@ section: "runtime"
 order: 1
 ---
 
-All clawq configuration lives in a single JSON file at `~/.clawq/config.json`. This page covers every configuration section, the interactive wizard, programmatic access via the CLI, and environment variables.
+All clawq configuration lives in a single JSON file at `~/.clawq/config.json` (or `$CLAWQ_HOME/config.json` if the `CLAWQ_HOME` environment variable is set). This page covers every configuration section, the interactive wizard, programmatic access via the CLI, and environment variables.
 
 ## Configuration Methods
 
@@ -69,6 +69,7 @@ Structural changes that affect startup (enabling/disabling channels, changing ga
 
 | Variable | Purpose |
 |----------|---------|
+| `CLAWQ_HOME` | Override the clawq data directory (default: `~/.clawq`). All config, database, logs, and state files are stored here. Propagated through daemon restarts. |
 | `CLAWQ_MASTER_KEY` | Passphrase for encrypting/decrypting API keys at rest (AES-256-GCM via PBKDF2) |
 
 When `security.encrypt_secrets` is `true` and `CLAWQ_MASTER_KEY` is set, API keys are automatically decrypted at runtime. Encrypted values are stored with a `$ENC:` prefix.

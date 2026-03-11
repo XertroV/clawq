@@ -58,15 +58,12 @@ let send_message ~(cfg : Runtime_config.matrix_config) ~room_id ~text =
 
 (* Sync token persistence *)
 let sync_token_path ~(cfg : Runtime_config.matrix_config) =
-  let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
   let safe_id =
     String.concat "_"
       (String.split_on_char ':'
          (String.concat "_" (String.split_on_char '/' cfg.user_id)))
   in
-  Filename.concat
-    (Filename.concat home ".clawq")
-    ("matrix_sync_" ^ safe_id ^ ".json")
+  Dot_dir.sub ("matrix_sync_" ^ safe_id ^ ".json")
 
 let load_sync_token ~cfg =
   let path = sync_token_path ~cfg in

@@ -25,7 +25,8 @@ let doctor_cmd = simple "doctor" "Check configuration for common issues."
 
 let onboard_cmd =
   simple "onboard"
-    "Create a starter config file at ~/.clawq/config.json if none exists."
+    "Create a starter config file at the clawq config directory if none \
+     exists. Set CLAWQ_HOME to override the default (~/.clawq)."
 
 let models_cmd =
   with_args "models" "List known models and set default model."

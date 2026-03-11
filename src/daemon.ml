@@ -116,10 +116,9 @@ let run ~(config : Runtime_config.t) =
           To keep the gateway loopback-only, set gateway.host to 127.0.0.1 (or \
           localhost / ::1).\n\
           Example: clawq config set gateway.host 127.0.0.1\n\
-          To allow non-loopback binding, set gateway.auth_token in \
-          ~/.clawq/config.json or run: clawq config set gateway.auth_token \
-          YOUR_TOKEN"
-         config.gateway.host);
+          To allow non-loopback binding, set gateway.auth_token in %s or run: \
+          clawq config set gateway.auth_token YOUR_TOKEN"
+         (Dot_dir.config_path ()) config.gateway.host);
   Logs.info (fun m ->
       m "clawq %s starting (pid=%d build=%s)" Build_info.version_string
         (Unix.getpid ()) Build_info.version_string);
@@ -156,13 +155,10 @@ let run ~(config : Runtime_config.t) =
   let db =
     let db_path =
       if config.memory.db_path <> "" then config.memory.db_path
-      else
-        let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
-        Filename.concat (Filename.concat home ".clawq") "memory.db"
+      else Dot_dir.db_path ()
     in
     try
-      let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
-      let clawq_dir = Filename.concat home ".clawq" in
+      let clawq_dir = Dot_dir.path () in
       (try if not (Sys.file_exists clawq_dir) then Sys.mkdir clawq_dir 0o755
        with _ -> ());
       let db =
@@ -217,10 +213,7 @@ let run ~(config : Runtime_config.t) =
   (* Auto-hydrate core memories from snapshot if db is empty *)
   (match db with
   | Some db ->
-      let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
-      let snapshot_path =
-        Filename.concat (Filename.concat home ".clawq") "memory_snapshot.json"
-      in
+      let snapshot_path = Dot_dir.sub "memory_snapshot.json" in
       if Sys.file_exists snapshot_path then begin
         let count = Memory.count_core ~db in
         if count = 0 then begin
@@ -1197,12 +1190,7 @@ let run ~(config : Runtime_config.t) =
                   last_retention_run := now;
                   ignore (Audit.retention_tick ~db ~config:cur_config)
                 end;
-                (let log_path =
-                   let home =
-                     try Sys.getenv "HOME" with Not_found -> "/tmp"
-                   in
-                   Filename.concat (Filename.concat home ".clawq") "daemon.log"
-                 in
+                (let log_path = Dot_dir.sub "daemon.log" in
                  if Log_rotation.maybe_rotate ~log_path ~config:cur_config.log
                  then Logs.info (fun m -> m "Rotated daemon.log"));
                 let* () =

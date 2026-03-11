@@ -50,8 +50,7 @@ let sandbox_workspace ~(config : Runtime_config.t) =
   else
     try
       let workspace = Runtime_config.effective_workspace config in
-      let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
-      let clawq_dir = Filename.concat home ".clawq" in
+      let clawq_dir = Dot_dir.path () in
       let ruleset_fd = create_ruleset_c access_fs_all in
       (try
          (* Workspace: read-write *)

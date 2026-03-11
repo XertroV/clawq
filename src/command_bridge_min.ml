@@ -65,9 +65,8 @@ let cmd_doctor () =
   | issues -> "doctor: issues found\n" ^ String.concat "\n" issues
 
 let cmd_onboard () =
-  let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
-  let config_dir = Filename.concat home ".clawq" in
-  let config_path = Filename.concat config_dir "config.json" in
+  let config_dir = Dot_dir.path () in
+  let config_path = Dot_dir.config_path () in
   if Sys.file_exists config_path then
     "Config already exists at " ^ config_path
     ^ "\nRun 'clawq-min config wizard' to reconfigure, or edit directly."
@@ -240,10 +239,7 @@ let cmd_auth args =
         match Secret_store.get_master_key () with
         | Error msg -> Printf.sprintf "Error: %s" msg
         | Ok key -> (
-            let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
-            let config_path =
-              Filename.concat (Filename.concat home ".clawq") "config.json"
-            in
+            let config_path = Dot_dir.config_path () in
             if not (Sys.file_exists config_path) then
               "No config file found at " ^ config_path
             else
@@ -293,13 +289,9 @@ let cmd_auth args =
 let get_db () =
   let cfg = get_config () in
   let db_path =
-    if cfg.memory.db_path <> "" then cfg.memory.db_path
-    else
-      let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
-      Filename.concat (Filename.concat home ".clawq") "memory.db"
+    if cfg.memory.db_path <> "" then cfg.memory.db_path else Dot_dir.db_path ()
   in
-  let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
-  let clawq_dir = Filename.concat home ".clawq" in
+  let clawq_dir = Dot_dir.path () in
   (try if not (Sys.file_exists clawq_dir) then Sys.mkdir clawq_dir 0o755
    with _ -> ());
   Memory.init ~db_path ~search_enabled:cfg.memory.search_enabled ()

@@ -208,9 +208,8 @@ let diff_display config warnings =
   List.rev !lines |> String.concat "\n"
 
 let apply config =
-  let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
-  let config_dir = Filename.concat home ".clawq" in
-  let config_path = Filename.concat config_dir "config.json" in
+  let config_dir = Dot_dir.path () in
+  let config_path = Dot_dir.config_path () in
   (try if not (Sys.file_exists config_dir) then Sys.mkdir config_dir 0o755
    with _ -> ());
   (* Backup existing config *)

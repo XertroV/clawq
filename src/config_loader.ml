@@ -1242,10 +1242,7 @@ let parse_config ?(resolve_secrets = true) json =
         try v |> member "tts_voice" |> to_string with _ -> "alloy"
       in
       let audio_dir =
-        try v |> member "audio_dir" |> to_string
-        with _ ->
-          let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
-          Filename.concat (Filename.concat home ".clawq") "audio"
+        try v |> member "audio_dir" |> to_string with _ -> Dot_dir.sub "audio"
       in
       if stt_enabled || tts_enabled then
         Some
@@ -1682,9 +1679,7 @@ let warn_invalid_config ~config_path issues =
       config_path
       (String.concat ", " issues)
 
-let default_path () =
-  let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
-  Filename.concat (Filename.concat home ".clawq") "config.json"
+let default_path () = Dot_dir.config_path ()
 
 let load ?(path = "") () : Runtime_config.t =
   let config_path = if path <> "" then path else default_path () in

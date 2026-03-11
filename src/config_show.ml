@@ -95,10 +95,7 @@ let resolve_dot_path json path =
   walk json keys
 
 let show section =
-  let path =
-    let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
-    Filename.concat (Filename.concat home ".clawq") "config.json"
-  in
+  let path = Dot_dir.config_path () in
   if not (Sys.file_exists path) then
     "No config file found at " ^ path ^ "\nRun 'clawq onboard' to create one."
   else

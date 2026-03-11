@@ -825,10 +825,7 @@ let shell_exec_with_hooks ~workspace ~workspace_only ~allowed_commands
   in
   let max_timeout = 600.0 in
   let default_timeout = 30.0 in
-  let shell_output_dir () =
-    let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
-    Filename.concat (Filename.concat home ".clawq") "tool-output"
-  in
+  let shell_output_dir () = Dot_dir.sub "tool-output" in
   let ensure_dir path =
     if Sys.file_exists path then () else Unix.mkdir path 0o755
   in
@@ -847,12 +844,7 @@ let shell_exec_with_hooks ~workspace ~workspace_only ~allowed_commands
     if (not save_full) && String.length text <= max_chars then None
     else
       let dir = shell_output_dir () in
-      (try
-         ensure_dir
-           (Filename.concat
-              (try Sys.getenv "HOME" with Not_found -> "/tmp")
-              ".clawq")
-       with _ -> ());
+      (try ensure_dir (Dot_dir.path ()) with _ -> ());
       (try ensure_dir dir with _ -> ());
       let path =
         Filename.concat dir

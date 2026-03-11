@@ -1496,6 +1496,7 @@ let test_background_task_logs_clamps_excessive_lines () =
           automerge = false;
           use_worktree = true;
           merge_status = None;
+          retry_count = 0;
         }
       in
       let oc = open_out (Option.get task.log_path) in

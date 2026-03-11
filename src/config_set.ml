@@ -397,9 +397,7 @@ let section_not_settable_error ?(show_cmd = "clawq config show") key =
      such as '%s.<field>', or use '%s %s' to inspect it."
     key key show_cmd key
 
-let config_path () =
-  let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
-  Filename.concat (Filename.concat home ".clawq") "config.json"
+let config_path () = Dot_dir.config_path ()
 
 let load_json path =
   if Sys.file_exists path then

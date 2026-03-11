@@ -1,7 +1,6 @@
 let write_state ~pairing_code ~(tunnel_json : Yojson.Safe.t option)
     ~(config : Runtime_config.t) ~components =
-  let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
-  let state_dir = Filename.concat home ".clawq" in
+  let state_dir = Dot_dir.path () in
   let state_path = Filename.concat state_dir "daemon_state.json" in
   (try if not (Sys.file_exists state_dir) then Sys.mkdir state_dir 0o755
    with _ -> ());
@@ -129,9 +128,7 @@ let boot_replay_summary_message (summary : boot_replay_summary) =
     summary.session_count summary.total_rows summary.reclaimed_stale_count
     summary.reclaimed_failed_count summary.replayed_count summary.failed_count
 
-let mcp_servers_path () =
-  let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
-  Filename.concat (Filename.concat home ".clawq") "mcp_servers.json"
+let mcp_servers_path () = Dot_dir.sub "mcp_servers.json"
 
 type exit_intent = Shutdown | Restart
 

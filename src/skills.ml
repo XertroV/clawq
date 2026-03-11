@@ -1,6 +1,4 @@
-let skills_dir () =
-  let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
-  Filename.concat (Filename.concat home ".clawq") "skills"
+let skills_dir () = Dot_dir.sub "skills"
 
 let substitute_template template (args : Yojson.Safe.t) =
   let open Yojson.Safe.Util in

@@ -57,18 +57,27 @@ let rec rm_tree path =
 
 (** Set HOME to a fresh temp directory, call f, restore HOME and cleanup. Use
     this for any test that exercises code reading from or writing to
-    $HOME/.clawq/ so it cannot touch the developer's real clawq directory. *)
+    $HOME/.clawq/ so it cannot touch the developer's real clawq directory. Also
+    clears CLAWQ_HOME to prevent it from overriding the temp HOME. *)
 let with_temp_home f =
   let base = Filename.get_temp_dir_name () in
   let dir = Filename.temp_file ~temp_dir:base "clawq_home_" "" in
   Sys.remove dir;
   Unix.mkdir dir 0o755;
   let old_home = try Some (Sys.getenv "HOME") with Not_found -> None in
+  let old_clawq_home = Sys.getenv_opt Dot_dir.env_var in
   Unix.putenv "HOME" dir;
+  (* Clear CLAWQ_HOME so Dot_dir.path () falls back to $HOME/.clawq *)
+  (match old_clawq_home with
+  | Some _ -> Unix.putenv Dot_dir.env_var ""
+  | None -> ());
   Fun.protect
     (fun () -> f dir)
     ~finally:(fun () ->
       (match old_home with
       | Some v -> Unix.putenv "HOME" v
       | None -> Unix.putenv "HOME" "");
+      (match old_clawq_home with
+      | Some v -> Unix.putenv Dot_dir.env_var v
+      | None -> Unix.putenv Dot_dir.env_var "");
       rm_tree dir)

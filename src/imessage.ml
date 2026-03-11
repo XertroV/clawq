@@ -6,10 +6,7 @@ let chat_db_path () =
   let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
   Filename.concat home "Library/Messages/chat.db"
 
-let state_path () =
-  let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
-  Filename.concat (Filename.concat home ".clawq") "imessage_state.json"
-
+let state_path () = Dot_dir.sub "imessage_state.json"
 let is_macos () = Sys.file_exists osascript_path
 
 let is_allowed ~(config : Runtime_config.imessage_config) ~handle_id =

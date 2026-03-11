@@ -1129,10 +1129,7 @@ let cmd_auth args =
         match Secret_store.get_master_key () with
         | Error msg -> Printf.sprintf "Error: %s" msg
         | Ok key ->
-            let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
-            let config_path =
-              Filename.concat (Filename.concat home ".clawq") "config.json"
-            in
+            let config_path = Dot_dir.config_path () in
             if not (Sys.file_exists config_path) then
               "No config file found at " ^ config_path
             else begin

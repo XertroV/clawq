@@ -1698,8 +1698,8 @@ let turn agent ~user_message ?db ?session_key ?interrupt_check ?inject_messages
               (List.map
                  (fun (tc : Provider.tool_call) -> tc.function_name)
                  calls)
-          ^ ") but tools are disabled. Set security.tools_enabled to true in \
-             ~/.clawq/config.json to enable them."
+          ^ ") but tools are disabled. Set security.tools_enabled to true in "
+          ^ Dot_dir.config_path () ^ " to enable them."
         in
         agent.history <-
           Provider.make_message ~role:"assistant" ~content :: agent.history;

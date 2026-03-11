@@ -39,8 +39,7 @@ let score_path ~query path =
     else None
 
 let load_config_json () =
-  let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
-  let path = Filename.concat (Filename.concat home ".clawq") "config.json" in
+  let path = Dot_dir.config_path () in
   if Sys.file_exists path then
     try Some (Yojson.Safe.from_file path) with _ -> None
   else None

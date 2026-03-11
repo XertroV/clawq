@@ -4,11 +4,7 @@ type preferences = {
 }
 
 let empty = { favorites = []; usage_counts = [] }
-
-let prefs_dir () =
-  let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
-  Filename.concat home ".clawq"
-
+let prefs_dir () = Dot_dir.path ()
 let prefs_file () = Filename.concat (prefs_dir ()) "model_prefs.json"
 
 let load () =

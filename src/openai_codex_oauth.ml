@@ -121,9 +121,7 @@ let build_authorization_url ~port ~code_challenge ~state =
     ]
   |> Uri.to_string
 
-let config_path () =
-  let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
-  Filename.concat (Filename.concat home ".clawq") "config.json"
+let config_path () = Dot_dir.config_path ()
 
 let load_config_json () =
   let path = config_path () in

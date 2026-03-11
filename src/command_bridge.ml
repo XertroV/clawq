@@ -638,10 +638,7 @@ let cmd_runtime args =
 let cmd_tunnel args =
   let cfg = get_config () in
   let provider_name = cfg.tunnel.provider in
-  let tunnel_state_path () =
-    let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
-    Filename.concat (Filename.concat home ".clawq") "tunnel_state.json"
-  in
+  let tunnel_state_path () = Dot_dir.sub "tunnel_state.json" in
   let save_tunnel_state ~pid ~port ~url =
     let start_ticks = proc_start_ticks pid in
     let path = tunnel_state_path () in
@@ -823,10 +820,7 @@ let cmd_reset_agent () =
   let cfg = get_config () in
   let workspace = Runtime_config.effective_workspace cfg in
   let db_path =
-    if cfg.memory.db_path <> "" then cfg.memory.db_path
-    else
-      let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
-      Filename.concat (Filename.concat home ".clawq") "memory.db"
+    if cfg.memory.db_path <> "" then cfg.memory.db_path else Dot_dir.db_path ()
   in
   let red s = "\027[1;31m" ^ s ^ "\027[0m" in
   let bold s = "\027[1m" ^ s ^ "\027[0m" in
@@ -909,10 +903,7 @@ let cmd_reset_workspace () =
   let cfg = get_config () in
   let workspace = Runtime_config.effective_workspace cfg in
   let db_path =
-    if cfg.memory.db_path <> "" then cfg.memory.db_path
-    else
-      let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
-      Filename.concat (Filename.concat home ".clawq") "memory.db"
+    if cfg.memory.db_path <> "" then cfg.memory.db_path else Dot_dir.db_path ()
   in
   let red s = "\027[1;31m" ^ s ^ "\027[0m" in
   let bold s = "\027[1m" ^ s ^ "\027[0m" in

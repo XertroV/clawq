@@ -1,10 +1,7 @@
 (* Force-link provider_init.ml so its native-provider registrations run. *)
 let _link_provider_init = Provider_init.registered
 let get_config () = Config_loader.load ()
-
-let daemon_state_path () =
-  let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
-  Filename.concat (Filename.concat home ".clawq") "daemon_state.json"
+let daemon_state_path () = Dot_dir.sub "daemon_state.json"
 
 let remove_daemon_state () =
   let path = daemon_state_path () in
@@ -64,9 +61,7 @@ let read_daemon_state () =
     with _ -> None
   else None
 
-let gateway_token_path () =
-  let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
-  Filename.concat (Filename.concat home ".clawq") "gateway_token"
+let gateway_token_path () = Dot_dir.sub "gateway_token"
 
 let read_gateway_token () =
   match read_file (gateway_token_path ()) with
@@ -75,8 +70,7 @@ let read_gateway_token () =
 
 let save_gateway_token token =
   let token = String.trim token in
-  let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
-  let clawq_dir = Filename.concat home ".clawq" in
+  let clawq_dir = Dot_dir.path () in
   (try if not (Sys.file_exists clawq_dir) then Sys.mkdir clawq_dir 0o700
    with _ -> ());
   let token_path = gateway_token_path () in
@@ -283,13 +277,9 @@ let shell_policy_summary (cfg : Runtime_config.t) sandbox =
 let get_db () =
   let cfg = get_config () in
   let db_path =
-    if cfg.memory.db_path <> "" then cfg.memory.db_path
-    else
-      let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
-      Filename.concat (Filename.concat home ".clawq") "memory.db"
+    if cfg.memory.db_path <> "" then cfg.memory.db_path else Dot_dir.db_path ()
   in
-  let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
-  let clawq_dir = Filename.concat home ".clawq" in
+  let clawq_dir = Dot_dir.path () in
   (try if not (Sys.file_exists clawq_dir) then Sys.mkdir clawq_dir 0o755
    with _ -> ());
   Memory.init ~db_path ~search_enabled:cfg.memory.search_enabled ()
@@ -420,6 +410,7 @@ let cmd_status () =
   let lines = ref [] in
   let add s = lines := s :: !lines in
   add "clawq status";
+  add (Printf.sprintf "  config dir: %s" (Dot_dir.path ()));
   add (Printf.sprintf "  model: %s" cfg.agent_defaults.primary_model);
   (match
      Runtime_config.primary_model_deprecation_warning cfg.agent_defaults
@@ -547,11 +538,7 @@ let cmd_doctor () =
   (* Teams channel checks *)
   (match cfg.channels.teams with
   | None -> (
-      let raw_path =
-        Filename.concat
-          (try Sys.getenv "HOME" with Not_found -> "/tmp")
-          ".clawq/config.json"
-      in
+      let raw_path = Dot_dir.config_path () in
       if Sys.file_exists raw_path then
         try
           let raw = Yojson.Safe.from_file raw_path in
@@ -578,9 +565,8 @@ let cmd_doctor () =
   result
 
 let cmd_onboard () =
-  let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
-  let config_dir = Filename.concat home ".clawq" in
-  let config_path = Filename.concat config_dir "config.json" in
+  let config_dir = Dot_dir.path () in
+  let config_path = Dot_dir.config_path () in
   if Sys.file_exists config_path then
     "Config already exists at " ^ config_path
     ^ "\nRun 'clawq config wizard' to reconfigure, or edit directly."
@@ -967,14 +953,8 @@ let cmd_memory args =
       let count = Memory.count_core ~db in
       base_status () ^ Printf.sprintf "\nCore memories: %d" count
   | "export" :: rest -> (
-      let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
       let path =
-        match rest with
-        | [ p ] -> p
-        | _ ->
-            Filename.concat
-              (Filename.concat home ".clawq")
-              "memory_snapshot.json"
+        match rest with [ p ] -> p | _ -> Dot_dir.sub "memory_snapshot.json"
       in
       let db = get_db () in
       try

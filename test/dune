@@ -26,6 +26,7 @@
   test_cost_tracker
   test_daemon
   test_dingtalk
+  test_dot_dir
   test_discord
   test_discord_gateway
   test_email

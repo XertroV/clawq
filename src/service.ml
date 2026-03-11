@@ -1,6 +1,4 @@
-let clawq_dir () =
-  let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
-  Filename.concat home ".clawq"
+let clawq_dir () = Dot_dir.path ()
 
 let test_disable_live_signal_restart_env =
   "CLAWQ_TEST_DISABLE_LIVE_SIGNAL_RESTART"

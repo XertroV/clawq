@@ -1,6 +1,4 @@
-let path () =
-  let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
-  Filename.concat (Filename.concat home ".clawq") "restart_notify.json"
+let path () = Dot_dir.sub "restart_notify.json"
 
 let write ~channel ~channel_id =
   let p = path () in

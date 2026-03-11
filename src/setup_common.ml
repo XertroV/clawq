@@ -172,9 +172,7 @@ let rec deep_merge_json base overlay =
       `Assoc merged
   | _, overlay -> overlay
 
-let config_path () =
-  let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
-  Filename.concat (Filename.concat home ".clawq") "config.json"
+let config_path () = Dot_dir.config_path ()
 
 let merge_and_write_config new_json =
   let cp = config_path () in
