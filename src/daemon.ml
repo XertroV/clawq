@@ -1,6 +1,13 @@
 include Daemon_util
 
 let run ~(config : Runtime_config.t) =
+  (Lwt.async_exception_hook :=
+     fun exn ->
+       let bt = Printexc.get_backtrace () in
+       let bt_msg = if bt = "" then " (no backtrace)" else "\n" ^ bt in
+       Logs.err (fun m ->
+           m "Uncaught async exception: %s%s" (Printexc.to_string exn) bt_msg);
+       Format.pp_print_flush Format.err_formatter ());
   let current_config = ref config in
   let open Lwt.Syntax in
   let is_loopback_host host =

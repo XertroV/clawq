@@ -8,9 +8,18 @@ let default_timeout_s = ref 30.0
 
 let set_default_timeout_s s = default_timeout_s := s
 
+let labeled_timeout ~label timeout_s f =
+  Lwt.catch
+    (fun () -> Lwt_unix.with_timeout timeout_s f)
+    (function
+      | Lwt_unix.Timeout ->
+          Lwt.fail_with
+            (Printf.sprintf "HTTP timeout in %s after %.1fs" label timeout_s)
+      | exn -> Lwt.fail exn)
+
 let post_json ~uri ~headers ~body =
   let open Lwt.Syntax in
-  Lwt_unix.with_timeout !default_timeout_s (fun () ->
+  labeled_timeout ~label:"post_json" !default_timeout_s (fun () ->
       let uri = Uri.of_string uri in
       let headers =
         Cohttp.Header.of_list (("Content-Type", "application/json") :: headers)
@@ -25,7 +34,7 @@ let post_json ~uri ~headers ~body =
 
 let put_json ~uri ~headers ~body =
   let open Lwt.Syntax in
-  Lwt_unix.with_timeout !default_timeout_s (fun () ->
+  labeled_timeout ~label:"put_json" !default_timeout_s (fun () ->
       let uri = Uri.of_string uri in
       let headers =
         Cohttp.Header.of_list (("Content-Type", "application/json") :: headers)
@@ -40,7 +49,7 @@ let put_json ~uri ~headers ~body =
 
 let post_json_with_headers ~uri ~headers ~body =
   let open Lwt.Syntax in
-  Lwt_unix.with_timeout !default_timeout_s (fun () ->
+  labeled_timeout ~label:"post_json_with_headers" !default_timeout_s (fun () ->
       let uri = Uri.of_string uri in
       let headers =
         Cohttp.Header.of_list (("Content-Type", "application/json") :: headers)
@@ -65,7 +74,7 @@ type multipart_part =
 
 let post_multipart ~uri ~headers ~parts =
   let open Lwt.Syntax in
-  Lwt_unix.with_timeout !default_timeout_s (fun () ->
+  labeled_timeout ~label:"post_multipart" !default_timeout_s (fun () ->
       let boundary =
         Printf.sprintf "----clawq%08x%08x" (Random.bits ()) (Random.bits ())
       in
@@ -108,7 +117,7 @@ let post_multipart ~uri ~headers ~parts =
 
 let put_empty ~uri ~headers =
   let open Lwt.Syntax in
-  Lwt_unix.with_timeout !default_timeout_s (fun () ->
+  labeled_timeout ~label:"put_empty" !default_timeout_s (fun () ->
       let uri = Uri.of_string uri in
       let headers =
         Cohttp.Header.of_list (("Content-Length", "0") :: headers)
@@ -126,7 +135,7 @@ let put_empty ~uri ~headers =
     arbitrarily long for SSE / streaming responses). *)
 let post_stream ~uri ~headers ~body =
   let open Lwt.Syntax in
-  Lwt_unix.with_timeout !default_timeout_s (fun () ->
+  labeled_timeout ~label:"post_stream" !default_timeout_s (fun () ->
       let uri = Uri.of_string uri in
       let headers =
         Cohttp.Header.of_list (("Content-Type", "application/json") :: headers)
@@ -144,7 +153,7 @@ let post_stream ~uri ~headers ~body =
     long-lived responses such as SSE or long-poll-like chunked streams. *)
 let get_stream ~uri ~headers =
   let open Lwt.Syntax in
-  Lwt_unix.with_timeout !default_timeout_s (fun () ->
+  labeled_timeout ~label:"get_stream" !default_timeout_s (fun () ->
       let uri = Uri.of_string uri in
       let headers = Cohttp.Header.of_list headers in
       let* response, body = Cohttp_lwt_unix.Client.get ~headers uri in
@@ -156,7 +165,7 @@ let get_stream ~uri ~headers =
 
 let get_with_timeout ~timeout_s ~uri ~headers =
   let open Lwt.Syntax in
-  Lwt_unix.with_timeout timeout_s (fun () ->
+  labeled_timeout ~label:"get_with_timeout" timeout_s (fun () ->
       let uri = Uri.of_string uri in
       let headers = Cohttp.Header.of_list headers in
       let* response, body = Cohttp_lwt_unix.Client.get ~headers uri in
@@ -171,7 +180,7 @@ let get ~uri ~headers =
 
 let patch_json ~uri ~headers ~body =
   let open Lwt.Syntax in
-  Lwt_unix.with_timeout !default_timeout_s (fun () ->
+  labeled_timeout ~label:"patch_json" !default_timeout_s (fun () ->
       let uri = Uri.of_string uri in
       let headers =
         Cohttp.Header.of_list (("Content-Type", "application/json") :: headers)
@@ -186,7 +195,7 @@ let patch_json ~uri ~headers ~body =
 
 let delete ~uri ~headers ~body =
   let open Lwt.Syntax in
-  Lwt_unix.with_timeout !default_timeout_s (fun () ->
+  labeled_timeout ~label:"delete" !default_timeout_s (fun () ->
       let uri = Uri.of_string uri in
       let headers =
         Cohttp.Header.of_list (("Content-Type", "application/json") :: headers)

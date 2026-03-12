@@ -1166,6 +1166,7 @@ let main_info =
 let help_env var = match var with "MANPAGER" -> None | _ -> Sys.getenv_opt var
 
 let () =
+  Printexc.record_backtrace true;
   let argv =
     let args = Array.to_list Sys.argv in
     match args with

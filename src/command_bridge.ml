@@ -59,11 +59,19 @@ let cmd_agent ?(run_daemon = fun ~config -> Lwt_main.run (Daemon.run ~config))
        start a second live agent."
   | Some lock_fd -> (
       let result =
-        try run_daemon ~config:cfg
-        with Failure msg ->
-          Logs.err (fun m -> m "%s" msg);
-          release_lock (Some lock_fd);
-          exit 1
+        try run_daemon ~config:cfg with
+        | Failure msg ->
+            Logs.err (fun m -> m "%s" msg);
+            release_lock (Some lock_fd);
+            exit 1
+        | exn ->
+            let bt = Printexc.get_backtrace () in
+            let bt_msg = if bt = "" then "" else "\n" ^ bt in
+            Logs.err (fun m ->
+                m "Daemon crashed with exception: %s%s" (Printexc.to_string exn)
+                  bt_msg);
+            release_lock (Some lock_fd);
+            exit 1
       in
       match result with
       | Daemon.Shutdown ->

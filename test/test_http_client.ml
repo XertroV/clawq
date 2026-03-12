@@ -30,6 +30,10 @@ let with_default_timeout timeout_s f =
     ~finally:(fun () -> Http_client.set_default_timeout_s old_timeout_s)
     f
 
+let starts_with ~prefix s =
+  String.length s >= String.length prefix
+  && String.sub s 0 (String.length prefix) = prefix
+
 let expect_timeout promise =
   Lwt_main.run
     (Lwt.catch
@@ -37,7 +41,10 @@ let expect_timeout promise =
          let open Lwt.Syntax in
          let* _ = promise in
          Lwt.return false)
-       (function Lwt_unix.Timeout -> Lwt.return true | exn -> Lwt.reraise exn))
+       (function
+         | Lwt_unix.Timeout -> Lwt.return true
+         | Failure msg -> Lwt.return (starts_with ~prefix:"HTTP timeout" msg)
+         | exn -> Lwt.reraise exn))
 
 let test_get_times_out_before_headers () =
   with_http_server
@@ -135,6 +142,20 @@ let test_get_stream_allows_delayed_body_after_headers () =
         "delayed chunk is still readable" (Some "stream chunk") first_chunk;
       Alcotest.(check (option string)) "stream ends cleanly" None end_of_stream)
 
+let test_labeled_timeout_includes_label () =
+  let msg =
+    Lwt_main.run
+      (Lwt.catch
+         (fun () ->
+           Http_client.labeled_timeout ~label:"test_fn" 0.01 (fun () ->
+               Lwt_unix.sleep 1.0)
+           |> Lwt.map (fun _ -> ""))
+         (function Failure msg -> Lwt.return msg | exn -> Lwt.reraise exn))
+  in
+  Alcotest.(check bool)
+    "contains label" true
+    (starts_with ~prefix:"HTTP timeout in test_fn" msg)
+
 let suite =
   [
     Alcotest.test_case "get times out before headers" `Quick
@@ -145,4 +166,6 @@ let suite =
       test_get_stream_still_times_out_before_headers;
     Alcotest.test_case "get_stream allows delayed body after headers" `Quick
       test_get_stream_allows_delayed_body_after_headers;
+    Alcotest.test_case "labeled_timeout includes label in error" `Quick
+      test_labeled_timeout_includes_label;
   ]
