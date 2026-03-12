@@ -8,6 +8,7 @@ let result_to_string = function
       "Thinking(Set " ^ level ^ ")"
   | Slash_commands.Compact -> "Compact"
   | Slash_commands.RuntimeCtx -> "RuntimeCtx"
+  | Slash_commands.Uptime -> "Uptime"
   | Slash_commands.ShowThinking Slash_commands.ShowThinkingStatus ->
       "ShowThinking(Status)"
   | Slash_commands.ShowThinking Slash_commands.ToggleShowThinking ->
@@ -55,6 +56,7 @@ let result_eq a b =
       a = b
   | Slash_commands.Compact, Slash_commands.Compact -> true
   | Slash_commands.RuntimeCtx, Slash_commands.RuntimeCtx -> true
+  | Slash_commands.Uptime, Slash_commands.Uptime -> true
   | Slash_commands.ShowThinking a, Slash_commands.ShowThinking b -> a = b
   | Slash_commands.Delegate a, Slash_commands.Delegate b -> a = b
   | Slash_commands.ForkAnd a, Slash_commands.ForkAnd b -> a = b
@@ -113,6 +115,10 @@ let test_runtime_ctx () =
     (Slash_commands.handle "/runtime-ctx");
   Alcotest.check result_testable "runtime_ctx" Slash_commands.RuntimeCtx
     (Slash_commands.handle "/runtime_ctx")
+
+let test_uptime () =
+  Alcotest.check result_testable "uptime" Slash_commands.Uptime
+    (Slash_commands.handle "/uptime")
 
 let test_unknown_command () =
   Alcotest.check result_testable "unknown cmd" Slash_commands.NotACommand
@@ -193,6 +199,7 @@ let test_commands_list () =
   Alcotest.(check bool) "has thinking" true (List.mem "thinking" names);
   Alcotest.(check bool) "has compact" true (List.mem "compact" names);
   Alcotest.(check bool) "has runtime_ctx" true (List.mem "runtime_ctx" names);
+  Alcotest.(check bool) "has uptime" true (List.mem "uptime" names);
   Alcotest.(check bool) "has update" true (List.mem "update" names);
   Alcotest.(check bool) "has delegate" true (List.mem "delegate" names);
   Alcotest.(check bool)
@@ -969,6 +976,7 @@ let suite =
     Alcotest.test_case "handle /new" `Quick test_new;
     Alcotest.test_case "handle /compact" `Quick test_compact;
     Alcotest.test_case "handle /runtime-ctx" `Quick test_runtime_ctx;
+    Alcotest.test_case "handle /uptime" `Quick test_uptime;
     Alcotest.test_case "handle /status" `Quick test_status;
     Alcotest.test_case "handle /thinking" `Quick test_thinking_show;
     Alcotest.test_case "handle /thinking levels" `Quick test_thinking_set_levels;

@@ -86,3 +86,21 @@ let daemon_uptime_reply ~pid =
       | None -> Printf.sprintf "Daemon is running (pid %d), but uptime is unavailable." pid)
   | None -> "Daemon is not running."
 
+
+
+let read_pid_file path =
+  if not (Sys.file_exists path) then None
+  else
+    try
+      let ic = open_in path in
+      let s = String.trim (input_line ic) in
+      close_in ic;
+      int_of_string_opt s
+    with _ -> None
+
+let read_current_daemon_pid () =
+  let default_path =
+    try Filename.concat (Dot_dir.path ()) "daemon.pid"
+    with _ -> Filename.concat (Filename.get_temp_dir_name ()) "daemon.pid"
+  in
+  read_pid_file default_path

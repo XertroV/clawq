@@ -316,6 +316,12 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
         | RuntimeCtx ->
             let* text = Session.runtime_context_block session_mgr ~key in
             send_message ~bot_token ~chat_id:update.chat_id ~text ()
+        | Uptime ->
+            let text =
+              Daemon_status.daemon_uptime_reply
+                ~pid:(Daemon_status.read_current_daemon_pid ())
+            in
+            send_message ~bot_token ~chat_id:update.chat_id ~text ()
         | Thinking Slash_commands.ShowThinking ->
             let current =
               (Session.get_config session_mgr).agent_defaults.reasoning_effort

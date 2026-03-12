@@ -350,6 +350,17 @@ let handler ~session_manager ~require_pairing ~auth_token
                     in
                     Cohttp_lwt_unix.Server.respond_string ~status:`OK
                       ~headers:json_headers ~body:resp_json ()
+                | Slash_commands.Uptime ->
+                    let response =
+                      Daemon_status.daemon_uptime_reply
+                        ~pid:(Daemon_status.read_current_daemon_pid ())
+                    in
+                    let resp_json =
+                      `Assoc [ ("response", `String response) ]
+                      |> Yojson.Safe.to_string
+                    in
+                    Cohttp_lwt_unix.Server.respond_string ~status:`OK
+                      ~headers:json_headers ~body:resp_json ()
                 | Slash_commands.Costs action ->
                     let response =
                       match Session.get_db session_manager with
@@ -781,6 +792,12 @@ let handler ~session_manager ~require_pairing ~auth_token
                     let key = "web:" ^ session_id in
                     let* text =
                       Session.runtime_context_block session_manager ~key
+                    in
+                    sse_reply text
+                | Slash_commands.Uptime ->
+                    let text =
+                      Daemon_status.daemon_uptime_reply
+                        ~pid:(Daemon_status.read_current_daemon_pid ())
                     in
                     sse_reply text
                 | Slash_commands.Costs action ->

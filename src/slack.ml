@@ -371,6 +371,15 @@ let handle_event ~(config : Runtime_config.slack_config)
                   send_message_fn ~bot_token:config.bot_token ~channel_id ~text
                 in
                 Lwt.return "ok"
+            | Uptime ->
+                let text =
+                  Daemon_status.daemon_uptime_reply
+                    ~pid:(Daemon_status.read_current_daemon_pid ())
+                in
+                let* () =
+                  send_message_fn ~bot_token:config.bot_token ~channel_id ~text
+                in
+                Lwt.return "ok"
             | Thinking Slash_commands.ShowThinking ->
                 let current =
                   (Session.get_config session_manager).agent_defaults
