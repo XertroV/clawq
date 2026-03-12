@@ -549,11 +549,45 @@ let background_logs_cmd =
              run "background" args)
         $ id $ lines $ offset $ follow))
 
+let background_resume_cmd =
+  let id = Arg.(required & pos 0 (some string) None & info [] ~docv:"ID") in
+  Cmd.v
+    (Cmd.info "resume"
+       ~doc:
+         "Resume a previously started background task using the runner's \
+          native session support.")
+    Term.(ret (const (fun id -> run "background" [ "resume"; id ]) $ id))
+
+let background_message_cmd =
+  let id = Arg.(required & pos 0 (some string) None & info [] ~docv:"ID") in
+  let message = required_trailing_args 1 "MESSAGE" in
+  Cmd.v
+    (Cmd.info "message"
+       ~doc:"Send a chat message into a started background task and resume it.")
+    Term.(
+      ret
+        (const (fun id message ->
+             run "background" ([ "message"; id ] @ message))
+        $ id $ message))
+
 let background_cancel_cmd =
   let id = Arg.(required & pos 0 (some string) None & info [] ~docv:"ID") in
   Cmd.v
     (Cmd.info "cancel" ~doc:"Cancel a queued or running background task.")
     Term.(ret (const (fun id -> run "background" [ "cancel"; id ]) $ id))
+
+let background_retry_cmd =
+  let id = Arg.(required & pos 0 (some string) None & info [] ~docv:"ID") in
+  Cmd.v
+    (Cmd.info "retry" ~doc:"Re-queue a failed background task.")
+    Term.(ret (const (fun id -> run "background" [ "retry"; id ]) $ id))
+
+let background_finalize_cmd =
+  let id = Arg.(required & pos 0 (some string) None & info [] ~docv:"ID") in
+  Cmd.v
+    (Cmd.info "finalize"
+       ~doc:"Rebase, merge, and clean up a completed task worktree.")
+    Term.(ret (const (fun id -> run "background" [ "finalize"; id ]) $ id))
 
 let background_cmd =
   Cmd.group
@@ -568,7 +602,11 @@ let background_cmd =
       background_add_cmd;
       background_wait_cmd;
       background_logs_cmd;
+      background_resume_cmd;
+      background_message_cmd;
       background_cancel_cmd;
+      background_retry_cmd;
+      background_finalize_cmd;
     ]
 
 let delegate_cmd =

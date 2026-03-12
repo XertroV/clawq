@@ -45,11 +45,11 @@ let with_fake_chat_provider ?response_for_user f =
     let user_messages =
       messages
       |> List.filter_map (fun msg ->
-             try
-               if msg |> member "role" |> to_string = "user" then
-                 Some (msg |> member "content" |> to_string)
-               else None
-             with _ -> None)
+          try
+            if msg |> member "role" |> to_string = "user" then
+              Some (msg |> member "content" |> to_string)
+            else None
+          with _ -> None)
     in
     let latest = match List.rev user_messages with x :: _ -> x | [] -> "" in
     let response_text =
@@ -155,12 +155,11 @@ let test_check_stuck_writes_durable_log () =
           (match verdict with
           | Session_observer.Stuck { reason; confidence = `High } ->
               Alcotest.(check string)
-                "reason"
-                "repeating failed tool call" reason
+                "reason" "repeating failed tool call" reason
           | _ -> Alcotest.fail "expected high-confidence stuck verdict");
           let log_path = Dot_dir.sub "observer.log" in
-          Alcotest.(check bool) "observer log created" true
-            (Sys.file_exists log_path);
+          Alcotest.(check bool)
+            "observer log created" true (Sys.file_exists log_path);
           let log_text = read_file log_path in
           Alcotest.(check bool)
             "writes stuck event" true
@@ -194,7 +193,9 @@ let test_check_stuck_logs_failures () =
             };
         }
       in
-      let history = [ Provider.make_message ~role:"user" ~content:"Check me" ] in
+      let history =
+        [ Provider.make_message ~role:"user" ~content:"Check me" ]
+      in
       let verdict =
         Lwt_main.run
           (Session_observer.check_stuck ~config ~history
@@ -220,14 +221,12 @@ let test_check_thinking_excerpt_logs_looping_verdict () =
           let verdict =
             Lwt_main.run
               (Session_observer.check_thinking_excerpt ~config
-                 ~excerpt:"Need to do X. Need to do X. Need to do X."
-                 ())
+                 ~excerpt:"Need to do X. Need to do X. Need to do X." ())
           in
           (match verdict with
           | `Looping reason ->
               Alcotest.(check string)
-                "loop reason"
-                "repeating the same plan" reason
+                "loop reason" "repeating the same plan" reason
           | `Sane -> Alcotest.fail "expected looping verdict");
           let log_text = read_file (Dot_dir.sub "observer.log") in
           Alcotest.(check bool)
@@ -238,8 +237,7 @@ let test_check_thinking_excerpt_logs_looping_verdict () =
             (string_contains log_text "\"verdict\":\"looping\"");
           Alcotest.(check bool)
             "writes loop reason" true
-            (string_contains log_text
-               "\"reason\":\"repeating the same plan\"")))
+            (string_contains log_text "\"reason\":\"repeating the same plan\"")))
 
 let suite =
   [

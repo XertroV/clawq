@@ -95,7 +95,8 @@ let test_send_chunked_html_with_fallback_chunks_long_messages () =
     (Telegram.send_chunked_html_with_fallback_using fake_send_message
        ~bot_token:"token" ~chat_id:"chat-1" ~text:long_text ());
   let ordered_calls = List.rev !calls in
-  Alcotest.(check int) "two chunks with html+plain attempts" 4
+  Alcotest.(check int)
+    "two chunks with html+plain attempts" 4
     (List.length ordered_calls);
   let plain_chunks =
     List.filter_map
@@ -104,9 +105,11 @@ let test_send_chunked_html_with_fallback_chunks_long_messages () =
       ordered_calls
   in
   Alcotest.(check int) "two plain fallback chunks" 2 (List.length plain_chunks);
-  Alcotest.(check bool) "all fallback chunks within Telegram limit" true
+  Alcotest.(check bool)
+    "all fallback chunks within Telegram limit" true
     (List.for_all (fun chunk -> String.length chunk <= 4096) plain_chunks);
-  Alcotest.(check string) "fallback chunks reconstruct original text" long_text
+  Alcotest.(check string)
+    "fallback chunks reconstruct original text" long_text
     (String.concat "" plain_chunks)
 
 let poll_error_testable =

@@ -92,6 +92,32 @@ let init_git_repo path =
   | 0 -> ()
   | code -> Alcotest.failf "git init failed for %s (exit %d)" path code
 
+let git_cmd repo args =
+  let cmd =
+    Printf.sprintf "git -C %s %s >/dev/null 2>&1" (Filename.quote repo) args
+  in
+  match Sys.command cmd with
+  | 0 -> ()
+  | code -> Alcotest.failf "git command failed for %s (exit %d)" args code
+
+let add_git_worktree repo ~branch ~name =
+  let worktree_path = Filename.concat repo name in
+  git_cmd repo
+    (Printf.sprintf "worktree add -b %s %s HEAD -q" (Filename.quote branch)
+       (Filename.quote worktree_path));
+  worktree_path
+
+let git_empty_commit repo =
+  let cmd =
+    Printf.sprintf
+      "git -C %s -c user.name=Test -c user.email=test@example.com commit \
+       --allow-empty -m 'initial' -q >/dev/null 2>&1"
+      (Filename.quote repo)
+  in
+  match Sys.command cmd with
+  | 0 -> ()
+  | code -> Alcotest.failf "git empty commit failed for %s (exit %d)" repo code
+
 let session_db home =
   let clawq_dir = Filename.concat home ".clawq" in
   if not (Sys.file_exists clawq_dir) then Unix.mkdir clawq_dir 0o755;
@@ -1068,6 +1094,12 @@ let test_handle_background_bare_shows_commands () =
         "bare background mentions add" true
         (contains result "background add");
       Alcotest.(check bool)
+        "bare background mentions resume" true
+        (contains result "background resume");
+      Alcotest.(check bool)
+        "bare background mentions message" true
+        (contains result "background message");
+      Alcotest.(check bool)
         "bare background mentions cancel" true
         (contains result "background cancel"))
 
@@ -1673,6 +1705,47 @@ let test_handle_background_wait_with_timeout () =
                 wait_result 0);
            true
          with Not_found -> false))
+
+let test_handle_background_resume_and_message () =
+  with_temp_home (fun home ->
+      let repo = Filename.concat home "repo" in
+      Unix.mkdir repo 0o755;
+      init_git_repo repo;
+      git_empty_commit repo;
+      ignore
+        (Command_bridge.handle
+           [ "background"; "add"; "codex"; repo; "Implement"; "resume"; "test" ]);
+      let clawq_dir = Filename.concat home ".clawq" in
+      let db =
+        Memory.init ~db_path:(Filename.concat clawq_dir "memory.db") ()
+      in
+      Background_task.init_schema db;
+      let worktree_path =
+        add_git_worktree repo ~branch:"clawq-bg-1" ~name:"resume-wt"
+      in
+      ignore
+        (Background_task.set_running ~db ~id:1 ~branch:"clawq-bg-1"
+           ~worktree_path
+           ~log_path:(Filename.concat clawq_dir "task-1.log")
+           ~pid:0);
+      Background_task.finish ~db ~id:1 ~status:Background_task.Succeeded
+        ~result_preview:"done";
+      let resume_result =
+        Command_bridge.handle [ "background"; "resume"; "1" ]
+      in
+      Alcotest.(check bool)
+        "background resume returns queued text" true
+        (contains resume_result "Queued background task 1 for resume");
+      let message_result =
+        Command_bridge.handle
+          [ "background"; "message"; "1"; "please"; "fix"; "tests" ]
+      in
+      Alcotest.(check bool)
+        "background message returns queued text" true
+        (contains message_result "Queued message for background task 1");
+      Alcotest.(check int)
+        "queued message persisted" 1
+        (Background_task.queued_resume_message_count ~db ~id:1))
 
 let test_handle_reloads_config_between_calls () =
   with_temp_home (fun home ->
@@ -2483,6 +2556,8 @@ let suite =
       test_handle_background_logs_offset;
     Alcotest.test_case "handle background wait with timeout" `Quick
       test_handle_background_wait_with_timeout;
+    Alcotest.test_case "handle background resume and message" `Quick
+      test_handle_background_resume_and_message;
     Alcotest.test_case "handle delegate" `Quick test_handle_delegate;
     Alcotest.test_case "handle delegate with --model" `Quick
       test_handle_delegate_with_model;

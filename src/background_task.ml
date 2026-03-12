@@ -34,6 +34,13 @@ type task = {
   retry_count : int;
 }
 
+type queued_message = {
+  id : int;
+  task_id : int;
+  message : string;
+  created_at : string;
+}
+
 let string_of_runner = function
   | Codex -> "codex"
   | Claude -> "claude"
@@ -102,6 +109,11 @@ let path_is_git_repo path =
     (Printf.sprintf "git -C %s rev-parse --is-inside-work-tree >/dev/null 2>&1"
        (Filename.quote path))
   = 0
+
+let path_is_git_worktree path =
+  let dot_git = Filename.concat path ".git" in
+  path_is_git_repo path && Sys.file_exists dot_git
+  && not (Sys.is_directory dot_git)
 
 let validate_workspace_path path =
   if String.trim path = "" then Error "Path is required"
@@ -360,7 +372,15 @@ let sql_bool stmt i =
   | Sqlite3.Data.INT n -> Int64.to_int n <> 0
   | _ -> false
 
-let task_of_stmt stmt =
+let queued_message_of_stmt stmt =
+  {
+    id = Option.value (sql_int (Sqlite3.column stmt 0)) ~default:0;
+    task_id = Option.value (sql_int (Sqlite3.column stmt 1)) ~default:0;
+    message = Sqlite3.column stmt 2 |> sql_text |> Option.value ~default:"";
+    created_at = Sqlite3.column stmt 3 |> sql_text |> Option.value ~default:"";
+  }
+
+let task_of_stmt stmt : task =
   {
     id = Option.value (sql_int (Sqlite3.column stmt 0)) ~default:0;
     runner =
@@ -427,6 +447,16 @@ let init_schema db =
   exec
     "CREATE INDEX IF NOT EXISTS idx_background_tasks_status ON \
      background_tasks (status)";
+  exec
+    "CREATE TABLE IF NOT EXISTS background_task_inbound_queue (\n\
+    \  id INTEGER PRIMARY KEY AUTOINCREMENT,\n\
+    \  task_id INTEGER NOT NULL,\n\
+    \  message TEXT NOT NULL,\n\
+    \  created_at TEXT NOT NULL DEFAULT (datetime('now'))\n\
+     )";
+  exec
+    "CREATE INDEX IF NOT EXISTS idx_background_task_inbound_queue_task_id ON \
+     background_task_inbound_queue (task_id, id)";
   let try_alter sql =
     match Sqlite3.exec db sql with
     | Sqlite3.Rc.OK | Sqlite3.Rc.ERROR -> ()
@@ -446,6 +476,100 @@ let init_schema db =
   try_alter
     "ALTER TABLE background_tasks ADD COLUMN retry_count INTEGER NOT NULL \
      DEFAULT 0"
+
+let list_queued_messages ~db ~task_id =
+  let sql =
+    "SELECT id, task_id, message, created_at FROM \
+     background_task_inbound_queue WHERE task_id = ? ORDER BY id ASC"
+  in
+  let stmt = Sqlite3.prepare db sql in
+  Fun.protect
+    ~finally:(fun () -> ignore (Sqlite3.finalize stmt))
+    (fun () ->
+      ignore (Sqlite3.bind stmt 1 (Sqlite3.Data.INT (Int64.of_int task_id)));
+      let rows = ref [] in
+      while Sqlite3.step stmt = Sqlite3.Rc.ROW do
+        rows := queued_message_of_stmt stmt :: !rows
+      done;
+      List.rev !rows)
+
+let queue_message ~db ~task_id ~message =
+  let sql =
+    "INSERT INTO background_task_inbound_queue (task_id, message) VALUES (?, ?)"
+  in
+  let stmt = Sqlite3.prepare db sql in
+  Fun.protect
+    ~finally:(fun () -> ignore (Sqlite3.finalize stmt))
+    (fun () ->
+      ignore (Sqlite3.bind stmt 1 (Sqlite3.Data.INT (Int64.of_int task_id)));
+      ignore (Sqlite3.bind stmt 2 (Sqlite3.Data.TEXT message));
+      match Sqlite3.step stmt with
+      | Sqlite3.Rc.DONE -> Ok (Int64.to_int (Sqlite3.last_insert_rowid db))
+      | rc ->
+          Error
+            (Printf.sprintf "Failed to queue task message: %s"
+               (Sqlite3.Rc.to_string rc)))
+
+let delete_queued_message ~db ~queue_id =
+  let sql = "DELETE FROM background_task_inbound_queue WHERE id = ?" in
+  let stmt = Sqlite3.prepare db sql in
+  Fun.protect
+    ~finally:(fun () -> ignore (Sqlite3.finalize stmt))
+    (fun () ->
+      ignore (Sqlite3.bind stmt 1 (Sqlite3.Data.INT (Int64.of_int queue_id)));
+      ignore (Sqlite3.step stmt))
+
+let take_queued_messages ~db ~task_id =
+  let rows = list_queued_messages ~db ~task_id in
+  List.iter (fun msg -> delete_queued_message ~db ~queue_id:msg.id) rows;
+  rows
+
+let queued_message_count ~db ~task_id =
+  let sql =
+    "SELECT COUNT(*) FROM background_task_inbound_queue WHERE task_id = ?"
+  in
+  let stmt = Sqlite3.prepare db sql in
+  Fun.protect
+    ~finally:(fun () -> ignore (Sqlite3.finalize stmt))
+    (fun () ->
+      ignore (Sqlite3.bind stmt 1 (Sqlite3.Data.INT (Int64.of_int task_id)));
+      match Sqlite3.step stmt with
+      | Sqlite3.Rc.ROW -> (
+          match Sqlite3.column stmt 0 with
+          | Sqlite3.Data.INT i -> Int64.to_int i
+          | _ -> 0)
+      | _ -> 0)
+
+let resume_supported (task : task) =
+  task.use_worktree && task.branch <> ""
+  &&
+  match task.worktree_path with
+  | Some worktree_path -> path_is_git_worktree worktree_path
+  | None -> false
+
+let format_injected_message idx message =
+  Printf.sprintf
+    "A new message arrived while you were working. Treat it as a new user chat \
+     message injected into the current background task conversation. \
+     Incorporate it and continue the task unless it explicitly changes or \
+     stops the task.\n\n\
+     Injected message %d:\n\
+     %s"
+    idx message
+
+let resume_prompt_of_messages messages =
+  match messages with
+  | [] ->
+      "Resume the current background task from where you left off. Continue \
+       the existing work, make concrete progress, and finish cleanly if the \
+       task is already near completion."
+  | _ ->
+      messages
+      |> List.mapi (fun idx message ->
+          format_injected_message (idx + 1) message)
+      |> String.concat "\n\n"
+
+type invocation = Fresh | Resume of string
 
 let enqueue ~db ~runner ?model ?(require_git = true) ?(automerge = false)
     ?(use_worktree = true) ~repo_path ~prompt ?branch ?session_key ?channel
@@ -495,7 +619,7 @@ let select_columns =
    created_at, started_at, finished_at, COALESCE(automerge, 0), \
    COALESCE(use_worktree, 1), merge_status, COALESCE(retry_count, 0)"
 
-let list_tasks ~db =
+let list_tasks ~db : task list =
   let sql =
     Printf.sprintf "SELECT %s FROM background_tasks ORDER BY id DESC"
       select_columns
@@ -510,7 +634,7 @@ let list_tasks ~db =
       done;
       List.rev !rows)
 
-let list_tasks_for_display ~db =
+let list_tasks_for_display ~db : task list * int =
   let all = list_tasks ~db in
   let active, inactive =
     List.partition (fun t -> not (is_terminal_status t.status)) all
@@ -518,7 +642,9 @@ let list_tasks_for_display ~db =
   let recent_inactive =
     (* all is ordered by id DESC then reversed, so inactive preserves that;
        sort desc and take the most recent N *)
-    let sorted = List.sort (fun a b -> compare b.id a.id) inactive in
+    let sorted =
+      List.sort (fun (a : task) (b : task) -> compare b.id a.id) inactive
+    in
     let rec take n = function
       | [] -> []
       | _ when n <= 0 -> []
@@ -528,11 +654,13 @@ let list_tasks_for_display ~db =
   in
   let hidden_count = List.length inactive - List.length recent_inactive in
   let visible =
-    List.sort (fun a b -> compare b.id a.id) (active @ recent_inactive)
+    List.sort
+      (fun (a : task) (b : task) -> compare b.id a.id)
+      (active @ recent_inactive)
   in
   (visible, hidden_count)
 
-let get_task ~db ~id =
+let get_task ~db ~id : task option =
   let sql =
     Printf.sprintf "SELECT %s FROM background_tasks WHERE id = ?" select_columns
   in
@@ -628,10 +756,7 @@ let result_preview_of_output ~exit_code ~output =
 let read_command_first_line command =
   try
     let ic = Unix.open_process_in command in
-    let line =
-      try Some (input_line ic)
-      with End_of_file -> None
-    in
+    let line = try Some (input_line ic) with End_of_file -> None in
     let exit_code =
       match Unix.close_process_in ic with
       | Unix.WEXITED code -> code
@@ -644,8 +769,10 @@ let worktree_harvest_issue (task : task) =
   match (task.use_worktree, task.worktree_path) with
   | false, _ | _, None -> None
   | true, Some worktree_path when not (path_is_git_repo worktree_path) ->
-      Some "Task worktree is no longer a git repository; changes cannot be harvested"
-  | true, Some worktree_path ->
+      Some
+        "Task worktree is no longer a git repository; changes cannot be \
+         harvested"
+  | true, Some worktree_path -> (
       let command =
         Printf.sprintf
           "git -C %s status --porcelain --untracked-files=normal 2>&1"
@@ -654,8 +781,7 @@ let worktree_harvest_issue (task : task) =
       let exit_code, first_line = read_command_first_line command in
       if exit_code <> 0 then
         Some
-          (Printf.sprintf
-             "Unable to inspect task worktree for harvesting%s"
+          (Printf.sprintf "Unable to inspect task worktree for harvesting%s"
              (match first_line with
              | Some line when String.trim line <> "" -> ": " ^ String.trim line
              | _ -> ""))
@@ -664,9 +790,10 @@ let worktree_harvest_issue (task : task) =
         | Some line when String.trim line <> "" ->
             Some
               (Printf.sprintf
-                 "Task left uncommitted worktree changes that cannot be harvested: %s"
+                 "Task left uncommitted worktree changes that cannot be \
+                  harvested: %s"
                  (String.trim line))
-        | _ -> None
+        | _ -> None)
 
 let completion_outcome ~db ~id ~exit_code ~output =
   let default_preview = result_preview_of_output ~exit_code ~output in
@@ -1044,9 +1171,67 @@ let finish ~db ~id ~status ~result_preview =
       ignore (Sqlite3.step stmt))
 
 let finalize_completed_task ~db ~id ~exit_code ~output =
-  let final_status, result_preview = completion_outcome ~db ~id ~exit_code ~output in
-  finish ~db ~id ~status:final_status ~result_preview;
-  final_status
+  match get_task ~db ~id with
+  | Some { status = Queued; _ } -> Queued
+  | _ ->
+      let final_status, result_preview =
+        completion_outcome ~db ~id ~exit_code ~output
+      in
+      finish ~db ~id ~status:final_status ~result_preview;
+      final_status
+
+let queued_resume_message_count ~db ~id = queued_message_count ~db ~task_id:id
+
+let requeue_for_resume ~db ~id ~result_preview =
+  let sql =
+    "UPDATE background_tasks SET status = 'queued', pid = NULL, result_preview \
+     = ?, started_at = NULL, finished_at = NULL WHERE id = ?"
+  in
+  let stmt = Sqlite3.prepare db sql in
+  let preview = preview_text result_preview in
+  Fun.protect
+    ~finally:(fun () -> ignore (Sqlite3.finalize stmt))
+    (fun () ->
+      ignore (Sqlite3.bind stmt 1 (Sqlite3.Data.TEXT preview));
+      ignore (Sqlite3.bind stmt 2 (Sqlite3.Data.INT (Int64.of_int id)));
+      ignore (Sqlite3.step stmt))
+
+let request_resume ~message ~db ~id =
+  match get_task ~db ~id with
+  | None -> Error (Printf.sprintf "No background task found with id %d" id)
+  | Some task when not (resume_supported task) ->
+      Error
+        (Printf.sprintf
+           "Task %d cannot be resumed because it does not have an isolated \
+            worktree-backed session. The original worktree may have been \
+            removed or is no longer a git worktree. Re-run it as a normal \
+            background worktree task first."
+           id)
+  | Some task -> (
+      let normalized_message = Option.map String.trim message in
+      (match task.status with
+      | Running -> (
+          match task.pid with
+          | Some pid when pid > 0 -> Process_group.terminate_blocking pid
+          | _ -> ())
+      | _ -> ());
+      match normalized_message with
+      | Some "" -> Error "Message must not be empty"
+      | Some text -> (
+          match queue_message ~db ~task_id:id ~message:text with
+          | Error msg -> Error msg
+          | Ok _queue_id ->
+              requeue_for_resume ~db ~id
+                ~result_preview:"Queued new message for resumed background task";
+              Ok
+                (Printf.sprintf
+                   "Queued message for background task %d. The task will \
+                    resume and receive it as a chat message."
+                   id))
+      | None ->
+          requeue_for_resume ~db ~id
+            ~result_preview:"Queued background task for native runner resume";
+          Ok (Printf.sprintf "Queued background task %d for resume" id))
 
 let set_merge_status ~db ~id ~merge_status =
   let sql = "UPDATE background_tasks SET merge_status = ? WHERE id = ?" in
@@ -1270,51 +1455,91 @@ let delegate_enqueue ?context ?notify_cfg ?(check_available = true)
             | Ok id -> Ok (id, runner, chosen_repo_path)
             | Error _ as err -> err))
 
-let command_of_task task =
+let command_of_task_with_invocation task invocation =
   let model_args flag =
     match task.model with
     | Some model when String.trim model <> "" -> [| flag; model |]
     | _ -> [||]
   in
-  match task.runner with
-  | Codex ->
+  match (task.runner, invocation) with
+  | Codex, Fresh ->
       Array.concat
         [
           [| "codex"; "exec" |];
           model_args "--model";
           [| "--dangerously-bypass-approvals-and-sandbox"; task.prompt |];
         ]
-  | Claude ->
+  | Codex, Resume prompt ->
+      Array.concat
+        [
+          [| "codex"; "exec"; "resume"; "--last" |];
+          model_args "--model";
+          [| "--dangerously-bypass-approvals-and-sandbox"; prompt |];
+        ]
+  | Claude, Fresh ->
       Array.concat
         [
           [| "claude"; "-p" |];
           model_args "--model";
           [| "--dangerously-skip-permissions"; task.prompt |];
         ]
-  | Kimi ->
+  | Claude, Resume prompt ->
+      Array.concat
+        [
+          [| "claude"; "-c"; "-p" |];
+          model_args "--model";
+          [| "--dangerously-skip-permissions"; prompt |];
+        ]
+  | Kimi, Fresh ->
       Array.concat
         [
           [| "kimi"; "--print"; "--yolo" |];
           model_args "--model";
           [| "-p"; task.prompt |];
         ]
-  | Gemini ->
+  | Kimi, Resume prompt ->
+      Array.concat
+        [
+          [| "kimi"; "--continue"; "--print"; "--yolo" |];
+          model_args "--model";
+          [| "-p"; prompt |];
+        ]
+  | Gemini, Fresh ->
       Array.concat
         [
           [| "gemini"; "--yolo" |];
           model_args "--model";
           [| "--prompt"; task.prompt |];
         ]
-  | Opencode ->
+  | Gemini, Resume prompt ->
+      Array.concat
+        [
+          [| "gemini"; "--resume"; "latest"; "--yolo" |];
+          model_args "--model";
+          [| "--prompt"; prompt |];
+        ]
+  | Opencode, Fresh ->
       Array.concat
         [ [| "opencode"; "run" |]; model_args "--model"; [| task.prompt |] ]
-  | Cursor ->
+  | Opencode, Resume prompt ->
+      Array.concat
+        [ [| "opencode"; "run"; "-c" |]; model_args "--model"; [| prompt |] ]
+  | Cursor, Fresh ->
       Array.concat
         [
           [| "cursor-agent"; "--print"; "--yolo"; "--trust" |];
           model_args "--model";
           [| task.prompt |];
         ]
+  | Cursor, Resume prompt ->
+      Array.concat
+        [
+          [| "cursor-agent"; "--continue"; "--print"; "--yolo"; "--trust" |];
+          model_args "--model";
+          [| prompt |];
+        ]
+
+let command_of_task task = command_of_task_with_invocation task Fresh
 
 let elapsed_string (task : task) =
   let now = Unix.gettimeofday () in
@@ -1481,7 +1706,7 @@ let run_simple_command ~cwd argv =
     (fun () -> Process_group.close proc)
 
 let prepare_worktree ?(run_simple_command = run_simple_command) task =
-  let log_path = task_log_path task.id in
+  let log_path = Option.value task.log_path ~default:(task_log_path task.id) in
   ensure_roots ();
   ensure_parent_dir log_path;
   let open Lwt.Syntax in
@@ -1493,10 +1718,30 @@ let prepare_worktree ?(run_simple_command = run_simple_command) task =
     let branch =
       if task.branch <> "" then task.branch else default_branch_name task.id
     in
-    let worktree_path = task_worktree_path task.id in
+    let worktree_path =
+      Option.value task.worktree_path ~default:(task_worktree_path task.id)
+    in
     if Sys.file_exists worktree_path then
-      Lwt.return
-        (Error (Printf.sprintf "Worktree path already exists: %s" worktree_path))
+      Lwt.return (Ok (branch, worktree_path, log_path))
+    else if Option.is_some task.worktree_path then
+      let* exit_code, stdout, stderr =
+        run_simple_command ~cwd:task.repo_path
+          [|
+            "git";
+            "-C";
+            task.repo_path;
+            "worktree";
+            "add";
+            worktree_path;
+            branch;
+          |]
+      in
+      if exit_code = 0 then Lwt.return (Ok (branch, worktree_path, log_path))
+      else
+        Lwt.return
+          (Error
+             (Printf.sprintf "git worktree add failed (exit %d): %s%s" exit_code
+                stdout stderr))
     else
       let* exit_code, stdout, stderr =
         run_simple_command ~cwd:task.repo_path
@@ -1522,7 +1767,8 @@ let running : (int, unit) Hashtbl.t = Hashtbl.create 16
 
 let spawn_task ?(on_task_started = fun _ -> Lwt.return_unit)
     ?(on_task_finished = fun _ -> Lwt.return_unit)
-    ?(run_simple_command = run_simple_command) ?command_override ~db task =
+    ?(run_simple_command = run_simple_command) ?command_override ~db
+    (task : task) =
   Hashtbl.replace running task.id ();
   Lwt.async (fun () ->
       let open Lwt.Syntax in
@@ -1538,18 +1784,31 @@ let spawn_task ?(on_task_started = fun _ -> Lwt.return_unit)
               finish ~db ~id:task.id ~status:Failed ~result_preview:err;
               Lwt.return_unit
           | Ok (branch, worktree_path, log_path) ->
+              let task_for_command =
+                {
+                  task with
+                  branch;
+                  worktree_path = Some worktree_path;
+                  log_path = Some log_path;
+                }
+              in
+              let queued_messages = list_queued_messages ~db ~task_id:task.id in
+              let invocation =
+                if queued_messages <> [] || resume_supported task then
+                  Resume
+                    (resume_prompt_of_messages
+                       (List.map
+                          (fun (msg : queued_message) -> msg.message)
+                          queued_messages))
+                else Fresh
+              in
               let command =
                 match command_override with
                 | Some cmd -> cmd
                 | None ->
                     Process_group.Exec
-                      (command_of_task
-                         {
-                           task with
-                           branch;
-                           worktree_path = Some worktree_path;
-                           log_path = Some log_path;
-                         })
+                      (command_of_task_with_invocation task_for_command
+                         invocation)
               in
               let proc =
                 Process_group.start_to_file ~cwd:worktree_path
@@ -1571,6 +1830,14 @@ let spawn_task ?(on_task_started = fun _ -> Lwt.return_unit)
                   | None -> Lwt.return_unit
                 in
                 let* status = Process_group.wait pid in
+                let exit_code = exit_code_of_status status in
+                let () =
+                  if exit_code = 0 then
+                    List.iter
+                      (fun (msg : queued_message) ->
+                        delete_queued_message ~db ~queue_id:msg.id)
+                      queued_messages
+                in
                 (* B210 watchdog: after child exits, give process group
                    2s then kill remaining members (e.g. grandchildren) *)
                 Lwt.async (fun () ->
@@ -1603,7 +1870,7 @@ let rec take n = function
   | _ when n <= 0 -> []
   | x :: xs -> x :: take (n - 1) xs
 
-let available_worker_slots ?max_running_tasks tasks =
+let available_worker_slots ?max_running_tasks (tasks : task list) =
   match max_running_tasks with
   | None -> None
   | Some max_running_tasks ->
@@ -1615,7 +1882,8 @@ let available_worker_slots ?max_running_tasks tasks =
       in
       Some (max 0 (max max_running_tasks 0 - running_count))
 
-let queued_tasks_ready_to_start ?max_running_tasks tasks =
+let queued_tasks_ready_to_start ?max_running_tasks (tasks : task list) :
+    task list =
   let queued =
     List.filter
       (fun (task : task) ->
@@ -2333,6 +2601,96 @@ let delegate_tool_with_notify ?(check_available = true) ~db ~default_repo_path
 let delegate_tool ?check_available ~db ~default_repo_path () =
   delegate_tool_with_notify ?check_available ~db ~default_repo_path
     ~notify_cfg:None ()
+
+let resume_tool ~db =
+  {
+    Tool.name = "background_task_resume";
+    description =
+      "Resume a previously started background coding task using the runner's \
+       built-in session resume support. Requires a worktree-backed task that \
+       has already started at least once.";
+    parameters_schema =
+      `Assoc
+        [
+          ("type", `String "object");
+          ( "properties",
+            `Assoc
+              [
+                ( "id",
+                  `Assoc
+                    [
+                      ("type", `String "integer");
+                      ("description", `String "Task id to resume");
+                    ] );
+              ] );
+          ("required", `List [ `String "id" ]);
+          ("additionalProperties", `Bool false);
+        ];
+    invoke =
+      (fun ?context:_ args ->
+        let open Yojson.Safe.Util in
+        let id = try args |> member "id" |> to_int with _ -> -1 in
+        if id < 0 then
+          Lwt.return "Error: id is required and must be a non-negative integer."
+        else
+          match request_resume ~db ~id ~message:None with
+          | Ok msg -> Lwt.return msg
+          | Error msg -> Lwt.return ("Error: " ^ msg));
+    invoke_stream = None;
+    risk_level = Medium;
+    deferred = false;
+  }
+
+let message_tool ~db =
+  {
+    Tool.name = "background_task_send_message";
+    description =
+      "Send a new chat message into a background coding task. The current run \
+       is resumed with the runner's native continue/resume support and the \
+       message is injected as a user chat message.";
+    parameters_schema =
+      `Assoc
+        [
+          ("type", `String "object");
+          ( "properties",
+            `Assoc
+              [
+                ( "id",
+                  `Assoc
+                    [
+                      ("type", `String "integer");
+                      ("description", `String "Task id to message");
+                    ] );
+                ( "message",
+                  `Assoc
+                    [
+                      ("type", `String "string");
+                      ( "description",
+                        `String "Message to inject into the task chat" );
+                    ] );
+              ] );
+          ("required", `List [ `String "id"; `String "message" ]);
+          ("additionalProperties", `Bool false);
+        ];
+    invoke =
+      (fun ?context:_ args ->
+        let open Yojson.Safe.Util in
+        let id = try args |> member "id" |> to_int with _ -> -1 in
+        let message =
+          try args |> member "message" |> to_string with _ -> ""
+        in
+        if id < 0 then
+          Lwt.return "Error: id is required and must be a non-negative integer."
+        else if String.trim message = "" then
+          Lwt.return "Error: message is required and must not be empty."
+        else
+          match request_resume ~db ~id ~message:(Some message) with
+          | Ok msg -> Lwt.return msg
+          | Error msg -> Lwt.return ("Error: " ^ msg));
+    invoke_stream = None;
+    risk_level = Medium;
+    deferred = false;
+  }
 
 let cancel_tool ~db =
   {

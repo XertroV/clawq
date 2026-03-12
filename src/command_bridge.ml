@@ -188,14 +188,19 @@ let cmd_background args =
          tasks\n\
         \  background show <id>                                    - Show task \
          details\n\
-        \  background add <codex|claude|kimi|gemini|opencode|cursor> <repo> \
-         [--branch <name>] <prompt> - Queue a task\n\
+        \  background add <codex|claude|kimi|gemini|opencode|cursor> [--model \
+         <model>] <repo> [--branch <name>] <prompt> - Queue a task\n\
         \  background wait <id> [--timeout <seconds>]              - Wait for \
          completion\n\
         \  background logs <id> [--lines N] [--offset N] [--follow] - Show \
          task logs\n\
+        \  background resume <id>                                - Resume a task\n\
+        \  background message <id> <message>...                  - Send a \
+         message to a task\n\
         \  background cancel <id>                                  - Cancel a \
          task\n\
+        \  background retry <id>                                   - Re-queue \
+         a failed task\n\
         \  background finalize <id>                                - Rebase, \
          merge and clean up worktree"
   | [ "show"; id_s ] -> (
@@ -297,6 +302,29 @@ let cmd_background args =
               with
               | Ok text -> text
               | Error msg -> "Error: " ^ msg)))
+  | [ "resume"; id_s ] -> (
+      let db = get_db () in
+      Background_task.init_schema db;
+      let id = try int_of_string id_s with _ -> -1 in
+      if id < 0 then "Error: background task id must be an integer"
+      else
+        match Background_task.request_resume ~db ~id ~message:None with
+        | Ok msg -> msg
+        | Error msg -> "Error: " ^ msg)
+  | "message" :: id_s :: message_parts -> (
+      let db = get_db () in
+      Background_task.init_schema db;
+      let id = try int_of_string id_s with _ -> -1 in
+      let message = String.concat " " message_parts |> String.trim in
+      if id < 0 then "Error: background task id must be an integer"
+      else if message = "" then
+        "Usage: clawq background message <id> <message...>"
+      else
+        match
+          Background_task.request_resume ~db ~id ~message:(Some message)
+        with
+        | Ok msg -> msg
+        | Error msg -> "Error: " ^ msg)
   | [ "cancel"; id_s ] -> (
       let db = get_db () in
       Background_task.init_schema db;
@@ -330,17 +358,22 @@ let cmd_background args =
             let result = Lwt_main.run (Worktree_merge.finalize_task ~db task) in
             Worktree_merge.format_result result)
   | _ ->
-      "Usage: clawq background <list|show|add|wait|logs|cancel|retry|finalize>\n\
+      "Usage: clawq background \
+       <list|show|add|wait|logs|resume|message|cancel|retry|finalize>\n\
       \  background list                                         - List queued \
        and completed tasks\n\
       \  background show <id>                                    - Show task \
        details\n\
-      \  background add <codex|claude|kimi|gemini|opencode|cursor> <repo> \
-       [--branch <name>] <prompt> - Queue a worktree runner\n\
+      \  background add <codex|claude|kimi|gemini|opencode|cursor> [--model \
+       <model>] <repo> [--branch <name>] <prompt> - Queue a worktree runner\n\
       \  background wait <id> [--timeout <seconds>]              - Wait for a \
        task to finish\n\
       \  background logs <id> [--lines N] [--offset N] [--follow] - Show task \
        log lines\n\
+      \  background resume <id>                                  - Resume a \
+       started task with the runner's native session support\n\
+      \  background message <id> <message...>                    - Inject a \
+       chat message into a started task and resume it\n\
       \  background cancel <id>                                  - Cancel a \
        queued/running task\n\
       \  background retry <id>                                   - Re-queue a \
@@ -1052,12 +1085,13 @@ let cmd_debug_context args =
   Background_task.init_schema db;
   let background_tasks =
     Background_task.list_tasks ~db
-    |> List.filter (fun t ->
+    |> List.filter (fun (t : Background_task.task) ->
         match t.Background_task.status with
         | Background_task.Queued | Background_task.Running -> true
         | _ -> false)
-    |> List.sort (fun a b -> compare a.Background_task.id b.Background_task.id)
-    |> List.map (fun t ->
+    |> List.sort (fun (a : Background_task.task) (b : Background_task.task) ->
+        compare a.Background_task.id b.Background_task.id)
+    |> List.map (fun (t : Background_task.task) ->
         {
           Prompt_builder.id = t.Background_task.id;
           runner = Background_task.string_of_runner t.runner;

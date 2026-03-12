@@ -160,7 +160,9 @@ let test_status_message_recovers_after_lock_warn_timeout () =
   in
   Lwt_main.run
     (let open Lwt.Syntax in
-     let* () = Status_message.tool_start sm ~id:"t1" ~name:"shell_exec" ~summary:None in
+     let* () =
+       Status_message.tool_start sm ~id:"t1" ~name:"shell_exec" ~summary:None
+     in
      Status_message.tool_result sm ~id:"t1" ~name:"shell_exec" ~result:"ok"
        ~is_error:false);
   Alcotest.(check int)
@@ -243,7 +245,8 @@ let test_html_fallback_to_plain_text_strips_markup () =
        "<b>tool</b><br><code>x &amp; y &lt; z</code>");
   Alcotest.(check string)
     "block tags preserve line breaks" "one\ntwo\nthree\n"
-    (Telegram.html_fallback_to_plain_text "<p>one</p><div>two</div><li>three</li>")
+    (Telegram.html_fallback_to_plain_text
+       "<p>one</p><div>two</div><li>three</li>")
 
 let suite =
   [

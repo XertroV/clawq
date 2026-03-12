@@ -130,7 +130,9 @@ let html_fallback_to_plain_text text =
     |> Str.global_replace (Str.regexp_case_fold "</div>") "\n"
     |> Str.global_replace (Str.regexp_case_fold "</li>") "\n"
   in
-  let without_tags = Str.global_replace (Str.regexp {|<[^>]*>|}) "" with_newlines in
+  let without_tags =
+    Str.global_replace (Str.regexp {|<[^>]*>|}) "" with_newlines
+  in
   without_tags
   |> Str.global_replace (Str.regexp "&lt;") "<"
   |> Str.global_replace (Str.regexp "&gt;") ">"
@@ -1186,8 +1188,7 @@ let send_chunked_html_with_fallback_using
       chat_id:string ->
       text:string ->
       unit ->
-      unit Lwt.t)
-    ?(disable_notification = true) ~bot_token ~chat_id ~text () =
+      unit Lwt.t) ?(disable_notification = true) ~bot_token ~chat_id ~text () =
   let open Lwt.Syntax in
   let chunks = chunk_text text in
   Lwt_list.iter_s
@@ -1196,7 +1197,8 @@ let send_chunked_html_with_fallback_using
         (fun () ->
           sender ~disable_notification ~parse_mode:"HTML" ~bot_token ~chat_id
             ~text:chunk ())
-        (fun _exn -> sender ~disable_notification ~bot_token ~chat_id ~text:chunk ()))
+        (fun _exn ->
+          sender ~disable_notification ~bot_token ~chat_id ~text:chunk ()))
     chunks
 
 let send_chunked_html_with_fallback ?(disable_notification = true) ~bot_token

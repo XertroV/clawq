@@ -514,7 +514,8 @@ let format_cost_summary_line label (s : Request_stats.summary) =
 
 let format_usage_summary_line label (s : Request_stats.summary) =
   Printf.sprintf "%s: %d turn%s, %s prompt (%s added), %s completion" label
-    s.total_turns (if s.total_turns = 1 then "" else "s")
+    s.total_turns
+    (if s.total_turns = 1 then "" else "s")
     (Request_stats.format_tokens s.total_prompt_tokens)
     (Request_stats.format_tokens s.total_added_prompt_tokens)
     (Request_stats.format_tokens s.total_completion_tokens)
@@ -798,7 +799,8 @@ let format_usage_plain ~db (action : usage_action) =
           List.map
             (fun (provider, (s : Request_stats.summary)) ->
               Printf.sprintf "%s  %d turn%s, %s prompt, %s completion" provider
-                s.total_turns (if s.total_turns = 1 then "" else "s")
+                s.total_turns
+                (if s.total_turns = 1 then "" else "s")
                 (Request_stats.format_tokens s.total_prompt_tokens)
                 (Request_stats.format_tokens s.total_completion_tokens))
             providers
@@ -910,7 +912,8 @@ let format_usage_telegram ~db (action : usage_action) =
             Buffer.add_string buf
               (esc
                  (Printf.sprintf "%d turn%s, %s prompt, %s completion"
-                    s.total_turns (if s.total_turns = 1 then "" else "s")
+                    s.total_turns
+                    (if s.total_turns = 1 then "" else "s")
                     (Request_stats.format_tokens s.total_prompt_tokens)
                     (Request_stats.format_tokens s.total_completion_tokens)));
             Buffer.add_char buf '\n')

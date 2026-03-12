@@ -14,6 +14,13 @@ let git_cmd repo args =
   | 0 -> ()
   | code -> Alcotest.failf "git command failed for %s (exit %d)" args code
 
+let add_git_worktree repo ~branch ~name =
+  let worktree_path = Filename.concat repo name in
+  git_cmd repo
+    (Printf.sprintf "worktree add -b %s %s HEAD -q" (Filename.quote branch)
+       (Filename.quote worktree_path));
+  worktree_path
+
 let with_temp_git_repo f =
   let repo = Filename.temp_file "clawq-bg-repo" "" in
   Sys.remove repo;
@@ -50,6 +57,32 @@ let fake_task ?(status = Background_task.Queued) id =
     created_at = "2026-03-11 00:00:00";
     started_at = None;
     finished_at = None;
+    automerge = false;
+    use_worktree = true;
+    merge_status = None;
+    retry_count = 0;
+  }
+
+let fake_started_task ?(runner = Background_task.Codex) ?model
+    ?(status = Background_task.Succeeded) id =
+  {
+    Background_task.id;
+    runner;
+    model;
+    repo_path = "/tmp/repo";
+    prompt = "test prompt";
+    branch = Printf.sprintf "clawq-bg-%d" id;
+    worktree_path = Some (Printf.sprintf "/tmp/worktree-%d" id);
+    log_path = Some (Printf.sprintf "/tmp/task-%d.log" id);
+    status;
+    session_key = None;
+    channel = None;
+    channel_id = None;
+    pid = None;
+    result_preview = None;
+    created_at = "2026-03-11 00:00:00";
+    started_at = Some "2026-03-11 00:01:00";
+    finished_at = Some "2026-03-11 00:02:00";
     automerge = false;
     use_worktree = true;
     merge_status = None;
@@ -1082,7 +1115,9 @@ let test_queued_tasks_ready_to_start_respects_capacity () =
   in
   Alcotest.(check (list int))
     "only one queued task fits" [ 2 ]
-    (List.map (fun task -> task.Background_task.id) ready)
+    (List.map
+       (fun (task : Background_task.task) -> task.Background_task.id)
+       ready)
 
 let test_start_queued_respects_max_running_tasks () =
   with_temp_git_repo (fun repo_path ->
@@ -1532,6 +1567,63 @@ let test_command_of_task_claude_with_model () =
     |]
     (Background_task.command_of_task task)
 
+let test_command_of_task_resume_codex () =
+  let task = fake_started_task 10 in
+  Alcotest.(check (array string))
+    "codex resume argv"
+    [|
+      "codex";
+      "exec";
+      "resume";
+      "--last";
+      "--dangerously-bypass-approvals-and-sandbox";
+      "resume now";
+    |]
+    (Background_task.command_of_task_with_invocation task
+       (Background_task.Resume "resume now"))
+
+let test_command_of_task_resume_claude () =
+  let task = fake_started_task ~runner:Background_task.Claude 11 in
+  Alcotest.(check (array string))
+    "claude resume argv"
+    [| "claude"; "-c"; "-p"; "--dangerously-skip-permissions"; "resume now" |]
+    (Background_task.command_of_task_with_invocation task
+       (Background_task.Resume "resume now"))
+
+let test_command_of_task_resume_kimi () =
+  let task = fake_started_task ~runner:Background_task.Kimi 12 in
+  Alcotest.(check (array string))
+    "kimi resume argv"
+    [| "kimi"; "--continue"; "--print"; "--yolo"; "-p"; "resume now" |]
+    (Background_task.command_of_task_with_invocation task
+       (Background_task.Resume "resume now"))
+
+let test_command_of_task_resume_gemini () =
+  let task = fake_started_task ~runner:Background_task.Gemini 13 in
+  Alcotest.(check (array string))
+    "gemini resume argv"
+    [| "gemini"; "--resume"; "latest"; "--yolo"; "--prompt"; "resume now" |]
+    (Background_task.command_of_task_with_invocation task
+       (Background_task.Resume "resume now"))
+
+let test_command_of_task_resume_opencode () =
+  let task = fake_started_task ~runner:Background_task.Opencode 14 in
+  Alcotest.(check (array string))
+    "opencode resume argv"
+    [| "opencode"; "run"; "-c"; "resume now" |]
+    (Background_task.command_of_task_with_invocation task
+       (Background_task.Resume "resume now"))
+
+let test_command_of_task_resume_cursor () =
+  let task = fake_started_task ~runner:Background_task.Cursor 15 in
+  Alcotest.(check (array string))
+    "cursor resume argv"
+    [|
+      "cursor-agent"; "--continue"; "--print"; "--yolo"; "--trust"; "resume now";
+    |]
+    (Background_task.command_of_task_with_invocation task
+       (Background_task.Resume "resume now"))
+
 let test_reap_marks_dead_pid_failed () =
   with_temp_git_repo (fun repo_path ->
       let db = Memory.init ~db_path:":memory:" () in
@@ -1617,6 +1709,240 @@ let test_reap_keeps_alive_process () =
              let* () = Process_group.terminate proc.pid in
              let* _ = Process_group.wait proc.pid in
              Process_group.close proc)))
+
+let test_request_resume_requeues_started_task () =
+  with_temp_git_repo (fun repo_path ->
+      let db = Memory.init ~db_path:":memory:" () in
+      Background_task.init_schema db;
+      let worktree_path =
+        add_git_worktree repo_path ~branch:"clawq-bg-1" ~name:"resume-wt-1"
+      in
+      let id =
+        match
+          Background_task.enqueue ~db ~runner:Background_task.Codex ~repo_path
+            ~prompt:"resume me" ()
+        with
+        | Ok id -> id
+        | Error msg -> Alcotest.fail msg
+      in
+      ignore
+        (Background_task.set_running ~db ~id ~branch:"clawq-bg-1" ~worktree_path
+           ~log_path:"/tmp/task-1.log" ~pid:0);
+      Background_task.finish ~db ~id ~status:Background_task.Succeeded
+        ~result_preview:"done";
+      (match Background_task.request_resume ~db ~id ~message:None with
+      | Ok _ -> ()
+      | Error msg -> Alcotest.fail msg);
+      match Background_task.get_task ~db ~id with
+      | None -> Alcotest.fail "expected task"
+      | Some task ->
+          Alcotest.(check string)
+            "task requeued" "queued"
+            (Background_task.string_of_status task.status))
+
+let test_request_resume_queues_message () =
+  with_temp_git_repo (fun repo_path ->
+      let db = Memory.init ~db_path:":memory:" () in
+      Background_task.init_schema db;
+      let worktree_path =
+        add_git_worktree repo_path ~branch:"clawq-bg-1" ~name:"resume-wt-2"
+      in
+      let id =
+        match
+          Background_task.enqueue ~db ~runner:Background_task.Codex ~repo_path
+            ~prompt:"resume me" ()
+        with
+        | Ok id -> id
+        | Error msg -> Alcotest.fail msg
+      in
+      ignore
+        (Background_task.set_running ~db ~id ~branch:"clawq-bg-1" ~worktree_path
+           ~log_path:"/tmp/task-1.log" ~pid:0);
+      Background_task.finish ~db ~id ~status:Background_task.Succeeded
+        ~result_preview:"done";
+      (match
+         Background_task.request_resume ~db ~id
+           ~message:(Some "please fix tests")
+       with
+      | Ok _ -> ()
+      | Error msg -> Alcotest.fail msg);
+      Alcotest.(check int)
+        "one queued message" 1
+        (Background_task.queued_resume_message_count ~db ~id);
+      match Background_task.list_queued_messages ~db ~task_id:id with
+      | [ queued ] ->
+          Alcotest.(check string)
+            "queued text" "please fix tests" queued.message
+      | _ -> Alcotest.fail "expected one queued message")
+
+let test_request_resume_rejects_non_worktree_task () =
+  let db = Memory.init ~db_path:":memory:" () in
+  Background_task.init_schema db;
+  let id =
+    match
+      Background_task.enqueue ~db ~runner:Background_task.Codex
+        ~repo_path:"/tmp" ~require_git:false ~use_worktree:false
+        ~prompt:"resume me" ()
+    with
+    | Ok id -> id
+    | Error msg -> Alcotest.fail msg
+  in
+  ignore
+    (Background_task.set_running ~db ~id ~branch:"" ~worktree_path:"/tmp"
+       ~log_path:"/tmp/task-nowhere.log" ~pid:0);
+  Background_task.finish ~db ~id ~status:Background_task.Succeeded
+    ~result_preview:"done";
+  match Background_task.request_resume ~db ~id ~message:None with
+  | Ok _ -> Alcotest.fail "expected resume rejection"
+  | Error msg ->
+      Alcotest.(check bool)
+        "mentions worktree backed session" true
+        (try
+           ignore
+             (Str.search_forward (Str.regexp_string "worktree-backed") msg 0);
+           true
+         with Not_found -> false)
+
+let test_request_resume_rejects_non_git_direct_run () =
+  let repo_path =
+    Filename.concat (Filename.get_temp_dir_name ()) "clawq-b398-nongit"
+  in
+  (try Unix.mkdir repo_path 0o755
+   with Unix.Unix_error (Unix.EEXIST, _, _) -> ());
+  let db = Memory.init ~db_path:":memory:" () in
+  Background_task.init_schema db;
+  let id =
+    match
+      Background_task.enqueue ~db ~runner:Background_task.Codex ~repo_path
+        ~require_git:false ~use_worktree:true ~prompt:"resume me" ()
+    with
+    | Ok id -> id
+    | Error msg -> Alcotest.fail msg
+  in
+  ignore
+    (Background_task.set_running ~db ~id ~branch:"" ~worktree_path:repo_path
+       ~log_path:(Filename.concat repo_path "task.log")
+       ~pid:0);
+  Background_task.finish ~db ~id ~status:Background_task.Succeeded
+    ~result_preview:"done";
+  match Background_task.request_resume ~db ~id ~message:None with
+  | Ok _ -> Alcotest.fail "expected resume rejection"
+  | Error msg ->
+      Alcotest.(check bool)
+        "mentions isolated worktree" true
+        (try
+           ignore
+             (Str.search_forward (Str.regexp_string "isolated worktree") msg 0);
+           true
+         with Not_found -> false)
+
+let test_finalize_completed_task_preserves_resume_queue () =
+  with_temp_git_repo (fun repo_path ->
+      let db = Memory.init ~db_path:":memory:" () in
+      Background_task.init_schema db;
+      let worktree_path =
+        add_git_worktree repo_path ~branch:"clawq-bg-1" ~name:"resume-wt-queue"
+      in
+      let id =
+        match
+          Background_task.enqueue ~db ~runner:Background_task.Codex ~repo_path
+            ~prompt:"resume me" ()
+        with
+        | Ok id -> id
+        | Error msg -> Alcotest.fail msg
+      in
+      ignore
+        (Background_task.set_running ~db ~id ~branch:"clawq-bg-1" ~worktree_path
+           ~log_path:"/tmp/task-1.log" ~pid:123);
+      ignore
+        (match
+           Background_task.request_resume ~db ~id ~message:(Some "continue")
+         with
+        | Ok _ -> ()
+        | Error msg -> Alcotest.fail msg);
+      ignore
+        (Background_task.finalize_completed_task ~db ~id ~exit_code:0
+           ~output:"done");
+      match Background_task.get_task ~db ~id with
+      | None -> Alcotest.fail "expected task"
+      | Some task ->
+          Alcotest.(check string)
+            "still queued" "queued"
+            (Background_task.string_of_status task.status))
+
+let test_spawn_task_keeps_resume_messages_on_immediate_exit () =
+  with_temp_git_repo (fun repo_path ->
+      let db = Memory.init ~db_path:":memory:" () in
+      Background_task.init_schema db;
+      let id =
+        match
+          Background_task.enqueue ~db ~runner:Background_task.Codex ~repo_path
+            ~prompt:"resume me" ()
+        with
+        | Ok id -> id
+        | Error msg -> Alcotest.fail msg
+      in
+      let worktree_path =
+        add_git_worktree repo_path ~branch:"clawq-bg-1" ~name:"resume-wt-3"
+      in
+      ignore
+        (Background_task.set_running ~db ~id ~branch:"clawq-bg-1" ~worktree_path
+           ~log_path:(Filename.concat repo_path "task.log")
+           ~pid:0);
+      Background_task.finish ~db ~id ~status:Background_task.Succeeded
+        ~result_preview:"done";
+      (match
+         Background_task.request_resume ~db ~id ~message:(Some "continue")
+       with
+      | Ok _ -> ()
+      | Error msg -> Alcotest.fail msg);
+      Lwt_main.run
+        (let open Lwt.Syntax in
+         Background_task.spawn_task ~db
+           ~command_override:(Process_group.Shell "exit 1")
+           (Option.get (Background_task.get_task ~db ~id));
+         let* () = Lwt_unix.sleep 0.1 in
+         Lwt.return_unit);
+      Alcotest.(check int)
+        "queued message preserved" 1
+        (Background_task.queued_resume_message_count ~db ~id))
+
+let test_spawn_task_clears_resume_messages_after_success () =
+  with_temp_git_repo (fun repo_path ->
+      let db = Memory.init ~db_path:":memory:" () in
+      Background_task.init_schema db;
+      let id =
+        match
+          Background_task.enqueue ~db ~runner:Background_task.Codex ~repo_path
+            ~prompt:"resume me" ()
+        with
+        | Ok id -> id
+        | Error msg -> Alcotest.fail msg
+      in
+      let worktree_path =
+        add_git_worktree repo_path ~branch:"clawq-bg-1" ~name:"resume-wt-4"
+      in
+      ignore
+        (Background_task.set_running ~db ~id ~branch:"clawq-bg-1" ~worktree_path
+           ~log_path:(Filename.concat repo_path "task.log")
+           ~pid:0);
+      Background_task.finish ~db ~id ~status:Background_task.Succeeded
+        ~result_preview:"done";
+      (match
+         Background_task.request_resume ~db ~id ~message:(Some "continue")
+       with
+      | Ok _ -> ()
+      | Error msg -> Alcotest.fail msg);
+      Lwt_main.run
+        (let open Lwt.Syntax in
+         Background_task.spawn_task ~db
+           ~command_override:(Process_group.Shell "exit 0")
+           (Option.get (Background_task.get_task ~db ~id));
+         let* () = Lwt_unix.sleep 0.1 in
+         Lwt.return_unit);
+      Alcotest.(check int)
+        "queued message cleared" 0
+        (Background_task.queued_resume_message_count ~db ~id))
 
 let test_reap_skips_locally_tracked () =
   with_temp_git_repo (fun repo_path ->
@@ -1832,10 +2158,10 @@ let test_list_tasks_for_display_filters () =
       (* The active task should be in visible *)
       let active_ids =
         List.filter
-          (fun t ->
+          (fun (t : Background_task.task) ->
             not (Background_task.is_terminal_status t.Background_task.status))
           visible
-        |> List.map (fun t -> t.Background_task.id)
+        |> List.map (fun (t : Background_task.task) -> t.Background_task.id)
       in
       Alcotest.(check int) "one active task visible" 1 (List.length active_ids);
       Alcotest.(check int)
@@ -2663,15 +2989,13 @@ let test_finalize_completed_task_fails_for_dirty_worktree () =
           ~output:"all done"
       in
       Alcotest.(check string)
-        "dirty worktree fails"
-        "failed"
+        "dirty worktree fails" "failed"
         (Background_task.string_of_status status);
       match Background_task.get_task ~db ~id with
       | None -> Alcotest.fail "expected task"
       | Some task ->
           Alcotest.(check string)
-            "task stored as failed"
-            "failed"
+            "task stored as failed" "failed"
             (Background_task.string_of_status task.status);
           let preview = Option.value ~default:"" task.result_preview in
           Alcotest.(check bool)
@@ -2733,6 +3057,18 @@ let suite =
     Alcotest.test_case "cancel running task waits for descendants" `Quick
       test_cancel_running_task_waits_for_descendants;
     Alcotest.test_case "command_of_task codex" `Quick test_command_of_task_codex;
+    Alcotest.test_case "command_of_task codex resume" `Quick
+      test_command_of_task_resume_codex;
+    Alcotest.test_case "command_of_task claude resume" `Quick
+      test_command_of_task_resume_claude;
+    Alcotest.test_case "command_of_task kimi resume" `Quick
+      test_command_of_task_resume_kimi;
+    Alcotest.test_case "command_of_task gemini resume" `Quick
+      test_command_of_task_resume_gemini;
+    Alcotest.test_case "command_of_task opencode resume" `Quick
+      test_command_of_task_resume_opencode;
+    Alcotest.test_case "command_of_task cursor resume" `Quick
+      test_command_of_task_resume_cursor;
     Alcotest.test_case "command_of_task gemini" `Quick
       test_command_of_task_gemini;
     Alcotest.test_case "command_of_task gemini with model" `Quick
@@ -2807,6 +3143,20 @@ let suite =
       test_list_tasks_for_display_filters;
     Alcotest.test_case "reap marks dead pid failed" `Quick
       test_reap_marks_dead_pid_failed;
+    Alcotest.test_case "request_resume requeues started task" `Quick
+      test_request_resume_requeues_started_task;
+    Alcotest.test_case "request_resume queues message" `Quick
+      test_request_resume_queues_message;
+    Alcotest.test_case "request_resume rejects non-worktree task" `Quick
+      test_request_resume_rejects_non_worktree_task;
+    Alcotest.test_case "request_resume rejects non-git direct run" `Quick
+      test_request_resume_rejects_non_git_direct_run;
+    Alcotest.test_case "finalize_completed_task preserves resume queue" `Quick
+      test_finalize_completed_task_preserves_resume_queue;
+    Alcotest.test_case "spawn task keeps resume messages on immediate exit"
+      `Quick test_spawn_task_keeps_resume_messages_on_immediate_exit;
+    Alcotest.test_case "spawn task clears resume messages after success" `Quick
+      test_spawn_task_clears_resume_messages_after_success;
     Alcotest.test_case "readopt running alive pid" `Quick
       test_readopt_running_alive_pid;
     Alcotest.test_case "readopt idempotent" `Quick test_readopt_idempotent;

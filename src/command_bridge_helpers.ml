@@ -340,13 +340,14 @@ let cmd_debug_prompt args =
         begin
           Background_task.init_schema db;
           Background_task.list_tasks ~db
-          |> List.filter (fun t ->
+          |> List.filter (fun (t : Background_task.task) ->
               match t.Background_task.status with
               | Background_task.Queued | Background_task.Running -> true
               | _ -> false)
-          |> List.sort (fun a b ->
-              compare a.Background_task.id b.Background_task.id)
-          |> List.map (fun t ->
+          |> List.sort
+               (fun (a : Background_task.task) (b : Background_task.task) ->
+                 compare a.Background_task.id b.Background_task.id)
+          |> List.map (fun (t : Background_task.task) ->
               {
                 Prompt_builder.id = t.Background_task.id;
                 runner = Background_task.string_of_runner t.runner;

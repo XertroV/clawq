@@ -366,8 +366,7 @@ let check_thinking_excerpt ~(config : Runtime_config.t) ~excerpt () =
       log_thinking_check ~excerpt ~raw_response:text ~parsed:verdict;
       match verdict with
       | `Sane -> Lwt.return `Sane
-      | `Looping reason -> Lwt.return (`Looping reason)
-    )
+      | `Looping reason -> Lwt.return (`Looping reason))
     (fun exn ->
       let msg = Printexc.to_string exn in
       Logs.warn (fun m ->

@@ -1094,6 +1094,8 @@ let test_register_all_with_db_registers_memory_and_bg_tools () =
       "background_task_list";
       "background_task_wait";
       "background_task_logs";
+      "background_task_resume";
+      "background_task_send_message";
       "delegate";
       "background_task_cancel";
     ];

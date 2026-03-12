@@ -246,11 +246,11 @@ let with_delayed_chat_provider ?(delay_s = 0.05) ?response_for_user f =
     let user_messages =
       messages
       |> List.filter_map (fun msg ->
-             try
-               if msg |> member "role" |> to_string = "user" then
-                 Some (msg |> member "content" |> to_string)
-               else None
-             with _ -> None)
+          try
+            if msg |> member "role" |> to_string = "user" then
+              Some (msg |> member "content" |> to_string)
+            else None
+          with _ -> None)
     in
     let latest = match List.rev user_messages with x :: _ -> x | [] -> "" in
     let response_text =
@@ -929,14 +929,14 @@ let test_clear_response_deferred_removes_marker () =
 let test_spawn_postmortem_agent_circuit_breaker_blocks_duplicates () =
   let mgr = Session.create ~config:Runtime_config.default () in
   let launches = ref [] in
-  let prev = !(Session.spawn_postmortem_agent_fn) in
+  let prev = !Session.spawn_postmortem_agent_fn in
   Fun.protect
     ~finally:(fun () -> Session.spawn_postmortem_agent_fn := prev)
     (fun () ->
-      Session.spawn_postmortem_agent_fn :=
-        (fun _mgr ~stuck_history:_ ~session_key ~reason ?db:_ () ->
-          launches := (session_key, reason) :: !launches;
-          Lwt.return_unit);
+      (Session.spawn_postmortem_agent_fn :=
+         fun _mgr ~stuck_history:_ ~session_key ~reason ?db:_ () ->
+           launches := (session_key, reason) :: !launches;
+           Lwt.return_unit);
       Lwt_main.run
         (Session.spawn_postmortem_agent mgr ~stuck_history:[]
            ~session_key:"web:stuck" ~reason:"loop-1" ());
@@ -955,20 +955,19 @@ let test_spawn_postmortem_agent_circuit_breaker_blocks_recursive_postmortems ()
     =
   let mgr = Session.create ~config:Runtime_config.default () in
   let launches = ref [] in
-  let prev = !(Session.spawn_postmortem_agent_fn) in
+  let prev = !Session.spawn_postmortem_agent_fn in
   Fun.protect
     ~finally:(fun () -> Session.spawn_postmortem_agent_fn := prev)
     (fun () ->
-      Session.spawn_postmortem_agent_fn :=
-        (fun _mgr ~stuck_history:_ ~session_key ~reason ?db:_ () ->
-          launches := (session_key, reason) :: !launches;
-          Lwt.return_unit);
+      (Session.spawn_postmortem_agent_fn :=
+         fun _mgr ~stuck_history:_ ~session_key ~reason ?db:_ () ->
+           launches := (session_key, reason) :: !launches;
+           Lwt.return_unit);
       Lwt_main.run
         (Session.spawn_postmortem_agent mgr ~stuck_history:[]
            ~session_key:"__postmortem_web:stuck" ~reason:"still-looping" ());
       Alcotest.(check int)
-        "recursive postmortem launch suppressed" 0
-        (List.length !launches))
+        "recursive postmortem launch suppressed" 0 (List.length !launches))
 
 let test_live_activity_tracks_nested_scopes () =
   let config = Runtime_config.default in
@@ -3189,11 +3188,11 @@ let test_compact_releases_session_lock_while_summarizing () =
                ]
            in
            let* result = compact_p in
-           (match result with
+           match result with
            | Ok true -> Lwt.return acquired
            | Ok false -> Alcotest.fail "expected compaction to run"
            | Error msg ->
-               Alcotest.fail (Printf.sprintf "compact should not fail: %s" msg)))
+               Alcotest.fail (Printf.sprintf "compact should not fail: %s" msg))
       in
       Alcotest.(check bool)
         "session lock can be re-acquired during compact execution" true
@@ -3218,11 +3217,11 @@ let test_compact_preserves_new_messages_arriving_midflight () =
                Lwt.return_unit)
          in
          let* result = compact_p in
-         (match result with
+         match result with
          | Ok true -> Lwt.return_unit
          | Ok false -> Alcotest.fail "expected compaction to apply"
          | Error msg ->
-             Alcotest.fail (Printf.sprintf "compact should not fail: %s" msg)));
+             Alcotest.fail (Printf.sprintf "compact should not fail: %s" msg));
       Lwt_main.run
         (Session.with_session_lock mgr ~key (fun agent _interrupt ->
              let newest =
@@ -3237,7 +3236,8 @@ let test_compact_preserves_new_messages_arriving_midflight () =
                |> List.map (fun msg -> msg.Provider.content)
              in
              Alcotest.(check bool)
-               "new message also persisted" true (List.mem injected persisted);
+               "new message also persisted" true
+               (List.mem injected persisted);
              Lwt.return_unit)))
 
 let test_compact_skips_apply_after_reset_midflight () =
@@ -3772,8 +3772,8 @@ let suite =
       `Quick test_workspace_change_not_re_reported_on_subsequent_turn;
     Alcotest.test_case "compact loads session from db when not in memory" `Quick
       test_compact_loads_session_from_db_when_not_in_memory;
-    Alcotest.test_case "compact releases session lock while summarizing"
-      `Quick test_compact_releases_session_lock_while_summarizing;
+    Alcotest.test_case "compact releases session lock while summarizing" `Quick
+      test_compact_releases_session_lock_while_summarizing;
     Alcotest.test_case "compact preserves new messages arriving midflight"
       `Quick test_compact_preserves_new_messages_arriving_midflight;
     Alcotest.test_case "compact skips apply after reset midflight" `Quick
