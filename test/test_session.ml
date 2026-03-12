@@ -235,6 +235,130 @@ let with_fake_chat_provider ?response_for_user f =
       in
       f config)
 
+let with_delayed_chat_provider ?(delay_s = 0.05) ?response_for_user f =
+  let port = free_port () in
+  let callback _conn req body =
+    let open Lwt.Syntax in
+    let* body_text = Cohttp_lwt.Body.to_string body in
+    let json = Yojson.Safe.from_string body_text in
+    let open Yojson.Safe.Util in
+    let messages = json |> member "messages" |> to_list in
+    let user_messages =
+      messages
+      |> List.filter_map (fun msg ->
+             try
+               if msg |> member "role" |> to_string = "user" then
+                 Some (msg |> member "content" |> to_string)
+               else None
+             with _ -> None)
+    in
+    let latest = match List.rev user_messages with x :: _ -> x | [] -> "" in
+    let response_text =
+      match response_for_user with
+      | Some g -> g latest
+      | None -> "reply:" ^ latest
+    in
+    let stream = try json |> member "stream" |> to_bool with _ -> false in
+    let* () = Lwt_unix.sleep delay_s in
+    match
+      (Cohttp.Request.meth req, Uri.path (Cohttp.Request.uri req), stream)
+    with
+    | `POST, "/chat/completions", false ->
+        let response_body =
+          Yojson.Safe.to_string
+            (`Assoc
+               [
+                 ("id", `String "cmpl_fake");
+                 ("object", `String "chat.completion");
+                 ("model", `String "fake-model");
+                 ( "choices",
+                   `List
+                     [
+                       `Assoc
+                         [
+                           ("index", `Int 0);
+                           ( "message",
+                             `Assoc
+                               [
+                                 ("role", `String "assistant");
+                                 ("content", `String response_text);
+                               ] );
+                           ("finish_reason", `String "stop");
+                         ];
+                     ] );
+                 ( "usage",
+                   `Assoc
+                     [
+                       ("prompt_tokens", `Int 1); ("completion_tokens", `Int 1);
+                     ] );
+               ])
+        in
+        Cohttp_lwt_unix.Server.respond_string ~status:`OK ~body:response_body ()
+    | `POST, "/chat/completions", true ->
+        let stream_body, push = Lwt_stream.create () in
+        let chunk =
+          Yojson.Safe.to_string
+            (`Assoc
+               [
+                 ("model", `String "fake-model");
+                 ( "choices",
+                   `List
+                     [
+                       `Assoc
+                         [
+                           ("index", `Int 0);
+                           ( "delta",
+                             `Assoc [ ("content", `String response_text) ] );
+                         ];
+                     ] );
+               ])
+        in
+        push (Some ("data: " ^ chunk ^ "\n\n"));
+        push (Some "data: [DONE]\n\n");
+        push None;
+        let headers =
+          Cohttp.Header.of_list [ ("Content-Type", "text/event-stream") ]
+        in
+        Cohttp_lwt_unix.Server.respond ~status:`OK ~headers
+          ~body:(Cohttp_lwt.Body.of_stream stream_body)
+          ()
+    | _ -> Cohttp_lwt_unix.Server.respond_string ~status:`Not_found ~body:"" ()
+  in
+  let stop, stopper = Lwt.wait () in
+  let server =
+    Cohttp_lwt_unix.Server.create
+      ~mode:(`TCP (`Port port))
+      (Cohttp_lwt_unix.Server.make ~callback ())
+  in
+  Lwt.async (fun () -> Lwt.pick [ server; stop ]);
+  Fun.protect
+    ~finally:(fun () -> Lwt.wakeup_later stopper ())
+    (fun () ->
+      let config =
+        {
+          Runtime_config.default with
+          default_provider = Some "fake";
+          providers =
+            [
+              ( "fake",
+                make_fake_provider_config
+                  (Printf.sprintf "http://127.0.0.1:%d" port) );
+            ];
+          prompt =
+            { Runtime_config.default.prompt with dynamic_enabled = false };
+          security =
+            { Runtime_config.default.security with tools_enabled = false };
+          agent_defaults =
+            {
+              Runtime_config.default.agent_defaults with
+              primary_model = "fake-model";
+              show_thinking = false;
+              show_tool_calls = false;
+            };
+        }
+      in
+      f config)
+
 type fake_provider_reply =
   | Fake_text of string
   | Fake_tool_calls of (string * string * string) list
@@ -3034,6 +3158,111 @@ let test_compact_loads_session_from_db_when_not_in_memory () =
   | Error msg ->
       Alcotest.fail (Printf.sprintf "compact should not fail: %s" msg)
 
+let seed_compactable_history ~db ~session_key =
+  for i = 1 to 25 do
+    Memory.store_message ~db ~session_key
+      (Provider.make_message ~role:"user"
+         ~content:(Printf.sprintf "msg %02d" i))
+  done
+
+let test_compact_releases_session_lock_while_summarizing () =
+  with_delayed_chat_provider ~delay_s:0.05 (fun config ->
+      let db = Memory.init ~db_path:":memory:" () in
+      let mgr = Session.create ~config ~db () in
+      let key = "telegram:42:user1" in
+      seed_compactable_history ~db ~session_key:key;
+      let acquired_during_compact =
+        Lwt_main.run
+          (let open Lwt.Syntax in
+           let compact_p = Session.compact mgr ~key () in
+           let* () = Lwt_unix.sleep 0.01 in
+           let* acquired =
+             Lwt.pick
+               [
+                 (let* () =
+                    Session.with_session_lock mgr ~key (fun _agent _interrupt ->
+                        Lwt.return_unit)
+                  in
+                  Lwt.return_true);
+                 (let* () = Lwt_unix.sleep 0.02 in
+                  Lwt.return_false);
+               ]
+           in
+           let* result = compact_p in
+           (match result with
+           | Ok true -> Lwt.return acquired
+           | Ok false -> Alcotest.fail "expected compaction to run"
+           | Error msg ->
+               Alcotest.fail (Printf.sprintf "compact should not fail: %s" msg)))
+      in
+      Alcotest.(check bool)
+        "session lock can be re-acquired during compact execution" true
+        acquired_during_compact)
+
+let test_compact_preserves_new_messages_arriving_midflight () =
+  with_delayed_chat_provider ~delay_s:0.05 (fun config ->
+      let db = Memory.init ~db_path:":memory:" () in
+      let mgr = Session.create ~config ~db () in
+      let key = "telegram:42:user1" in
+      let injected = "arrived during compact" in
+      seed_compactable_history ~db ~session_key:key;
+      Lwt_main.run
+        (let open Lwt.Syntax in
+         let compact_p = Session.compact mgr ~key () in
+         let* () = Lwt_unix.sleep 0.01 in
+         let* () =
+           Session.with_session_lock mgr ~key (fun agent _interrupt ->
+               agent.Agent.history <-
+                 Provider.make_message ~role:"user" ~content:injected
+                 :: agent.Agent.history;
+               Lwt.return_unit)
+         in
+         let* result = compact_p in
+         (match result with
+         | Ok true -> Lwt.return_unit
+         | Ok false -> Alcotest.fail "expected compaction to apply"
+         | Error msg ->
+             Alcotest.fail (Printf.sprintf "compact should not fail: %s" msg)));
+      Lwt_main.run
+        (Session.with_session_lock mgr ~key (fun agent _interrupt ->
+             let newest =
+               match agent.Agent.history with
+               | msg :: _ -> msg.Provider.content
+               | [] -> Alcotest.fail "expected compacted history"
+             in
+             Alcotest.(check string)
+               "new message preserved at head of history" injected newest;
+             let persisted =
+               Memory.load_history ~db ~session_key:key
+               |> List.map (fun msg -> msg.Provider.content)
+             in
+             Alcotest.(check bool)
+               "new message also persisted" true (List.mem injected persisted);
+             Lwt.return_unit)))
+
+let test_compact_skips_apply_after_reset_midflight () =
+  with_delayed_chat_provider ~delay_s:0.05 (fun config ->
+      let db = Memory.init ~db_path:":memory:" () in
+      let mgr = Session.create ~config ~db () in
+      let key = "telegram:42:user1" in
+      seed_compactable_history ~db ~session_key:key;
+      let result =
+        Lwt_main.run
+          (let open Lwt.Syntax in
+           let compact_p = Session.compact mgr ~key () in
+           let* () = Lwt_unix.sleep 0.01 in
+           let* _active_bg_tasks = Session.reset mgr ~key in
+           compact_p)
+      in
+      (match result with
+      | Ok false -> ()
+      | Ok true -> Alcotest.fail "expected compact apply to be skipped"
+      | Error msg ->
+          Alcotest.fail (Printf.sprintf "compact should not fail: %s" msg));
+      Alcotest.(check int)
+        "reset keeps persisted history cleared" 0
+        (List.length (Memory.load_history ~db ~session_key:key)))
+
 let test_turn_stream_forwards_tool_events_to_on_chunk () =
   let call_count = ref 0 in
   let handle_request ~stream ~messages:_ ~json:_ =
@@ -3489,6 +3718,12 @@ let suite =
       `Quick test_workspace_change_not_re_reported_on_subsequent_turn;
     Alcotest.test_case "compact loads session from db when not in memory" `Quick
       test_compact_loads_session_from_db_when_not_in_memory;
+    Alcotest.test_case "compact releases session lock while summarizing"
+      `Quick test_compact_releases_session_lock_while_summarizing;
+    Alcotest.test_case "compact preserves new messages arriving midflight"
+      `Quick test_compact_preserves_new_messages_arriving_midflight;
+    Alcotest.test_case "compact skips apply after reset midflight" `Quick
+      test_compact_skips_apply_after_reset_midflight;
     Alcotest.test_case "turn_stream forwards tool events to on_chunk" `Quick
       test_turn_stream_forwards_tool_events_to_on_chunk;
     Alcotest.test_case "non-vision model filters images" `Quick
