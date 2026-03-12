@@ -3542,6 +3542,57 @@ let test_with_session_lock_warns_on_slow_mutex_acquisition () =
        true
      with Not_found -> false)
 
+let test_prev_assistant_tokens_from_history_delta_uses_workspace_tool_call () =
+  let large_content = String.make 2400 'x' in
+  let assistant =
+    {
+      Provider.role = "assistant";
+      content = "";
+      content_parts = [];
+      tool_calls =
+        [
+          {
+            Provider.id = "tc-file-write";
+            function_name = "file_write";
+            arguments =
+              Yojson.Safe.to_string
+                (`Assoc
+                   [
+                     ("path", `String "AGENTS.md");
+                     ("content", `String large_content);
+                   ]);
+          };
+        ];
+      tool_call_id = None;
+      name = None;
+      provider_response_items_json = None;
+    }
+  in
+  let tool_result =
+    Provider.make_tool_result ~tool_call_id:"tc-file-write" ~name:"file_write"
+      ~content:"Wrote AGENTS.md"
+  in
+  let refresh =
+    Provider.make_message ~role:"event"
+      ~content:
+        "[workspace context refreshed after active workspace file update: \
+         AGENTS.md]"
+  in
+  let prior_user =
+    Provider.make_message ~role:"user" ~content:"update AGENTS"
+  in
+  let history = [ refresh; tool_result; assistant; prior_user ] in
+  let estimated =
+    Agent.estimate_prev_assistant_tokens_from_history_delta ~history
+      ~previous_request_history_len:(Some 1) ~current_request_history_len:4
+  in
+  let expected = Agent.estimate_message_tokens assistant in
+  Alcotest.(check (option int))
+    "uses assistant tool-call payload, not tool result/event" (Some expected)
+    estimated;
+  Alcotest.(check bool)
+    "assistant token estimate is meaningfully large" true (expected > 100)
+
 let suite =
   [
     Alcotest.test_case "reset clears active session and history" `Quick
@@ -3702,6 +3753,9 @@ let suite =
       test_non_active_doc_write_does_not_persist_workspace_refresh_event;
     Alcotest.test_case "workspace refresh event does not enter live prompt"
       `Quick test_workspace_refresh_event_does_not_enter_live_prompt;
+    Alcotest.test_case
+      "prev assistant token estimate uses workspace tool call payload" `Quick
+      test_prev_assistant_tokens_from_history_delta_uses_workspace_tool_call;
     Alcotest.test_case "drain progress callbacks fire for queued messages"
       `Quick test_drain_progress_callbacks_fire_for_queued_messages;
     Alcotest.test_case "drain progress not called when no queued messages"
