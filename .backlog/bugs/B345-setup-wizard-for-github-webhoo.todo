@@ -1,14 +1,15 @@
 ---
 claimed_at: "2026-03-10T13:11:18Z"
 claimed_by: cli-user
-completed_at: null
+completed_at: "2026-03-12T16:31:08Z"
 complexity: medium
 depends_on: []
+duration_minutes: 3079.836674441967
 estimate_hours: 1
 id: B345
 priority: high
 started_at: "2026-03-10T13:11:18Z"
-status: in_progress
+status: done
 tags: []
 title: Setup wizard for GitHub webhooks
 ---
