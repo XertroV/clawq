@@ -483,6 +483,19 @@ let github_hook_push_events_require_allowlist () =
   in
   Alcotest.(check bool) "push is gated" true prepared.is_user_generated
 
+let github_hook_workflow_events_are_not_user_generated () =
+  let payload =
+    {|{"action":"completed","workflow_run":{"id":55,"name":"ci","status":"completed","conclusion":"failure","head_branch":"master","head_sha":"abc123","html_url":"https://github.com/acme/backend/actions/runs/55"},"repository":{"name":"backend","owner":{"login":"acme"},"full_name":"acme/backend"},"sender":{"login":"github-actions"}}|}
+  in
+  let prepared =
+    Github_hooks.prepare_event ~event_name:"workflow_run"
+      ~headers:
+        (Cohttp.Header.of_list [ ("X-GitHub-Delivery", "workflow-delivery") ])
+      ~raw_body:payload
+  in
+  Alcotest.(check bool) "workflow_run bypasses user gating" false
+    prepared.is_user_generated
+
 let config_github_roundtrip () =
   let json =
     Yojson.Safe.from_string
@@ -638,6 +651,8 @@ let hooks_suite =
       github_hook_context_normalizes_pr_flag_and_workflow_fields;
     Alcotest.test_case "push events require allowlist" `Quick
       github_hook_push_events_require_allowlist;
+    Alcotest.test_case "workflow events bypass user allowlist gating" `Quick
+      github_hook_workflow_events_are_not_user_generated;
   ]
 
 let config_suite =
