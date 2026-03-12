@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B402
+priority: high
+status: pending
+tags: []
+title: delegated worker prompts should require commit and success reporting should distinguish dirty worktrees
+---
+
+Delegated/background coding prompts should explicitly require the worker to commit all task changes before reporting completion. In parallel, operator-visible success reporting should clearly distinguish clean committed success from failure-with-usable-dirty-worktree so status never misleads.

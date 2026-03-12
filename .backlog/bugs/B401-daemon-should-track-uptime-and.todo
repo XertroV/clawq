@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B401
+priority: high
+status: pending
+tags: []
+title: daemon should track uptime and inject it into runtime ctx; add /uptime slash command
+---
+
+daemon should track uptime, inject it into runtime context, and expose it via a /uptime slash command for connectors using shared slash-command plumbing.
