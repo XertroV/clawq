@@ -772,6 +772,71 @@ Payload: {{payload_path}}
             && contains_str message "Raw Webhook Payload"
         | None -> false))
 
+let test_github_webhook_accepts_repo_case_mismatch () =
+  let webhook_secret = "webhook-secret" in
+  let payload =
+    {|{"action":"completed","workflow_job":{"id":77,"run_id":55,"name":"test","status":"completed","conclusion":"failure"},"repository":{"name":"backend","owner":{"login":"AcMe"},"full_name":"AcMe/Backend"},"sender":{"login":"github-actions[bot]"}}|}
+  in
+  let signature =
+    compute_github_signature ~secret:webhook_secret ~body:payload
+  in
+  let seen_key = ref None in
+  let config = Runtime_config.default in
+  let db = Memory.init ~db_path:":memory:" () in
+  let session_manager = Session.create ~config ~db () in
+  Session.set_special_command_handler session_manager
+    (fun ~key ~message:_ ~send_progress:_ ~interrupt_check:_ ->
+      seen_key := Some key;
+      Lwt.return_some "accepted") ;
+  let github_config : Runtime_config.github_config =
+    {
+      auth = Runtime_config.GithubPat "ghp_test12345";
+      repos =
+        [
+          {
+            Runtime_config.name = "acme/backend";
+            webhook_secret;
+            webhook_path = "/github/webhook/backend";
+            agent_name = None;
+            allow_users = [ "octocat" ];
+            react_to = [ "workflow_job" ];
+            include_pr_files = false;
+          };
+        ];
+    }
+  in
+  let headers =
+    Cohttp.Header.of_list
+      [
+        ("X-GitHub-Event", "workflow_job");
+        ("X-Hub-Signature-256", signature);
+        ("X-GitHub-Delivery", "repo-case-mismatch-delivery");
+      ]
+  in
+  let req =
+    Cohttp.Request.make ~headers ~meth:`POST
+      (Uri.of_string "http://127.0.0.1/github/webhook/backend")
+  in
+  let resp, body =
+    Lwt_main.run
+      (Http_server.handler ~session_manager ~require_pairing:false
+         ~auth_token:None ~github_config
+         ~github_api_limiter:
+           (Rate_limiter.create ~rate_per_minute:60 ~burst_multiplier:1.0)
+         (Obj.magic ()) req
+         (Cohttp_lwt.Body.of_string payload))
+  in
+  Alcotest.(check int)
+    "ok" 200
+    (Cohttp.Code.code_of_status (Cohttp.Response.status resp));
+  let json = Yojson.Safe.from_string (body_string body) in
+  let open Yojson.Safe.Util in
+  Alcotest.(check string)
+    "status" "ignored"
+    (json |> member "status" |> to_string);
+  Alcotest.(check (option string))
+    "no session key for bare event" None !seen_key
+
 let test_github_webhook_rejects_repo_mismatch () =
   with_temp_clawq_home (fun home ->
       let hooks_dir = Filename.concat home "workspace/gh-hooks" in
@@ -955,6 +1020,8 @@ let suite =
       test_github_workflow_job_hook_routes_to_session;
     Alcotest.test_case "github webhook rejects repo mismatch" `Quick
       test_github_webhook_rejects_repo_mismatch;
+    Alcotest.test_case "github webhook accepts repo case mismatch" `Quick
+      test_github_webhook_accepts_repo_case_mismatch;
     Alcotest.test_case "github webhook rejects ambiguous path" `Quick
       test_github_webhook_rejects_ambiguous_path;
   ]
