@@ -128,8 +128,10 @@ let test_status_notifier_invalid_non_numeric_send_id_is_suppressed () =
   Alcotest.(check (option string))
     "invalid telegram id does not get adopted" None sm.msg_id
 
-let test_status_message_recovers_after_lock_warn_timeout () =
+let test_telegram_status_notifier_preserves_silent_send_after_lock_warn_timeout
+    () =
   let outbound_mutex = Lwt_mutex.create () in
+  let disable_notifications = ref [] in
   let sent = ref [] in
   let edited = ref [] in
   Lwt_main.run (Lwt_mutex.lock outbound_mutex);
@@ -138,22 +140,35 @@ let test_status_message_recovers_after_lock_warn_timeout () =
       let* () = Lwt_unix.sleep 0.03 in
       Lwt_mutex.unlock outbound_mutex;
       Lwt.return_unit);
-  let notifier : Status_message.notifier =
+  let transport : Telegram.status_transport =
     {
-      send =
-        (fun ?parse_mode:_ text ->
+      send_with_id =
+        (fun ?disable_notification
+          ?parse_mode:_
+          ~bot_token:_
+          ~chat_id:_
+          ~text
+          ()
+        ->
           Lwt_util.with_lock_timeout ~label:"telegram-status-test"
             ~warn_timeout:0.01 ~fatal_timeout:0.2 outbound_mutex (fun () ->
+              disable_notifications :=
+                disable_notification :: !disable_notifications;
               sent := text :: !sent;
               Lwt.return "42"));
-      edit =
-        (fun id ?parse_mode:_ text ->
+      edit_text =
+        (fun ?parse_mode:_ ~bot_token:_ ~chat_id:_ ~message_id ~text () ->
           Lwt_util.with_lock_timeout ~label:"telegram-status-test"
             ~warn_timeout:0.01 ~fatal_timeout:0.2 outbound_mutex (fun () ->
-              edited := (id, text) :: !edited;
-              Lwt.return None));
-      delete = (fun _id -> Lwt.return_unit);
+              edited := (message_id, text) :: !edited;
+              Lwt.return_unit));
+      delete_message =
+        (fun ~bot_token:_ ~chat_id:_ ~message_id:_ () -> Lwt.return_unit);
     }
+  in
+  let notifier =
+    Telegram.make_status_notifier_with_transport transport ~bot_token:"token"
+      ~chat_id:"chat-1"
   in
   let sm =
     Status_message.create ~debounce_interval:0.0 ~notifier ~parse_mode:"HTML" ()
@@ -169,6 +184,8 @@ let test_status_message_recovers_after_lock_warn_timeout () =
     "initial send still succeeds after warn timeout" 1 (List.length !sent);
   Alcotest.(check int)
     "follow-up edit still succeeds after warn timeout" 1 (List.length !edited);
+  Alcotest.(check (list (option bool)))
+    "status sends stay silent" [ Some true ] !disable_notifications;
   Alcotest.(check (option string))
     "message id adopted after delayed send" (Some "42") sm.msg_id
 
@@ -261,8 +278,9 @@ let suite =
       test_tool_result_details_evict_oldest_without_clearing_newer_entries;
     Alcotest.test_case "status notifier suppresses invalid non-numeric id"
       `Quick test_status_notifier_invalid_non_numeric_send_id_is_suppressed;
-    Alcotest.test_case "status message recovers after lock warn timeout" `Quick
-      test_status_message_recovers_after_lock_warn_timeout;
+    Alcotest.test_case
+      "telegram status notifier stays silent after lock warn timeout" `Quick
+      test_telegram_status_notifier_preserves_silent_send_after_lock_warn_timeout;
     Alcotest.test_case "tool result detail formatting" `Quick
       test_format_tool_result_detail_includes_tool_name_and_empty_output;
     Alcotest.test_case "finalize is idempotent with no tools" `Quick
