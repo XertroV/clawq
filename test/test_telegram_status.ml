@@ -194,6 +194,15 @@ let test_finalize_idempotent_with_tools () =
   Alcotest.(check int)
     "second finalize triggers no additional edit" edits_after_first !edited
 
+let test_html_fallback_to_plain_text_strips_markup () =
+  Alcotest.(check string)
+    "fallback removes tags and decodes entities" "tool\nx & y < z"
+    (Telegram.html_fallback_to_plain_text
+       "<b>tool</b><br><code>x &amp; y &lt; z</code>");
+  Alcotest.(check string)
+    "block tags preserve line breaks" "one\ntwo\nthree\n"
+    (Telegram.html_fallback_to_plain_text "<p>one</p><div>two</div><li>three</li>")
+
 let suite =
   [
     Alcotest.test_case "status notifier edits in place without reanchoring"
@@ -213,4 +222,6 @@ let suite =
       test_finalize_idempotent_no_tools;
     Alcotest.test_case "finalize is idempotent with tools" `Quick
       test_finalize_idempotent_with_tools;
+    Alcotest.test_case "html fallback strips markup" `Quick
+      test_html_fallback_to_plain_text_strips_markup;
   ]
