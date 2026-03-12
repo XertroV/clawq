@@ -645,16 +645,22 @@ let run_matching_hooks ~(session_manager : Session.t) ~prepared =
                     "GitHub hooks: hook %s requested post_back_to_github but \
                      posting follow-up comments is not implemented yet"
                     hook.name);
+            Logs.info (fun m ->
+                m "GitHub hooks: invoking hook %s for %s %s key=%s sender=%s"
+                  hook.name prepared.repo_full_name prepared.event_name key
+                  sender_id);
             let* ran =
               Lwt.catch
                 (fun () ->
-                  let* _response =
+                  let* response =
                     Session.turn session_manager ~key ~message ~channel_name
                       ~channel_type:"dm" ~sender_id ()
                   in
                   Logs.info (fun m ->
-                      m "GitHub hooks: ran hook %s for %s %s" hook.name
-                        prepared.repo_full_name prepared.event_name);
+                      m
+                        "GitHub hooks: ran hook %s for %s %s response=%S"
+                        hook.name prepared.repo_full_name prepared.event_name
+                        response);
                   Lwt.return 1)
                 (fun exn ->
                   Logs.err (fun m ->
