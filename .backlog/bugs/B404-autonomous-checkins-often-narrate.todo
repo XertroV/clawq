@@ -1,0 +1,14 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B404
+priority: high
+status: pending
+tags: []
+title: autonomous check-ins often narrate work instead of doing it
+---
+
+autonomous check-ins often narrate work instead of doing it
+
+When checked in with autonomously, the agent often responds with a status message about remaining work instead of actually taking the next concrete action. Worse, it avoids saying STAY_IDLE, so it creates the impression of activity while failing to execute. These turns should be used to do work whenever actionable tasks remain, especially on active local lanes like review, harvest, commit, and research.
