@@ -1,0 +1,14 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B403
+priority: high
+status: pending
+tags: []
+title: zai websearch mcp error
+---
+
+23:21:11.129] INFO  [telegram:58495225:58495225] Tool call: zai_websearch (id=call_i3eXC9XAEN3O2lUCPf2GwCpK) args={"query":"clawq gh-hooks configuration docs failed CI runs delegate codex hook docs"}
+[23:21:11.676] WARN  [telegram:58495225:58495225] Tool error: zai_websearch -> Error: Z.ai MCP error: Tool not found: webSearchPrime
+[23:21:11.719] INFO  [telegram:58495225:58495225] -> LLM provider=openai-codex model=gpt-5.4 msgs=337 ~94k tok
