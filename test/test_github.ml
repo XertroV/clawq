@@ -496,6 +496,69 @@ let github_hook_workflow_events_are_not_user_generated () =
   Alcotest.(check bool) "workflow_run bypasses user gating" false
     prepared.is_user_generated
 
+let handle_webhook_non_user_generated_failure_runs_hooks () =
+  Test_helpers.with_temp_home (fun _home ->
+      let hook_dir = Github_hooks.hooks_dir () in
+      let () = Unix.mkdir hook_dir 0o755 in
+      let hook_path = Filename.concat hook_dir "workflow_run.md" in
+      let hook_body =
+        String.concat "\n"
+          [
+            "---";
+            "name: failed-workflow";
+            "repo: acme/backend";
+            "event: workflow_run";
+            "match:";
+            "  status: completed";
+            "  conclusion: failure";
+            "---";
+            "Investigate {{repo}}";
+          ]
+      in
+      let oc = open_out hook_path in
+      output_string oc hook_body;
+      close_out oc;
+      let body =
+        {|{"action":"completed","workflow_run":{"id":55,"name":"ci","status":"completed","conclusion":"failure","head_branch":"master","head_sha":"abc123","html_url":"https://github.com/acme/backend/actions/runs/55"},"repository":{"name":"backend","owner":{"login":"acme"},"full_name":"acme/backend"},"sender":{"login":"github-actions"}}|}
+      in
+      let repo_config : Runtime_config.github_repo_config =
+        {
+          name = "acme/backend";
+          webhook_secret = "secret123";
+          webhook_path = "/github/webhook/acme";
+          agent_name = None;
+          allow_users = [ "nobody" ];
+          react_to = [];
+          include_pr_files = true;
+        }
+      in
+      let github_config : Runtime_config.github_config =
+        {
+          auth = Runtime_config.GithubPat "ghp_test12345";
+          repos = [ repo_config ];
+        }
+      in
+      let session_manager = Session.create ~config:Runtime_config.default () in
+      let api_limiter =
+        Rate_limiter.create ~rate_per_minute:600 ~burst_multiplier:1.0
+      in
+      let headers =
+        Cohttp.Header.of_list
+          [
+            ( "x-hub-signature-256",
+              "sha256="
+              ^ Digestif.SHA256.(hmac_string ~key:"secret123" body |> to_hex) );
+            ("X-GitHub-Delivery", "workflow-delivery");
+          ]
+      in
+      match
+        Lwt_main.run
+          (Github.handle_webhook ~repo_config ~github_config ~session_manager
+             ~api_limiter ~event_type:"workflow_run" ~body ~headers)
+      with
+      | Github.Ok response -> Alcotest.(check string) "hook ran" "hooked:1" response
+      | Github.BadSignature -> Alcotest.fail "expected valid signature")
+
 let config_github_roundtrip () =
   let json =
     Yojson.Safe.from_string
@@ -653,6 +716,8 @@ let hooks_suite =
       github_hook_push_events_require_allowlist;
     Alcotest.test_case "workflow events bypass user allowlist gating" `Quick
       github_hook_workflow_events_are_not_user_generated;
+    Alcotest.test_case "non-user-generated workflow failures run hooks" `Quick
+      handle_webhook_non_user_generated_failure_runs_hooks;
   ]
 
 let config_suite =
