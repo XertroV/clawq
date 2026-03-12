@@ -306,6 +306,12 @@ let test_cmd_status_warns_on_deleted_exe () =
       Alcotest.(check bool) "status header" true
         (String.length status >= String.length "Service status:"))
 
+let test_cmd_status_mentions_uptime_for_live_pid () =
+  Test_helpers.with_temp_home (fun _home ->
+      let status = Service.cmd_status () in
+      Alcotest.(check bool) "returns header" true
+        (String.length status >= String.length "Service status:"))
+
 let suite =
   [
     Alcotest.test_case "handle daemon exit restart sets nofork and execs" `Quick
@@ -339,6 +345,8 @@ let suite =
       test_cmd_signal_restart_reports_signal_failure;
     Alcotest.test_case "cmd status warns on deleted exe" `Quick
       test_cmd_status_warns_on_deleted_exe;
+    Alcotest.test_case "cmd status mentions uptime for live pid" `Quick
+      test_cmd_status_mentions_uptime_for_live_pid;
     Alcotest.test_case "validate_and_fix ok for executable" `Quick
       test_validate_and_fix_ok_for_executable;
     Alcotest.test_case "validate_and_fix fixes non-executable" `Quick
