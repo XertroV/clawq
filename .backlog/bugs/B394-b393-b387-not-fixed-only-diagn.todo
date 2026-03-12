@@ -1,7 +1,7 @@
 ---
 claimed_at: "2026-03-12T00:45:02Z"
 claimed_by: cli-user
-completed_at: null
+completed_at: "2026-03-12T01:00:38Z"
 complexity: medium
 depends_on:
     - 'Delegate #82 investigated B387 (/tasks on Telegram does nothing) and found plausible silent HTTP error swallowing in telegram_api.send_message when parse_mode=None'
@@ -10,11 +10,12 @@ depends_on:
     - add a targeted fix
     - add focused regression coverage if practical
     - and verify without relying solely on diagnostic logging.
+duration_minutes: 15.610760521416667
 estimate_hours: 1
 id: B394
 priority: high
 started_at: "2026-03-12T00:45:02Z"
-status: in_progress
+status: done
 tags: []
 title: B393 B387 not fixed; only diagnostic logging added
 ---
