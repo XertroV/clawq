@@ -89,29 +89,47 @@ let post_setup_instructions ~repo_name ~webhook_path ~webhook_secret
     | None -> Printf.sprintf "http://localhost:%d" gateway_port
   in
   let webhook_url = base_url ^ webhook_path in
+  let tunnel_note =
+    match tunnel_url with
+    | None ->
+        "
+\
+        \    Note: You are using localhost. For GitHub to reach your server,
+\
+        \    set up a tunnel first: clawq tunnel start
+"
+    | Some _ -> ""
+  in
   Printf.sprintf
     {|
   Complete GitHub webhook setup for %s:
 
-    1. Go to: %s
-    2. Payload URL:    %s
-    3. Content type:   application/json
-    4. Secret:         %s
-    5. Events:         Select "Let me select individual events" and check:
-                       - Pull requests
-                       - Issue comments
-                       - Pull request review comments
-    6. Active:         checked
-    7. Click "Add webhook"
-%s|}
-    repo_name settings_url webhook_url webhook_secret
-    (match tunnel_url with
-    | None ->
-        "\n\
-        \    Note: You are using localhost. For GitHub to reach your server,\n\
-        \    set up a tunnel: clawq tunnel start\n\n\
-        \  Full documentation: https://clawq.org/channels/\n"
-    | Some _ -> "\n  Full documentation: https://clawq.org/channels/\n")
+    1. Start clawq with the HTTP gateway enabled.
+    2. Ensure the webhook URL below is reachable from GitHub.%s
+    3. Go to:         %s
+    4. Payload URL:   %s
+    5. Content type:  application/json
+    6. Secret:        %s
+    7. Events:        Select "Let me select individual events" and check:
+                      - Pull requests
+                      - Issue comments
+                      - Pull request review comments
+                      - Pull request reviews
+    8. Active:        checked
+    9. Click "Add webhook"
+
+    Verify locally:
+      - `clawq service status` should show the gateway is running
+      - `tail -f ~/.clawq/daemon.log` should show GitHub webhook deliveries
+
+    Hook automation:
+      - Add markdown hook files under ~/.clawq/workspace/gh-hooks/
+      - Match on repo/event and optional fields such as action, status,
+        conclusion, branch, head_sha, and workflow_run_id
+
+    Full documentation: https://clawq.org/channels/
+|}
+    repo_name tunnel_note settings_url webhook_url webhook_secret
 
 (* ── Load existing config ────────────────────────────────────────── *)
 

@@ -174,6 +174,29 @@ let instructions_with_tunnel () =
     (contains "https://my.tunnel.example.com/github/webhook/app");
   Alcotest.(check bool) "no tunnel note" false (contains "set up a tunnel")
 
+let instructions_include_verification_and_hook_notes () =
+  let s =
+    Setup_github.post_setup_instructions ~repo_name:"acme/app"
+      ~webhook_path:"/github/webhook/app" ~webhook_secret:"abc123"
+      ~gateway_port:13451 ~tunnel_url:None
+  in
+  let contains sub =
+    try
+      ignore (Str.search_forward (Str.regexp_string sub) s 0);
+      true
+    with Not_found -> false
+  in
+  Alcotest.(check bool) "mentions gateway enabled" true
+    (contains "HTTP gateway enabled");
+  Alcotest.(check bool) "mentions service status" true
+    (contains "clawq service status");
+  Alcotest.(check bool) "mentions daemon log" true
+    (contains "tail -f ~/.clawq/daemon.log");
+  Alcotest.(check bool) "mentions gh-hooks dir" true
+    (contains "~/.clawq/workspace/gh-hooks/");
+  Alcotest.(check bool) "mentions review event" true
+    (contains "Pull request reviews")
+
 let deep_merge_empty () =
   let overlay =
     Setup_github.build_github_json ~pat_token:"ghp_x" ~repo_name:"o/r"
@@ -292,6 +315,8 @@ let suite =
       instructions_without_tunnel;
     Alcotest.test_case "instructions with tunnel" `Quick
       instructions_with_tunnel;
+    Alcotest.test_case "instructions include verification and hook notes" `Quick
+      instructions_include_verification_and_hook_notes;
     Alcotest.test_case "deep merge into empty" `Quick deep_merge_empty;
     Alcotest.test_case "deep merge preserves existing" `Quick
       deep_merge_existing_channels;
