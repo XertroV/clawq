@@ -22,6 +22,12 @@ let result_to_string = function
       "Costs(Session " ^ key ^ ")"
   | Slash_commands.Costs Slash_commands.CostsModel -> "Costs(Model)"
   | Slash_commands.Costs Slash_commands.CostsProvider -> "Costs(Provider)"
+  | Slash_commands.Usage Slash_commands.UsageSummary -> "Usage(Summary)"
+  | Slash_commands.Usage Slash_commands.UsageSessions -> "Usage(Sessions)"
+  | Slash_commands.Usage (Slash_commands.UsageSession key) ->
+      "Usage(Session " ^ key ^ ")"
+  | Slash_commands.Usage Slash_commands.UsageModel -> "Usage(Model)"
+  | Slash_commands.Usage Slash_commands.UsageProvider -> "Usage(Provider)"
   | Slash_commands.Model Slash_commands.ModelShow -> "Model(Show)"
   | Slash_commands.Model (Slash_commands.ModelSet name) ->
       "Model(Set " ^ name ^ ")"
@@ -55,6 +61,7 @@ let result_eq a b =
   | Slash_commands.Tools, Slash_commands.Tools -> true
   | Slash_commands.Tasks, Slash_commands.Tasks -> true
   | Slash_commands.Costs a, Slash_commands.Costs b -> a = b
+  | Slash_commands.Usage a, Slash_commands.Usage b -> a = b
   | Slash_commands.Model _, Slash_commands.Model _ -> true
   | Slash_commands.NotACommand, Slash_commands.NotACommand -> true
   | _ -> false
@@ -195,7 +202,8 @@ let test_commands_list () =
   Alcotest.(check bool) "has fork_and" true (List.mem "fork_and" names);
   Alcotest.(check bool) "has tools" true (List.mem "tools" names);
   Alcotest.(check bool) "has tasks" true (List.mem "tasks" names);
-  Alcotest.(check bool) "has costs" true (List.mem "costs" names)
+  Alcotest.(check bool) "has costs" true (List.mem "costs" names);
+  Alcotest.(check bool) "has usage" true (List.mem "usage" names)
 
 let test_case_insensitive () =
   (match Slash_commands.handle "/HELP" with
@@ -281,6 +289,41 @@ let test_costs_model_and_provider () =
 
 let test_costs_usage_on_invalid_args () =
   match Slash_commands.handle "/costs nope" with
+  | Slash_commands.Reply text ->
+      let contains =
+        try
+          ignore (Str.search_forward (Str.regexp_string "Usage:") text 0);
+          true
+        with Not_found -> false
+      in
+      Alcotest.(check bool) "mentions usage" true contains
+  | other ->
+      Alcotest.fail
+        (Printf.sprintf "expected Reply(Usage), got %s" (result_to_string other))
+
+let test_usage_default () =
+  Alcotest.check result_testable "/usage summary"
+    (Slash_commands.Usage Slash_commands.UsageSummary)
+    (Slash_commands.handle "/usage")
+
+let test_usage_session () =
+  Alcotest.check result_testable "/usage session"
+    (Slash_commands.Usage Slash_commands.UsageSessions)
+    (Slash_commands.handle "/usage session");
+  Alcotest.check result_testable "/usage session key"
+    (Slash_commands.Usage (Slash_commands.UsageSession "telegram:1:user"))
+    (Slash_commands.handle "/usage session telegram:1:user")
+
+let test_usage_model_and_provider () =
+  Alcotest.check result_testable "/usage model"
+    (Slash_commands.Usage Slash_commands.UsageModel)
+    (Slash_commands.handle "/usage model");
+  Alcotest.check result_testable "/usage provider"
+    (Slash_commands.Usage Slash_commands.UsageProvider)
+    (Slash_commands.handle "/usage provider")
+
+let test_usage_usage_on_invalid_args () =
+  match Slash_commands.handle "/usage nope" with
   | Slash_commands.Reply text ->
       let contains =
         try
@@ -830,6 +873,48 @@ let test_format_costs_plain_and_telegram () =
         "telegram uses code formatting" true
         (contains_str telegram "<code>telegram:1:user</code>"))
 
+let test_format_usage_plain_and_telegram () =
+  with_request_stats_db (fun db ->
+      insert_request_stat ~db ~session_key:"telegram:1:user" ~provider:"openai"
+        ~model:"gpt-5.4" ~prompt_tokens:1200 ~completion_tokens:300
+        ~cost_usd:0.12 ~added_prompt_tokens:900 ();
+      insert_request_stat ~db ~session_key:"discord:chan:user"
+        ~provider:"anthropic" ~model:"claude-sonnet-4-6" ~prompt_tokens:800
+        ~completion_tokens:200 ~cost_usd:0.25 ~added_prompt_tokens:500 ();
+      let summary =
+        Slash_commands.format_usage_plain ~db Slash_commands.UsageSummary
+      in
+      Alcotest.(check bool)
+        "plain usage heading" true
+        (contains_str summary "Usage Summary");
+      Alcotest.(check bool)
+        "plain usage includes all time" true
+        (contains_str summary "All time:");
+      let sessions =
+        Slash_commands.format_usage_plain ~db Slash_commands.UsageSessions
+      in
+      Alcotest.(check bool)
+        "plain usage sessions heading" true
+        (contains_str sessions "Session Usage");
+      Alcotest.(check bool)
+        "plain usage sessions include telegram key" true
+        (contains_str sessions "telegram:1:user");
+      Alcotest.(check bool)
+        "plain usage shows added prompt tokens" true
+        (contains_str sessions "900");
+      let telegram =
+        Slash_commands.format_usage_telegram ~db Slash_commands.UsageSessions
+      in
+      Alcotest.(check bool)
+        "telegram usage heading" true
+        (contains_str telegram "<b>Session Usage</b>");
+      Alcotest.(check bool)
+        "telegram usage uses blockquote" true
+        (contains_str telegram "<blockquote expandable>");
+      Alcotest.(check bool)
+        "telegram usage uses code formatting" true
+        (contains_str telegram "<code>telegram:1:user</code>"))
+
 let test_model_bare_name () =
   match Slash_commands.handle "/model glm-5" with
   | Slash_commands.Model (Slash_commands.ModelSet "glm-5") -> ()
@@ -918,6 +1003,12 @@ let suite =
       test_costs_model_and_provider;
     Alcotest.test_case "/costs invalid args" `Quick
       test_costs_usage_on_invalid_args;
+    Alcotest.test_case "/usage summary" `Quick test_usage_default;
+    Alcotest.test_case "/usage session" `Quick test_usage_session;
+    Alcotest.test_case "/usage model/provider" `Quick
+      test_usage_model_and_provider;
+    Alcotest.test_case "/usage invalid args" `Quick
+      test_usage_usage_on_invalid_args;
     Alcotest.test_case "/show-thinking toggle" `Quick test_show_thinking_toggle;
     Alcotest.test_case "/show-thinking status" `Quick test_show_thinking_status;
     Alcotest.test_case "/show-thinking aliases" `Quick
@@ -967,6 +1058,8 @@ let suite =
       test_format_tools_plain_with_skills;
     Alcotest.test_case "format costs plain and telegram" `Quick
       test_format_costs_plain_and_telegram;
+    Alcotest.test_case "format usage plain and telegram" `Quick
+      test_format_usage_plain_and_telegram;
     Alcotest.test_case "/model bare name sets model" `Quick test_model_bare_name;
     Alcotest.test_case "/model provider/name sets model" `Quick
       test_model_bare_name_provider_prefix;

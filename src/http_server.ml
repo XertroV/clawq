@@ -362,6 +362,18 @@ let handler ~session_manager ~require_pairing ~auth_token
                     in
                     Cohttp_lwt_unix.Server.respond_string ~status:`OK
                       ~headers:json_headers ~body:resp_json ()
+                | Slash_commands.Usage action ->
+                    let response =
+                      match Session.get_db session_manager with
+                      | Some db -> Slash_commands.format_usage_plain ~db action
+                      | None -> "Usage is not available (no database)."
+                    in
+                    let resp_json =
+                      `Assoc [ ("response", `String response) ]
+                      |> Yojson.Safe.to_string
+                    in
+                    Cohttp_lwt_unix.Server.respond_string ~status:`OK
+                      ~headers:json_headers ~body:resp_json ()
                 | _ -> (
                     let* result =
                       Lwt.catch
@@ -776,6 +788,13 @@ let handler ~session_manager ~require_pairing ~auth_token
                       match Session.get_db session_manager with
                       | Some db -> Slash_commands.format_costs_plain ~db action
                       | None -> "Costs are not available (no database)."
+                    in
+                    sse_reply text
+                | Slash_commands.Usage action ->
+                    let text =
+                      match Session.get_db session_manager with
+                      | Some db -> Slash_commands.format_usage_plain ~db action
+                      | None -> "Usage is not available (no database)."
                     in
                     sse_reply text
                 | Slash_commands.Thinking Slash_commands.ShowThinking ->
