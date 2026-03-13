@@ -1,10 +1,15 @@
 ---
+claimed_at: "2026-03-13T05:42:35Z"
+claimed_by: cli-user
+completed_at: "2026-03-13T05:47:42Z"
 complexity: medium
 depends_on: []
+duration_minutes: 5.1275769848333335
 estimate_hours: 1
 id: B407
 priority: high
-status: pending
+started_at: "2026-03-13T05:42:35Z"
+status: done
 tags: []
 title: '`clawq channel` shows Discord and slack as configured even when they are missing tokens and secrets. A missing token/secret should indicate that it is not configured.'
 ---

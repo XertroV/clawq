@@ -977,40 +977,49 @@ let cmd_channel () =
         (fun (name, (acct : Runtime_config.telegram_account)) ->
           add
             (Printf.sprintf "  telegram/%s: %s (allow_from: %s)" name
-               (if acct.bot_token = "" then "no token" else "configured")
+               (if Runtime_config.telegram_account_has_valid_credentials acct
+                then "configured"
+                else "not configured (missing bot_token)")
                (String.concat ", " acct.allow_from)))
         tg.accounts);
   (match cfg.channels.discord with
   | None -> add "  discord: not configured"
   | Some d ->
-      add
-        (Printf.sprintf
-           "  discord: configured (allow_guilds: %s; allow_users: %s; intents: \
-            %d)"
-           (String.concat ", " d.allow_guilds)
-           (String.concat ", " d.allow_users)
-           d.intents));
+      if Runtime_config.discord_has_valid_credentials d then
+        add
+          (Printf.sprintf
+             "  discord: configured (allow_guilds: %s; allow_users: %s; \
+              intents: %d)"
+             (String.concat ", " d.allow_guilds)
+             (String.concat ", " d.allow_users)
+             d.intents)
+      else add "  discord: not configured (missing bot_token)");
   (match cfg.channels.slack with
   | None -> add "  slack: not configured"
   | Some s ->
-      add
-        (Printf.sprintf
-           "  slack: configured (events_path: %s; socket_mode: %b; \
-            allow_channels: %s; allow_users: %s)"
-           s.events_path s.socket_mode
-           (String.concat ", " s.allow_channels)
-           (String.concat ", " s.allow_users)));
+      if Runtime_config.slack_has_valid_credentials s then
+        add
+          (Printf.sprintf
+             "  slack: configured (events_path: %s; socket_mode: %b; \
+              allow_channels: %s; allow_users: %s)"
+             s.events_path s.socket_mode
+             (String.concat ", " s.allow_channels)
+             (String.concat ", " s.allow_users))
+      else add "  slack: not configured (missing bot_token or signing_secret)");
   (match cfg.channels.teams with
   | None -> add "  teams: not configured"
   | Some t ->
-      add
-        (Printf.sprintf
-           "  teams: configured (app_id: %s...; webhook_path: %s; allow_teams: \
-            %s; allow_users: %s)"
-           (String.sub t.app_id 0 (min 8 (String.length t.app_id)))
-           t.webhook_path
-           (String.concat ", " t.allow_teams)
-           (String.concat ", " t.allow_users)));
+      if Runtime_config.teams_has_valid_credentials t then
+        add
+          (Printf.sprintf
+             "  teams: configured (app_id: %s...; webhook_path: %s; \
+              allow_teams: %s; allow_users: %s)"
+             (String.sub t.app_id 0 (min 8 (String.length t.app_id)))
+             t.webhook_path
+             (String.concat ", " t.allow_teams)
+             (String.concat ", " t.allow_users))
+      else
+        add "  teams: not configured (missing app_id, app_secret, or tenant_id)");
   List.rev !lines |> String.concat "\n"
 
 let cmd_memory args =

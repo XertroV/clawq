@@ -306,6 +306,104 @@ let test_teams_credential_validation () =
     "invalid teams" false
     (Runtime_config.teams_has_valid_credentials invalid_teams)
 
+let test_discord_credential_validation () =
+  let valid_discord =
+    {
+      Runtime_config.bot_token = "Bot.valid-token-12345";
+      allow_guilds = [ "*" ];
+      allow_users = [ "*" ];
+      intents = 33281;
+    }
+  in
+  let invalid_discord = { valid_discord with Runtime_config.bot_token = "" } in
+  Alcotest.(check bool)
+    "valid discord" true
+    (Runtime_config.discord_has_valid_credentials valid_discord);
+  Alcotest.(check bool)
+    "empty bot_token discord" false
+    (Runtime_config.discord_has_valid_credentials invalid_discord)
+
+(* Test that cmd_channel reports "not configured" when tokens are missing *)
+let test_cmd_channel_discord_no_token () =
+  let json =
+    Yojson.Safe.from_string
+      {|{"channels": {"discord": {"bot_token": "", "allow_guilds": ["*"], "allow_users": ["*"]}}}|}
+  in
+  let cfg = Config_loader.parse_config ~resolve_secrets:false json in
+  let result =
+    match cfg.channels.discord with
+    | None -> "none"
+    | Some d ->
+        if Runtime_config.discord_has_valid_credentials d then "configured"
+        else "not configured"
+  in
+  Alcotest.(check string)
+    "discord with empty token is not configured" "not configured" result
+
+let test_cmd_channel_slack_no_token () =
+  let json =
+    Yojson.Safe.from_string
+      {|{"channels": {"slack": {"bot_token": "", "signing_secret": "valid-secret-12345", "events_path": "/slack/events"}}}|}
+  in
+  let cfg = Config_loader.parse_config ~resolve_secrets:false json in
+  let result =
+    match cfg.channels.slack with
+    | None -> "none"
+    | Some s ->
+        if Runtime_config.slack_has_valid_credentials s then "configured"
+        else "not configured"
+  in
+  Alcotest.(check string)
+    "slack with empty bot_token is not configured" "not configured" result
+
+let test_cmd_channel_slack_no_secret () =
+  let json =
+    Yojson.Safe.from_string
+      {|{"channels": {"slack": {"bot_token": "xoxb-valid-token-12345", "signing_secret": "", "events_path": "/slack/events"}}}|}
+  in
+  let cfg = Config_loader.parse_config ~resolve_secrets:false json in
+  let result =
+    match cfg.channels.slack with
+    | None -> "none"
+    | Some s ->
+        if Runtime_config.slack_has_valid_credentials s then "configured"
+        else "not configured"
+  in
+  Alcotest.(check string)
+    "slack with empty signing_secret is not configured" "not configured" result
+
+let test_cmd_channel_discord_with_token () =
+  let json =
+    Yojson.Safe.from_string
+      {|{"channels": {"discord": {"bot_token": "Bot.valid-token-12345", "allow_guilds": ["*"], "allow_users": ["*"]}}}|}
+  in
+  let cfg = Config_loader.parse_config ~resolve_secrets:false json in
+  let result =
+    match cfg.channels.discord with
+    | None -> "none"
+    | Some d ->
+        if Runtime_config.discord_has_valid_credentials d then "configured"
+        else "not configured"
+  in
+  Alcotest.(check string)
+    "discord with valid token is configured" "configured" result
+
+let test_cmd_channel_slack_with_creds () =
+  let json =
+    Yojson.Safe.from_string
+      {|{"channels": {"slack": {"bot_token": "xoxb-valid-token-12345", "signing_secret": "valid-secret-12345", "events_path": "/slack/events"}}}|}
+  in
+  let cfg = Config_loader.parse_config ~resolve_secrets:false json in
+  let result =
+    match cfg.channels.slack with
+    | None -> "none"
+    | Some s ->
+        if Runtime_config.slack_has_valid_credentials s then "configured"
+        else "not configured"
+  in
+  Alcotest.(check string)
+    "slack with valid creds is configured" "configured" result
+
 let suite =
   [
     Alcotest.test_case "help/version returns output" `Quick
@@ -360,4 +458,16 @@ let suite =
       test_lark_credential_validation;
     Alcotest.test_case "teams credential validation" `Quick
       test_teams_credential_validation;
+    Alcotest.test_case "discord credential validation" `Quick
+      test_discord_credential_validation;
+    Alcotest.test_case "channel discord no token shows not configured" `Quick
+      test_cmd_channel_discord_no_token;
+    Alcotest.test_case "channel slack no token shows not configured" `Quick
+      test_cmd_channel_slack_no_token;
+    Alcotest.test_case "channel slack no secret shows not configured" `Quick
+      test_cmd_channel_slack_no_secret;
+    Alcotest.test_case "channel discord with token shows configured" `Quick
+      test_cmd_channel_discord_with_token;
+    Alcotest.test_case "channel slack with creds shows configured" `Quick
+      test_cmd_channel_slack_with_creds;
   ]
