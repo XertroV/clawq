@@ -114,9 +114,21 @@ Content-Type: application/json
 
 {
   "type": "message",
-  "text": "Hello!"
+  "text": "Hello!",
+  "channelData": {
+    "notification": {
+      "alert": false
+    }
+  }
 }
 ```
+
+### Notification Suppression
+
+Setting `channelData.notification.alert` to `false` prevents the message from generating a desktop/mobile notification (toast) in Teams. This is analogous to Telegram's `disable_notification: true`.
+
+- **Final replies** and **ask_user_question** prompts use `alert: true` (notification).
+- **Tool status** and other intermediate messages use `alert: false` (silent).
 
 Or to start a new activity in the conversation (no reply_to_id):
 ```

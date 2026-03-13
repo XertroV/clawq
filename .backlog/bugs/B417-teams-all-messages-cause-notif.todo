@@ -1,10 +1,15 @@
 ---
+claimed_at: "2026-03-13T07:49:03Z"
+claimed_by: cli-user
+completed_at: "2026-03-13T07:52:47Z"
 complexity: medium
 depends_on: []
+duration_minutes: 3.7498789244833333
 estimate_hours: 1
 id: B417
 priority: high
-status: pending
+started_at: "2026-03-13T07:49:03Z"
+status: done
 tags: []
 title: 'teams: all messages cause notifications. if it''s possible to avoid this we should (similar to telegram)'
 ---

@@ -202,9 +202,11 @@ let split_message text =
     List.rev !result
   end
 
-(* Send a reply via Bot Framework REST API *)
-let send_reply ~(config : Runtime_config.teams_config) ~service_url
-    ~conversation_id ~reply_to_id ~text =
+(* Send a reply via Bot Framework REST API.
+   ~alert controls channelData.notification.alert: true triggers a
+   desktop/mobile notification toast, false suppresses it. *)
+let send_reply ?(alert = false) ~(config : Runtime_config.teams_config)
+    ~service_url ~conversation_id ~reply_to_id ~text () =
   let open Lwt.Syntax in
   let* token_opt = fetch_token ~config in
   match token_opt with
@@ -228,7 +230,14 @@ let send_reply ~(config : Runtime_config.teams_config) ~service_url
           in
           let headers = [ ("Authorization", "Bearer " ^ token) ] in
           let body =
-            `Assoc [ ("type", `String "message"); ("text", `String chunk) ]
+            `Assoc
+              [
+                ("type", `String "message");
+                ("text", `String chunk);
+                ( "channelData",
+                  `Assoc [ ("notification", `Assoc [ ("alert", `Bool alert) ]) ]
+                );
+              ]
             |> Yojson.Safe.to_string
           in
           let* _status, _resp = Http_client.post_json ~uri ~headers ~body in
@@ -375,12 +384,18 @@ let handle_webhook ~(config : Runtime_config.teams_config)
                 let sender_name =
                   if user_name = "" then None else Some user_name
                 in
+                (* Register alerting notifier for ask_user_question *)
+                Session.register_alert_channel_notifier session_manager ~key
+                  (fun reply_text ->
+                    send_reply ~alert:true ~config
+                      ~service_url:effective_service_url ~conversation_id
+                      ~reply_to_id:activity_id ~text:reply_text ());
                 let* result =
                   Session.with_registered_notifier session_manager ~key
                     ~notify:(fun reply_text ->
-                      send_reply ~config ~service_url:effective_service_url
-                        ~conversation_id ~reply_to_id:activity_id
-                        ~text:reply_text)
+                      send_reply ~alert:false ~config
+                        ~service_url:effective_service_url ~conversation_id
+                        ~reply_to_id:activity_id ~text:reply_text ())
                     (fun () ->
                       Lwt.catch
                         (fun () ->
@@ -397,8 +412,9 @@ let handle_webhook ~(config : Runtime_config.teams_config)
                     if Session.is_queued_message_response response then
                       Lwt.return_unit
                     else
-                      send_reply ~config ~service_url:effective_service_url
-                        ~conversation_id ~reply_to_id:activity_id ~text:response
+                      send_reply ~alert:true ~config
+                        ~service_url:effective_service_url ~conversation_id
+                        ~reply_to_id:activity_id ~text:response ()
                 | Error err ->
                     Logs.err (fun m ->
                         m "Teams: agent error for conv=%s user=%s: %s"

@@ -406,14 +406,20 @@ let run ~(config : Runtime_config.t) =
         let open Lwt.Syntax in
         let notify =
           match
-            Session.find_registered_notifier session_manager ~key:session_key
+            Session.find_alert_channel_notifier session_manager ~key:session_key
           with
           | Some n -> n
-          | None ->
-              fun _text ->
-                Lwt.fail_with
-                  (Printf.sprintf "No channel notifier for session %s"
-                     session_key)
+          | None -> (
+              match
+                Session.find_registered_notifier session_manager
+                  ~key:session_key
+              with
+              | Some n -> n
+              | None ->
+                  fun _text ->
+                    Lwt.fail_with
+                      (Printf.sprintf "No channel notifier for session %s"
+                         session_key))
         in
         let notes_eligible = function
           | Tools_builtin.Text _ | Tools_builtin.File_upload _ -> false
