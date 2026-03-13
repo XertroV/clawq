@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B425
+priority: high
+status: pending
+tags: []
+title: Investigate whether we can deprecate default_provider since we have primary_model as a pmodel including the provider.
+---
+
+Investigate whether we can deprecate default_provider since we have primary_model as a pmodel including the provider.

@@ -421,3 +421,4 @@ bugs:
     - file: B422-heartbeat-interval-seconds-kee.todo
     - file: B423-audit-code-to-avoid-bug-loader.todo
     - file: B424-slash-commands-should-work-ove.todo
+    - file: B425-investigate-whether-we-can-dep.todo
