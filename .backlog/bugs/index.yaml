@@ -405,3 +405,4 @@ bugs:
     - file: B406-for-cloudflare-tunnel-and-othe.todo
     - file: B407-clawq-channel-shows-discord-an.todo
     - file: B408-clawq-config-does-not-set-conf.todo
+    - file: B409-ensure-that-teams-connector-is.todo

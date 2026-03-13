@@ -1,0 +1,14 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B409
+priority: high
+status: pending
+tags: []
+title: ensure that teams connector is run at startup (its not listed in logs)
+---
+
+Logs output:
+
+Channels: cli=true telegram=true discord=true slack=true github=true signal=true matrix=true irc=true email=true nostr=true dingtalk=true onebot=true lark=false
