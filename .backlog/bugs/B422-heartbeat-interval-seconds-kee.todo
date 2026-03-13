@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B422
+priority: high
+status: pending
+tags: []
+title: heartbeat_interval_seconds keeps getting reset to 300 in config instead of what i set it to (250)
+---
+
+heartbeat_interval_seconds keeps getting reset to 300 in config instead of what i set it to (250)
