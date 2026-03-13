@@ -6,6 +6,17 @@ let init_git_repo path =
   | 0 -> ()
   | code -> Alcotest.failf "git init failed for %s (exit %d)" path code
 
+let configure_git_identity repo =
+  let cmd =
+    Printf.sprintf
+      "git -C %s config user.name 'Test User' >/dev/null 2>&1 && git -C %s \
+       config user.email test@example.com >/dev/null 2>&1"
+      (Filename.quote repo) (Filename.quote repo)
+  in
+  match Sys.command cmd with
+  | 0 -> ()
+  | code -> Alcotest.failf "git identity config failed for %s (exit %d)" repo code
+
 let git_cmd repo args =
   let cmd =
     Printf.sprintf "git -C %s %s >/dev/null 2>&1" (Filename.quote repo) args
@@ -26,6 +37,7 @@ let with_temp_git_repo f =
   Sys.remove repo;
   Unix.mkdir repo 0o755;
   init_git_repo repo;
+  configure_git_identity repo;
   git_cmd repo "commit --allow-empty -m 'initial' -q";
   Fun.protect
     (fun () -> f repo)
