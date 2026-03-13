@@ -1,4 +1,4 @@
-let schema_version = 16
+let schema_version = 17
 
 type session_activity = Active | Inactive | Any
 
@@ -116,7 +116,8 @@ let init_session_schema db =
     \     last_active TEXT NOT NULL DEFAULT (datetime('now')),\n\
     \     keepalive_enabled INTEGER NOT NULL DEFAULT 0,\n\
     \     heartbeat_enabled INTEGER NOT NULL DEFAULT 0,\n\
-    \     model_override TEXT DEFAULT NULL\n\
+    \     model_override TEXT DEFAULT NULL,\n\
+    \     CHECK ((channel IS NULL) = (channel_id IS NULL))\n\
     \   )";
   exec_exn db
     "CREATE TABLE IF NOT EXISTS discord_resume_state (\n\
@@ -433,6 +434,32 @@ let migrate_schema db current_version =
       exec_exn db
         "ALTER TABLE session_state ADD COLUMN heartbeat_enabled INTEGER NOT \
          NULL DEFAULT 0";
+      set_schema_version db schema_version
+  | 16 ->
+      (* Recreate session_state with CHECK constraint enforcing channel and
+         channel_id are either both NULL or both non-NULL.
+         SQLite does not support ADD CONSTRAINT on existing tables, so we
+         use the CREATE-INSERT-DROP-RENAME pattern. *)
+      exec_exn db
+        "CREATE TABLE session_state_new (session_key TEXT PRIMARY KEY, turn \
+         TEXT NOT NULL DEFAULT 'user', channel TEXT, channel_id TEXT, \
+         response_sent_at TEXT, last_active TEXT NOT NULL DEFAULT \
+         (datetime('now')), keepalive_enabled INTEGER NOT NULL DEFAULT 0, \
+         heartbeat_enabled INTEGER NOT NULL DEFAULT 0, model_override TEXT \
+         DEFAULT NULL, CHECK ((channel IS NULL) = (channel_id IS NULL)) )";
+      exec_exn db
+        "INSERT INTO session_state_new SELECT * FROM session_state WHERE \
+         (channel IS NULL) = (channel_id IS NULL)";
+      exec_exn db "DROP TABLE session_state";
+      exec_exn db "ALTER TABLE session_state_new RENAME TO session_state";
+      init_inbound_queue_schema db;
+      init_models_cache_schema db;
+      init_request_stats_schema db;
+      init_quota_cache_schema db;
+      init_postmortems_schema db;
+      init_model_discovery_state_schema db;
+      Summary_store.init_schema db;
+      init_pending_questions_schema db;
       set_schema_version db schema_version
   | n when n = schema_version ->
       init_session_schema db;

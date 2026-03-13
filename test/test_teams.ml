@@ -199,6 +199,32 @@ let test_split_message_multi () =
   let chunks = Teams.split_message long in
   Alcotest.(check bool) "multiple chunks" true (List.length chunks > 1)
 
+let test_encode_decode_channel_id () =
+  let service_url = "https://smba.trafficmanager.net/amer/" in
+  let conversation_id = "19:3ed169b9@thread.v2" in
+  let encoded = Teams.encode_channel_id ~service_url ~conversation_id in
+  let decoded_svc, decoded_conv = Teams.decode_channel_id encoded in
+  Alcotest.(check string) "service_url roundtrip" service_url decoded_svc;
+  Alcotest.(check string)
+    "conversation_id roundtrip" conversation_id decoded_conv
+
+let test_decode_channel_id_with_pipe_in_conversation_id () =
+  (* Pipe delimiter: service_url is up to the first |; rest is conversation_id *)
+  let service_url = "https://smba.trafficmanager.net/amer/" in
+  let conversation_id = "19:abc|def@thread.v2" in
+  let encoded = Teams.encode_channel_id ~service_url ~conversation_id in
+  let decoded_svc, decoded_conv = Teams.decode_channel_id encoded in
+  Alcotest.(check string)
+    "service_url with pipe in conv" service_url decoded_svc;
+  Alcotest.(check string)
+    "conversation_id preserved" conversation_id decoded_conv
+
+let test_encode_channel_id_format () =
+  let encoded =
+    Teams.encode_channel_id ~service_url:"https://svc" ~conversation_id:"conv-1"
+  in
+  Alcotest.(check string) "pipe-delimited" "https://svc|conv-1" encoded
+
 let suite =
   [
     Alcotest.test_case "parse_activity returns record" `Quick
@@ -228,4 +254,10 @@ let suite =
       test_build_reply_body_none_mode;
     Alcotest.test_case "split_message single" `Quick test_split_message_single;
     Alcotest.test_case "split_message multi" `Quick test_split_message_multi;
+    Alcotest.test_case "encode_decode channel_id roundtrip" `Quick
+      test_encode_decode_channel_id;
+    Alcotest.test_case "decode channel_id with pipe in conversation_id" `Quick
+      test_decode_channel_id_with_pipe_in_conversation_id;
+    Alcotest.test_case "encode_channel_id format" `Quick
+      test_encode_channel_id_format;
   ]

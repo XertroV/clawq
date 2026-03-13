@@ -66,6 +66,11 @@ type resume_senders = {
     bot_token:string -> channel_id:string -> text:string -> unit Lwt.t;
   send_slack :
     bot_token:string -> channel_id:string -> text:string -> unit Lwt.t;
+  send_teams :
+    config:Runtime_config.teams_config ->
+    channel_id:string ->
+    text:string ->
+    unit Lwt.t;
 }
 
 let default_resume_senders =
@@ -76,6 +81,7 @@ let default_resume_senders =
           ~text ());
     send_discord = Discord.send_message;
     send_slack = Slack.send_message;
+    send_teams = Teams.send_message;
   }
 
 type boot_resume_summary = {
@@ -239,6 +245,12 @@ let dispatch_resumed_message ?(senders = default_resume_senders)
           in
           Lwt.return (Ok ())
       | None -> Lwt.return (Error "slack channel is not configured"))
+  | "teams" -> (
+      match config.channels.teams with
+      | Some tc ->
+          let* () = senders.send_teams ~config:tc ~channel_id ~text in
+          Lwt.return (Ok ())
+      | None -> Lwt.return (Error "teams channel is not configured"))
   | _ -> Lwt.return (Error (Printf.sprintf "unsupported channel %s" channel))
 
 let resumed_dispatch_target ~session_key ~channel ~channel_id =
@@ -813,7 +825,13 @@ let resume_pending_agent_sessions ?(senders = default_resume_senders)
                 missing_channel_count = !summary.missing_channel_count + 1;
               };
             Logs.warn (fun m ->
-                m "Cannot resume session %s: missing channel info" session_key);
+                m
+                  "Cannot resume session %s: missing channel routing info \
+                   (channel=%s channel_id=%s); session may predate channel \
+                   tracking"
+                  session_key
+                  (Option.value ~default:"<none>" channel_opt)
+                  (Option.value ~default:"<none>" channel_id_opt));
             Session.mark_response_sent session_manager ~key:session_key;
             Lwt.return_unit)
       pending

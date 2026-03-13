@@ -7,6 +7,14 @@ let dedup = Channel_util.Lru_dedup.create 500
 let session_key ~team_id ~conversation_id =
   Printf.sprintf "teams:%s:%s" team_id conversation_id
 
+let encode_channel_id ~service_url ~conversation_id =
+  service_url ^ "|" ^ conversation_id
+
+let decode_channel_id channel_id =
+  match String.split_on_char '|' channel_id with
+  | service_url :: rest -> (service_url, String.concat "|" rest)
+  | [] -> ("", channel_id)
+
 type teams_activity = {
   activity_id : string;
   service_url : string;
@@ -298,6 +306,14 @@ let send_reply ?(alert = false) ~(config : Runtime_config.teams_config)
           Lwt.return_unit)
         chunks
 
+let send_message ~(config : Runtime_config.teams_config) ~channel_id ~text =
+  let service_url, conversation_id = decode_channel_id channel_id in
+  let effective_service_url =
+    if service_url = "" then config.service_url else service_url
+  in
+  send_reply ~config ~service_url:effective_service_url ~conversation_id
+    ~reply_to_id:"" ~text ()
+
 let is_team_allowed ~(config : Runtime_config.teams_config) ~team_id =
   match config.allow_teams with [ "*" ] -> true | ids -> List.mem team_id ids
 
@@ -474,6 +490,11 @@ let handle_webhook ~(config : Runtime_config.teams_config)
                           let* response =
                             Session.turn session_manager ~key ~message:text
                               ~channel_name:"teams" ~channel_type:"webhook"
+                              ~channel:"teams"
+                              ~channel_id:
+                                (encode_channel_id
+                                   ~service_url:effective_service_url
+                                   ~conversation_id)
                               ~sender_id:user_id ?sender_name ()
                           in
                           Lwt.return (Ok response))

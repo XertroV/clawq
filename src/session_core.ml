@@ -939,6 +939,17 @@ let inject_attachment_context agent attachments =
   | None -> ()
 
 let record_agent_turn mgr ~key ?channel ?channel_id () =
+  (match (channel, channel_id) with
+  | Some _, None | None, Some _ ->
+      Logs.warn (fun m ->
+          m
+            "record_agent_turn: mismatched channel routing for session %s \
+             (channel=%s channel_id=%s); session will not be resumable on \
+             restart"
+            key
+            (Option.value ~default:"<none>" channel)
+            (Option.value ~default:"<none>" channel_id))
+  | _ -> ());
   match mgr.db with
   | Some db ->
       Memory.upsert_session_state ~db ~session_key:key ~turn:"agent" ?channel
