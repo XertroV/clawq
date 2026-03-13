@@ -86,6 +86,14 @@ Every command below is invoked as `clawq COMMAND`. Run `clawq COMMAND --help` fo
 | `skills list` | List available skills |
 | `skills path` | Print the skills directory path |
 | `skills init` | Create an example skill file |
+| `setup` | Interactive setup wizards for channel integrations (discord, github, slack, teams, telegram, tunnel, summarizer) |
+| `setup discord` | Configure Discord bot token, allowed guilds/users, and gateway intents |
+| `setup telegram` | Configure Telegram bot token and allowed users |
+| `setup slack` | Configure Slack bot token, app token, and signing secret |
+| `setup github` | Configure GitHub PAT, repos, and webhook paths |
+| `setup teams` | Configure MS Teams app credentials |
+| `setup tunnel` | Configure tunnel provider (Cloudflare, Tailscale, ngrok) |
+| `setup summarizer` | Configure autosummarizer settings |
 | `status` | Show runtime configuration and daemon status |
 | `transcribe FILE` | Transcribe audio via configured STT provider |
 | `tunnel` | Manage the public tunnel (default: status) |
@@ -642,7 +650,7 @@ Tell users:
 2. `git clone <repo> clawq && cd clawq`
 3. `make bootstrap` — creates opam switch clawq-5.1, installs deps
 4. `make build` — builds the project
-5. `clawq onboard` — creates initial config; in a TTY it runs onboarding, otherwise it writes a starter template. Use `clawq config wizard` later for full reconfiguration.
+5. `clawq onboard` — creates initial config; in a TTY it runs onboarding, otherwise it writes a starter template. Use `clawq config wizard` later for full reconfiguration. For individual channels, use `clawq setup <channel>` (discord, telegram, slack, github, teams, tunnel, summarizer).
 6. `clawq doctor` — validate configuration
 7. `clawq agent` — start the daemon
 8. Open `http://127.0.0.1:13451/` for the web UI

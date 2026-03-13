@@ -94,6 +94,14 @@ clawq config set channels.telegram.accounts.main.allow_from '["*"]'
 
 ### Setup
 
+The fastest path is the interactive wizard:
+
+```bash
+clawq setup telegram
+```
+
+Or manually:
+
 1. Create a bot with [@BotFather](https://t.me/BotFather) on Telegram.
 2. Copy the bot token into your config.
 3. Start the daemon with `clawq agent`.
@@ -141,6 +149,14 @@ Resume, and Reconnect.
 ```
 
 ### Setup
+
+The fastest path is the interactive wizard:
+
+```bash
+clawq setup discord
+```
+
+The wizard walks through setting the bot token, allowed guilds/users, and gateway intents. Or manually:
 
 1. Create a Discord application at the [Discord Developer Portal](https://discord.com/developers/applications).
 2. Add a Bot to the application and copy its token.
@@ -200,6 +216,8 @@ is needed --- similar to Telegram's long polling approach.
 ```
 
 **Setup:**
+
+Use the interactive wizard (`clawq setup slack`) or follow the manual steps:
 
 1. Create a Slack app at [api.slack.com/apps](https://api.slack.com/apps).
 2. Enable Socket Mode in the app settings.
@@ -301,6 +319,8 @@ opportunistically when new deliveries arrive.
 
 ### Setup
 
+Use the interactive wizard (`clawq setup github`) or follow the manual steps:
+
 1. Create a GitHub Personal Access Token and store it under
    `channels.github.auth.token`.
 2. Configure one repo entry per GitHub repository with a unique
@@ -368,6 +388,8 @@ Framework REST API using OAuth 2.0 bearer tokens.
 ```
 
 ### Setup
+
+Use the interactive wizard (`clawq setup teams`) to configure the clawq-side credentials, then follow the Azure setup below.
 
 <Callout type="caution" title="Get your public HTTPS URL first">
   You need a publicly reachable **HTTPS** URL before entering anything into

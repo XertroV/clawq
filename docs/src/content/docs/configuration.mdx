@@ -20,6 +20,20 @@ clawq config wizard # re-run the wizard any time
 
 The wizard walks through provider, model, security, channels, gateway, and memory settings. When run in a TTY, it launches a full interactive TUI. When piped or redirected, it falls back to generating a starter template.
 
+### Channel Setup Wizards
+
+For configuring individual channels, use the dedicated setup wizards:
+
+```bash
+clawq setup discord     # Discord bot token, guilds, users, intents
+clawq setup telegram    # Telegram bot token, allowed users
+clawq setup slack       # Slack bot token, app token, signing secret
+clawq setup github      # GitHub PAT, repos, webhook paths
+clawq setup teams       # MS Teams app credentials
+clawq setup tunnel      # Tunnel provider configuration
+clawq setup summarizer  # Autosummarizer settings
+```
+
 ### CLI Set/Get/Show
 
 Manage individual values by dot-path:

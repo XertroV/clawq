@@ -44,6 +44,7 @@ Every clawq command is listed below. Run `clawq COMMAND --help` for per-command 
 | `clawq runtime` | Manage native and Docker runtimes |
 | `clawq service` | Manage the clawq system service (start/stop/restart) |
 | `clawq skills` | Manage agent skills (shell-script tool extensions) |
+| `clawq setup` | Interactive setup wizards for channel integrations |
 | `clawq status` | Show runtime configuration and daemon status |
 | `clawq transcribe` | Transcribe an audio file using the configured STT provider |
 | `clawq tunnel` | Manage a public tunnel to the local gateway |
@@ -105,6 +106,22 @@ clawq config show              # full config
 clawq config show channels     # channels section only
 clawq config show security     # security section only
 ```
+
+## Setup Subcommands
+
+The `setup` command provides per-channel interactive wizards for configuring individual integrations. Each wizard loads any existing configuration, presents a TUI dashboard, and merges changes back into `~/.clawq/config.json`.
+
+```bash
+clawq setup discord      # Discord bot token, guilds, users, gateway intents
+clawq setup github       # GitHub PAT, repos, webhook paths
+clawq setup slack        # Slack bot token, app token, signing secret
+clawq setup teams        # MS Teams app credentials
+clawq setup telegram     # Telegram bot token, allowed users
+clawq setup tunnel       # Cloudflare / Tailscale / ngrok tunnel
+clawq setup summarizer   # Autosummarizer settings
+```
+
+Running `clawq setup` without a subcommand prints the list of available wizards.
 
 ## Common Workflows
 

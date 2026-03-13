@@ -48,6 +48,20 @@ Alternatively, use the config wizard directly:
 clawq config wizard
 ```
 
+### Channel Setup Wizards
+
+For individual channel configuration, use the dedicated setup wizards:
+
+```bash
+clawq setup telegram    # Telegram bot
+clawq setup discord     # Discord bot
+clawq setup slack       # Slack app
+clawq setup github      # GitHub webhooks
+clawq setup teams       # MS Teams bot
+```
+
+Each wizard loads existing config, presents an interactive dashboard, and writes changes back to `~/.clawq/config.json`.
+
 ## 3. Manual Configuration
 
 ### Using config set commands
