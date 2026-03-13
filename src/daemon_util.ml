@@ -738,7 +738,7 @@ let setup_mcp_clients ?(connect_client = Mcp_client.connect) ~registry
   else
     let servers = Mcp_client.load_server_configs servers_path in
     let open Lwt.Syntax in
-    Lwt_list.iter_s
+    Lwt_list.iter_p
       (fun cfg ->
         Lwt.catch
           (fun () ->

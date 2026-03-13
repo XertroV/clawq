@@ -193,7 +193,7 @@ let kill_ec_process state =
   | Some p ->
       Process_group.signal_group p Sys.sigterm;
       (* Brief grace for cleanup, then force kill *)
-      Unix.sleepf 0.5;
+      Unix.sleepf 0.1;
       if process_alive p then Process_group.signal_group p Sys.sigkill;
       (* Wait briefly for kernel to reap *)
       let deadline = Unix.gettimeofday () +. 2.0 in
