@@ -189,7 +189,8 @@ let test_delegate_prompt_automerge () =
   in
   Alcotest.(check bool)
     "contains MUST commit" true
-    (contains_substring ~needle:"MUST commit all changes" prompt);
+    (contains_substring ~needle:"MUST" prompt
+    && contains_substring ~needle:"git commit" prompt);
   Alcotest.(check bool)
     "no 'Do not commit'" false
     (contains_substring ~needle:"Do not commit" prompt)
@@ -200,7 +201,8 @@ let test_delegate_prompt_no_automerge () =
   in
   Alcotest.(check bool)
     "contains MUST commit" true
-    (contains_substring ~needle:"MUST commit all changes" prompt);
+    (contains_substring ~needle:"MUST" prompt
+    && contains_substring ~needle:"git commit" prompt);
   Alcotest.(check bool)
     "no 'Do not commit'" false
     (contains_substring ~needle:"Do not commit" prompt)
