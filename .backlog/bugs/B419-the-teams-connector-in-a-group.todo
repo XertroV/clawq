@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B419
+priority: high
+status: pending
+tags: []
+title: The teams connector -- in a group chat at least -- seems to tag the caller in every message that's part of a reply, which is annoying. Need to analyze behavior and discuss what to do.
+---
+
+The teams connector -- in a group chat at least -- seems to tag the caller in every message that's part of a reply, which is annoying. Need to analyze behavior and discuss what to do.
