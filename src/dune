@@ -99,7 +99,8 @@
   summary_store
   summarizer
   tool_postprocess
-  log_rotation)
+  log_rotation
+  table_format)
  (foreign_stubs
   (language c)
   (names landlock_stubs))

@@ -298,25 +298,51 @@ let get_db () =
 
 let cmd_cron args =
   match args with
-  | [ "list" ] | [] ->
+  | "list" :: flags | ([] as flags) ->
+      let show_prompt = List.mem "--prompt" flags || List.mem "-p" flags in
       let db = get_db () in
       Scheduler.init_schema db;
       let jobs = Scheduler.list_jobs ~db in
       if jobs = [] then "No cron jobs configured."
       else
-        let header =
-          Printf.sprintf "  %-20s %-15s %-20s %s" "NAME" "SESSION" "SCHEDULE"
-            "ENABLED"
+        let columns =
+          let base =
+            [
+              Table_format.
+                { header = "NAME"; align = Left; min_width = 4; flex = false };
+              { header = "SESSION"; align = Left; min_width = 7; flex = false };
+              { header = "SCHEDULE"; align = Left; min_width = 8; flex = false };
+              { header = "ENABLED"; align = Left; min_width = 3; flex = false };
+            ]
+          in
+          if show_prompt then
+            base
+            @ [
+                Table_format.
+                  {
+                    header = "PROMPT";
+                    align = Left;
+                    min_width = 10;
+                    flex = true;
+                  };
+              ]
+          else base
         in
         let rows =
           List.map
             (fun (j : Scheduler.job) ->
-              Printf.sprintf "  %-20s %-15s %-20s %s" j.name j.session_key
-                j.schedule_str
-                (if j.enabled then "yes" else "no"))
+              let base =
+                [
+                  j.name;
+                  j.session_key;
+                  j.schedule_str;
+                  (if j.enabled then "yes" else "no");
+                ]
+              in
+              if show_prompt then base @ [ j.message ] else base)
             jobs
         in
-        "Cron jobs:\n" ^ header ^ "\n" ^ String.concat "\n" rows
+        "Cron jobs:\n" ^ Table_format.render columns rows
   | "add" :: name :: session_key :: schedule :: message -> (
       let db = get_db () in
       Scheduler.init_schema db;

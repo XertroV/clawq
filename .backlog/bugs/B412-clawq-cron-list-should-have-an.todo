@@ -1,10 +1,15 @@
 ---
+claimed_at: "2026-03-13T07:04:33Z"
+claimed_by: cli-user
+completed_at: "2026-03-13T07:11:13Z"
 complexity: medium
 depends_on: []
+duration_minutes: 6.670799482866666
 estimate_hours: 1
 id: B412
 priority: high
-status: pending
+started_at: "2026-03-13T07:04:33Z"
+status: done
 tags: []
 title: '`clawq cron list` should have an option to show the cron job''s prompt, too. Also, we should write a nice table to the console if we can tell it''s width so we can do wordwrapping etc. If there''s a library to do this already, let''s use that, otherwise we can write a module and update the cron list output.'
 ---

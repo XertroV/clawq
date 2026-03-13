@@ -31,7 +31,7 @@ Every command below is invoked as `clawq COMMAND`. Run `clawq COMMAND --help` fo
 | `config get KEY` | Read a config value by dot-path |
 | `config show [SECTION]` | Show config (secrets redacted) |
 | `cron` | Manage scheduled agent messages (default: list) |
-| `cron list` | List all configured cron jobs |
+| `cron list [--prompt\|-p]` | List all configured cron jobs (--prompt shows prompt text) |
 | `cron add NAME SESSION SCHEDULE MSG` | Add a cron job |
 | `cron remove NAME` | Remove a cron job by name |
 | `cron history NAME` | Show last 10 run records for a job |

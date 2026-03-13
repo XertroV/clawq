@@ -1057,6 +1057,62 @@ let test_handle_cron_list () =
         "cron list returns output" true
         (String.length result > 0))
 
+let test_handle_cron_list_prompt () =
+  with_temp_home (fun _home ->
+      let result = Command_bridge.handle [ "cron"; "list"; "--prompt" ] in
+      Alcotest.(check bool)
+        "cron list --prompt returns output" true
+        (String.length result > 0))
+
+let test_handle_cron_list_prompt_short () =
+  with_temp_home (fun _home ->
+      let result = Command_bridge.handle [ "cron"; "list"; "-p" ] in
+      Alcotest.(check bool)
+        "cron list -p returns output" true
+        (String.length result > 0))
+
+let test_handle_cron_list_with_jobs () =
+  with_temp_home (fun _home ->
+      let _add_result =
+        Command_bridge.handle
+          [
+            "cron";
+            "add";
+            "test-job";
+            "sess1";
+            "* * * * *";
+            "do";
+            "the";
+            "thing";
+          ]
+      in
+      let result = Command_bridge.handle [ "cron"; "list" ] in
+      Alcotest.(check bool)
+        "contains job name" true
+        (try
+           ignore (Str.search_forward (Str.regexp_string "test-job") result 0);
+           true
+         with Not_found -> false);
+      let result_prompt =
+        Command_bridge.handle [ "cron"; "list"; "--prompt" ]
+      in
+      Alcotest.(check bool)
+        "prompt flag shows message" true
+        (try
+           ignore
+             (Str.search_forward
+                (Str.regexp_string "do the thing")
+                result_prompt 0);
+           true
+         with Not_found -> false);
+      Alcotest.(check bool)
+        "prompt flag shows PROMPT header" true
+        (try
+           ignore
+             (Str.search_forward (Str.regexp_string "PROMPT") result_prompt 0);
+           true
+         with Not_found -> false))
+
 let test_handle_cron_runs () =
   with_temp_home (fun _home ->
       let result = Command_bridge.handle [ "cron"; "runs" ] in
@@ -2545,6 +2601,12 @@ let suite =
       test_handle_not_implemented;
     Alcotest.test_case "handle cron" `Quick test_handle_cron;
     Alcotest.test_case "handle cron list" `Quick test_handle_cron_list;
+    Alcotest.test_case "handle cron list --prompt" `Quick
+      test_handle_cron_list_prompt;
+    Alcotest.test_case "handle cron list -p" `Quick
+      test_handle_cron_list_prompt_short;
+    Alcotest.test_case "handle cron list with jobs" `Quick
+      test_handle_cron_list_with_jobs;
     Alcotest.test_case "handle cron runs" `Quick test_handle_cron_runs;
     Alcotest.test_case "handle cron history missing job" `Quick
       test_handle_cron_history_missing_job;
