@@ -1,0 +1,14 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B426
+priority: high
+status: pending
+tags: []
+title: cant resume github workflow run session
+---
+
+[22:09:17.685] INFO  Resuming 1 pending agent sessions
+[22:09:17.685] WARN  Cannot resume session github:XertroV/clawq:workflow_run:23047553167: missing channel routing info (channel=<none> channel_id=<none>); session may predate channel tracking
+[22:09:17.697] INFO  Boot: pending-session resume summary pending=1 resumed=0 missing_channel=1 failed=0
