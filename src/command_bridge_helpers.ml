@@ -399,6 +399,8 @@ let cmd_debug_prompt args =
                 Some
                   (Agent.runtime_context_usage agent
                      ~compacted_before_turn:compacted);
+              tunnel_status_line =
+                Some ("- Tunnel: " ^ !Prompt_builder.tunnel_status_line_fn ());
               task_tree_summary;
             }
           ()

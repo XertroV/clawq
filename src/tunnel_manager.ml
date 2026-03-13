@@ -158,7 +158,9 @@ let start_cf_managed ~(config : Runtime_config.tunnel_config)
                     | _ -> None
                 in
                 match static with
-                | Some url -> on_url (Some url)
+                | Some url ->
+                    Logs.info (fun m -> m "[Tunnel] Public URL: %s" url);
+                    on_url (Some url)
                 | None ->
                     Logs.warn (fun m ->
                         m
@@ -305,6 +307,7 @@ let start_tunnel ~(config : Runtime_config.tunnel_config) ~port
   then begin
     let url = config.url in
     url_ref := Some url;
+    Logs.info (fun m -> m "[Tunnel] Public URL: %s" url);
     on_url (Some url);
     (* Wait for cancel *)
     let* () = cancel_waiter in

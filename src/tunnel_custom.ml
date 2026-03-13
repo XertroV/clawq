@@ -96,7 +96,8 @@ let start t =
     | Some url ->
         t.url <- Some url;
         t.status <- Running url;
-        Logs.info (fun m -> m "Custom tunnel started: %s" url)
+        Logs.info (fun m -> m "[Tunnel] Custom tunnel started");
+        Logs.info (fun m -> m "[Tunnel] Public URL: %s" url)
     | None ->
         t.url <- None;
         t.status <-

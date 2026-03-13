@@ -146,8 +146,8 @@ let start t =
           in
           t.url <- Some managed_url;
           t.status <- Running managed_url;
-          Logs.info (fun m ->
-              m "[Tunnel] Cloudflare named tunnel started: %s" managed_url)
+          Logs.info (fun m -> m "[Tunnel] Cloudflare named tunnel started");
+          Logs.info (fun m -> m "[Tunnel] Public URL: %s" managed_url)
         end
         else begin
           t.url <- None;
@@ -168,7 +168,8 @@ let start t =
           t.url <- Some url;
           t.status <- Running url;
           Logs.info (fun m ->
-              m "[Tunnel] Cloudflare tunnel using configured URL: %s" url);
+              m "[Tunnel] Cloudflare tunnel using configured URL");
+          Logs.info (fun m -> m "[Tunnel] Public URL: %s" url);
           Lwt.return_unit
       | None ->
           let stderr_file = Filename.temp_file "cloudflared" ".log" in
@@ -208,8 +209,8 @@ let start t =
           | Some url ->
               t.url <- Some url;
               t.status <- Running url;
-              Logs.info (fun m ->
-                  m "[Tunnel] Cloudflare tunnel started: %s" url)
+              Logs.info (fun m -> m "[Tunnel] Cloudflare tunnel started");
+              Logs.info (fun m -> m "[Tunnel] Public URL: %s" url)
           | None ->
               t.url <- None;
               t.status <- Error "Could not extract tunnel URL";

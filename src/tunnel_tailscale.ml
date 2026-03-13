@@ -121,7 +121,8 @@ let start t =
     | Some url ->
         t.url <- Some url;
         t.status <- Running url;
-        Logs.info (fun m -> m "Tailscale funnel started: %s" url)
+        Logs.info (fun m -> m "[Tunnel] Tailscale funnel started");
+        Logs.info (fun m -> m "[Tunnel] Public URL: %s" url)
     | None ->
         t.url <- None;
         t.status <- Error "Could not extract tailscale funnel URL";

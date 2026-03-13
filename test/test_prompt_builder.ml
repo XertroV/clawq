@@ -161,6 +161,8 @@ let test_runtime_context_includes_session_details () =
                     max_messages_per_session = 500;
                     compacted_before_turn = true;
                   };
+              tunnel_status_line =
+                Some "- Tunnel: https://my-tunnel.trycloudflare.com";
               task_tree_summary = None;
             }
           ()
@@ -189,7 +191,10 @@ let test_runtime_context_includes_session_details () =
             tokens > 96000; compacted before this turn: yes");
       Alcotest.(check bool)
         "includes no background tasks line" true
-        (contains runtime "- Background tasks: none running"))
+        (contains runtime "- Background tasks: none running");
+      Alcotest.(check bool)
+        "includes tunnel status" true
+        (contains runtime "- Tunnel: https://my-tunnel.trycloudflare.com"))
 
 let remove_file path = try Sys.remove path with _ -> ()
 
@@ -556,6 +561,7 @@ let test_background_tasks_appear_after_context_usage () =
                     max_messages_per_session = 500;
                     compacted_before_turn = false;
                   };
+              tunnel_status_line = None;
               task_tree_summary = Some "- [ ] do stuff";
             }
           ()

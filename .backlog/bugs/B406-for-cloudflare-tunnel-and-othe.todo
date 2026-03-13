@@ -1,10 +1,15 @@
 ---
+claimed_at: "2026-03-13T04:34:26Z"
+claimed_by: cli-user
+completed_at: "2026-03-13T04:39:54Z"
 complexity: medium
 depends_on: []
+duration_minutes: 5.4669527854333335
 estimate_hours: 1
 id: B406
 priority: high
-status: pending
+started_at: "2026-03-13T04:34:26Z"
+status: done
 tags: []
 title: For cloudflare tunnel (and other tunnels) once they are started we should print the public url to the log if we can
 ---

@@ -674,6 +674,17 @@ let run ~(config : Runtime_config.t) =
         | None -> ())
     | None -> Logs.info (fun m -> m "Tunnel stopped")
   in
+  (Prompt_builder.tunnel_status_line_fn :=
+     fun () ->
+       let cur = !current_config in
+       if not cur.tunnel.enabled then "not configured"
+       else
+         match !tunnel_url_ref with
+         | Some url -> url
+         | None -> (
+             match tunnel_manager.Tunnel_manager.state with
+             | Tunnel_manager.Active _ -> "up (unknown url)"
+             | Tunnel_manager.Idle -> "down"));
   Lwt.async (fun () ->
       Lwt.catch
         (fun () ->

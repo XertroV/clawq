@@ -1127,6 +1127,8 @@ let cmd_debug_context args =
           ~pid:(Daemon_status.read_current_daemon_pid ());
       background_tasks;
       context_usage = None;
+      tunnel_status_line =
+        Some ("- Tunnel: " ^ !Prompt_builder.tunnel_status_line_fn ());
       task_tree_summary;
     }
   in

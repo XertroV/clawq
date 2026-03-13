@@ -828,6 +828,8 @@ let runtime_context_details mgr ~agent ~key ~compacted_before_turn =
     background_tasks = active_background_task_summaries mgr;
     context_usage =
       Some (Agent.runtime_context_usage agent ~compacted_before_turn);
+    tunnel_status_line =
+      Some ("- Tunnel: " ^ !Prompt_builder.tunnel_status_line_fn ());
     task_tree_summary =
       (match mgr.db with
       | Some db ->
