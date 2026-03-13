@@ -611,31 +611,11 @@ let process_stream stream ~on_chunk =
     | Some (`Json json) -> handle_json json
     | None -> Lwt.return_unit
   in
-  let flush_buffer () =
-    let data = Buffer.contents buffer in
-    Buffer.clear buffer;
-    let lines = String.split_on_char '\n' data in
-    let rec loop = function
-      | [] -> Lwt.return_unit
-      | [ last ] ->
-          Buffer.add_string buffer last;
-          Lwt.return_unit
-      | line :: rest ->
-          let line =
-            if String.length line > 0 && line.[String.length line - 1] = '\r'
-            then String.sub line 0 (String.length line - 1)
-            else line
-          in
-          let* () = if line = "" then Lwt.return_unit else handle_line line in
-          loop rest
-    in
-    loop lines
-  in
   let* () =
     Lwt_stream.iter_s
       (fun chunk ->
         Buffer.add_string buffer chunk;
-        flush_buffer ())
+        Provider.process_sse_buffer ~buf:buffer ~process_line:handle_line ())
       stream
   in
   let* () =
@@ -651,24 +631,10 @@ let process_stream stream ~on_chunk =
   in
   let model = if !model_acc = "" then "openai-codex" else !model_acc in
   let text = Buffer.contents content_acc in
-  if tool_calls <> [] then
-    Lwt.return
-      (Provider.ToolCalls
-         {
-           calls = tool_calls;
-           model;
-           usage = !usage_acc;
-           provider_response_items_json = !response_items_json_acc;
-         })
-  else
-    Lwt.return
-      (Provider.Text
-         {
-           content = text;
-           model;
-           usage = !usage_acc;
-           provider_response_items_json = !response_items_json_acc;
-         })
+  Lwt.return
+    (Provider.make_stream_result ~tool_calls ~content:text ~model
+       ~usage:!usage_acc ~provider_response_items_json:!response_items_json_acc
+       ())
 
 let do_request ~provider_name ~provider ~model ~messages ?tools ~on_chunk () =
   let open Lwt.Syntax in

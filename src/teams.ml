@@ -2,24 +2,10 @@
 (* See src/TEAMS_API.md for protocol and auth details *)
 
 let max_message_chars = 28672
-
-(* LRU-500 dedup set for activity_id *)
-let dedup_set : (string, unit) Hashtbl.t = Hashtbl.create 512
-let dedup_queue : string Queue.t = Queue.create ()
-let dedup_max = 500
+let dedup = Channel_util.Lru_dedup.create 500
 
 let dedup_seen id =
-  if id = "" then false
-  else if Hashtbl.mem dedup_set id then true
-  else begin
-    if Queue.length dedup_queue >= dedup_max then begin
-      let oldest = Queue.pop dedup_queue in
-      Hashtbl.remove dedup_set oldest
-    end;
-    Queue.push id dedup_queue;
-    Hashtbl.add dedup_set id ();
-    false
-  end
+  if id = "" then false else Channel_util.Lru_dedup.check_and_mark dedup id
 
 (* Token cache for outbound OAuth bearer tokens *)
 let token_cache : (string * float) option ref = ref None

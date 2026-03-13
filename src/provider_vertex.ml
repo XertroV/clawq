@@ -100,7 +100,7 @@ let get_access_token (provider : Runtime_config.provider_config) =
 
 (* Reuse Gemini content format since Vertex uses identical structure *)
 let messages_to_contents = Provider_gemini.messages_to_gemini_contents
-let extract_system_prompt = Provider_gemini.extract_system_prompt
+let extract_system_prompt = Provider.extract_system_prompt
 let tools_to_vertex_json = Provider_gemini.tools_to_gemini_json
 
 let make_request_body ~config ~messages ~tools =
@@ -259,34 +259,11 @@ let complete_streaming ~(config : Runtime_config.t)
         end
         else Lwt.return_unit
       in
-      let process_buffer () =
-        let s = Buffer.contents buf in
-        Buffer.clear buf;
-        let lines = String.split_on_char '\n' s in
-        let rec process_lines = function
-          | [] -> Lwt.return_unit
-          | [ last ] ->
-              Buffer.add_string buf last;
-              Lwt.return_unit
-          | line :: rest ->
-              let line =
-                if
-                  String.length line > 0 && line.[String.length line - 1] = '\r'
-                then String.sub line 0 (String.length line - 1)
-                else line
-              in
-              let* () =
-                if line <> "" then process_line line else Lwt.return_unit
-              in
-              process_lines rest
-        in
-        process_lines lines
-      in
       let* () =
         Lwt_stream.iter_s
           (fun chunk ->
             Buffer.add_string buf chunk;
-            process_buffer ())
+            Provider.process_sse_buffer ~buf ~process_line ())
           stream
       in
       let remaining = Buffer.contents buf in
@@ -295,21 +272,6 @@ let complete_streaming ~(config : Runtime_config.t)
       in
       let content = Buffer.contents content_acc in
       let final_model = !resp_model in
-      if !tool_calls_acc <> [] then
-        Lwt.return
-          (Provider.ToolCalls
-             {
-               calls = !tool_calls_acc;
-               model = final_model;
-               usage = !usage_acc;
-               provider_response_items_json = None;
-             })
-      else
-        Lwt.return
-          (Provider.Text
-             {
-               content;
-               model = final_model;
-               usage = !usage_acc;
-               provider_response_items_json = None;
-             })
+      Lwt.return
+        (Provider.make_stream_result ~tool_calls:!tool_calls_acc ~content
+           ~model:final_model ~usage:!usage_acc ())

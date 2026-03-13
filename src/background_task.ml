@@ -739,19 +739,9 @@ let read_last_lines path ~lines =
 let permission_rejection_markers =
   [ "permission requested:"; "auto-rejecting"; "The user rejected permission" ]
 
-let contains_substring ~needle haystack =
-  let needle_len = String.length needle in
-  let hay_len = String.length haystack in
-  let rec loop i =
-    if i + needle_len > hay_len then false
-    else if String.sub haystack i needle_len = needle then true
-    else loop (i + 1)
-  in
-  needle_len > 0 && hay_len >= needle_len && loop 0
-
 let looks_like_permission_rejection output =
   List.exists
-    (fun needle -> contains_substring ~needle output)
+    (fun needle -> String_util.contains output needle)
     permission_rejection_markers
 
 let classify_task_result ~exit_code ~output =

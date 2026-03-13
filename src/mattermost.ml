@@ -6,7 +6,7 @@ let strip_trailing_slash s =
   else s
 
 let is_allowed ~(config : Runtime_config.mattermost_config) ~user_id =
-  match config.allow_users with [ "*" ] -> true | ids -> List.mem user_id ids
+  Channel_util.is_allowed ~allowlist:config.allow_users user_id
 
 let is_allowed_channel ~(config : Runtime_config.mattermost_config) ~channel_id
     =
@@ -95,13 +95,13 @@ let start ~(config : Runtime_config.t) ~(session_manager : Session.t) =
             ^ "/api/v4/websocket"
           else base ^ "/api/v4/websocket"
         in
-        let backoff = ref 1.0 in
+        let backoff = Channel_util.Backoff.create () in
         let rec connect_loop () =
           let result =
             Lwt.catch
               (fun () ->
                 let* ws = Ws_client.connect_wss ~uri:ws_url () in
-                backoff := 1.0;
+                Channel_util.Backoff.reset backoff;
                 (* Send auth challenge *)
                 let auth_msg =
                   `Assoc
@@ -197,9 +197,9 @@ let start ~(config : Runtime_config.t) ~(session_manager : Session.t) =
           (match outcome with
           | Error err ->
               Logs.err (fun m -> m "Mattermost: connection error: %s" err);
-              backoff := Float.min (!backoff *. 2.0) 60.0
+              Channel_util.Backoff.increase backoff
           | Ok () -> Logs.info (fun m -> m "Mattermost: connection closed"));
-          let delay = !backoff in
+          let delay = Channel_util.Backoff.current backoff in
           Logs.info (fun m -> m "Mattermost: reconnecting in %.0fs" delay);
           let* () = Lwt_unix.sleep delay in
           connect_loop ()

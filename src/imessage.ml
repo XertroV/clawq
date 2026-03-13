@@ -10,7 +10,7 @@ let state_path () = Dot_dir.sub "imessage_state.json"
 let is_macos () = Sys.file_exists osascript_path
 
 let is_allowed ~(config : Runtime_config.imessage_config) ~handle_id =
-  match config.allow_from with [ "*" ] -> true | ids -> List.mem handle_id ids
+  Channel_util.is_allowed ~allowlist:config.allow_from handle_id
 
 let load_last_seen_id () =
   let path = state_path () in

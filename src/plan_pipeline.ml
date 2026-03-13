@@ -351,19 +351,6 @@ let read_log_tail path max_chars =
         String.trim (really_input_string ic (len - start)))
   with _ -> ""
 
-let contains_substring haystack needle =
-  let hlen = String.length haystack in
-  let nlen = String.length needle in
-  if nlen = 0 then true
-  else if nlen > hlen then false
-  else
-    let rec loop i =
-      if i + nlen > hlen then false
-      else if String.sub haystack i nlen = needle then true
-      else loop (i + 1)
-    in
-    loop 0
-
 let save_plan_hash pipeline =
   let path = plan_file_path pipeline in
   if Sys.file_exists path then
@@ -382,15 +369,15 @@ let check_plan_stable ~pipeline ~bg_task =
       match bg_task.Background_task.log_path with
       | Some path when Sys.file_exists path ->
           let content = read_log_tail path 4096 in
-          contains_substring content "PLAN_STABLE"
-          || contains_substring content "CODE_STABLE"
+          String_util.contains content "PLAN_STABLE"
+          || String_util.contains content "CODE_STABLE"
       | _ -> false
     in
     let preview_marker =
       match bg_task.Background_task.result_preview with
       | Some p ->
-          contains_substring p "PLAN_STABLE"
-          || contains_substring p "CODE_STABLE"
+          String_util.contains p "PLAN_STABLE"
+          || String_util.contains p "CODE_STABLE"
       | None -> false
     in
     log_marker || preview_marker

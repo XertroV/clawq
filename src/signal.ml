@@ -1,47 +1,7 @@
 (* Signal channel integration via signal-cli JSON-RPC or REST API *)
 
-(* Back up from a byte offset to avoid splitting a multi-byte UTF-8 char.
-   UTF-8 continuation bytes have the form 10xxxxxx (0x80..0xBF). *)
-let utf8_safe_offset text pos =
-  let rec back i =
-    if i <= 0 then i
-    else
-      let b = Char.code text.[i] in
-      if b land 0xC0 = 0x80 then back (i - 1) else i
-  in
-  back pos
-
 let chunk_text ?(max_bytes = 1600) text =
-  let len = String.length text in
-  if max_bytes <= 0 then [ text ]
-  else if len <= max_bytes then [ text ]
-  else
-    let rec go off acc =
-      if off >= len then List.rev acc
-      else
-        let remaining = len - off in
-        if remaining <= max_bytes then
-          go len (String.sub text off remaining :: acc)
-        else
-          let limit = off + max_bytes in
-          (* Try to break at a newline *)
-          let break_at =
-            let rec find i =
-              if i <= off then limit
-              else if text.[i] = '\n' then i + 1
-              else find (i - 1)
-            in
-            find (limit - 1)
-          in
-          (* Avoid splitting a multi-byte UTF-8 character *)
-          let break_at = utf8_safe_offset text break_at in
-          let break_at =
-            if break_at <= off then off + max_bytes else break_at
-          in
-          let chunk_len = break_at - off in
-          go break_at (String.sub text off chunk_len :: acc)
-    in
-    go 0 []
+  Channel_util.chunk_text ~utf8_safe:true ~max_len:max_bytes text
 
 let send_jsonrpc ~(cfg : Runtime_config.signal_config) ~recipient ~group_id_opt
     ~text =
@@ -207,7 +167,7 @@ let receive_loop_jsonrpc ~(cfg : Runtime_config.signal_config) ~on_message () =
   let open Lwt.Syntax in
   let uri = cfg.base_url ^ "/api/v1/events" in
   Logs.info (fun m -> m "Signal: starting JSON-RPC SSE loop at %s" uri);
-  let backoff = ref 5.0 in
+  let backoff = Channel_util.Backoff.create ~initial:5.0 ~max_val:120.0 () in
   let rec loop () =
     let result =
       Lwt.catch
@@ -242,7 +202,7 @@ let receive_loop_jsonrpc ~(cfg : Runtime_config.signal_config) ~on_message () =
                 body
             in
             let* () = flush_sse_buffer ~on_event:process_line line_buffer in
-            backoff := 5.0;
+            Channel_util.Backoff.reset backoff;
             Lwt.return `Ok
           end
           else begin
@@ -256,9 +216,9 @@ let receive_loop_jsonrpc ~(cfg : Runtime_config.signal_config) ~on_message () =
     in
     let* outcome = result in
     (match outcome with
-    | `Error -> backoff := Float.min (!backoff *. 2.0) 120.0
+    | `Error -> Channel_util.Backoff.increase backoff
     | `Ok -> ());
-    let* () = Lwt_unix.sleep !backoff in
+    let* () = Lwt_unix.sleep (Channel_util.Backoff.current backoff) in
     loop ()
   in
   loop ()
@@ -268,7 +228,7 @@ let receive_loop_rest ~(cfg : Runtime_config.signal_config) ~on_message () =
   let open Lwt.Syntax in
   let uri = cfg.base_url ^ "/v1/receive/" ^ cfg.account in
   Logs.info (fun m -> m "Signal: starting REST polling loop at %s" uri);
-  let backoff = ref 5.0 in
+  let backoff = Channel_util.Backoff.create ~initial:5.0 ~max_val:120.0 () in
   let rec loop () =
     let result =
       Lwt.catch
@@ -289,7 +249,7 @@ let receive_loop_rest ~(cfg : Runtime_config.signal_config) ~on_message () =
                   end)
                 messages
             in
-            backoff := 5.0;
+            Channel_util.Backoff.reset backoff;
             Lwt.return `Ok
           end
           else begin
@@ -303,9 +263,9 @@ let receive_loop_rest ~(cfg : Runtime_config.signal_config) ~on_message () =
     in
     let* outcome = result in
     (match outcome with
-    | `Error -> backoff := Float.min (!backoff *. 2.0) 120.0
+    | `Error -> Channel_util.Backoff.increase backoff
     | `Ok -> ());
-    let* () = Lwt_unix.sleep !backoff in
+    let* () = Lwt_unix.sleep (Channel_util.Backoff.current backoff) in
     loop ()
   in
   loop ()

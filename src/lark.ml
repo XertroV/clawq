@@ -2,24 +2,10 @@
 
 let feishu_base = "https://open.feishu.cn/open-apis"
 let lark_base = "https://open.larksuite.com/open-apis"
-
-(* LRU-500 dedup set for event_id *)
-let dedup_set : (string, unit) Hashtbl.t = Hashtbl.create 512
-let dedup_queue : string Queue.t = Queue.create ()
-let dedup_max = 500
+let dedup = Channel_util.Lru_dedup.create 500
 
 let dedup_seen id =
-  if id = "" then false
-  else if Hashtbl.mem dedup_set id then true
-  else begin
-    if Queue.length dedup_queue >= dedup_max then begin
-      let oldest = Queue.pop dedup_queue in
-      Hashtbl.remove dedup_set oldest
-    end;
-    Queue.push id dedup_queue;
-    Hashtbl.add dedup_set id ();
-    false
-  end
+  if id = "" then false else Channel_util.Lru_dedup.check_and_mark dedup id
 
 (* Strip @_user_N mention placeholders from text *)
 let strip_mention_placeholders text =
@@ -96,7 +82,7 @@ let get_tenant_access_token ~(config : Runtime_config.lark_config) =
       end
 
 let is_allowed ~(config : Runtime_config.lark_config) ~user_id =
-  match config.allow_users with [ "*" ] -> true | ids -> List.mem user_id ids
+  Channel_util.is_allowed ~allowlist:config.allow_users user_id
 
 (* Verify Lark webhook signature: HMAC-SHA256 of timestamp + nonce + body *)
 let verify_lark_signature ~verification_token ~timestamp ~nonce ~body ~signature

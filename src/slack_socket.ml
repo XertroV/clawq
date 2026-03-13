@@ -96,7 +96,7 @@ let start ~config ~session_manager ~(event_limiter : Rate_limiter.t) =
   | Some sc ->
       Logs.info (fun m -> m "Slack Socket Mode starting");
       let open Lwt.Syntax in
-      let backoff = ref 1.0 in
+      let backoff = Channel_util.Backoff.create ~max_val:30.0 () in
       let rec loop () =
         let result =
           Lwt.catch
@@ -104,7 +104,7 @@ let start ~config ~session_manager ~(event_limiter : Rate_limiter.t) =
               let* () =
                 run_connection ~config:sc ~session_manager ~event_limiter
               in
-              backoff := 1.0;
+              Channel_util.Backoff.reset backoff;
               Lwt.return (Ok ()))
             (fun exn -> Lwt.return (Error (Printexc.to_string exn)))
         in
@@ -117,11 +117,10 @@ let start ~config ~session_manager ~(event_limiter : Rate_limiter.t) =
             loop ()
         | Error err ->
             Logs.err (fun m -> m "Slack Socket Mode error: %s" err);
-            let delay = !backoff in
-            backoff := Float.min (!backoff *. 2.0) 30.0;
             Logs.info (fun m ->
-                m "Slack Socket Mode: reconnecting in %.0fs" delay);
-            let* () = Lwt_unix.sleep delay in
+                m "Slack Socket Mode: reconnecting in %.0fs"
+                  (Channel_util.Backoff.current backoff));
+            let* () = Channel_util.Backoff.sleep_and_increase backoff in
             loop ()
       in
       loop ()

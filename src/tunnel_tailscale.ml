@@ -19,14 +19,6 @@ let name = "tailscale"
 let create ~config ~port =
   { process = None; status = Stopped; url = None; port; config }
 
-let contains_substr s sub =
-  let rec loop pos =
-    if pos + String.length sub > String.length s then false
-    else if String.sub s pos (String.length sub) = sub then true
-    else loop (pos + 1)
-  in
-  loop 0
-
 let extract_url line =
   let len = String.length line in
   let rec find_start i =
@@ -45,8 +37,8 @@ let extract_url line =
       let url_lower = String.lowercase_ascii url in
       if
         String.length url > 20
-        && (contains_substr url_lower ".ts.net"
-           || contains_substr url_lower "tailscale")
+        && (String_util.contains url_lower ".ts.net"
+           || String_util.contains url_lower "tailscale")
       then Some url
       else find_start (i + 1)
     else find_start (i + 1)

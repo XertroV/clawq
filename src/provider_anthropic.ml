@@ -114,15 +114,7 @@ let tools_to_anthropic_json tools =
       if converted = [] then None else Some (`List converted)
   | Some _ -> None
 
-let extract_system_prompt messages =
-  (* Pull system role messages out; Anthropic takes system as a top-level param *)
-  List.fold_left
-    (fun acc (m : Provider.message) ->
-      if m.role = "system" then
-        let sc = Provider.sanitize_utf8 m.content in
-        if acc = "" then sc else acc ^ "\n" ^ sc
-      else acc)
-    "" messages
+let extract_system_prompt = Provider.extract_system_prompt
 
 let parse_anthropic_response body model =
   try
@@ -464,33 +456,11 @@ let complete_streaming ~(config : Runtime_config.t)
       end
       else Lwt.return_unit
     in
-    let process_buffer () =
-      let s = Buffer.contents buf in
-      Buffer.clear buf;
-      let lines = String.split_on_char '\n' s in
-      let rec process_lines = function
-        | [] -> Lwt.return_unit
-        | [ last ] ->
-            Buffer.add_string buf last;
-            Lwt.return_unit
-        | line :: rest ->
-            let line =
-              if String.length line > 0 && line.[String.length line - 1] = '\r'
-              then String.sub line 0 (String.length line - 1)
-              else line
-            in
-            let* () =
-              if line <> "" then process_line line else Lwt.return_unit
-            in
-            process_lines rest
-      in
-      process_lines lines
-    in
     let* () =
       Lwt_stream.iter_s
         (fun chunk ->
           Buffer.add_string buf chunk;
-          process_buffer ())
+          Provider.process_sse_buffer ~buf ~process_line ())
         stream
     in
     let remaining = Buffer.contents buf in
@@ -509,21 +479,6 @@ let complete_streaming ~(config : Runtime_config.t)
           })
         !tool_calls_acc
     in
-    if tool_calls <> [] then
-      Lwt.return
-        (Provider.ToolCalls
-           {
-             calls = tool_calls;
-             model = final_model;
-             usage = !usage_acc;
-             provider_response_items_json = None;
-           })
-    else
-      Lwt.return
-        (Provider.Text
-           {
-             content;
-             model = final_model;
-             usage = !usage_acc;
-             provider_response_items_json = None;
-           })
+    Lwt.return
+      (Provider.make_stream_result ~tool_calls ~content ~model:final_model
+         ~usage:!usage_acc ())

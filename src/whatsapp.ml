@@ -1,24 +1,9 @@
 let api_base = "https://graph.facebook.com/v18.0"
-
-(* LRU-500 dedup set: tracks recently processed message IDs *)
-let dedup_set : (string, unit) Hashtbl.t = Hashtbl.create 512
-let dedup_queue : string Queue.t = Queue.create ()
-let dedup_max = 500
-
-let dedup_seen id =
-  if Hashtbl.mem dedup_set id then true
-  else begin
-    if Queue.length dedup_queue >= dedup_max then begin
-      let oldest = Queue.pop dedup_queue in
-      Hashtbl.remove dedup_set oldest
-    end;
-    Queue.push id dedup_queue;
-    Hashtbl.add dedup_set id ();
-    false
-  end
+let dedup = Channel_util.Lru_dedup.create 500
+let dedup_seen id = Channel_util.Lru_dedup.check_and_mark dedup id
 
 let is_allowed ~(config : Runtime_config.whatsapp_config) ~from =
-  match config.allow_from with [ "*" ] -> true | ids -> List.mem from ids
+  Channel_util.is_allowed ~allowlist:config.allow_from from
 
 let strip_leading_plus s =
   if String.length s > 0 && s.[0] = '+' then String.sub s 1 (String.length s - 1)

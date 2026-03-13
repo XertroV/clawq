@@ -6,7 +6,7 @@ let stream_register_url =
 let open_api_base = "https://api.dingtalk.com/v1.0"
 
 let is_allowed ~(config : Runtime_config.dingtalk_config) ~sender_id =
-  match config.allow_from with [ "*" ] -> true | ids -> List.mem sender_id ids
+  Channel_util.is_allowed ~allowlist:config.allow_from sender_id
 
 (* Compute HMAC-SHA256 signature of timestamp with app_secret *)
 let compute_auth_sig ~app_secret ~timestamp =
@@ -120,7 +120,7 @@ let start ~(config : Runtime_config.t) ~(session_manager : Session.t) =
       else begin
         Logs.info (fun m -> m "DingTalk channel starting (stream mode)");
         let open Lwt.Syntax in
-        let backoff = ref 1.0 in
+        let backoff = Channel_util.Backoff.create () in
         let rec connect_loop () =
           (* Step 1: Register via HTTP POST to get the WSS endpoint and ticket *)
           let reg_body =
@@ -156,7 +156,7 @@ let start ~(config : Runtime_config.t) ~(session_manager : Session.t) =
                   let ticket = reg_json |> member "ticket" |> to_string in
                   let ws_url = endpoint ^ "?ticket=" ^ Uri.pct_encode ticket in
                   let* ws = Ws_client.connect_wss ~uri:ws_url () in
-                  backoff := 1.0;
+                  Channel_util.Backoff.reset backoff;
                   Ws_client.on_message ws (fun msg ->
                       Lwt.catch
                         (fun () ->
@@ -269,9 +269,9 @@ let start ~(config : Runtime_config.t) ~(session_manager : Session.t) =
           (match outcome with
           | Error err ->
               Logs.err (fun m -> m "DingTalk: connection error: %s" err);
-              backoff := Float.min (!backoff *. 2.0) 60.0
+              Channel_util.Backoff.increase backoff
           | Ok () -> Logs.info (fun m -> m "DingTalk: connection closed"));
-          let delay = !backoff in
+          let delay = Channel_util.Backoff.current backoff in
           Logs.info (fun m -> m "DingTalk: reconnecting in %.0fs" delay);
           let* () = Lwt_unix.sleep delay in
           connect_loop ()

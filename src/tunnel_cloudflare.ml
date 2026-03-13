@@ -19,14 +19,6 @@ let name = "cloudflare"
 let create ~config ~port =
   { process = None; status = Stopped; url = None; port; config }
 
-let contains_substr s sub =
-  let rec loop pos =
-    if pos + String.length sub > String.length s then false
-    else if String.sub s pos (String.length sub) = sub then true
-    else loop (pos + 1)
-  in
-  loop 0
-
 (* Extract trycloudflare.com URL from cloudflared output *)
 let extract_url line =
   (* Look for https://*.trycloudflare.com pattern *)
@@ -48,7 +40,7 @@ let extract_url line =
         (* Check for trycloudflare.com *)
         let url_lower = String.lowercase_ascii url in
         if String.length url_lower >= 24 then begin
-          if contains_substr url_lower "trycloudflare.com" then Some url
+          if String_util.contains url_lower "trycloudflare.com" then Some url
           else find_start (i + 1)
         end
         else find_start (i + 1)
@@ -58,7 +50,7 @@ let extract_url line =
   find_start 0
 
 let count_registered_connections line =
-  if contains_substr line "Connection registered connIndex=" then 1 else 0
+  if String_util.contains line "Connection registered connIndex=" then 1 else 0
 
 let static_url cfg =
   if String.trim cfg.Runtime_config.url <> "" then Some cfg.url

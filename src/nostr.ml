@@ -1,27 +1,13 @@
 (* Nostr channel via NIP-17 gift-wrap events using the nak CLI tool *)
 
-(* LRU-1000 dedup by inner rumor ID (kind:14 id for NIP-17, event id for NIP-04) *)
-let dedup_set : (string, unit) Hashtbl.t = Hashtbl.create 1024
-let dedup_queue : string Queue.t = Queue.create ()
-let dedup_max = 1000
-
-let dedup_seen id =
-  if Hashtbl.mem dedup_set id then true
-  else begin
-    if Queue.length dedup_queue >= dedup_max then begin
-      let oldest = Queue.pop dedup_queue in
-      Hashtbl.remove dedup_set oldest
-    end;
-    Queue.push id dedup_queue;
-    Hashtbl.add dedup_set id ();
-    false
-  end
+let dedup = Channel_util.Lru_dedup.create 1000
+let dedup_seen id = Channel_util.Lru_dedup.check_and_mark dedup id
 
 (* Per-sender protocol tracking: "nip17" or "nip04". *)
 let sender_protocols : (string, string) Hashtbl.t = Hashtbl.create 16
 
 let is_allowed ~(config : Runtime_config.nostr_config) ~pubkey =
-  match config.allow_from with [ "*" ] -> true | ids -> List.mem pubkey ids
+  Channel_util.is_allowed ~allowlist:config.allow_from pubkey
 
 (* Send a reply using the appropriate protocol for the recipient.
    NIP-17: nak gift wrap --sec <sec> -p <recipient> <relays...>
@@ -386,7 +372,7 @@ let start ~(config : Runtime_config.t) ~(session_manager : Session.t) =
           List.map
             (fun relay ->
               let open Lwt.Syntax in
-              let backoff = ref 1.0 in
+              let backoff = Channel_util.Backoff.create () in
               let rec reconnect () =
                 let t0 = Unix.gettimeofday () in
                 let* () =
@@ -394,13 +380,12 @@ let start ~(config : Runtime_config.t) ~(session_manager : Session.t) =
                     ~session_mgr:session_manager
                 in
                 let elapsed = Unix.gettimeofday () -. t0 in
-                if elapsed > 30.0 then backoff := 1.0;
-                let delay = !backoff in
-                backoff := Float.min (!backoff *. 2.0) 60.0;
+                if elapsed > 30.0 then Channel_util.Backoff.reset backoff;
                 Logs.info (fun m ->
                     m "Nostr: relay %s disconnected, reconnecting in %.0fs"
-                      relay delay);
-                let* () = Lwt_unix.sleep delay in
+                      relay
+                      (Channel_util.Backoff.current backoff));
+                let* () = Channel_util.Backoff.sleep_and_increase backoff in
                 reconnect ()
               in
               reconnect ())

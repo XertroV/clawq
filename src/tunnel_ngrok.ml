@@ -19,21 +19,13 @@ let name = "ngrok"
 let create ~config ~port =
   { process = None; status = Stopped; url = None; port; config }
 
-let contains_substr s sub =
-  let rec loop pos =
-    if pos + String.length sub > String.length s then false
-    else if String.sub s pos (String.length sub) = sub then true
-    else loop (pos + 1)
-  in
-  loop 0
-
 let extract_url_from_json_line line =
   (* ngrok logs JSON like: {"msg":"started tunnel","url":"https://..."} *)
   try
     let json = Yojson.Safe.from_string (String.trim line) in
     let open Yojson.Safe.Util in
     let msg = try json |> member "msg" |> to_string with _ -> "" in
-    if msg = "started tunnel" || contains_substr msg "started tunnel" then
+    if msg = "started tunnel" || String_util.contains msg "started tunnel" then
       try Some (json |> member "url" |> to_string) with _ -> None
     else None
   with _ -> None

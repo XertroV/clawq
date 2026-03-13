@@ -30,7 +30,7 @@ let set_thinking_level ~(session_mgr : Session.t) ~chat_id ~user_id level =
             chat_id user_id err);
       "Failed to update thinking level: " ^ err
 
-let redact_token = Tui_input.redact
+let redact_token = String_util.redact_token
 
 type update = {
   update_id : int;
@@ -621,30 +621,7 @@ let telegram_delegate_prompt ~user_prompt =
 
 (* Split text into chunks no larger than max_len, preferring newline boundaries *)
 let chunk_text ?(max_len = telegram_max_message_len) text =
-  let len = String.length text in
-  if len <= max_len then [ text ]
-  else
-    let rec go off acc =
-      if off >= len then List.rev acc
-      else
-        let remaining = len - off in
-        if remaining <= max_len then
-          go len (String.sub text off remaining :: acc)
-        else
-          (* Try to find a newline to break on *)
-          let limit = off + max_len in
-          let break_at =
-            let rec find i =
-              if i <= off then limit
-              else if text.[i] = '\n' then i + 1
-              else find (i - 1)
-            in
-            find (limit - 1)
-          in
-          let chunk_len = break_at - off in
-          go break_at (String.sub text off chunk_len :: acc)
-    in
-    go 0 []
+  Channel_util.chunk_text ~max_len text
 
 let send_chat_action ~bot_token ~chat_id ~action =
   let open Lwt.Syntax in

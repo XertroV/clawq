@@ -63,6 +63,7 @@
   landlock
   rich_message
   channel
+  channel_util
   slash_commands
   totp
   cost_tracker

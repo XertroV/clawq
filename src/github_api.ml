@@ -5,9 +5,7 @@ let github_api_base () =
   | Some base when String.trim base <> "" -> String.trim base
   | _ -> default_github_api_base
 
-let redact_token token =
-  let len = String.length token in
-  if len <= 8 then "..." else String.sub token 0 8 ^ "..."
+let redact_token = String_util.redact_token
 
 let auth_headers (auth : Runtime_config.github_auth) =
   match auth with

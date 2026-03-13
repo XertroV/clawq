@@ -7,9 +7,7 @@ let current_thinking_message current =
 
 let is_allowed_allowlist ~kind ~id allowlist =
   let coq_allowed = Clawq_core.is_allowed0 id allowlist in
-  let ocaml_allowed =
-    match allowlist with [ "*" ] -> true | ids -> List.mem id ids
-  in
+  let ocaml_allowed = Channel_util.is_allowed ~allowlist id in
   if coq_allowed <> ocaml_allowed then
     Logs.warn (fun m ->
         m "Discord allowlist drift for %s=%s: Coq=%b OCaml=%b" kind id
@@ -69,18 +67,7 @@ let session_key ~channel_id ~author_id =
   Printf.sprintf "discord:%s:%s" channel_id author_id
 
 let chunk_text ?(max_len = 2000) text =
-  let len = String.length text in
-  if len <= max_len then [ text ]
-  else
-    let rec go off acc =
-      if off >= len then List.rev acc
-      else
-        let remaining = len - off in
-        let chunk_len = min max_len remaining in
-        let chunk = String.sub text off chunk_len in
-        go (off + chunk_len) (chunk :: acc)
-    in
-    go 0 []
+  Channel_util.chunk_text ~prefer_newline_break:false ~max_len text
 
 (* Tracks message IDs whose reactions should be kept in sync per session key *)
 let reactions : string Reaction_tracker.t = Reaction_tracker.create ()
@@ -1141,7 +1128,7 @@ let start ~config ~session_manager ~db ~(message_limiter : Rate_limiter.t) =
             Logs.info (fun m ->
                 m "Discord: loaded persisted resume state (seq=%d)" seq)
         | None -> ());
-        let backoff = ref 1.0 in
+        let backoff = Channel_util.Backoff.create () in
         let rec connect_loop () =
           let close_p, close_u = Lwt.wait () in
           let on_dispatch event_name d =
@@ -1170,7 +1157,7 @@ let start ~config ~session_manager ~db ~(message_limiter : Rate_limiter.t) =
                     ?resume_seq:!resume_seq ?resume_url:!resume_url ~on_dispatch
                     ~on_close ()
                 in
-                backoff := 1.0;
+                Channel_util.Backoff.reset backoff;
                 let* code = close_p in
                 resume_session_id := Discord_gateway.session_id gw;
                 resume_seq := Discord_gateway.last_seq gw;
@@ -1184,10 +1171,10 @@ let start ~config ~session_manager ~db ~(message_limiter : Rate_limiter.t) =
           match outcome with
           | Error err ->
               Logs.err (fun m -> m "Discord: gateway connection error: %s" err);
-              let delay = !backoff in
-              backoff := Float.min (!backoff *. 2.0) 60.0;
-              Logs.info (fun m -> m "Discord: reconnecting in %.0fs" delay);
-              let* () = Lwt_unix.sleep delay in
+              Logs.info (fun m ->
+                  m "Discord: reconnecting in %.0fs"
+                    (Channel_util.Backoff.current backoff));
+              let* () = Channel_util.Backoff.sleep_and_increase backoff in
               connect_loop ()
           | Ok code ->
               let code_int = match code with Some c -> c | None -> 0 in
@@ -1202,14 +1189,13 @@ let start ~config ~session_manager ~db ~(message_limiter : Rate_limiter.t) =
                 Logs.info (fun m ->
                     m "Discord: connection closed (code=%d), reconnecting"
                       code_int);
-                let delay =
-                  if !resume_session_id <> None then 1.0 else !backoff
+                let* () =
+                  if !resume_session_id <> None then begin
+                    Channel_util.Backoff.reset backoff;
+                    Lwt_unix.sleep 1.0
+                  end
+                  else Channel_util.Backoff.sleep_and_increase backoff
                 in
-                backoff :=
-                  if !resume_session_id = None then
-                    Float.min (!backoff *. 2.0) 60.0
-                  else 1.0;
-                let* () = Lwt_unix.sleep delay in
                 connect_loop ()
               end
         in

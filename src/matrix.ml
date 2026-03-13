@@ -1,29 +1,7 @@
 (* Matrix channel integration via Client-Server API v3 *)
 
 let chunk_text ?(max_bytes = 4000) text =
-  let len = String.length text in
-  if len <= max_bytes then [ text ]
-  else
-    let rec go off acc =
-      if off >= len then List.rev acc
-      else
-        let remaining = len - off in
-        if remaining <= max_bytes then
-          go len (String.sub text off remaining :: acc)
-        else
-          let limit = off + max_bytes in
-          let break_at =
-            let rec find i =
-              if i <= off then limit
-              else if text.[i] = '\n' then i + 1
-              else find (i - 1)
-            in
-            find (limit - 1)
-          in
-          let chunk_len = break_at - off in
-          go break_at (String.sub text off chunk_len :: acc)
-    in
-    go 0 []
+  Channel_util.chunk_text ~max_len:max_bytes text
 
 let txn_counter = ref 0
 
@@ -149,7 +127,7 @@ let start ~(config : Runtime_config.t) ~(session_manager : Session.t) =
               cfg.homeserver_url);
         let open Lwt.Syntax in
         let since = ref (load_sync_token ~cfg) in
-        let backoff = ref 1.0 in
+        let backoff = Channel_util.Backoff.create ~max_val:120.0 () in
         let sync_timeout_ms = 30000 in
         let sync_request_timeout_s = 40.0 in
         let rec loop () =
@@ -221,7 +199,7 @@ let start ~(config : Runtime_config.t) ~(session_manager : Session.t) =
                                    err))
                       events
                   in
-                  backoff := 1.0;
+                  Channel_util.Backoff.reset backoff;
                   Lwt.return `Ok
                 end
                 else begin
@@ -235,9 +213,9 @@ let start ~(config : Runtime_config.t) ~(session_manager : Session.t) =
           in
           let* outcome = result in
           (match outcome with
-          | `Error -> backoff := Float.min (!backoff *. 2.0) 120.0
+          | `Error -> Channel_util.Backoff.increase backoff
           | `Ok -> ());
-          let* () = Lwt_unix.sleep !backoff in
+          let* () = Lwt_unix.sleep (Channel_util.Backoff.current backoff) in
           loop ()
         in
         loop ()

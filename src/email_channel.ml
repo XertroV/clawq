@@ -1,21 +1,8 @@
 (* Email channel integration: IMAP receive + SMTP send *)
 
-(* Seen message ID dedup: circular buffer using Hashtbl + Queue *)
-let seen_ids : (string, unit) Hashtbl.t = Hashtbl.create 1024
-let seen_ids_queue : string Queue.t = Queue.create ()
-let seen_ids_max = 1000
-
-let mark_seen id =
-  if not (Hashtbl.mem seen_ids id) then begin
-    if Queue.length seen_ids_queue >= seen_ids_max then begin
-      let old = Queue.pop seen_ids_queue in
-      Hashtbl.remove seen_ids old
-    end;
-    Hashtbl.replace seen_ids id ();
-    Queue.push id seen_ids_queue
-  end
-
-let is_seen id = Hashtbl.mem seen_ids id
+let dedup = Channel_util.Lru_dedup.create 1000
+let mark_seen id = Channel_util.Lru_dedup.mark dedup id
+let is_seen id = Channel_util.Lru_dedup.mem dedup id
 
 (* RFC 2047 decode: =?charset?B?base64?= or =?charset?Q?qp?= *)
 let decode_rfc2047_word word =

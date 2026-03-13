@@ -5,22 +5,16 @@
 let test_ts_contains_substr_found () =
   Alcotest.(check bool)
     "found" true
-    (Tunnel_tailscale.contains_substr "hello world" "world")
+    (String_util.contains "hello world" "world")
 
 let test_ts_contains_substr_not_found () =
-  Alcotest.(check bool)
-    "not found" false
-    (Tunnel_tailscale.contains_substr "hello" "xyz")
+  Alcotest.(check bool) "not found" false (String_util.contains "hello" "xyz")
 
 let test_ts_contains_substr_empty () =
-  Alcotest.(check bool)
-    "empty sub" true
-    (Tunnel_tailscale.contains_substr "hello" "")
+  Alcotest.(check bool) "empty sub" true (String_util.contains "hello" "")
 
 let test_ts_contains_substr_same () =
-  Alcotest.(check bool)
-    "same" true
-    (Tunnel_tailscale.contains_substr "hello" "hello")
+  Alcotest.(check bool) "same" true (String_util.contains "hello" "hello")
 
 let test_ts_extract_url_with_tsnet () =
   let line = "Available on the internet: https://myhost.tail12345.ts.net/" in
@@ -31,7 +25,7 @@ let test_ts_extract_url_with_tsnet () =
         (String.sub url 0 8 = "https://");
       Alcotest.(check bool)
         "contains ts.net" true
-        (Tunnel_tailscale.contains_substr url ".ts.net")
+        (String_util.contains url ".ts.net")
   | None -> Alcotest.fail "expected Some"
 
 let test_ts_extract_url_no_url () =
@@ -70,7 +64,7 @@ let test_ts_get_pid_none () =
 let test_ngrok_contains_substr () =
   Alcotest.(check bool)
     "found" true
-    (Tunnel_ngrok.contains_substr "hello world" "world")
+    (String_util.contains "hello world" "world")
 
 let test_ngrok_extract_url_valid () =
   let line = {|{"msg":"started tunnel","url":"https://abc123.ngrok.io"}|} in

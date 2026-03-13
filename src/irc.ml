@@ -1,29 +1,7 @@
 (* IRC channel integration with TLS, SASL, and reconnect *)
 
 let chunk_text ?(max_bytes = 450) text =
-  let len = String.length text in
-  if len <= max_bytes then [ text ]
-  else
-    let rec go off acc =
-      if off >= len then List.rev acc
-      else
-        let remaining = len - off in
-        if remaining <= max_bytes then
-          go len (String.sub text off remaining :: acc)
-        else
-          let limit = off + max_bytes in
-          let break_at =
-            let rec find i =
-              if i <= off then limit
-              else if text.[i] = '\n' then i + 1
-              else find (i - 1)
-            in
-            find (limit - 1)
-          in
-          let chunk_len = break_at - off in
-          go break_at (String.sub text off chunk_len :: acc)
-    in
-    go 0 []
+  Channel_util.chunk_text ~max_len:max_bytes text
 
 (* Parse an IRC line: ":prefix CMD param1 param2 :trailing" *)
 type irc_msg = {
@@ -339,7 +317,9 @@ let start ~(config : Runtime_config.t) ~(session_manager : Session.t) =
             m "IRC: starting channel (host=%s port=%d tls=%b)" cfg.host cfg.port
               cfg.tls);
         let open Lwt.Syntax in
-        let backoff = ref 5.0 in
+        let backoff =
+          Channel_util.Backoff.create ~initial:5.0 ~max_val:120.0 ()
+        in
         let rec connect_loop () =
           let result =
             Lwt.catch
@@ -348,18 +328,20 @@ let start ~(config : Runtime_config.t) ~(session_manager : Session.t) =
                   if cfg.tls then connect_tls ~host:cfg.host ~port:cfg.port
                   else connect_tcp ~host:cfg.host ~port:cfg.port
                 in
-                backoff := 5.0;
+                Channel_util.Backoff.reset backoff;
                 let* () = run_session ~cfg ~conn ~session_manager in
                 Lwt.return_unit)
               (fun exn ->
                 Logs.err (fun m ->
                     m "IRC: connection error: %s" (Printexc.to_string exn));
-                backoff := Float.min (!backoff *. 2.0) 120.0;
+                Channel_util.Backoff.increase backoff;
                 Lwt.return_unit)
           in
           let* () = result in
-          Logs.info (fun m -> m "IRC: reconnecting in %.0fs" !backoff);
-          let* () = Lwt_unix.sleep !backoff in
+          Logs.info (fun m ->
+              m "IRC: reconnecting in %.0fs"
+                (Channel_util.Backoff.current backoff));
+          let* () = Lwt_unix.sleep (Channel_util.Backoff.current backoff) in
           connect_loop ()
         in
         connect_loop ()

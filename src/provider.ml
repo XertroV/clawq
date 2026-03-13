@@ -84,6 +84,12 @@ let make_tool_search_result ~tool_call_id ~tools_json =
     provider_response_items_json = None;
   }
 
+let make_stream_result ~tool_calls ~content ~model ~usage
+    ?(provider_response_items_json = None) () =
+  if tool_calls <> [] then
+    ToolCalls { calls = tool_calls; model; usage; provider_response_items_json }
+  else Text { content; model; usage; provider_response_items_json }
+
 let sanitize_utf8 s =
   let len = String.length s in
   let buf = Buffer.create len in
@@ -129,6 +135,15 @@ let sanitize_utf8 s =
           incr i)
   done;
   Buffer.contents buf
+
+let extract_system_prompt messages =
+  List.fold_left
+    (fun acc (m : message) ->
+      if m.role = "system" then
+        let sc = sanitize_utf8 m.content in
+        if acc = "" then sc else acc ^ "\n" ^ sc
+      else acc)
+    "" messages
 
 let content_parts_to_openai_json (parts : content_part list) =
   `List
@@ -839,6 +854,27 @@ let parse_sse_line line =
     else try Some (`Json (Yojson.Safe.from_string data)) with _ -> None
   else None
 
+let process_sse_buffer ~buf ~process_line () =
+  let open Lwt.Syntax in
+  let s = Buffer.contents buf in
+  Buffer.clear buf;
+  let lines = String.split_on_char '\n' s in
+  let rec go = function
+    | [] -> Lwt.return_unit
+    | [ last ] ->
+        Buffer.add_string buf last;
+        Lwt.return_unit
+    | line :: rest ->
+        let line =
+          if String.length line > 0 && line.[String.length line - 1] = '\r' then
+            String.sub line 0 (String.length line - 1)
+          else line
+        in
+        let* () = if line <> "" then process_line line else Lwt.return_unit in
+        go rest
+  in
+  go lines
+
 let process_sse_stream ?(thinking_style = NoThinking) stream ~on_chunk =
   let open Lwt.Syntax in
   let buf = Buffer.create 256 in
@@ -977,34 +1013,14 @@ let process_sse_stream ?(thinking_style = NoThinking) stream ~on_chunk =
             else Lwt.return_unit)
     | None -> Lwt.return_unit
   in
-  let process_buffer () =
-    let s = Buffer.contents buf in
-    Buffer.clear buf;
-    let lines = String.split_on_char '\n' s in
-    let rec process_lines = function
-      | [] -> Lwt.return_unit
-      | [ last ] ->
-          (* last element may be incomplete - put back in buffer *)
-          Buffer.add_string buf last;
-          Lwt.return_unit
-      | line :: rest ->
-          let line =
-            if String.length line > 0 && line.[String.length line - 1] = '\r'
-            then String.sub line 0 (String.length line - 1)
-            else line
-          in
-          let* () = if line <> "" then process_line line else Lwt.return_unit in
-          process_lines rest
-    in
-    process_lines lines
-  in
+  let pb () = process_sse_buffer ~buf ~process_line () in
   let* () =
     Lwt.finalize
       (fun () ->
         Lwt_stream.iter_s
           (fun chunk ->
             Buffer.add_string buf chunk;
-            process_buffer ())
+            pb ())
           stream)
       (fun () ->
         let open Lwt.Syntax in
@@ -1027,24 +1043,8 @@ let process_sse_stream ?(thinking_style = NoThinking) stream ~on_chunk =
         { id; function_name = name; arguments = Buffer.contents args_buf })
       !tool_calls_acc
   in
-  if tool_calls <> [] then
-    Lwt.return
-      (ToolCalls
-         {
-           calls = tool_calls;
-           model;
-           usage = !usage_acc;
-           provider_response_items_json = None;
-         })
-  else
-    Lwt.return
-      (Text
-         {
-           content;
-           model;
-           usage = !usage_acc;
-           provider_response_items_json = None;
-         })
+  Lwt.return
+    (make_stream_result ~tool_calls ~content ~model ~usage:!usage_acc ())
 
 let complete_stream ~(config : Runtime_config.t) ~messages ?tools ?session_key
     ?preferred_provider ?quota_states ~on_chunk () =

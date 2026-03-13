@@ -34,3 +34,8 @@ let unescape_newlines s =
     end
   done;
   Buffer.contents buf
+
+let redact_token s =
+  let len = String.length s in
+  if len <= 8 then String.make len '*'
+  else String.sub s 0 4 ^ "..." ^ String.sub s (len - 4) 4

@@ -1,12 +1,10 @@
 (* OneBot v11 channel (QQ and compatible bots) *)
 
 let is_allowed_user ~(config : Runtime_config.onebot_config) ~user_id =
-  match config.allow_from with [ "*" ] -> true | ids -> List.mem user_id ids
+  Channel_util.is_allowed ~allowlist:config.allow_from user_id
 
 let is_allowed_group ~(config : Runtime_config.onebot_config) ~group_id =
-  match config.allow_groups with
-  | [ "*" ] -> true
-  | ids -> List.mem group_id ids
+  Channel_util.is_allowed ~allowlist:config.allow_groups group_id
 
 (* Split text into chunks of at most max_bytes bytes, on UTF-8 boundaries *)
 let split_utf8 ~max_bytes text =
@@ -158,7 +156,7 @@ let start ~(config : Runtime_config.t) ~(session_manager : Session.t) =
         Logs.info (fun m ->
             m "OneBot channel starting (ws_url=%s)" ob_config.ws_url);
         let open Lwt.Syntax in
-        let backoff = ref 1.0 in
+        let backoff = Channel_util.Backoff.create () in
         let rec connect_loop () =
           let result =
             Lwt.catch
@@ -171,7 +169,7 @@ let start ~(config : Runtime_config.t) ~(session_manager : Session.t) =
                   if is_tls then Ws_client.connect_wss ~uri:ob_config.ws_url ()
                   else Ws_client.connect_ws ~uri:ob_config.ws_url ()
                 in
-                backoff := 1.0;
+                Channel_util.Backoff.reset backoff;
                 (* Send auth if token provided *)
                 let* () =
                   match ob_config.access_token with
@@ -280,9 +278,9 @@ let start ~(config : Runtime_config.t) ~(session_manager : Session.t) =
           (match outcome with
           | Error err ->
               Logs.err (fun m -> m "OneBot: connection error: %s" err);
-              backoff := Float.min (!backoff *. 2.0) 60.0
+              Channel_util.Backoff.increase backoff
           | Ok () -> Logs.info (fun m -> m "OneBot: connection closed"));
-          let delay = !backoff in
+          let delay = Channel_util.Backoff.current backoff in
           Logs.info (fun m -> m "OneBot: reconnecting in %.0fs" delay);
           let* () = Lwt_unix.sleep delay in
           connect_loop ()

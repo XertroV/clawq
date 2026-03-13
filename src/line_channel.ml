@@ -3,7 +3,7 @@
 let api_base = "https://api.line.me/v2/bot/message"
 
 let is_allowed ~(config : Runtime_config.line_config) ~user_id =
-  match config.allow_from with [ "*" ] -> true | ids -> List.mem user_id ids
+  Channel_util.is_allowed ~allowlist:config.allow_from user_id
 
 (* Verify X-Line-Signature: HMAC-SHA256 of body, base64-encoded *)
 let verify_signature ~channel_secret ~body ~signature =
