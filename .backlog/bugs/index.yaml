@@ -406,3 +406,4 @@ bugs:
     - file: B407-clawq-channel-shows-discord-an.todo
     - file: B408-clawq-config-does-not-set-conf.todo
     - file: B409-ensure-that-teams-connector-is.todo
+    - file: B410-clawq-channel-test-teams-does.todo

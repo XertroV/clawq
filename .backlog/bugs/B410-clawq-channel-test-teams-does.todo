@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B410
+priority: high
+status: pending
+tags: []
+title: '`clawq channel test teams` does not work but was suggested somewhere'
+---
+
+`clawq channel test teams` does not work but was suggested somewhere
