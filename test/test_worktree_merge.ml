@@ -25,7 +25,8 @@ let configure_git_identity repo =
   in
   match Sys.command cmd with
   | 0 -> ()
-  | code -> Alcotest.failf "git identity config failed for %s (exit %d)" repo code
+  | code ->
+      Alcotest.failf "git identity config failed for %s (exit %d)" repo code
 
 let git_cmd repo args =
   let cmd =

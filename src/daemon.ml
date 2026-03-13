@@ -819,11 +819,12 @@ let run ~(config : Runtime_config.t) =
             m "Gateway server error: %s" (Printexc.to_string exn));
         Lwt.return_unit)
   in
+  let telegram_stop_waiter, telegram_stop_resolver = Lwt.wait () in
   let telegram =
     Lwt.catch
       (fun () ->
         Telegram.start_polling ~config ~session_manager ~run_update_command
-          ~chat_limiter ())
+          ~chat_limiter ~stop:telegram_stop_waiter ())
       (fun exn ->
         Logs.err (fun m ->
             m "Telegram polling error: %s" (Printexc.to_string exn));
@@ -1464,9 +1465,17 @@ let run ~(config : Runtime_config.t) =
     match picked_intent with
     | Shutdown ->
         Lwt.wakeup_later stop_gateway ();
+        if Lwt.is_sleeping telegram_stop_waiter then
+          Lwt.wakeup_later telegram_stop_resolver ();
         let* () = gateway in
+        let* () = telegram in
         Lwt.return Shutdown
     | Restart ->
+        (* Stop Telegram poller early so the in-flight long-poll request is
+           cancelled before we exec the new process. This prevents the new
+           process from getting a 409 Conflict from the Telegram API. *)
+        if Lwt.is_sleeping telegram_stop_waiter then
+          Lwt.wakeup_later telegram_stop_resolver ();
         let* () =
           Session.interrupt_resumable_channel_sessions session_manager
         in
@@ -1490,7 +1499,9 @@ let run ~(config : Runtime_config.t) =
         Logs.info (fun m -> m "Draining complete, stopping gateway for restart");
         Lwt.wakeup_later stop_gateway ();
         let* () = gateway in
-        Logs.info (fun m -> m "Gateway stopped; proceeding with restart exec");
+        let* () = telegram in
+        Logs.info (fun m ->
+            m "Gateway and Telegram stopped; proceeding with restart exec");
         Lwt.return Restart
   in
   write_runtime_state

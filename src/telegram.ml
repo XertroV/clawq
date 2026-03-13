@@ -1255,7 +1255,7 @@ let buffer_or_dispatch_update ~bot_token
           ?run_update_command ?chat_limiter pending.generation
 
 let poll_account ~bot_token ~(account : Runtime_config.telegram_account) ~name
-    ~(session_mgr : Session.t) ?run_update_command ?chat_limiter () =
+    ~(session_mgr : Session.t) ?run_update_command ?chat_limiter ~stop () =
   let open Lwt.Syntax in
   Logs.info (fun m -> m "Starting Telegram polling for account '%s'" name);
   let* () =
@@ -1271,225 +1271,269 @@ let poll_account ~bot_token ~(account : Runtime_config.telegram_account) ~name
   let poll_count = ref 0 in
   let conflict_backoff = ref 5.0 in
   let rec poll () =
-    incr poll_count;
-    if !poll_count <= 3 then
+    if not (Lwt.is_sleeping stop) then begin
       Logs.info (fun m ->
-          m "Telegram poll #%d for account '%s'" !poll_count name)
-    else if !poll_count = 4 then
-      Logs.info (fun m ->
-          m "Telegram polling stable, suppressing routine poll logs for '%s'"
-            name);
-    let poll_start = Unix.gettimeofday () in
-    let* poll_result =
-      Lwt.catch
-        (fun () -> get_updates ~bot_token ~offset:!offset ~timeout:30)
-        (fun exn ->
-          Logs.err (fun m ->
-              m "Telegram poll error for '%s': %s" name (Printexc.to_string exn));
-          let* () = Lwt_unix.sleep 5.0 in
-          Lwt.return (Updates (0, [])))
-    in
-    let* max_uid, updates =
-      match poll_result with
-      | Updates (max_uid, updates) ->
-          conflict_backoff := 5.0;
-          Lwt.return (max_uid, updates)
-      | Poll_error Conflict_webhook ->
-          Logs.warn (fun m ->
-              m
-                "Telegram: clearing webhook for '%s' before resuming \
-                 long-polling"
-                name);
-          let* () = delete_webhook ~bot_token in
-          let* () = Lwt_unix.sleep 2.0 in
-          Lwt.return (0, [])
-      | Poll_error Conflict_duplicate_poller ->
-          Logs.warn (fun m ->
-              m "Telegram: another poller is active for '%s', backing off %.0fs"
-                name !conflict_backoff);
-          let* () = Lwt_unix.sleep !conflict_backoff in
-          conflict_backoff := Float.min (!conflict_backoff *. 2.0) 60.0;
-          Lwt.return (0, [])
-      | Poll_error (Other_error _) ->
-          let* () = Lwt_unix.sleep 5.0 in
-          Lwt.return (0, [])
-    in
-    if max_uid + 1 > !offset then offset := max_uid + 1;
-    let update_count = List.length updates in
-    List.iter
-      (fun update ->
-        offset := update.update_id + 1;
-        if update.message_id > 0 then begin
-          let cur =
-            Option.value ~default:0
-              (Hashtbl.find_opt latest_chat_msg_id update.chat_id)
-          in
-          if update.message_id > cur then
-            Hashtbl.replace latest_chat_msg_id update.chat_id update.message_id
-        end;
-        if should_process_update update then
-          buffer_or_dispatch_update ~bot_token ~account ~session_mgr
-            ?run_update_command ?chat_limiter update
-        else
-          Logs.info (fun m ->
-              m "Telegram: ignoring duplicate update update_id=%d chat_id=%s"
-                update.update_id update.chat_id))
-      updates;
-    (if !poll_count <= 3 || !poll_count mod 100 = 0 then
-       let poll_elapsed_ms = (Unix.gettimeofday () -. poll_start) *. 1000.0 in
-       Logs.info (fun m ->
-           m "Telegram poll #%d for '%s': %.0fms elapsed, %d update(s) received"
-             !poll_count name poll_elapsed_ms update_count));
-    let* () =
-      let rec drain_callbacks () =
-        if Queue.is_empty pending_callbacks then Lwt.return_unit
-        else
-          let cb = Queue.pop pending_callbacks in
-          if cb.cb_bot_token <> bot_token then begin
-            (* Re-queue callbacks for other accounts *)
-            Queue.push cb pending_callbacks;
-            Lwt.return_unit
-          end
-          else
-            let* () =
-              Lwt.catch
-                (fun () ->
-                  match cb.data with
-                  | data
-                    when String.starts_with ~prefix:details_callback_prefix data
-                    ->
-                      let text =
-                        match
-                          take_tool_result_details ~chat_id:cb.cb_chat_id
-                            ~user_id:cb.cb_user_id data
-                        with
-                        | Some details when String.trim details <> "" -> details
-                        | _ -> "No details available."
-                      in
-                      let* () =
-                        answer_callback_query ~bot_token
-                          ~callback_query_id:cb.callback_query_id ()
-                      in
-                      send_message ~disable_notification:true ~bot_token
-                        ~chat_id:cb.cb_chat_id ~text ()
-                  | data -> (
-                      match Hashtbl.find_opt callback_routing data with
-                      | Some (session_key, label, _created) ->
-                          Hashtbl.remove callback_routing data;
-                          let* () =
-                            answer_callback_query ~bot_token
-                              ~callback_query_id:cb.callback_query_id
-                              ~text:(Printf.sprintf "Selected: %s" label)
-                              ()
-                          in
-                          Lwt.async (fun () ->
-                              Lwt.catch
-                                (fun () ->
-                                  let message =
-                                    Printf.sprintf "[Button: %s]" label
-                                  in
-                                  let* response =
-                                    Session.turn session_mgr ~key:session_key
-                                      ~message ~channel:"telegram"
-                                      ~channel_id:cb.cb_chat_id ()
-                                  in
-                                  if
-                                    not
-                                      (Session.is_queued_message_response
-                                         response)
-                                  then
-                                    send_chunked ~disable_notification:false
-                                      ~parse_mode:"MarkdownV2" ~bot_token
-                                      ~chat_id:cb.cb_chat_id
-                                      ~text:
-                                        (Telegram_format.markdown_to_mdv2
-                                           response)
-                                      ()
-                                  else Lwt.return_unit)
-                                (fun exn ->
-                                  Logs.err (fun m ->
-                                      m
-                                        "Telegram: button callback routing \
-                                         error: %s"
-                                        (Printexc.to_string exn));
-                                  Lwt.return_unit));
-                          Lwt.return_unit
-                      | None ->
-                          answer_callback_query ~bot_token
-                            ~callback_query_id:cb.callback_query_id
-                            ~text:"Unknown action" ()))
-                (fun exn ->
-                  Logs.err (fun m ->
-                      m "Telegram: callback handling error: %s"
-                        (Printexc.to_string exn));
-                  Lwt.return_unit)
-            in
-            drain_callbacks ()
+          m "Telegram: poller for '%s' stopping (stop signalled)" name);
+      Lwt.return_unit
+    end
+    else begin
+      incr poll_count;
+      if !poll_count <= 3 then
+        Logs.info (fun m ->
+            m "Telegram poll #%d for account '%s'" !poll_count name)
+      else if !poll_count = 4 then
+        Logs.info (fun m ->
+            m "Telegram polling stable, suppressing routine poll logs for '%s'"
+              name);
+      let poll_start = Unix.gettimeofday () in
+      let* poll_result_opt =
+        Lwt.pick
+          [
+            (let* r =
+               Lwt.catch
+                 (fun () -> get_updates ~bot_token ~offset:!offset ~timeout:30)
+                 (fun exn ->
+                   Logs.err (fun m ->
+                       m "Telegram poll error for '%s': %s" name
+                         (Printexc.to_string exn));
+                   let* () = Lwt_unix.sleep 5.0 in
+                   Lwt.return (Updates (0, [])))
+             in
+             Lwt.return (Some r));
+            (let* () = Lwt.protected stop in
+             Lwt.return None);
+          ]
       in
-      drain_callbacks ()
-    in
-    (* Drain poll answers *)
-    let* () =
-      let rec drain_poll_answers () =
-        if Queue.is_empty pending_poll_answers then Lwt.return_unit
-        else
-          let pa = Queue.pop pending_poll_answers in
-          let* () =
-            match Hashtbl.find_opt poll_routing pa.pa_poll_id with
-            | Some (session_key, chat_id, poll_bot_token, options, _created_at)
-              ->
-                let selected =
-                  List.filter_map
-                    (fun idx ->
-                      if idx >= 0 && idx < List.length options then
-                        Some (List.nth options idx)
-                      else None)
-                    pa.pa_option_ids
+      match poll_result_opt with
+      | None ->
+          Logs.info (fun m ->
+              m "Telegram: poller for '%s' stopping (stop signalled mid-poll)"
+                name);
+          Lwt.return_unit
+      | Some poll_result ->
+          let* max_uid, updates =
+            match poll_result with
+            | Updates (max_uid, updates) ->
+                conflict_backoff := 5.0;
+                Lwt.return (max_uid, updates)
+            | Poll_error Conflict_webhook ->
+                Logs.warn (fun m ->
+                    m
+                      "Telegram: clearing webhook for '%s' before resuming \
+                       long-polling"
+                      name);
+                let* () = delete_webhook ~bot_token in
+                let* () = Lwt_unix.sleep 2.0 in
+                Lwt.return (0, [])
+            | Poll_error Conflict_duplicate_poller ->
+                Logs.warn (fun m ->
+                    m
+                      "Telegram: another poller is active for '%s', backing \
+                       off %.0fs"
+                      name !conflict_backoff);
+                let* () = Lwt_unix.sleep !conflict_backoff in
+                conflict_backoff := Float.min (!conflict_backoff *. 2.0) 60.0;
+                Lwt.return (0, [])
+            | Poll_error (Other_error _) ->
+                let* () = Lwt_unix.sleep 5.0 in
+                Lwt.return (0, [])
+          in
+          if max_uid + 1 > !offset then offset := max_uid + 1;
+          let update_count = List.length updates in
+          List.iter
+            (fun update ->
+              offset := update.update_id + 1;
+              if update.message_id > 0 then begin
+                let cur =
+                  Option.value ~default:0
+                    (Hashtbl.find_opt latest_chat_msg_id update.chat_id)
                 in
-                if selected = [] then Lwt.return_unit
-                else begin
-                  Lwt.async (fun () ->
-                      Lwt.catch
-                        (fun () ->
-                          let message =
-                            Printf.sprintf "[Poll vote: %s]"
-                              (String.concat ", " selected)
-                          in
-                          let* response =
-                            Session.turn session_mgr ~key:session_key ~message
-                              ~channel:"telegram" ~channel_id:chat_id ()
-                          in
-                          if not (Session.is_queued_message_response response)
-                          then
-                            send_chunked ~disable_notification:false
-                              ~bot_token:poll_bot_token ~chat_id ~text:response
-                              ()
-                          else Lwt.return_unit)
-                        (fun exn ->
-                          Logs.err (fun m ->
-                              m "Telegram: poll answer routing error: %s"
-                                (Printexc.to_string exn));
-                          Lwt.return_unit));
+                if update.message_id > cur then
+                  Hashtbl.replace latest_chat_msg_id update.chat_id
+                    update.message_id
+              end;
+              if should_process_update update then
+                buffer_or_dispatch_update ~bot_token ~account ~session_mgr
+                  ?run_update_command ?chat_limiter update
+              else
+                Logs.info (fun m ->
+                    m
+                      "Telegram: ignoring duplicate update update_id=%d \
+                       chat_id=%s"
+                      update.update_id update.chat_id))
+            updates;
+          (if !poll_count <= 3 || !poll_count mod 100 = 0 then
+             let poll_elapsed_ms =
+               (Unix.gettimeofday () -. poll_start) *. 1000.0
+             in
+             Logs.info (fun m ->
+                 m
+                   "Telegram poll #%d for '%s': %.0fms elapsed, %d update(s) \
+                    received"
+                   !poll_count name poll_elapsed_ms update_count));
+          let* () =
+            let rec drain_callbacks () =
+              if Queue.is_empty pending_callbacks then Lwt.return_unit
+              else
+                let cb = Queue.pop pending_callbacks in
+                if cb.cb_bot_token <> bot_token then begin
+                  (* Re-queue callbacks for other accounts *)
+                  Queue.push cb pending_callbacks;
                   Lwt.return_unit
                 end
-            | None ->
-                Logs.debug (fun m ->
-                    m "Telegram: ignoring poll_answer for unknown poll_id=%s"
-                      pa.pa_poll_id);
-                Lwt.return_unit
+                else
+                  let* () =
+                    Lwt.catch
+                      (fun () ->
+                        match cb.data with
+                        | data
+                          when String.starts_with
+                                 ~prefix:details_callback_prefix data ->
+                            let text =
+                              match
+                                take_tool_result_details ~chat_id:cb.cb_chat_id
+                                  ~user_id:cb.cb_user_id data
+                              with
+                              | Some details when String.trim details <> "" ->
+                                  details
+                              | _ -> "No details available."
+                            in
+                            let* () =
+                              answer_callback_query ~bot_token
+                                ~callback_query_id:cb.callback_query_id ()
+                            in
+                            send_message ~disable_notification:true ~bot_token
+                              ~chat_id:cb.cb_chat_id ~text ()
+                        | data -> (
+                            match Hashtbl.find_opt callback_routing data with
+                            | Some (session_key, label, _created) ->
+                                Hashtbl.remove callback_routing data;
+                                let* () =
+                                  answer_callback_query ~bot_token
+                                    ~callback_query_id:cb.callback_query_id
+                                    ~text:(Printf.sprintf "Selected: %s" label)
+                                    ()
+                                in
+                                Lwt.async (fun () ->
+                                    Lwt.catch
+                                      (fun () ->
+                                        let message =
+                                          Printf.sprintf "[Button: %s]" label
+                                        in
+                                        let* response =
+                                          Session.turn session_mgr
+                                            ~key:session_key ~message
+                                            ~channel:"telegram"
+                                            ~channel_id:cb.cb_chat_id ()
+                                        in
+                                        if
+                                          not
+                                            (Session.is_queued_message_response
+                                               response)
+                                        then
+                                          send_chunked
+                                            ~disable_notification:false
+                                            ~parse_mode:"MarkdownV2" ~bot_token
+                                            ~chat_id:cb.cb_chat_id
+                                            ~text:
+                                              (Telegram_format.markdown_to_mdv2
+                                                 response)
+                                            ()
+                                        else Lwt.return_unit)
+                                      (fun exn ->
+                                        Logs.err (fun m ->
+                                            m
+                                              "Telegram: button callback \
+                                               routing error: %s"
+                                              (Printexc.to_string exn));
+                                        Lwt.return_unit));
+                                Lwt.return_unit
+                            | None ->
+                                answer_callback_query ~bot_token
+                                  ~callback_query_id:cb.callback_query_id
+                                  ~text:"Unknown action" ()))
+                      (fun exn ->
+                        Logs.err (fun m ->
+                            m "Telegram: callback handling error: %s"
+                              (Printexc.to_string exn));
+                        Lwt.return_unit)
+                  in
+                  drain_callbacks ()
+            in
+            drain_callbacks ()
           in
-          drain_poll_answers ()
-      in
-      drain_poll_answers ()
-    in
-    (* Periodic cleanup of stale routing entries *)
-    if !poll_count mod 100 = 0 then cleanup_stale_routing ();
-    poll ()
+          (* Drain poll answers *)
+          let* () =
+            let rec drain_poll_answers () =
+              if Queue.is_empty pending_poll_answers then Lwt.return_unit
+              else
+                let pa = Queue.pop pending_poll_answers in
+                let* () =
+                  match Hashtbl.find_opt poll_routing pa.pa_poll_id with
+                  | Some
+                      ( session_key,
+                        chat_id,
+                        poll_bot_token,
+                        options,
+                        _created_at ) ->
+                      let selected =
+                        List.filter_map
+                          (fun idx ->
+                            if idx >= 0 && idx < List.length options then
+                              Some (List.nth options idx)
+                            else None)
+                          pa.pa_option_ids
+                      in
+                      if selected = [] then Lwt.return_unit
+                      else begin
+                        Lwt.async (fun () ->
+                            Lwt.catch
+                              (fun () ->
+                                let message =
+                                  Printf.sprintf "[Poll vote: %s]"
+                                    (String.concat ", " selected)
+                                in
+                                let* response =
+                                  Session.turn session_mgr ~key:session_key
+                                    ~message ~channel:"telegram"
+                                    ~channel_id:chat_id ()
+                                in
+                                if
+                                  not
+                                    (Session.is_queued_message_response response)
+                                then
+                                  send_chunked ~disable_notification:false
+                                    ~bot_token:poll_bot_token ~chat_id
+                                    ~text:response ()
+                                else Lwt.return_unit)
+                              (fun exn ->
+                                Logs.err (fun m ->
+                                    m "Telegram: poll answer routing error: %s"
+                                      (Printexc.to_string exn));
+                                Lwt.return_unit));
+                        Lwt.return_unit
+                      end
+                  | None ->
+                      Logs.debug (fun m ->
+                          m
+                            "Telegram: ignoring poll_answer for unknown \
+                             poll_id=%s"
+                            pa.pa_poll_id);
+                      Lwt.return_unit
+                in
+                drain_poll_answers ()
+            in
+            drain_poll_answers ()
+          in
+          (* Periodic cleanup of stale routing entries *)
+          if !poll_count mod 100 = 0 then cleanup_stale_routing ();
+          poll ()
+    end
   in
   poll ()
 
 let start_polling ~(config : Runtime_config.t) ~(session_manager : Session.t)
-    ?run_update_command ?chat_limiter () =
+    ?run_update_command ?chat_limiter ~stop () =
   match config.channels.telegram with
   | None ->
       Logs.info (fun m -> m "No Telegram config found, skipping polling");
@@ -1514,7 +1558,7 @@ let start_polling ~(config : Runtime_config.t) ~(session_manager : Session.t)
                   Some
                     (poll_account ~bot_token:account.bot_token ~account ~name
                        ~session_mgr:session_manager ?run_update_command
-                       ?chat_limiter ()))
+                       ?chat_limiter ~stop ()))
               accounts
           in
           match poll_loops with
