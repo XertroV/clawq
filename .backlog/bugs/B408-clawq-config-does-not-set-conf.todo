@@ -1,0 +1,33 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B408
+priority: high
+status: pending
+tags: []
+title: '`clawq config` does not set config variables or doesnt have an up to date schema or cant parse the keys right or something'
+---
+
+Example:
+
+~/src/clawq master ≡ ⇡ 8m 29s
+❯ ./clawq config get summarizer
+{"summarizer_enabled":true,"summarizer_model":"groq:openai/gpt-oss-120b","threshold_chars":2500,"p1_max_chars":200000,"p2_max_chars":50000,"context_window_messages":4,"excluded_tools":["tool_search","unsummarize","summarize_thread","thread_summary"],"max_age_days":30,"enabled":true,"model":"groq:openai/gpt-oss-120b","escalation_model":"groq:moonshotai/kimi-k2-instruct-0905","envelope_template":null}⏎                                             
+~/src/clawq master ≡ ⇡
+❯ ./clawq config get summarizer.threshold_chars
+2500⏎                                                                                                           
+~/src/clawq master ≡ ⇡
+❯ ./clawq config set summarizer.threshold_chars
+Usage: clawq config <subcommand>       
+
+Subcommands:
+  wizard           Interactive configuration wizard
+  set KEY VALUE    Set a config value by dot-path
+  set KEY          Prompt for value (secret keys only, hidden input)
+  get KEY          Get a config value by dot-path (secrets redacted)
+  show [SECTION]   Display current config (secrets redacted)
+  search QUERY     Search config keys matching QUERY⏎                                                           
+~/src/clawq master ≡ ⇡
+❯ ./clawq config set summarizer.threshold_chars 4000
+Error: unknown config key summarizer.threshold_chars. Valid keys at this level: workspace, default_temperature, default_provider, providers, model_context_limits, agent_defaults, prompt, channels, gateway, runtime, tunnel, memory, security, stt, mcp, resilience, voice, web_channel, telemetry, agent_bindings, heartbeat, notify, web_search, zai_mcp⏎
