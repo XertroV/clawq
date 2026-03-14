@@ -1,0 +1,14 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B435
+priority: high
+status: pending
+tags: []
+title: /costs and /usage both send plaintext tables to Teams even though it supports markdown tables. We should preferentially send markdown tables, and only send plaintext tables when markdown is not supported.
+---
+
+/costs and /usage both send plaintext tables to Teams even though it supports markdown tables. We should preferentially send markdown tables, and only send plaintext tables when markdown is not supported.
+Also we had a regression in the teams handling of /help -- it was sending a table a few commits ago (which we should have fixed a rendering bug involving '|' with) but now it does not. 
+Check git history to try and recover what was lost, updating the impl as needed.
