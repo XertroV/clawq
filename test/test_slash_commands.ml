@@ -1,5 +1,6 @@
 let result_to_string = function
   | Slash_commands.Reply s -> "Reply(" ^ s ^ ")"
+  | Slash_commands.Help -> "Help"
   | Slash_commands.Reset -> "Reset"
   | Slash_commands.Thinking Slash_commands.ShowThinking -> "Thinking(Show)"
   | Slash_commands.Thinking (Slash_commands.SetThinking None) ->
@@ -53,6 +54,7 @@ let result_to_string = function
 let result_eq a b =
   match (a, b) with
   | Slash_commands.Reply a, Slash_commands.Reply b -> a = b
+  | Slash_commands.Help, Slash_commands.Help -> true
   | Slash_commands.Reset, Slash_commands.Reset -> true
   | ( Slash_commands.Thinking Slash_commands.ShowThinking,
       Slash_commands.Thinking Slash_commands.ShowThinking ) ->
@@ -90,17 +92,40 @@ let test_start () =
 
 let test_help () =
   match Slash_commands.handle "/help" with
-  | Slash_commands.Reply s ->
+  | Slash_commands.Help ->
+      let s = Slash_commands.format_help ~connector:Format_adapter.Plain in
       let contains =
         try
           ignore (Str.search_forward (Str.regexp_string "/help") s 0);
           true
         with Not_found -> false
       in
-      Alcotest.(check bool) "contains /help" true contains
+      Alcotest.(check bool) "contains /help" true contains;
+      let contains_markdown_table =
+        try
+          ignore
+            (Str.search_forward
+               (Str.regexp_string "| Command | Description |")
+               s 0);
+          true
+        with Not_found -> false
+      in
+      let contains_plain_start =
+        try
+          ignore
+            (Str.search_forward
+               (Str.regexp_string "Available commands:\n\n  /start")
+               s 0);
+          true
+        with Not_found -> false
+      in
+      Alcotest.(check bool)
+        "does not use markdown table" false contains_markdown_table;
+      Alcotest.(check bool)
+        "contains plain start line" true contains_plain_start
   | other ->
       Alcotest.fail
-        (Printf.sprintf "expected Reply, got %s" (result_to_string other))
+        (Printf.sprintf "expected Help, got %s" (result_to_string other))
 
 let test_new () =
   Alcotest.check result_testable "reset" Slash_commands.Reset
@@ -240,10 +265,10 @@ let test_commands_list () =
 
 let test_case_insensitive () =
   (match Slash_commands.handle "/HELP" with
-  | Slash_commands.Reply _ -> ()
+  | Slash_commands.Help -> ()
   | other ->
       Alcotest.fail
-        (Printf.sprintf "expected Reply for /HELP, got %s"
+        (Printf.sprintf "expected Help for /HELP, got %s"
            (result_to_string other)));
   Alcotest.check result_testable "reset from /NEW" Slash_commands.Reset
     (Slash_commands.handle "/NEW")
@@ -254,11 +279,28 @@ let test_bare_slash () =
 
 let test_command_with_args () =
   match Slash_commands.handle "/help extra args here" with
-  | Slash_commands.Reply _ -> ()
+  | Slash_commands.Help -> ()
   | other ->
       Alcotest.fail
-        (Printf.sprintf "expected Reply for /help with args, got %s"
+        (Printf.sprintf "expected Help for /help with args, got %s"
            (result_to_string other))
+
+let test_format_help_telegram () =
+  let output =
+    Slash_commands.format_help ~connector:Format_adapter.Telegram_html
+  in
+  let contains needle =
+    try
+      ignore (Str.search_forward (Str.regexp_string needle) output 0);
+      true
+    with Not_found -> false
+  in
+  Alcotest.(check bool)
+    "telegram uses bold heading" true
+    (contains "<b>Available commands:</b>");
+  Alcotest.(check bool)
+    "telegram uses code formatting" true
+    (contains "<code>/start</code>")
 
 let test_whitespace_only () =
   Alcotest.check result_testable "whitespace only" Slash_commands.NotACommand
@@ -707,7 +749,9 @@ let test_format_tools_plain () =
       };
     ]
   in
-  let output = Slash_commands.format_tools_plain tools [] in
+  let output =
+    Slash_commands.format_tools ~connector:Format_adapter.Plain tools []
+  in
   Alcotest.(check bool) "contains count" true (contains_str output "(2)");
   Alcotest.(check bool)
     "contains file_read" true
@@ -759,7 +803,9 @@ let test_format_tools_telegram () =
       };
     ]
   in
-  let output = Slash_commands.format_tools_telegram tools [] in
+  let output =
+    Slash_commands.format_tools ~connector:Format_adapter.Telegram_html tools []
+  in
   Alcotest.(check bool) "contains <b>" true (contains_str output "<b>");
   Alcotest.(check bool)
     "contains blockquote" true
@@ -787,7 +833,9 @@ let make_dummy_tool name description =
   }
 
 let test_format_tools_telegram_empty () =
-  let output = Slash_commands.format_tools_telegram [] [] in
+  let output =
+    Slash_commands.format_tools ~connector:Format_adapter.Telegram_html [] []
+  in
   Alcotest.(check bool)
     "contains Tools (0)" true
     (contains_str output "Tools (0)");
@@ -798,7 +846,10 @@ let test_format_tools_telegram_empty () =
 let test_format_tools_telegram_with_skills () =
   let tools = [ make_dummy_tool "file_read" "Read a file" ] in
   let skills = [ make_dummy_tool "my_script" "Run my script" ] in
-  let output = Slash_commands.format_tools_telegram tools skills in
+  let output =
+    Slash_commands.format_tools ~connector:Format_adapter.Telegram_html tools
+      skills
+  in
   Alcotest.(check bool)
     "has Tools section" true
     (contains_str output "Tools (1)");
@@ -836,7 +887,9 @@ let test_format_tools_telegram_with_skills () =
 let test_format_tools_plain_with_skills () =
   let tools = [ make_dummy_tool "file_read" "Read a file" ] in
   let skills = [ make_dummy_tool "my_script" "Run my script" ] in
-  let output = Slash_commands.format_tools_plain tools skills in
+  let output =
+    Slash_commands.format_tools ~connector:Format_adapter.Plain tools skills
+  in
   Alcotest.(check bool)
     "has Tools section" true
     (contains_str output "Tools (1)");
@@ -876,7 +929,8 @@ let test_format_costs_plain_and_telegram () =
         ~provider:"anthropic" ~model:"claude-sonnet-4-6" ~prompt_tokens:800
         ~completion_tokens:200 ~cost_usd:0.25 ();
       let summary =
-        Slash_commands.format_costs_plain ~db Slash_commands.CostsSummary
+        Slash_commands.format_costs ~connector:Format_adapter.Plain ~db
+          Slash_commands.CostsSummary
       in
       Alcotest.(check bool)
         "plain summary heading" true
@@ -885,7 +939,8 @@ let test_format_costs_plain_and_telegram () =
         "plain summary includes all time" true
         (contains_str summary "All time:");
       let sessions =
-        Slash_commands.format_costs_plain ~db Slash_commands.CostsSessions
+        Slash_commands.format_costs ~connector:Format_adapter.Plain ~db
+          Slash_commands.CostsSessions
       in
       Alcotest.(check bool)
         "plain sessions heading" true
@@ -894,7 +949,8 @@ let test_format_costs_plain_and_telegram () =
         "plain sessions include telegram key" true
         (contains_str sessions "telegram:1:user");
       let telegram =
-        Slash_commands.format_costs_telegram ~db Slash_commands.CostsSessions
+        Slash_commands.format_costs ~connector:Format_adapter.Telegram_html ~db
+          Slash_commands.CostsSessions
       in
       Alcotest.(check bool)
         "telegram heading" true
@@ -915,7 +971,8 @@ let test_format_usage_plain_and_telegram () =
         ~provider:"anthropic" ~model:"claude-sonnet-4-6" ~prompt_tokens:800
         ~completion_tokens:200 ~cost_usd:0.25 ~added_prompt_tokens:500 ();
       let summary =
-        Slash_commands.format_usage_plain ~db Slash_commands.UsageSummary
+        Slash_commands.format_usage ~connector:Format_adapter.Plain ~db
+          Slash_commands.UsageSummary
       in
       Alcotest.(check bool)
         "plain usage heading" true
@@ -924,7 +981,8 @@ let test_format_usage_plain_and_telegram () =
         "plain usage includes all time" true
         (contains_str summary "All time:");
       let sessions =
-        Slash_commands.format_usage_plain ~db Slash_commands.UsageSessions
+        Slash_commands.format_usage ~connector:Format_adapter.Plain ~db
+          Slash_commands.UsageSessions
       in
       Alcotest.(check bool)
         "plain usage sessions heading" true
@@ -936,7 +994,8 @@ let test_format_usage_plain_and_telegram () =
         "plain usage shows added prompt tokens" true
         (contains_str sessions "900");
       let telegram =
-        Slash_commands.format_usage_telegram ~db Slash_commands.UsageSessions
+        Slash_commands.format_usage ~connector:Format_adapter.Telegram_html ~db
+          Slash_commands.UsageSessions
       in
       Alcotest.(check bool)
         "telegram usage heading" true
@@ -1098,6 +1157,7 @@ let suite =
       test_format_costs_plain_and_telegram;
     Alcotest.test_case "format usage plain and telegram" `Quick
       test_format_usage_plain_and_telegram;
+    Alcotest.test_case "format help telegram" `Quick test_format_help_telegram;
     Alcotest.test_case "/model bare name sets model" `Quick test_model_bare_name;
     Alcotest.test_case "/model provider/name sets model" `Quick
       test_model_bare_name_provider_prefix;

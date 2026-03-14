@@ -181,6 +181,96 @@ let test_chat_costs_returns_cost_summary () =
         "has all time row" true
         (contains_str response "All time:"))
 
+let make_dummy_tool name description =
+  {
+    Tool.name;
+    description;
+    parameters_schema = `Assoc [];
+    invoke = (fun ?context:_ _ -> Lwt.return "ok");
+    invoke_stream = None;
+    risk_level = Tool.Low;
+    deferred = false;
+  }
+
+let test_chat_help_returns_plain_help () =
+  let session_manager = Session.create ~config:Runtime_config.default () in
+  let req =
+    Cohttp.Request.make ~meth:`POST (Uri.of_string "http://127.0.0.1/chat")
+  in
+  let body =
+    Cohttp_lwt.Body.of_string {|{"session_id":"s","message":"/help"}|}
+  in
+  let resp, body =
+    Lwt_main.run
+      (Http_server.handler ~session_manager ~require_pairing:false
+         ~auth_token:None (Obj.magic ()) req body)
+  in
+  Alcotest.(check int)
+    "ok" 200
+    (Cohttp.Code.code_of_status (Cohttp.Response.status resp));
+  let payload = Yojson.Safe.from_string (body_string body) in
+  let open Yojson.Safe.Util in
+  let response = payload |> member "response" |> to_string in
+  Alcotest.(check bool)
+    "help header present" true
+    (contains_str response "Available commands:");
+  Alcotest.(check bool)
+    "no markdown table" false
+    (contains_str response "| Command | Description |")
+
+let test_chat_tools_returns_plain_tool_list () =
+  let registry = Tool_registry.create () in
+  Tool_registry.register registry (make_dummy_tool "file_read" "Read a file");
+  let session_manager =
+    Session.create ~config:Runtime_config.default ~tool_registry:registry ()
+  in
+  let req =
+    Cohttp.Request.make ~meth:`POST (Uri.of_string "http://127.0.0.1/chat")
+  in
+  let body =
+    Cohttp_lwt.Body.of_string {|{"session_id":"s","message":"/tools"}|}
+  in
+  let resp, body =
+    Lwt_main.run
+      (Http_server.handler ~session_manager ~require_pairing:false
+         ~auth_token:None (Obj.magic ()) req body)
+  in
+  Alcotest.(check int)
+    "ok" 200
+    (Cohttp.Code.code_of_status (Cohttp.Response.status resp));
+  let payload = Yojson.Safe.from_string (body_string body) in
+  let open Yojson.Safe.Util in
+  let response = payload |> member "response" |> to_string in
+  Alcotest.(check bool)
+    "tools header present" true
+    (contains_str response "Tools (1)");
+  Alcotest.(check bool)
+    "tool entry present" true
+    (contains_str response "file_read")
+
+let test_chat_model_show_returns_formatted_model_summary () =
+  let session_manager = Session.create ~config:Runtime_config.default () in
+  let req =
+    Cohttp.Request.make ~meth:`POST (Uri.of_string "http://127.0.0.1/chat")
+  in
+  let body =
+    Cohttp_lwt.Body.of_string {|{"session_id":"s","message":"/model"}|}
+  in
+  let resp, body =
+    Lwt_main.run
+      (Http_server.handler ~session_manager ~require_pairing:false
+         ~auth_token:None (Obj.magic ()) req body)
+  in
+  Alcotest.(check int)
+    "ok" 200
+    (Cohttp.Code.code_of_status (Cohttp.Response.status resp));
+  let payload = Yojson.Safe.from_string (body_string body) in
+  let open Yojson.Safe.Util in
+  let response = payload |> member "response" |> to_string in
+  Alcotest.(check bool)
+    "model heading present" true
+    (contains_str response "Current:")
+
 let test_chat_usage_returns_usage_summary () =
   Test_helpers.with_memory_db (fun db ->
       Memory.init_request_stats_schema db;
@@ -1127,8 +1217,14 @@ let suite =
       test_chat_rejects_missing_auth_token;
     Alcotest.test_case "chat runtime ctx returns runtime context" `Quick
       test_chat_runtime_ctx_returns_runtime_context;
+    Alcotest.test_case "chat help returns plain help" `Quick
+      test_chat_help_returns_plain_help;
     Alcotest.test_case "chat costs returns cost summary" `Quick
       test_chat_costs_returns_cost_summary;
+    Alcotest.test_case "chat tools returns plain tool list" `Quick
+      test_chat_tools_returns_plain_tool_list;
+    Alcotest.test_case "chat model show returns formatted model summary" `Quick
+      test_chat_model_show_returns_formatted_model_summary;
     Alcotest.test_case "chat usage returns usage summary" `Quick
       test_chat_usage_returns_usage_summary;
     Alcotest.test_case "session inject rejects missing auth token" `Quick

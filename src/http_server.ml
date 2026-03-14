@@ -340,6 +340,16 @@ let handler ~session_manager ~require_pairing ~auth_token
               else
                 let key = "web:" ^ session_id in
                 match Slash_commands.handle message with
+                | Slash_commands.Help ->
+                    let response =
+                      Slash_commands.format_help ~connector:Format_adapter.Plain
+                    in
+                    let resp_json =
+                      `Assoc [ ("response", `String response) ]
+                      |> Yojson.Safe.to_string
+                    in
+                    Cohttp_lwt_unix.Server.respond_string ~status:`OK
+                      ~headers:json_headers ~body:resp_json ()
                 | Slash_commands.RuntimeCtx ->
                     let* response =
                       Session.runtime_context_block session_manager ~key
@@ -364,7 +374,9 @@ let handler ~session_manager ~require_pairing ~auth_token
                 | Slash_commands.Costs action ->
                     let response =
                       match Session.get_db session_manager with
-                      | Some db -> Slash_commands.format_costs_plain ~db action
+                      | Some db ->
+                          Slash_commands.format_costs
+                            ~connector:Format_adapter.Plain ~db action
                       | None -> "Costs are not available (no database)."
                     in
                     let resp_json =
@@ -376,8 +388,74 @@ let handler ~session_manager ~require_pairing ~auth_token
                 | Slash_commands.Usage action ->
                     let response =
                       match Session.get_db session_manager with
-                      | Some db -> Slash_commands.format_usage_plain ~db action
+                      | Some db ->
+                          Slash_commands.format_usage
+                            ~connector:Format_adapter.Plain ~db action
                       | None -> "Usage is not available (no database)."
+                    in
+                    let resp_json =
+                      `Assoc [ ("response", `String response) ]
+                      |> Yojson.Safe.to_string
+                    in
+                    Cohttp_lwt_unix.Server.respond_string ~status:`OK
+                      ~headers:json_headers ~body:resp_json ()
+                | Slash_commands.Tools ->
+                    let response =
+                      match Session.get_tool_registry session_manager with
+                      | Some reg ->
+                          let tools, skills =
+                            Tool_registry.partition_skills reg
+                          in
+                          Slash_commands.format_tools
+                            ~connector:Format_adapter.Plain tools skills
+                      | None -> "Tools are not enabled."
+                    in
+                    let resp_json =
+                      `Assoc [ ("response", `String response) ]
+                      |> Yojson.Safe.to_string
+                    in
+                    Cohttp_lwt_unix.Server.respond_string ~status:`OK
+                      ~headers:json_headers ~body:resp_json ()
+                | Slash_commands.Model Slash_commands.ModelShow ->
+                    let current =
+                      Session.get_session_effective_model session_manager ~key
+                    in
+                    let prefs = Model_preferences.load () in
+                    let usage_ranked =
+                      List.filter_map
+                        (fun (m, c) ->
+                          if List.mem m prefs.favorites then None
+                          else Some (m, c))
+                        prefs.usage_counts
+                    in
+                    let response =
+                      Slash_commands.format_model_show
+                        ~connector:Format_adapter.Plain ~current
+                        ~favorites:prefs.favorites ~usage_ranked
+                    in
+                    let resp_json =
+                      `Assoc [ ("response", `String response) ]
+                      |> Yojson.Safe.to_string
+                    in
+                    Cohttp_lwt_unix.Server.respond_string ~status:`OK
+                      ~headers:json_headers ~body:resp_json ()
+                | Slash_commands.Model (Slash_commands.ModelList provider) ->
+                    let db_extras =
+                      match Session.get_db session_manager with
+                      | None -> []
+                      | Some db ->
+                          Model_discovery.get_db_only_models ~db
+                            ~provider_filter:provider
+                    in
+                    let models =
+                      Models_catalog.to_plain_list ~provider_filter:provider
+                        ~db_extras ()
+                      |> String.split_on_char '\n'
+                      |> List.filter (fun s -> s <> "")
+                    in
+                    let response =
+                      Slash_commands.format_model_list
+                        ~connector:Format_adapter.Plain ~models ~provider
                     in
                     let resp_json =
                       `Assoc [ ("response", `String response) ]
@@ -781,6 +859,10 @@ let handler ~session_manager ~require_pairing ~auth_token
               else
                 match Slash_commands.handle message with
                 | Slash_commands.Reply text -> sse_reply text
+                | Slash_commands.Help ->
+                    sse_reply
+                      (Slash_commands.format_help
+                         ~connector:Format_adapter.Plain)
                 | Slash_commands.Reset ->
                     let key = "web:" ^ session_id in
                     let* active_bg_tasks = Session.reset session_manager ~key in
@@ -814,14 +896,18 @@ let handler ~session_manager ~require_pairing ~auth_token
                 | Slash_commands.Costs action ->
                     let text =
                       match Session.get_db session_manager with
-                      | Some db -> Slash_commands.format_costs_plain ~db action
+                      | Some db ->
+                          Slash_commands.format_costs
+                            ~connector:Format_adapter.Plain ~db action
                       | None -> "Costs are not available (no database)."
                     in
                     sse_reply text
                 | Slash_commands.Usage action ->
                     let text =
                       match Session.get_db session_manager with
-                      | Some db -> Slash_commands.format_usage_plain ~db action
+                      | Some db ->
+                          Slash_commands.format_usage
+                            ~connector:Format_adapter.Plain ~db action
                       | None -> "Usage is not available (no database)."
                     in
                     sse_reply text
@@ -892,7 +978,8 @@ let handler ~session_manager ~require_pairing ~auth_token
                           let tools, skills =
                             Tool_registry.partition_skills reg
                           in
-                          Slash_commands.format_tools_plain tools skills
+                          Slash_commands.format_tools
+                            ~connector:Format_adapter.Plain tools skills
                       | None -> "Tools are not enabled."
                     in
                     sse_reply text
@@ -979,7 +1066,8 @@ let handler ~session_manager ~require_pairing ~auth_token
                             prefs.usage_counts
                         in
                         let text =
-                          Slash_commands.format_model_show_plain ~current
+                          Slash_commands.format_model_show
+                            ~connector:Format_adapter.Plain ~current
                             ~favorites:prefs.favorites ~usage_ranked
                         in
                         sse_reply text
@@ -1121,8 +1209,8 @@ let handler ~session_manager ~require_pairing ~auth_token
                           |> List.filter (fun s -> s <> "")
                         in
                         let text =
-                          Slash_commands.format_model_list_plain ~models
-                            ~provider
+                          Slash_commands.format_model_list
+                            ~connector:Format_adapter.Plain ~models ~provider
                         in
                         sse_reply text
                     | ModelUsage ->

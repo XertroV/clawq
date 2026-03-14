@@ -1,13 +1,16 @@
 ---
+claimed_at: "2026-03-14T01:14:44Z"
+claimed_by: cli-user
+completed_at: "2026-03-14T01:55:21Z"
 complexity: medium
 depends_on: []
+duration_minutes: 40.6217485802
 estimate_hours: 1
 id: B428
 priority: high
-status: pending
-tags:
-    - teams
-    - slash-commands
+started_at: "2026-03-14T01:14:44Z"
+status: done
+tags: []
 title: /help output on Teams renders as single line (should format as table)
 ---
 

@@ -1,5 +1,7 @@
 # Telegram Formatting Reference (Internal)
 
+See also: `docs/SLASH_COMMAND_RENDERING_COMPATIBILITY.md` for the cross-connector compatibility rules that explain why Telegram gets a richer slash-command renderer while shared slash output avoids tables.
+
 ## HTML Mode (`parse_mode: "HTML"`)
 
 ### Supported Tags

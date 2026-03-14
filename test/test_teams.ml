@@ -229,8 +229,34 @@ let test_slash_command_recognized_after_mention_strip () =
   let stripped = Teams.strip_at_mentions "<at>Bot</at> /help" in
   Alcotest.(check string) "stripped to /help" "/help" stripped;
   match Slash_commands.handle stripped with
-  | Slash_commands.Reply _ -> ()
-  | _ -> Alcotest.fail "expected Reply from /help"
+  | Slash_commands.Help ->
+      let text = Slash_commands.format_help ~connector:Format_adapter.Plain in
+      Alcotest.(check bool)
+        "help stays multiline" true
+        (String.contains text '\n')
+  | _ -> Alcotest.fail "expected Help from /help"
+
+let test_help_reply_body_uses_plain_multiline_text () =
+  let help_text = Slash_commands.format_help ~connector:Format_adapter.Plain in
+  let body =
+    Teams.build_reply_body ~alert:false ~text:help_text ~mention:None
+      ~mention_mode:"entity"
+  in
+  let json = Yojson.Safe.from_string body in
+  let open Yojson.Safe.Util in
+  let text = json |> member "text" |> to_string in
+  Alcotest.(check bool)
+    "help body stays multiline" true
+    (String.contains text '\n');
+  Alcotest.(check bool)
+    "help body avoids markdown table" false
+    (try
+       ignore
+         (Str.search_forward
+            (Str.regexp_string "| Command | Description |")
+            text 0);
+       true
+     with Not_found -> false)
 
 let test_slash_new_after_mention_strip () =
   let stripped = Teams.strip_at_mentions "<at>Bot</at> /new" in
@@ -282,6 +308,8 @@ let suite =
       test_encode_channel_id_format;
     Alcotest.test_case "slash /help recognized after mention strip" `Quick
       test_slash_command_recognized_after_mention_strip;
+    Alcotest.test_case "help reply body uses plain multiline text" `Quick
+      test_help_reply_body_uses_plain_multiline_text;
     Alcotest.test_case "slash /new recognized after mention strip" `Quick
       test_slash_new_after_mention_strip;
     Alcotest.test_case "normal message not a slash command" `Quick

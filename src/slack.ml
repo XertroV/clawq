@@ -339,6 +339,14 @@ let handle_event ~(config : Runtime_config.slack_config)
                     ~text:reply_text
                 in
                 Lwt.return "ok"
+            | Help ->
+                let text =
+                  Slash_commands.format_help ~connector:Format_adapter.Slack
+                in
+                let* () =
+                  send_message_fn ~bot_token:config.bot_token ~channel_id ~text
+                in
+                Lwt.return "ok"
             | Reset ->
                 let* active_bg_tasks = Session.reset session_manager ~key in
                 let* () =
@@ -462,7 +470,8 @@ let handle_event ~(config : Runtime_config.slack_config)
                   match Session.get_tool_registry session_manager with
                   | Some reg ->
                       let tools, skills = Tool_registry.partition_skills reg in
-                      Slash_commands.format_tools_plain tools skills
+                      Slash_commands.format_tools
+                        ~connector:Format_adapter.Slack tools skills
                   | None -> "Tools are not enabled."
                 in
                 let* () =
@@ -484,7 +493,9 @@ let handle_event ~(config : Runtime_config.slack_config)
             | Costs action ->
                 let text =
                   match Session.get_db session_manager with
-                  | Some db -> Slash_commands.format_costs_plain ~db action
+                  | Some db ->
+                      Slash_commands.format_costs
+                        ~connector:Format_adapter.Slack ~db action
                   | None -> "Costs are not available (no database)."
                 in
                 let* () =
@@ -494,7 +505,9 @@ let handle_event ~(config : Runtime_config.slack_config)
             | Usage action ->
                 let text =
                   match Session.get_db session_manager with
-                  | Some db -> Slash_commands.format_usage_plain ~db action
+                  | Some db ->
+                      Slash_commands.format_usage
+                        ~connector:Format_adapter.Slack ~db action
                   | None -> "Usage is not available (no database)."
                 in
                 let* () =
@@ -517,7 +530,7 @@ let handle_event ~(config : Runtime_config.slack_config)
                         prefs.usage_counts
                     in
                     let text =
-                      format_model_show_plain ~current
+                      format_model_show ~connector:Format_adapter.Slack ~current
                         ~favorites:prefs.favorites ~usage_ranked
                     in
                     let* () =
@@ -686,7 +699,10 @@ let handle_event ~(config : Runtime_config.slack_config)
                       |> String.split_on_char '\n'
                       |> List.filter (fun s -> s <> "")
                     in
-                    let text = format_model_list_plain ~models ~provider in
+                    let text =
+                      format_model_list ~connector:Format_adapter.Slack ~models
+                        ~provider
+                    in
                     let* () =
                       send_message_fn ~bot_token:config.bot_token ~channel_id
                         ~text

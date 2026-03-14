@@ -466,6 +466,12 @@ let handle_message ~(discord_config : Runtime_config.discord_config)
       | Reply text ->
           send_message_fn ~bot_token:discord_config.bot_token
             ~channel_id:msg.channel_id ~text
+      | Help ->
+          let text =
+            Slash_commands.format_help ~connector:Format_adapter.Discord
+          in
+          send_message_fn ~bot_token:discord_config.bot_token
+            ~channel_id:msg.channel_id ~text
       | Reset ->
           let* active_bg_tasks = Session.reset session_mgr ~key in
           send_message_fn ~bot_token:discord_config.bot_token
@@ -569,7 +575,8 @@ let handle_message ~(discord_config : Runtime_config.discord_config)
             match Session.get_tool_registry session_mgr with
             | Some reg ->
                 let tools, skills = Tool_registry.partition_skills reg in
-                Slash_commands.format_tools_plain tools skills
+                Slash_commands.format_tools ~connector:Format_adapter.Discord
+                  tools skills
             | None -> "Tools are not enabled."
           in
           send_message_fn ~bot_token:discord_config.bot_token
@@ -587,7 +594,9 @@ let handle_message ~(discord_config : Runtime_config.discord_config)
       | Costs action ->
           let text =
             match Session.get_db session_mgr with
-            | Some db -> Slash_commands.format_costs_plain ~db action
+            | Some db ->
+                Slash_commands.format_costs ~connector:Format_adapter.Discord
+                  ~db action
             | None -> "Costs are not available (no database)."
           in
           send_message_fn ~bot_token:discord_config.bot_token
@@ -595,7 +604,9 @@ let handle_message ~(discord_config : Runtime_config.discord_config)
       | Usage action ->
           let text =
             match Session.get_db session_mgr with
-            | Some db -> Slash_commands.format_usage_plain ~db action
+            | Some db ->
+                Slash_commands.format_usage ~connector:Format_adapter.Discord
+                  ~db action
             | None -> "Usage is not available (no database)."
           in
           send_message_fn ~bot_token:discord_config.bot_token
@@ -607,9 +618,19 @@ let handle_message ~(discord_config : Runtime_config.discord_config)
               let current =
                 Session.get_session_effective_model session_mgr ~key
               in
+              let prefs = Model_preferences.load () in
+              let usage_ranked =
+                List.filter_map
+                  (fun (m, c) ->
+                    if List.mem m prefs.favorites then None else Some (m, c))
+                  prefs.usage_counts
+              in
+              let text =
+                format_model_show ~connector:Format_adapter.Discord ~current
+                  ~favorites:prefs.favorites ~usage_ranked
+              in
               send_message_fn ~bot_token:discord_config.bot_token
-                ~channel_id:msg.channel_id
-                ~text:(Printf.sprintf "Current model: %s" current)
+                ~channel_id:msg.channel_id ~text
           | ModelSet name -> (
               let provider, model_id, fmt = Models_catalog.split_name name in
               match fmt with
@@ -732,9 +753,15 @@ let handle_message ~(discord_config : Runtime_config.discord_config)
                     Model_discovery.get_db_only_models ~db
                       ~provider_filter:provider
               in
-              let text =
+              let models =
                 Models_catalog.to_plain_list ~provider_filter:provider
                   ~db_extras ()
+                |> String.split_on_char '\n'
+                |> List.filter (fun s -> s <> "")
+              in
+              let text =
+                format_model_list ~connector:Format_adapter.Discord ~models
+                  ~provider
               in
               send_message_fn ~bot_token:discord_config.bot_token
                 ~channel_id:msg.channel_id ~text

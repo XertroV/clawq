@@ -530,6 +530,11 @@ let handle_webhook ~(config : Runtime_config.teams_config)
                               user_id err);
                         Lwt.return_unit)
                 | Reply text -> send_text text
+                | Help ->
+                    let text =
+                      Slash_commands.format_help ~connector:Format_adapter.Plain
+                    in
+                    send_text text
                 | Reset ->
                     let* active_bg_tasks = Session.reset session_manager ~key in
                     send_text (Slash_commands.reset_message ~active_bg_tasks ())
@@ -642,7 +647,8 @@ let handle_webhook ~(config : Runtime_config.teams_config)
                           let tools, skills =
                             Tool_registry.partition_skills reg
                           in
-                          Slash_commands.format_tools_plain tools skills
+                          Slash_commands.format_tools
+                            ~connector:Format_adapter.Plain tools skills
                       | None -> "Tools are not enabled."
                     in
                     send_text text
@@ -658,14 +664,18 @@ let handle_webhook ~(config : Runtime_config.teams_config)
                 | Costs action ->
                     let text =
                       match Session.get_db session_manager with
-                      | Some db -> Slash_commands.format_costs_plain ~db action
+                      | Some db ->
+                          Slash_commands.format_costs
+                            ~connector:Format_adapter.Plain ~db action
                       | None -> "Costs are not available (no database)."
                     in
                     send_text text
                 | Usage action ->
                     let text =
                       match Session.get_db session_manager with
-                      | Some db -> Slash_commands.format_usage_plain ~db action
+                      | Some db ->
+                          Slash_commands.format_usage
+                            ~connector:Format_adapter.Plain ~db action
                       | None -> "Usage is not available (no database)."
                     in
                     send_text text
@@ -677,7 +687,19 @@ let handle_webhook ~(config : Runtime_config.teams_config)
                           Session.get_session_effective_model session_manager
                             ~key
                         in
-                        send_text (Printf.sprintf "Current model: %s" current)
+                        let prefs = Model_preferences.load () in
+                        let usage_ranked =
+                          List.filter_map
+                            (fun (m, c) ->
+                              if List.mem m prefs.favorites then None
+                              else Some (m, c))
+                            prefs.usage_counts
+                        in
+                        let text =
+                          format_model_show ~connector:Format_adapter.Plain
+                            ~current ~favorites:prefs.favorites ~usage_ranked
+                        in
+                        send_text text
                     | ModelSet name -> (
                         let provider, model_id, fmt =
                           Models_catalog.split_name name
@@ -806,9 +828,15 @@ let handle_webhook ~(config : Runtime_config.teams_config)
                               Model_discovery.get_db_only_models ~db
                                 ~provider_filter:provider
                         in
-                        let text =
+                        let models =
                           Models_catalog.to_plain_list ~provider_filter:provider
                             ~db_extras ()
+                          |> String.split_on_char '\n'
+                          |> List.filter (fun s -> s <> "")
+                        in
+                        let text =
+                          format_model_list ~connector:Format_adapter.Plain
+                            ~models ~provider
                         in
                         send_text text
                     | ModelUsage ->

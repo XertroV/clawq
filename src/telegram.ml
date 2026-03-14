@@ -293,6 +293,12 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
       else
         match Slash_commands.handle user_text with
         | Reply text -> send_message ~bot_token ~chat_id:update.chat_id ~text ()
+        | Help ->
+            let text =
+              Slash_commands.format_help ~connector:Format_adapter.Telegram_html
+            in
+            send_chunked_html_with_fallback ~bot_token ~chat_id:update.chat_id
+              ~text ()
         | Reset ->
             let* active_bg_tasks = Session.reset session_mgr ~key in
             send_message ~bot_token ~chat_id:update.chat_id
@@ -394,7 +400,8 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
               match Session.get_tool_registry session_mgr with
               | Some reg ->
                   let tools, skills = Tool_registry.partition_skills reg in
-                  Slash_commands.format_tools_telegram tools skills
+                  Slash_commands.format_tools
+                    ~connector:Format_adapter.Telegram_html tools skills
               | None -> "Tools are not enabled."
             in
             send_chunked_html_with_fallback ~bot_token ~chat_id:update.chat_id
@@ -411,7 +418,9 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
         | Costs action ->
             let text =
               match Session.get_db session_mgr with
-              | Some db -> Slash_commands.format_costs_telegram ~db action
+              | Some db ->
+                  Slash_commands.format_costs
+                    ~connector:Format_adapter.Telegram_html ~db action
               | None -> "Costs are not available (no database)."
             in
             send_chunked_html_with_fallback ~bot_token ~chat_id:update.chat_id
@@ -419,7 +428,9 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
         | Usage action ->
             let text =
               match Session.get_db session_mgr with
-              | Some db -> Slash_commands.format_usage_telegram ~db action
+              | Some db ->
+                  Slash_commands.format_usage
+                    ~connector:Format_adapter.Telegram_html ~db action
               | None -> "Usage is not available (no database)."
             in
             send_chunked_html_with_fallback ~bot_token ~chat_id:update.chat_id
@@ -439,8 +450,8 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
                     prefs.usage_counts
                 in
                 let text =
-                  format_model_show_telegram ~current ~favorites:prefs.favorites
-                    ~usage_ranked
+                  format_model_show ~connector:Format_adapter.Telegram_html
+                    ~current ~favorites:prefs.favorites ~usage_ranked
                 in
                 send_message ~bot_token ~chat_id:update.chat_id ~text
                   ~parse_mode:"HTML" ()
@@ -573,7 +584,10 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
                   |> String.split_on_char '\n'
                   |> List.filter (fun s -> s <> "")
                 in
-                let text = format_model_list_telegram ~models ~provider in
+                let text =
+                  format_model_list ~connector:Format_adapter.Telegram_html
+                    ~models ~provider
+                in
                 send_message ~bot_token ~chat_id:update.chat_id ~text
                   ~parse_mode:"HTML" ()
             | ModelUsage ->

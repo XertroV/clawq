@@ -28,6 +28,7 @@ type usage_action =
 
 type result =
   | Reply of string
+  | Help
   | Reset
   | Compact
   | RuntimeCtx
@@ -124,17 +125,59 @@ let commands =
     };
   ]
 
+let pad_right text width =
+  let len = String.length text in
+  if len >= width then text else text ^ String.make (width - len) ' '
+
 let help_text =
+  let command_labels = List.map (fun c -> "/" ^ c.name) commands in
+  let command_width =
+    List.fold_left
+      (fun acc label -> max acc (String.length label))
+      0 command_labels
+  in
   let rows =
     List.map
-      (fun c -> Printf.sprintf "| /%s | %s |" c.name c.description)
+      (fun c ->
+        let label = pad_right ("/" ^ c.name) command_width in
+        Printf.sprintf "  %s  %s" label c.description)
       commands
   in
-  "Available commands:\n\n| Command | Description |\n|---------|-------------|\n"
-  ^ String.concat "\n" rows
-  ^ "\n\n\
-     Prefix a message with ! to interrupt the current turn in this session and \
-     send the rest as a normal message."
+  String.concat "\n"
+    ([ "Available commands:"; "" ]
+    @ rows
+    @ [
+        "";
+        "Prefix a message with ! to interrupt the current turn in this session \
+         and send the rest as a normal message.";
+      ])
+
+let help_text_telegram =
+  let rows =
+    List.map
+      (fun c ->
+        Printf.sprintf "%s  %s"
+          (Format_adapter.code Format_adapter.Telegram_html ("/" ^ c.name))
+          (Format_adapter.escape Format_adapter.Telegram_html c.description))
+      commands
+  in
+  String.concat "\n"
+    ([
+       Format_adapter.bold Format_adapter.Telegram_html "Available commands:";
+       "";
+     ]
+    @ rows
+    @ [
+        "";
+        Format_adapter.escape Format_adapter.Telegram_html
+          "Prefix a message with ! to interrupt the current turn in this \
+           session and send the rest as a normal message.";
+      ])
+
+let format_help ~connector =
+  match connector with
+  | Format_adapter.Telegram_html -> help_text_telegram
+  | _ -> help_text
 
 let costs_usage =
   "Usage: /costs [session [KEY]|model|provider]\n\
@@ -178,7 +221,7 @@ let handle text =
               "clawq bot ready. Send me a message and I'll respond using AI.\n\
                Use /help to see available commands. Prefix a message with ! to \
                interrupt the current turn."
-        | "help" -> Reply help_text
+        | "help" -> Help
         | "new" -> Reset
         | "compact" -> Compact
         | "runtime-ctx" | "runtime_ctx" -> RuntimeCtx
@@ -457,6 +500,11 @@ let format_tools_telegram (tools : Tool.t list) (skills : Tool.t list) : string
   end;
   Buffer.contents buf
 
+let format_tools ~connector tools skills =
+  match connector with
+  | Format_adapter.Telegram_html -> format_tools_telegram tools skills
+  | _ -> format_tools_plain tools skills
+
 let format_model_show_telegram ~current ~favorites ~usage_ranked =
   let buf = Buffer.create 1024 in
   Buffer.add_string buf "<b>Current Model</b>\n";
@@ -521,6 +569,17 @@ let format_model_show_plain ~current ~favorites ~usage_ranked =
       usage_ranked
   end;
   Buffer.contents buf
+
+let format_model_show ~connector ~current ~favorites ~usage_ranked =
+  match connector with
+  | Format_adapter.Telegram_html ->
+      format_model_show_telegram ~current ~favorites ~usage_ranked
+  | _ -> format_model_show_plain ~current ~favorites ~usage_ranked
+
+let format_model_list ~connector ~models ~provider =
+  match connector with
+  | Format_adapter.Telegram_html -> format_model_list_telegram ~models ~provider
+  | _ -> format_model_list_plain ~models ~provider
 
 let format_cost_summary_line label (s : Request_stats.summary) =
   Printf.sprintf "%s: $%.4f, %d turn%s, %s prompt (%s added), %s completion"
@@ -735,6 +794,11 @@ let format_costs_telegram ~db (action : costs_action) =
         Buffer.add_string buf "</blockquote>";
         Buffer.contents buf
 
+let format_costs ~connector ~db action =
+  match connector with
+  | Format_adapter.Telegram_html -> format_costs_telegram ~db action
+  | _ -> format_costs_plain ~db action
+
 let format_usage_plain ~db (action : usage_action) =
   match action with
   | UsageSummary ->
@@ -938,3 +1002,8 @@ let format_usage_telegram ~db (action : usage_action) =
           providers;
         Buffer.add_string buf "</blockquote>";
         Buffer.contents buf
+
+let format_usage ~connector ~db action =
+  match connector with
+  | Format_adapter.Telegram_html -> format_usage_telegram ~db action
+  | _ -> format_usage_plain ~db action
