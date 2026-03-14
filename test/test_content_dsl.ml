@@ -163,6 +163,74 @@ let test_render_separator () =
     "has separator chars" true
     (string_contains result "\xE2\x94\x81")
 
+let test_teams_multi_block_line_breaks () =
+  let doc =
+    [
+      Content_dsl.ToolEntry
+        {
+          emoji = "\xF0\x9F\x93\x96";
+          name = "file_read";
+          summary = Some "a.ml";
+          state = Content_dsl.Done;
+          timing = None;
+          preview = None;
+          error_detail = None;
+          connector_char = None;
+        };
+      Content_dsl.ToolEntry
+        {
+          emoji = "\xF0\x9F\x93\x96";
+          name = "file_read";
+          summary = Some "b.ml";
+          state = Content_dsl.Done;
+          timing = None;
+          preview = None;
+          error_detail = None;
+          connector_char = None;
+        };
+    ]
+  in
+  let result = Content_dsl.render_document Format_adapter.Teams doc in
+  (* Teams markdown needs "  \n" (two trailing spaces) for line breaks *)
+  Alcotest.(check bool)
+    "has trailing-space line break" true
+    (string_contains result "  \n");
+  (* Plain "\n" without leading spaces should NOT appear between entries *)
+  let lines = String.split_on_char '\n' result in
+  let has_bare_newline =
+    List.exists
+      (fun line ->
+        let len = String.length line in
+        len >= 2
+        && line.[len - 1] <> ' '
+        && line.[len - 2] <> ' '
+        && line <> List.nth lines (List.length lines - 1))
+      (match lines with _ :: rest -> List.rev rest |> List.rev | [] -> [])
+  in
+  Alcotest.(check bool)
+    "no bare newlines between entries" false has_bare_newline
+
+let test_teams_failed_error_line_break () =
+  let doc =
+    [
+      Content_dsl.ToolEntry
+        {
+          emoji = "\xF0\x9F\x94\xA7";
+          name = "shell_exec";
+          summary = Some "make build";
+          state = Content_dsl.Failed;
+          timing = None;
+          preview = None;
+          error_detail = Some "exit code 1";
+          connector_char = None;
+        };
+    ]
+  in
+  let result = Content_dsl.render_document Format_adapter.Teams doc in
+  Alcotest.(check bool)
+    "error detail has trailing-space line break" true
+    (string_contains result "  \n")
+
 let tests =
   [
     Alcotest.test_case "paragraph" `Quick test_render_paragraph;
@@ -178,4 +246,8 @@ let tests =
     Alcotest.test_case "multi-block document" `Quick
       test_render_document_multi_block;
     Alcotest.test_case "separator" `Quick test_render_separator;
+    Alcotest.test_case "Teams multi-block line breaks" `Quick
+      test_teams_multi_block_line_breaks;
+    Alcotest.test_case "Teams failed error line break" `Quick
+      test_teams_failed_error_line_break;
   ]

@@ -94,10 +94,11 @@ let render_block c = function
                   (Format_adapter.code c (Format_adapter.escape c s))
             | None -> ""
           in
+          let lb = Format_adapter.line_break c in
           let error_part =
             match error_detail with
             | Some err ->
-                Printf.sprintf "\n  \xE2\x94\x94 %s"
+                Printf.sprintf "%s  \xE2\x94\x94 %s" lb
                   (Format_adapter.italic c (Format_adapter.escape c err))
             | None -> ""
           in
@@ -141,10 +142,11 @@ let render_block c = function
   | CollapsedTools { count } ->
       Printf.sprintf "\xE2\x9C\x93 %d tools completed" count
   | ToolSummary { total; emoji_breakdown; parallel_indicator; total_time } ->
+      let lb = Format_adapter.line_break c in
       Printf.sprintf
-        "\xE2\x94\x81\xE2\x94\x81\xE2\x94\x81\xE2\x94\x81\xE2\x94\x81\xE2\x94\x81\xE2\x94\x81\xE2\x94\x81\xE2\x94\x81\xE2\x94\x81\n\
-         \xF0\x9F\x9B\xA0\xEF\xB8\x8F %d tools \xC2\xB7 %s%s \xC2\xB7 %s"
-        total emoji_breakdown parallel_indicator total_time
+        "\xE2\x94\x81\xE2\x94\x81\xE2\x94\x81\xE2\x94\x81\xE2\x94\x81\xE2\x94\x81\xE2\x94\x81\xE2\x94\x81\xE2\x94\x81\xE2\x94\x81%s\xF0\x9F\x9B\xA0\xEF\xB8\x8F \
+         %d tools \xC2\xB7 %s%s \xC2\xB7 %s"
+        lb total emoji_breakdown parallel_indicator total_time
   | Separator ->
       "\xE2\x94\x81\xE2\x94\x81\xE2\x94\x81\xE2\x94\x81\xE2\x94\x81\xE2\x94\x81\xE2\x94\x81\xE2\x94\x81\xE2\x94\x81\xE2\x94\x81"
   | ThinkingPreview text ->
@@ -155,4 +157,4 @@ let render_block c = function
 
 let render_document connector doc =
   let lines = List.map (render_block connector) doc in
-  String.concat "\n" lines
+  String.concat (Format_adapter.line_break connector) lines

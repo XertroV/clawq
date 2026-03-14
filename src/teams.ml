@@ -683,8 +683,7 @@ let handle_webhook ~(config : Runtime_config.teams_config)
                               ~service_url:effective_service_url
                               ~conversation_id ~reply_to_id:activity_id
                           in
-                          Status_message.create ~notifier ~parse_mode:"Markdown"
-                            ())
+                          Status_message.create ~notifier ~parse_mode:"Teams" ())
                     end;
                     (* Register alerting notifier for ask_user_question *)
                     Session.register_alert_channel_notifier session_manager ~key

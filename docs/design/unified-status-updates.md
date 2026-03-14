@@ -198,7 +198,7 @@ let teams : t = {
   can_type = true;
   max_message_length = 28672;
   connector = Format_adapter.Teams;
-  parse_mode = "Markdown";
+  parse_mode = "Teams";
   debounce_interval = 1.0;  (* higher to avoid rate limits *)
 }
 

@@ -34,6 +34,7 @@ let of_parse_mode = function
   | "MarkdownV2" -> Telegram_mdv2
   | "Markdown" -> Discord
   | "mrkdwn" -> Slack
+  | "Teams" -> Teams
   | _ -> Plain
 
 let parse_mode_string = function
@@ -106,6 +107,12 @@ let escape_table_cell connector text =
         text;
       Buffer.contents buf
   | Telegram_html | Plain -> text
+
+let line_break = function
+  | Teams -> "  \n"
+  | Telegram_html | Telegram_markdown | Telegram_mdv2 | Discord | Slack | Plain
+    ->
+      "\n"
 
 let render_table connector ?(max_width = 60) columns rows =
   match connector with
