@@ -181,8 +181,10 @@ let help_text_telegram =
       ])
 
 let format_help ~connector =
-  Format_adapter.dispatch connector ~telegram_html:help_text_telegram
-    ~default:help_text
+  match connector with
+  | Format_adapter.Telegram_html -> help_text_telegram
+  | Format_adapter.Plain -> help_text
+  | _ -> Format_adapter.code_block connector help_text
 
 let costs_usage =
   "Usage: /costs [session [KEY]/model/provider]\n\
@@ -1023,3 +1025,44 @@ let format_status ~connector ~(db : Sqlite3.db option) ~session_count
   ^ "\n"
   ^ Format_adapter.code_block connector
       (Table_format.render ~max_width:60 status_columns rows)
+
+let format_model_usage ~connector ~(config : Runtime_config.t)
+    (results : Provider_quota.provider_quota list) =
+  if results = [] then "No providers configured."
+  else
+    let columns =
+      Table_format.
+        [
+          { header = "PROVIDER"; align = Left; min_width = 10; flex = false };
+          { header = "SESSION"; align = Right; min_width = 7; flex = false };
+          { header = "WEEKLY"; align = Right; min_width = 7; flex = false };
+          { header = "MONTHLY"; align = Right; min_width = 7; flex = false };
+          { header = "STATUS"; align = Left; min_width = 6; flex = false };
+        ]
+    in
+    let rows =
+      List.map
+        (fun (pq : Provider_quota.provider_quota) ->
+          let sess, week, mon =
+            match pq.state with
+            | Provider_quota.Unknown _ -> ("-", "-", "-")
+            | Provider_quota.Known { session; weekly; monthly } ->
+                let fmt_pct = function
+                  | None -> "-"
+                  | Some w -> Printf.sprintf "%.0f%%" w.Provider_quota.used_pct
+                in
+                (fmt_pct session, fmt_pct weekly, fmt_pct monthly)
+          in
+          let threshold =
+            match List.assoc_opt pq.provider_name config.providers with
+            | Some pc -> Option.value ~default:0.85 pc.quota_threshold
+            | None -> 0.85
+          in
+          let status = Provider_quota.status_label ~threshold pq in
+          [ pq.provider_name; sess; week; mon; status ])
+        results
+    in
+    Format_adapter.bold connector "Provider Quota/Usage"
+    ^ "\n"
+    ^ Format_adapter.code_block connector
+        (Table_format.render ~max_width:60 columns rows)

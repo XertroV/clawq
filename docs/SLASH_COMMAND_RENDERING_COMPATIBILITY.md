@@ -59,14 +59,15 @@ Source: https://support.discord.com/hc/en-us/articles/210298617-Markdown-Text-10
 
 - Default slash-command layout should be connector-safe plain text.
 - Connector-specific rich renderers are allowed when they are explicitly supported and already wired for that connector.
-- Today, Telegram is the only connector with dedicated rich slash-command rendering.
+- Telegram uses dedicated rich HTML rendering. Discord, Slack, and Teams use code blocks for tabular data.
 - New slash-command output should be modeled as structured sections/rows first, then rendered per connector.
 - Do not introduce Markdown tables for shared slash-command output.
 
 ## Practical Rules
 
 - Use aligned lines, short headings, bullet lists, and code formatting sparingly.
-- Avoid tables, HTML outside Telegram, and connector-specific syntax in shared formatters.
+- Avoid Markdown tables, HTML outside Telegram, and connector-specific syntax in shared formatters.
+- For tabular data: use `Table_format.render` (CLI-style space-padded columns) wrapped in `Format_adapter.code_block` to preserve monospace alignment on connectors. For `Plain`, `code_block` is a no-op.
 - If interactive UI is needed, prefer `Rich_message` with a text fallback.
 - When adding a new slash command, decide whether it needs:
   - a shared plain renderer only, or
@@ -76,5 +77,6 @@ Source: https://support.discord.com/hc/en-us/articles/210298617-Markdown-Text-10
 
 - `src/slash_commands.ml` owns slash-command content rendering.
 - Connectors select a rendering target instead of formatting replies ad hoc.
-- Telegram may use HTML-specific renderers.
-- Teams, Slack, Discord, and web should stay on connector-safe text unless there is a proven richer path.
+- Telegram uses HTML-specific renderers (`<pre>` for tables, `<b>` for headings).
+- Discord, Slack, and Teams use `Format_adapter.code_block` (triple-backtick fences) for tabular output like `/costs`, `/usage`, `/model usage`, and `/help`.
+- Web/Plain receives raw text (no code block wrapping).

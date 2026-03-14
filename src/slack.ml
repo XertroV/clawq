@@ -723,27 +723,13 @@ let handle_event ~(config : Runtime_config.slack_config)
                 | ModelUsage ->
                     let cfg = Session.get_config session_manager in
                     Provider_quota.set_cache_ttl cfg.quota_cache_ttl_s;
-                    let results = Provider_quota.get_all_cached () in
-                    let lines =
-                      List.map
-                        (fun (name, pq) ->
-                          let summary = Provider_quota.to_summary_string pq in
-                          let threshold =
-                            match List.assoc_opt name cfg.providers with
-                            | Some pc ->
-                                Option.value ~default:0.85 pc.quota_threshold
-                            | None -> 0.85
-                          in
-                          let label =
-                            Provider_quota.status_label ~threshold pq
-                          in
-                          summary ^ "  " ^ label)
-                        results
+                    let results =
+                      Provider_quota.get_all_cached ()
+                      |> List.map (fun (_name, pq) -> pq)
                     in
                     let text =
-                      if lines = [] then "No providers configured."
-                      else
-                        "*Provider Quota/Usage*\n\n" ^ String.concat "\n" lines
+                      Slash_commands.format_model_usage
+                        ~connector:Format_adapter.Slack ~config:cfg results
                     in
                     let* () =
                       send_message_fn ~bot_token:config.bot_token ~channel_id

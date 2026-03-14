@@ -604,28 +604,16 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
             | ModelUsage ->
                 let cfg = Session.get_config session_mgr in
                 Provider_quota.set_cache_ttl cfg.quota_cache_ttl_s;
-                let results = Provider_quota.get_all_cached () in
-                let lines =
-                  List.map
-                    (fun (name, pq) ->
-                      let summary = Provider_quota.to_summary_string pq in
-                      let threshold =
-                        match List.assoc_opt name cfg.providers with
-                        | Some pc ->
-                            Option.value ~default:0.85 pc.quota_threshold
-                        | None -> 0.85
-                      in
-                      let label = Provider_quota.status_label ~threshold pq in
-                      summary ^ "  " ^ label)
-                    results
+                let results =
+                  Provider_quota.get_all_cached ()
+                  |> List.map (fun (_name, pq) -> pq)
                 in
                 let text =
-                  if lines = [] then "No providers configured."
-                  else
-                    "<b>Provider Quota/Usage</b>\n\n" ^ String.concat "\n" lines
+                  Slash_commands.format_model_usage
+                    ~connector:Format_adapter.Telegram_html ~config:cfg results
                 in
-                send_message ~bot_token ~chat_id:update.chat_id ~text
-                  ~parse_mode:"HTML" ())
+                send_chunked_html_with_fallback ~bot_token
+                  ~chat_id:update.chat_id ~text ())
         | ForkAnd prompt ->
             let* () =
               send_message ~bot_token ~chat_id:update.chat_id

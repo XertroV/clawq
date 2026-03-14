@@ -1268,33 +1268,9 @@ let handler ~session_manager ~require_pairing ~auth_token
                                    ~name ())
                                cfg.providers)
                         in
-                        let lines =
-                          List.map
-                            (fun pq ->
-                              let summary =
-                                Provider_quota.to_summary_string pq
-                              in
-                              let threshold =
-                                match
-                                  List.assoc_opt pq.Provider_quota.provider_name
-                                    cfg.providers
-                                with
-                                | Some pc ->
-                                    Option.value ~default:0.85
-                                      pc.quota_threshold
-                                | None -> 0.85
-                              in
-                              let label =
-                                Provider_quota.status_label ~threshold pq
-                              in
-                              summary ^ "  " ^ label)
-                            results
-                        in
                         let text =
-                          if lines = [] then "No providers configured."
-                          else
-                            "*Provider Quota/Usage*\n\n"
-                            ^ String.concat "\n" lines
+                          Slash_commands.format_model_usage
+                            ~connector:Format_adapter.Plain ~config:cfg results
                         in
                         sse_reply text)
                 | Slash_commands.NotACommand ->

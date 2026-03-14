@@ -865,15 +865,15 @@ let handle_webhook ~(config : Runtime_config.teams_config)
                     | ModelUsage ->
                         let cfg = Session.get_config session_manager in
                         Provider_quota.set_cache_ttl cfg.quota_cache_ttl_s;
-                        let results = Provider_quota.get_all_cached () in
-                        let lines =
-                          List.map
-                            (fun (name, pq) ->
-                              Printf.sprintf "%s: %s" name
-                                (Provider_quota.to_summary_string pq))
-                            results
+                        let results =
+                          Provider_quota.get_all_cached ()
+                          |> List.map (fun (_name, pq) -> pq)
                         in
-                        send_text (String.concat "\n" lines))))
+                        let text =
+                          Slash_commands.format_model_usage
+                            ~connector:Format_adapter.Teams ~config:cfg results
+                        in
+                        send_text text)))
 
 (* Channel.S start — webhook-only, no polling loop needed *)
 let start ~(config : Runtime_config.t) ~(_session_manager : Session.t) =

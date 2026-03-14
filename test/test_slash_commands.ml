@@ -1021,6 +1021,87 @@ let test_format_usage_plain_and_telegram () =
         "telegram usage contains session key" true
         (contains_str telegram "telegram:1:user"))
 
+let test_format_help_discord_code_block () =
+  let output = Slash_commands.format_help ~connector:Format_adapter.Discord in
+  Alcotest.(check bool)
+    "discord help wrapped in code block" true
+    (String.length output > 6
+    && String.sub output 0 3 = "```"
+    && contains_str output "```\n");
+  Alcotest.(check bool)
+    "discord help contains /help" true
+    (contains_str output "/help")
+
+let test_format_help_slack_code_block () =
+  let output = Slash_commands.format_help ~connector:Format_adapter.Slack in
+  Alcotest.(check bool)
+    "slack help wrapped in code block" true
+    (String.length output > 6 && String.sub output 0 3 = "```");
+  Alcotest.(check bool)
+    "slack help contains /help" true
+    (contains_str output "/help")
+
+let test_format_model_usage_empty () =
+  let config = Runtime_config.default in
+  let result =
+    Slash_commands.format_model_usage ~connector:Format_adapter.Discord
+      ~config []
+  in
+  Alcotest.(check string)
+    "empty providers" "No providers configured." result
+
+let test_format_model_usage_table () =
+  let config = Runtime_config.default in
+  let pq : Provider_quota.provider_quota =
+    {
+      provider_name = "openai";
+      state =
+        Provider_quota.Known
+          {
+            session = Some { used_pct = 42.0; resets_at = None; window_duration_s = None };
+            weekly = Some { used_pct = 75.0; resets_at = None; window_duration_s = None };
+            monthly = None;
+          };
+      fetched_at = Unix.gettimeofday ();
+    }
+  in
+  let result =
+    Slash_commands.format_model_usage ~connector:Format_adapter.Discord
+      ~config [ pq ]
+  in
+  Alcotest.(check bool)
+    "contains code block" true
+    (contains_str result "```");
+  Alcotest.(check bool)
+    "contains PROVIDER header" true
+    (contains_str result "PROVIDER");
+  Alcotest.(check bool)
+    "contains openai" true
+    (contains_str result "openai");
+  Alcotest.(check bool)
+    "contains bold heading" true
+    (contains_str result "**Provider Quota/Usage**")
+
+let test_format_model_usage_plain () =
+  let config = Runtime_config.default in
+  let pq : Provider_quota.provider_quota =
+    {
+      provider_name = "test-prov";
+      state = Provider_quota.Unknown "not_configured";
+      fetched_at = Unix.gettimeofday ();
+    }
+  in
+  let result =
+    Slash_commands.format_model_usage ~connector:Format_adapter.Plain ~config
+      [ pq ]
+  in
+  Alcotest.(check bool)
+    "plain has no code block" false
+    (contains_str result "```");
+  Alcotest.(check bool)
+    "plain contains provider name" true
+    (contains_str result "test-prov")
+
 let test_model_bare_name () =
   match Slash_commands.handle "/model glm-5" with
   | Slash_commands.Model (Slash_commands.ModelSet "glm-5") -> ()
@@ -1219,6 +1300,16 @@ let suite =
     Alcotest.test_case "format usage plain and telegram" `Quick
       test_format_usage_plain_and_telegram;
     Alcotest.test_case "format help telegram" `Quick test_format_help_telegram;
+    Alcotest.test_case "format help discord code block" `Quick
+      test_format_help_discord_code_block;
+    Alcotest.test_case "format help slack code block" `Quick
+      test_format_help_slack_code_block;
+    Alcotest.test_case "format model usage empty" `Quick
+      test_format_model_usage_empty;
+    Alcotest.test_case "format model usage table" `Quick
+      test_format_model_usage_table;
+    Alcotest.test_case "format model usage plain" `Quick
+      test_format_model_usage_plain;
     Alcotest.test_case "/model bare name sets model" `Quick test_model_bare_name;
     Alcotest.test_case "/model provider/name sets model" `Quick
       test_model_bare_name_provider_prefix;

@@ -778,15 +778,14 @@ let handle_message ~(discord_config : Runtime_config.discord_config)
           | ModelUsage ->
               let cfg = Session.get_config session_mgr in
               Provider_quota.set_cache_ttl cfg.quota_cache_ttl_s;
-              let results = Provider_quota.get_all_cached () in
-              let lines =
-                List.map
-                  (fun (name, pq) ->
-                    Printf.sprintf "%s: %s" name
-                      (Provider_quota.to_summary_string pq))
-                  results
+              let results =
+                Provider_quota.get_all_cached ()
+                |> List.map (fun (_name, pq) -> pq)
               in
-              let text = String.concat "\n" lines in
+              let text =
+                Slash_commands.format_model_usage
+                  ~connector:Format_adapter.Discord ~config:cfg results
+              in
               send_message_fn ~bot_token:discord_config.bot_token
                 ~channel_id:msg.channel_id ~text)
       | ForkAnd prompt ->
