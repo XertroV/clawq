@@ -580,6 +580,34 @@ let handle_webhook ~(config : Runtime_config.teams_config)
                               (if user_name <> "" then user_name else user_id)
                               user_id err);
                         Lwt.return_unit)
+                | Menu -> (
+                    let card_json =
+                      Slash_commands.format_menu ~connector:Format_adapter.Teams
+                    in
+                    let open Lwt.Syntax in
+                    let* token_opt = fetch_token ~config in
+                    match token_opt with
+                    | None ->
+                        Logs.err (fun m ->
+                            m "Teams: cannot send menu, no OAuth token");
+                        Lwt.return_unit
+                    | Some token ->
+                        let uri =
+                          Printf.sprintf "%s/v3/conversations/%s/activities"
+                            (String.trim effective_service_url)
+                            (Uri.pct_encode conversation_id)
+                        in
+                        let headers =
+                          [ ("Authorization", "Bearer " ^ token) ]
+                        in
+                        let* status, _resp =
+                          Http_client.post_json ~uri ~headers ~body:card_json
+                        in
+                        if status < 200 || status >= 300 then
+                          Logs.warn (fun m ->
+                              m "Teams: menu card failed (HTTP %d) conv=%s"
+                                status conversation_id);
+                        Lwt.return_unit)
                 | Reply text -> send_text text
                 | Help ->
                     let text =

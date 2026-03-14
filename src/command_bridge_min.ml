@@ -473,6 +473,27 @@ let handle args =
   | "watcher" :: _ -> unsupported "watcher"
   | "ec-run" :: _ -> unsupported "ec-run"
   | "hardware" :: _ -> "hardware: deferred to Phase 2"
+  | "manifest" :: [ "teams" ] -> Slash_commands.manifest_teams ()
+  | "manifest" :: [ "telegram" ] -> Slash_commands.manifest_telegram ()
+  | "manifest" :: [ platform; "--output"; path ]
+    when platform = "teams" || platform = "telegram" ->
+      let content =
+        if platform = "teams" then Slash_commands.manifest_teams ()
+        else Slash_commands.manifest_telegram ()
+      in
+      let oc = open_out path in
+      output_string oc content;
+      output_char oc '\n';
+      close_out oc;
+      Printf.sprintf "%s manifest written to %s"
+        (String.capitalize_ascii platform)
+        path
+  | "manifest" :: _ ->
+      "Usage: clawq-min manifest <platform> [--output FILE]\n\n\
+       Platforms:\n\
+      \  teams      Generate Teams app manifest command list (top 10 by \
+       priority)\n\
+      \  telegram   Generate Telegram setMyCommands payload (all commands)"
   | "benchmark" :: rest -> Benchmark.run rest
   | "migrate" :: rest -> Migrate.cmd_migrate rest
   | "completions" :: rest -> Completions.cmd_completions rest

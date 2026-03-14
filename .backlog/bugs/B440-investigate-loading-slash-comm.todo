@@ -1,14 +1,15 @@
 ---
 claimed_at: "2026-03-14T07:33:07Z"
 claimed_by: cli-user
-completed_at: null
+completed_at: "2026-03-14T07:45:24Z"
 complexity: medium
 depends_on: []
+duration_minutes: 12.28436933355
 estimate_hours: 3
 id: B440
 priority: high
 started_at: "2026-03-14T07:33:07Z"
-status: in_progress
+status: done
 tags: []
 title: Implement slash command registration for Teams/Telegram autocomplete with priority-based manifest generation
 ---

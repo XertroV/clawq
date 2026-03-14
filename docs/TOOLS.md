@@ -1,0 +1,65 @@
+# Connector Abstraction & Slash Command Registration
+
+## Overview
+
+clawq supports multiple messaging connectors (Telegram, Teams, Discord, Slack) via a shared slash command system. Each connector dispatches commands through `Slash_commands.handle` and formats output using `Format_adapter`.
+
+## Slash Command Registration
+
+### Command Type
+
+```ocaml
+type command = { name : string; description : string; priority : int }
+```
+
+Priority (0–100) determines ordering for platform command autocomplete menus. Higher = more prominent.
+
+### Platform Registration
+
+| Platform | Mechanism | When | Limit |
+|----------|-----------|------|-------|
+| **Telegram** | `setMyCommands` API | Daemon startup (per account) | ~100 |
+| **Teams** | App manifest `bots.commandLists` | Build time via `clawq manifest teams` | 10 per scope |
+| **Discord** | N/A (no native slash registration yet) | — | — |
+| **Slack** | N/A (no native slash registration yet) | — | — |
+
+### Telegram Runtime Registration
+
+On startup, each Telegram polling account calls `set_my_commands` which registers all commands sorted by priority via the Telegram Bot API `setMyCommands` endpoint. This happens automatically in `poll_account` before the polling loop begins.
+
+### Teams Manifest Generation
+
+Teams requires a static app manifest. Use the CLI to generate the command fragment:
+
+```bash
+clawq manifest teams              # Print to stdout
+clawq manifest teams --output manifest.json  # Write to file
+```
+
+This outputs the top 10 commands (by priority) in Teams `bots.commandLists` format. Paste the `commandLists` array into your Teams app manifest.
+
+For full command discoverability beyond the 10-command limit, use `/menu` in Teams to get an Adaptive Card with all commands as clickable buttons.
+
+### Telegram Manifest Generation
+
+```bash
+clawq manifest telegram           # Print setMyCommands payload
+clawq manifest telegram --output cmds.json
+```
+
+Generates the full `setMyCommands` JSON payload sorted by priority. Primarily useful for debugging — Telegram registration happens automatically on daemon startup.
+
+## Adding a New Command
+
+1. Add an entry to `Slash_commands.commands` in `src/slash_commands.ml` with appropriate priority
+2. Add a result variant if needed
+3. Add handler case in `Slash_commands.handle`
+4. Handle the new variant in each connector: `telegram.ml`, `teams.ml`, `discord.ml`, `slack.ml`, `http_server.ml`
+5. Add tests in `test/test_slash_commands.ml`
+
+## `/menu` Command
+
+The `/menu` command renders a full command listing:
+- **Teams**: Adaptive Card with grouped action buttons (Core / Info & Config / Advanced tiers)
+- **Telegram**: HTML-formatted list with `<code>` command names
+- **Other connectors**: Plain text list sorted by priority

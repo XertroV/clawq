@@ -403,6 +403,19 @@ let update_cmd = disabled "update" "Trigger a daemon update"
 let hardware_cmd = disabled "hardware" "Hardware integration (deferred)"
 let otp_show_cmd = disabled "otp-show" "Show pairing codes"
 
+let manifest_cmd =
+  with_args "manifest"
+    "Generate platform-specific slash command registration payloads."
+    [
+      `S "SUBCOMMANDS";
+      `I
+        ( "teams",
+          "Generate Teams app manifest command list (top 10 by priority)." );
+      `I ("telegram", "Generate Telegram setMyCommands payload (all commands).");
+      `S "OPTIONS";
+      `I ("--output FILE", "Write output to file instead of stdout.");
+    ]
+
 let version_cmd =
   let info = Cmd.info "version" ~doc:"Print version and build info." in
   Cmd.v info
@@ -467,6 +480,7 @@ let () =
       hardware_cmd;
       benchmark_cmd;
       completions_cmd;
+      manifest_cmd;
     ]
   in
   exit (Cmd.eval ~argv ~env:help_env (Cmd.group main_info cmds))

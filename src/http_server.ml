@@ -16,9 +16,11 @@ let slash_commands_json () =
        (fun (cmd : Slash_commands.command) ->
          `Assoc
            [
-             ("name", `String cmd.name); ("description", `String cmd.description);
+             ("name", `String cmd.name);
+             ("description", `String cmd.description);
+             ("priority", `Int cmd.priority);
            ])
-       Slash_commands.commands)
+       Slash_commands.commands_by_priority)
 
 let json_of_stream_event = function
   | Provider.Delta content ->
@@ -344,6 +346,16 @@ let handler ~session_manager ~require_pairing ~auth_token
                 | Slash_commands.Help ->
                     let response =
                       Slash_commands.format_help ~connector:Format_adapter.Plain
+                    in
+                    let resp_json =
+                      `Assoc [ ("response", `String response) ]
+                      |> Yojson.Safe.to_string
+                    in
+                    Cohttp_lwt_unix.Server.respond_string ~status:`OK
+                      ~headers:json_headers ~body:resp_json ()
+                | Slash_commands.Menu ->
+                    let response =
+                      Slash_commands.format_menu ~connector:Format_adapter.Plain
                     in
                     let resp_json =
                       `Assoc [ ("response", `String response) ]
@@ -889,6 +901,10 @@ let handler ~session_manager ~require_pairing ~auth_token
                 | Slash_commands.Help ->
                     sse_reply
                       (Slash_commands.format_help
+                         ~connector:Format_adapter.Plain)
+                | Slash_commands.Menu ->
+                    sse_reply
+                      (Slash_commands.format_menu
                          ~connector:Format_adapter.Plain)
                 | Slash_commands.Reset ->
                     let key = "web:" ^ session_id in

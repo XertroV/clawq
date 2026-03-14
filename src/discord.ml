@@ -490,6 +490,12 @@ let handle_message ~(discord_config : Runtime_config.discord_config)
       | Reply text ->
           send_message_fn ~bot_token:discord_config.bot_token
             ~channel_id:msg.channel_id ~text
+      | Menu ->
+          let text =
+            Slash_commands.format_menu ~connector:Format_adapter.Discord
+          in
+          send_message_fn ~bot_token:discord_config.bot_token
+            ~channel_id:msg.channel_id ~text
       | Help ->
           let text =
             Slash_commands.format_help ~connector:Format_adapter.Discord

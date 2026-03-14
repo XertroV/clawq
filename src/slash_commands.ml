@@ -1,4 +1,4 @@
-type command = { name : string; description : string }
+type command = { name : string; description : string; priority : int }
 type thinking_action = ShowThinking | SetThinking of string option
 type show_thinking_action = ShowThinkingStatus | ToggleShowThinking
 type heartbeat_action = HeartbeatStatus | SetHeartbeat of bool
@@ -44,6 +44,7 @@ type result =
   | Costs of costs_action
   | Usage of usage_action
   | Model of model_action
+  | Menu
   | DebugDumpChat
   | NotACommand
 
@@ -70,66 +71,102 @@ let invalid_thinking_level_message value =
 
 let commands =
   [
-    { name = "start"; description = "Start the bot" };
-    { name = "help"; description = "Show available commands" };
-    { name = "new"; description = "Start a new conversation" };
-    { name = "status"; description = "Show bot status" };
-    { name = "runtime_ctx"; description = "Show current runtime context" };
-    { name = "uptime"; description = "Show current daemon uptime" };
+    { name = "start"; description = "Start the bot"; priority = 100 };
+    { name = "help"; description = "Show available commands"; priority = 95 };
+    { name = "new"; description = "Start a new conversation"; priority = 90 };
+    { name = "status"; description = "Show bot status"; priority = 80 };
+    {
+      name = "model";
+      description = "Manage model: /model [set/fav/unfav/list/usage] [args]";
+      priority = 75;
+    };
     {
       name = "thinking";
       description = "Show or set thinking level: /thinking [level]";
+      priority = 70;
     };
     {
       name = "compact";
       description = "Compact session history (summarize older messages)";
-    };
-    { name = "pair"; description = "Pair with TOTP code: /pair <6-digit-code>" };
-    {
-      name = "update";
-      description = "Pull, rebuild, and gracefully restart clawq";
+      priority = 65;
     };
     {
       name = "delegate";
       description =
         "Delegate a prompt to a temporary subagent: /delegate <prompt>";
-    };
-    {
-      name = "show_thinking";
-      description = "Toggle display of model thinking in responses";
-    };
-    {
-      name = "config";
-      description = "View or modify config: /config [show/get/set/keys]";
-    };
-    {
-      name = "heartbeat";
-      description = "Show or set heartbeat routing for this session";
+      priority = 60;
     };
     {
       name = "fork_and";
       description =
         "Fork the current session and run a prompt: /fork_and <prompt>";
+      priority = 55;
     };
-    { name = "tools"; description = "List all available tools" };
-    { name = "tasks"; description = "Show the agent's current task tree" };
+    { name = "tools"; description = "List all available tools"; priority = 50 };
     {
-      name = "model";
-      description = "Manage model: /model [set/fav/unfav/list/usage] [args]";
+      name = "tasks";
+      description = "Show the agent's current task tree";
+      priority = 45;
     };
     {
       name = "costs";
       description = "Show cost breakdowns: /costs [session/model/provider]";
+      priority = 40;
     };
     {
       name = "usage";
       description = "Show token usage: /usage [session/model/provider]";
+      priority = 35;
+    };
+    {
+      name = "config";
+      description = "View or modify config: /config [show/get/set/keys]";
+      priority = 30;
+    };
+    {
+      name = "uptime";
+      description = "Show current daemon uptime";
+      priority = 25;
+    };
+    {
+      name = "runtime_ctx";
+      description = "Show current runtime context";
+      priority = 20;
+    };
+    {
+      name = "show_thinking";
+      description = "Toggle display of model thinking in responses";
+      priority = 15;
+    };
+    {
+      name = "heartbeat";
+      description = "Show or set heartbeat routing for this session";
+      priority = 10;
+    };
+    {
+      name = "pair";
+      description = "Pair with TOTP code: /pair <6-digit-code>";
+      priority = 5;
+    };
+    {
+      name = "update";
+      description = "Pull, rebuild, and gracefully restart clawq";
+      priority = 3;
+    };
+    {
+      name = "menu";
+      description = "Show all commands as interactive menu";
+      priority = 85;
     };
     {
       name = "debug_dump_chat";
       description = "Dump session to file and send as attachment";
+      priority = 1;
     };
   ]
+
+let commands_by_priority =
+  List.sort (fun a b -> compare b.priority a.priority) commands
 
 let pad_right text width =
   let len = String.length text in
@@ -423,6 +460,7 @@ let handle text =
                   \  /model unfav <name>       — Remove from favorites\n\
                   \  /model list [provider]    — List available models\n\
                   \  /model usage              — Show provider quota/usage")
+        | "menu" -> Menu
         | "debug-dump-chat" | "debug_dump_chat" -> DebugDumpChat
         | "" -> NotACommand
         | _ -> NotACommand)
@@ -1133,3 +1171,170 @@ let format_model_usage ~connector ~(config : Runtime_config.t)
     Format_adapter.bold connector "Provider Quota/Usage"
     ^ "\n\n"
     ^ Format_adapter.render_table connector ~max_width:60 columns rows
+
+(* Manifest generation for platform command registration *)
+
+let teams_command_limit = 10
+
+let manifest_teams () =
+  let top =
+    List.filteri (fun i _ -> i < teams_command_limit) commands_by_priority
+  in
+  let cmds =
+    `List
+      (List.map
+         (fun c ->
+           `Assoc
+             [
+               ("title", `String ("/" ^ c.name));
+               ("description", `String c.description);
+             ])
+         top)
+  in
+  `Assoc
+    [
+      ( "bots",
+        `List
+          [
+            `Assoc
+              [
+                ( "commandLists",
+                  `List
+                    [
+                      `Assoc
+                        [
+                          ( "scopes",
+                            `List [ `String "personal"; `String "team" ] );
+                          ("commands", cmds);
+                        ];
+                    ] );
+              ];
+          ] );
+    ]
+  |> Yojson.Safe.pretty_to_string ~std:true
+
+let manifest_telegram () =
+  `List
+    (List.map
+       (fun c ->
+         `Assoc
+           [
+             ("command", `String c.name); ("description", `String c.description);
+           ])
+       commands_by_priority)
+  |> Yojson.Safe.pretty_to_string ~std:true
+
+(* /menu: Adaptive Card with all commands grouped by priority tier *)
+
+let format_menu_teams () =
+  let group_by_tier cmds =
+    let high = List.filter (fun c -> c.priority >= 60) cmds in
+    let mid = List.filter (fun c -> c.priority >= 20 && c.priority < 60) cmds in
+    let low = List.filter (fun c -> c.priority < 20) cmds in
+    [ ("Core", high); ("Info & Config", mid); ("Advanced", low) ]
+  in
+  let tiers = group_by_tier commands_by_priority in
+  let action_sets =
+    List.map
+      (fun (tier_name, cmds) ->
+        let actions =
+          List.map
+            (fun c ->
+              `Assoc
+                [
+                  ("type", `String "Action.Submit");
+                  ("title", `String ("/" ^ c.name));
+                  ( "data",
+                    `Assoc
+                      [
+                        ( "msteams",
+                          `Assoc
+                            [
+                              ("type", `String "imBack");
+                              ("value", `String ("/" ^ c.name));
+                            ] );
+                      ] );
+                ])
+            cmds
+        in
+        `Assoc [ ("type", `String "ActionSet"); ("actions", `List actions) ])
+      tiers
+  in
+  let text_blocks =
+    List.map2
+      (fun (tier_name, _) action_set ->
+        [
+          `Assoc
+            [
+              ("type", `String "TextBlock");
+              ("text", `String tier_name);
+              ("weight", `String "bolder");
+              ("size", `String "medium");
+            ];
+          action_set;
+        ])
+      tiers action_sets
+    |> List.flatten
+  in
+  let card =
+    `Assoc
+      [
+        ("type", `String "AdaptiveCard");
+        ("$schema", `String "http://adaptivecards.io/schemas/adaptive-card.json");
+        ("version", `String "1.4");
+        ( "body",
+          `List
+            ([
+               `Assoc
+                 [
+                   ("type", `String "TextBlock");
+                   ("text", `String "Command Menu");
+                   ("weight", `String "bolder");
+                   ("size", `String "large");
+                 ];
+             ]
+            @ text_blocks) );
+      ]
+  in
+  `Assoc
+    [
+      ("type", `String "message");
+      ( "attachments",
+        `List
+          [
+            `Assoc
+              [
+                ( "contentType",
+                  `String "application/vnd.microsoft.card.adaptive" );
+                ("content", card);
+              ];
+          ] );
+    ]
+  |> Yojson.Safe.to_string
+
+let format_menu_plain () =
+  let buf = Buffer.create 512 in
+  Buffer.add_string buf "Command Menu\n\n";
+  List.iter
+    (fun c ->
+      Buffer.add_string buf (Printf.sprintf "  /%s — %s\n" c.name c.description))
+    commands_by_priority;
+  Buffer.contents buf
+
+let format_menu_telegram () =
+  let buf = Buffer.create 512 in
+  Buffer.add_string buf "<b>Command Menu</b>\n\n";
+  List.iter
+    (fun c ->
+      Buffer.add_string buf
+        (Printf.sprintf "%s — %s\n"
+           (Format_adapter.code Format_adapter.Telegram_html ("/" ^ c.name))
+           (Format_adapter.escape Format_adapter.Telegram_html c.description)))
+    commands_by_priority;
+  Buffer.contents buf
+
+let format_menu ~connector =
+  match connector with
+  | Format_adapter.Teams -> format_menu_teams ()
+  | Format_adapter.Telegram_html -> format_menu_telegram ()
+  | _ -> format_menu_plain ()

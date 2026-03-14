@@ -1414,6 +1414,33 @@ let cmd_ec_run args =
   end
   else "Usage: clawq ec-run --daemon-mode\n(internal command)\n"
 
+let cmd_manifest args =
+  match args with
+  | [ "teams" ] -> Slash_commands.manifest_teams ()
+  | [ "telegram" ] -> Slash_commands.manifest_telegram ()
+  | [ "teams"; "--output"; path ] ->
+      let content = Slash_commands.manifest_teams () in
+      let oc = open_out path in
+      output_string oc content;
+      output_char oc '\n';
+      close_out oc;
+      Printf.sprintf "Teams manifest written to %s" path
+  | [ "telegram"; "--output"; path ] ->
+      let content = Slash_commands.manifest_telegram () in
+      let oc = open_out path in
+      output_string oc content;
+      output_char oc '\n';
+      close_out oc;
+      Printf.sprintf "Telegram manifest written to %s" path
+  | _ ->
+      "Usage: clawq manifest <platform> [--output FILE]\n\n\
+       Platforms:\n\
+      \  teams      Generate Teams app manifest command list (top 10 by \
+       priority)\n\
+      \  telegram   Generate Telegram setMyCommands payload (all commands)\n\n\
+       Options:\n\
+      \  --output FILE   Write output to file instead of stdout"
+
 let handle args =
   match args with
   | "phase2" :: _ -> Phase2.render ()
@@ -1445,6 +1472,7 @@ let handle args =
   | "runtime" :: rest -> cmd_runtime rest
   | "tunnel" :: rest -> cmd_tunnel rest
   | "update" :: rest -> cmd_update rest
+  | "manifest" :: rest -> cmd_manifest rest
   | "hardware" :: _ -> "hardware: deferred to Phase 2"
   | "migrate" :: rest -> Migrate.cmd_migrate rest
   | "service" :: rest -> cmd_service rest

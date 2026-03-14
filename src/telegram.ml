@@ -298,6 +298,12 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
       else
         match Slash_commands.handle user_text with
         | Reply text -> send_message ~bot_token ~chat_id:update.chat_id ~text ()
+        | Menu ->
+            let text =
+              Slash_commands.format_menu ~connector:Format_adapter.Telegram_html
+            in
+            send_chunked_html_with_fallback ~bot_token ~chat_id:update.chat_id
+              ~text ()
         | Help ->
             let text =
               Slash_commands.format_help ~connector:Format_adapter.Telegram_html
