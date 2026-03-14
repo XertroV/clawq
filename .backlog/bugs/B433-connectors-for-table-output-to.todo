@@ -6,7 +6,7 @@ id: B433
 priority: high
 status: pending
 tags: []
-title: 'connectors: for table output to connectors that don''t support tables, we can use a code block + the table code used by the CLI.'
+title: 'connectors + slash cmds: for table output to connectors that don''t support tables, we can use a code block + the table code used by the CLI.'
 ---
 
-connectors: for table output to connectors that don't support tables, we can use a code block + the table code used by the CLI.
+connectors + slash cmds: for table output to connectors that don't support tables, we can use a code block + the table code used by the CLI.
