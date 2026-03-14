@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B442
+priority: high
+status: pending
+tags: []
+title: We should store quota data in the DB for a historical record
+---
+
+We should store quota data in the DB for a historical record
