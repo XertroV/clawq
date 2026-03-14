@@ -1,13 +1,13 @@
 ---
+completed_at: null
 complexity: low
 depends_on: []
 estimate_hours: 0.5
 id: P2.M4.E3.T006
 priority: low
-status: pending
-tags:
-    - idea
-    - planning
+started_at: null
+status: done
+tags: []
 title: Connector command registration abstraction
 ---
 Document the connector abstraction pattern for command registration:

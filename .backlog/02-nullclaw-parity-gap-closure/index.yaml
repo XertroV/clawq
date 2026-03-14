@@ -2,7 +2,7 @@ complexity: medium
 depends_on: []
 estimate_hours: 480
 id: P2
-locked: false
+locked: true
 milestones:
     - complexity: high
       depends_on: []
@@ -39,7 +39,7 @@ milestones:
       locked: false
       name: Memory, Runtime & Tooling
       path: 04-memory-runtime-tooling
-      status: pending
+      status: done
     - complexity: medium
       depends_on: []
       description: 'Embedded Chat UI (P2-10) and tunnel alternatives: Tailscale, ngrok, custom (P2-12).'
@@ -65,5 +65,5 @@ stats:
     in_progress: 0
     pending: 0
     total_tasks: 105
-status: pending
+status: done
 weeks: 16

@@ -27,7 +27,7 @@ epics:
       locked: false
       name: Slash Command Registration & Tooling
       path: 03-slash-command-registration-too
-      status: pending
+      status: done
 estimate_hours: 60
 id: P2.M4
 locked: false
@@ -38,4 +38,4 @@ stats:
     in_progress: 0
     pending: 0
     total_tasks: 12
-status: pending
+status: done
