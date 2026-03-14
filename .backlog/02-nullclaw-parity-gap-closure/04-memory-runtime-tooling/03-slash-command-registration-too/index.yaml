@@ -48,7 +48,8 @@ tasks:
       file: T005-telegram-setmycommands-on-star.todo
       id: T005
       priority: high
-      status: pending
+      status: done
+      tags: []
       title: Telegram setMyCommands on startup
     - complexity: low
       depends_on: []
