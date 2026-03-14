@@ -620,6 +620,16 @@ let handle_message ~(discord_config : Runtime_config.discord_config)
             match Session.get_db session_mgr with
             | Some db ->
                 Task_tree.init_schema db;
+                Task_tree.render_emoji_tree ~db ~session_key:key ()
+            | None -> "Tasks are not available (no database)."
+          in
+          send_message_fn ~bot_token:discord_config.bot_token
+            ~channel_id:msg.channel_id ~text
+      | TasksFull ->
+          let text =
+            match Session.get_db session_mgr with
+            | Some db ->
+                Task_tree.init_schema db;
                 Task_tree.render_tree_with_legend ~db ~session_key:key
             | None -> "Tasks are not available (no database)."
           in

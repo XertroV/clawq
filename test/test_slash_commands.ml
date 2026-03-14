@@ -24,6 +24,7 @@ let result_to_string = function
   | Slash_commands.ForkAnd s -> "ForkAnd(" ^ s ^ ")"
   | Slash_commands.Tools -> "Tools"
   | Slash_commands.Tasks -> "Tasks"
+  | Slash_commands.TasksFull -> "TasksFull"
   | Slash_commands.Costs Slash_commands.CostsSummary -> "Costs(Summary)"
   | Slash_commands.Costs Slash_commands.CostsSessions -> "Costs(Sessions)"
   | Slash_commands.Costs (Slash_commands.CostsSession key) ->
@@ -75,6 +76,7 @@ let result_eq a b =
   | Slash_commands.ForkAnd a, Slash_commands.ForkAnd b -> a = b
   | Slash_commands.Tools, Slash_commands.Tools -> true
   | Slash_commands.Tasks, Slash_commands.Tasks -> true
+  | Slash_commands.TasksFull, Slash_commands.TasksFull -> true
   | Slash_commands.Costs a, Slash_commands.Costs b -> a = b
   | Slash_commands.Usage a, Slash_commands.Usage b -> a = b
   | Slash_commands.Model _, Slash_commands.Model _ -> true
@@ -646,6 +648,24 @@ let test_tasks_command () =
 let test_tasks_command_with_telegram_bot_suffix () =
   Alcotest.check result_testable "/tasks@bot returns Tasks" Slash_commands.Tasks
     (Slash_commands.handle "/tasks@clawq_bot")
+
+let test_tasks_full_command () =
+  Alcotest.check result_testable "/tasks full returns TasksFull"
+    Slash_commands.TasksFull
+    (Slash_commands.handle "/tasks full")
+
+let test_tasks_invalid_args () =
+  match Slash_commands.handle "/tasks bogus" with
+  | Slash_commands.Reply s ->
+      Alcotest.(check bool)
+        "contains usage" true
+        (try
+           ignore (Str.search_forward (Str.regexp_string "Usage") s 0);
+           true
+         with Not_found -> false)
+  | other ->
+      Alcotest.fail
+        (Printf.sprintf "expected Reply, got %s" (result_to_string other))
 
 let test_tasks_render_empty_tree () =
   let db = Sqlite3.db_open ":memory:" in
@@ -1599,6 +1619,9 @@ let suite =
     Alcotest.test_case "/tasks returns Tasks" `Quick test_tasks_command;
     Alcotest.test_case "/tasks@bot returns Tasks" `Quick
       test_tasks_command_with_telegram_bot_suffix;
+    Alcotest.test_case "/tasks full returns TasksFull" `Quick
+      test_tasks_full_command;
+    Alcotest.test_case "/tasks invalid args" `Quick test_tasks_invalid_args;
     Alcotest.test_case "/tasks renders empty tree" `Quick
       test_tasks_render_empty_tree;
     Alcotest.test_case "/tasks renders nonempty tree" `Quick

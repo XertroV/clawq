@@ -975,6 +975,169 @@ let test_render_with_legend () =
        true
      with Not_found -> false)
 
+let test_render_emoji_tree_empty () =
+  let db = fresh_db () in
+  let output = Task_tree.render_emoji_tree ~db ~session_key:"s1" () in
+  Alcotest.(check bool)
+    "contains encouragement" true
+    (try
+       ignore
+         (Str.search_forward (Str.regexp_string "No tasks tracked") output 0);
+       true
+     with Not_found -> false)
+
+let test_render_emoji_tree_basic () =
+  let db = fresh_db () in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc [ ("op", `String "add"); ("title", `String "First task") ];
+        `Assoc
+          [
+            ("op", `String "add");
+            ("title", `String "Second task");
+            ("status", `String "done");
+          ];
+      ]
+  in
+  let output = Task_tree.render_emoji_tree ~db ~session_key:"s1" () in
+  Alcotest.(check bool)
+    "contains done emoji" true
+    (try
+       ignore (Str.search_forward (Str.regexp_string "\xe2\x9c\x85") output 0);
+       true
+     with Not_found -> false);
+  Alcotest.(check bool)
+    "contains pending emoji" true
+    (try
+       ignore (Str.search_forward (Str.regexp_string "\xe2\xac\x9c") output 0);
+       true
+     with Not_found -> false);
+  Alcotest.(check bool)
+    "contains First task" true
+    (try
+       ignore (Str.search_forward (Str.regexp_string "First task") output 0);
+       true
+     with Not_found -> false)
+
+let test_render_emoji_tree_nested () =
+  let db = fresh_db () in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [
+            ("op", `String "add");
+            ("title", `String "Parent");
+            ("id", `String "p");
+          ];
+        `Assoc
+          [
+            ("op", `String "add");
+            ("title", `String "Child one");
+            ("parent", `String "p");
+          ];
+        `Assoc
+          [
+            ("op", `String "add");
+            ("title", `String "Child two");
+            ("parent", `String "p");
+          ];
+        `Assoc [ ("op", `String "add"); ("title", `String "Second root") ];
+      ]
+  in
+  let output = Task_tree.render_emoji_tree ~db ~session_key:"s1" () in
+  Alcotest.(check bool)
+    "contains branch connector" true
+    (try
+       ignore
+         (Str.search_forward
+            (Str.regexp_string "\xe2\x94\x9c\xe2\x94\x80\xe2\x94\x80")
+            output 0);
+       true
+     with Not_found -> false);
+  Alcotest.(check bool)
+    "contains end connector" true
+    (try
+       ignore
+         (Str.search_forward
+            (Str.regexp_string "\xe2\x94\x94\xe2\x94\x80\xe2\x94\x80")
+            output 0);
+       true
+     with Not_found -> false);
+  Alcotest.(check bool)
+    "contains vertical bar" true
+    (try
+       ignore (Str.search_forward (Str.regexp_string "\xe2\x94\x82") output 0);
+       true
+     with Not_found -> false)
+
+let test_render_emoji_tree_truncation () =
+  let db = fresh_db () in
+  let long_title =
+    "This is a really long task title that should be truncated to about fifty \
+     chars"
+  in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [ `Assoc [ ("op", `String "add"); ("title", `String long_title) ] ]
+  in
+  let output =
+    Task_tree.render_emoji_tree ~max_title_chars:50 ~db ~session_key:"s1" ()
+  in
+  Alcotest.(check bool)
+    "title truncated with ellipsis" true
+    (try
+       ignore (Str.search_forward (Str.regexp_string "...") output 0);
+       true
+     with Not_found -> false);
+  Alcotest.(check bool)
+    "full title not present" false
+    (try
+       ignore (Str.search_forward (Str.regexp_string long_title) output 0);
+       true
+     with Not_found -> false)
+
+let test_render_emoji_tree_summary () =
+  let db = fresh_db () in
+  let _ =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc [ ("op", `String "add"); ("title", `String "A") ];
+        `Assoc
+          [
+            ("op", `String "add");
+            ("title", `String "B");
+            ("status", `String "in_progress");
+          ];
+        `Assoc
+          [
+            ("op", `String "add");
+            ("title", `String "C");
+            ("status", `String "done");
+          ];
+      ]
+  in
+  let output = Task_tree.render_emoji_tree ~db ~session_key:"s1" () in
+  Alcotest.(check bool)
+    "contains task count" true
+    (try
+       ignore (Str.search_forward (Str.regexp_string "3 tasks") output 0);
+       true
+     with Not_found -> false);
+  Alcotest.(check bool)
+    "contains pending count" true
+    (try
+       ignore (Str.search_forward (Str.regexp_string "1 pending") output 0);
+       true
+     with Not_found -> false);
+  Alcotest.(check bool)
+    "contains done count" true
+    (try
+       ignore (Str.search_forward (Str.regexp_string "1 done") output 0);
+       true
+     with Not_found -> false)
+
 let test_note_only_update () =
   let db = fresh_db () in
   let _ =
@@ -3209,6 +3372,13 @@ let suite =
     Alcotest.test_case "batch transaction rollback" `Quick
       test_batch_transaction_rollback;
     Alcotest.test_case "render with legend" `Quick test_render_with_legend;
+    Alcotest.test_case "emoji tree empty" `Quick test_render_emoji_tree_empty;
+    Alcotest.test_case "emoji tree basic" `Quick test_render_emoji_tree_basic;
+    Alcotest.test_case "emoji tree nested" `Quick test_render_emoji_tree_nested;
+    Alcotest.test_case "emoji tree truncation" `Quick
+      test_render_emoji_tree_truncation;
+    Alcotest.test_case "emoji tree summary" `Quick
+      test_render_emoji_tree_summary;
     Alcotest.test_case "note-only update" `Quick test_note_only_update;
     Alcotest.test_case "comma-separated ID update" `Quick
       test_comma_separated_id_update;

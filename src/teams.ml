@@ -1031,6 +1031,15 @@ let handle_webhook ~(config : Runtime_config.teams_config)
                       match Session.get_db session_manager with
                       | Some db ->
                           Task_tree.init_schema db;
+                          Task_tree.render_emoji_tree ~db ~session_key:key ()
+                      | None -> "Tasks are not available (no database)."
+                    in
+                    send_text text
+                | TasksFull ->
+                    let text =
+                      match Session.get_db session_manager with
+                      | Some db ->
+                          Task_tree.init_schema db;
                           Task_tree.render_tree_with_legend ~db ~session_key:key
                       | None -> "Tasks are not available (no database)."
                     in

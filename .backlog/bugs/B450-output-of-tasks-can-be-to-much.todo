@@ -1,14 +1,15 @@
 ---
 claimed_at: "2026-03-14T14:35:59Z"
 claimed_by: cli-user
-completed_at: null
+completed_at: "2026-03-14T14:58:42Z"
 complexity: medium
 depends_on: []
+duration_minutes: 22.728130117516667
 estimate_hours: 1
 id: B450
 priority: high
 started_at: "2026-03-14T14:35:59Z"
-status: in_progress
+status: done
 tags: []
 title: output of /tasks can be to much. Need to have `/tasks` and `/tasks full`. The current output should be the full output. The default output should be a tree drawing of the tasks with each line truncated to ~50 characters. Use emoji for the checkbox, make it look nice and well formatted. For our custom formatting DSL thing we could have a Tree type or something if we don't already since we use the tree structure elsewhere sometimes.
 ---

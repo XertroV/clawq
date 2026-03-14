@@ -502,6 +502,18 @@ let handle_event ~(config : Runtime_config.slack_config)
                   match Session.get_db session_manager with
                   | Some db ->
                       Task_tree.init_schema db;
+                      Task_tree.render_emoji_tree ~db ~session_key:key ()
+                  | None -> "Tasks are not available (no database)."
+                in
+                let* () =
+                  send_message_fn ~bot_token:config.bot_token ~channel_id ~text
+                in
+                Lwt.return "ok"
+            | TasksFull ->
+                let text =
+                  match Session.get_db session_manager with
+                  | Some db ->
+                      Task_tree.init_schema db;
                       Task_tree.render_tree_with_legend ~db ~session_key:key
                   | None -> "Tasks are not available (no database)."
                 in

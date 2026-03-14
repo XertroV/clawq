@@ -393,6 +393,13 @@ let status_icon = function
   | Task_error -> "[!]"
   | Cancelled -> "[-]"
 
+let status_emoji = function
+  | Pending -> "\xe2\xac\x9c"
+  | In_progress -> "\xf0\x9f\x94\xb6"
+  | Done -> "\xe2\x9c\x85"
+  | Task_error -> "\xe2\x9d\x8c"
+  | Cancelled -> "\xe2\x9e\x96"
+
 let render_tree ~db ~session_key =
   let tasks = load_tasks ~db ~session_key () in
   if tasks = [] then
@@ -448,6 +455,81 @@ let render_tree_with_legend ~db ~session_key =
     ^ "\n\n\
        Legend: [ ] pending  [>] in_progress  [x] done  [!] error  [-] cancelled"
     ^ warning
+
+let render_emoji_tree ?(max_title_chars = 50) ~db ~session_key () =
+  let tasks = load_tasks ~db ~session_key () in
+  if tasks = [] then
+    "No tasks tracked. Use the task_tree tool to plan and track your work.\n\
+     Breaking complex goals into subtasks helps maintain focus across long \
+     sessions."
+  else
+    let buf = Buffer.create 512 in
+    let rec render_children ~parent_id ~prefix =
+      let children =
+        List.filter (fun t -> t.parent_id = parent_id) tasks
+        |> List.sort (fun a b -> compare a.sort_order b.sort_order)
+      in
+      let total = List.length children in
+      List.iteri
+        (fun i t ->
+          let is_last = i = total - 1 in
+          let connector =
+            if is_last then "\xe2\x94\x94\xe2\x94\x80\xe2\x94\x80 "
+            else "\xe2\x94\x9c\xe2\x94\x80\xe2\x94\x80 "
+          in
+          let child_prefix =
+            if is_last then prefix ^ "    " else prefix ^ "\xe2\x94\x82   "
+          in
+          let title =
+            Stream_visibility.truncate_text ~max_chars:max_title_chars t.title
+          in
+          Buffer.add_string buf
+            (Printf.sprintf "%s%s%s %s\n" prefix connector
+               (status_emoji t.status) title);
+          render_children ~parent_id:(Some t.id) ~prefix:child_prefix)
+        children
+    in
+    render_children ~parent_id:None ~prefix:"";
+    (* Summary line *)
+    let n_pending = ref 0 in
+    let n_active = ref 0 in
+    let n_done = ref 0 in
+    let n_error = ref 0 in
+    let n_cancelled = ref 0 in
+    List.iter
+      (fun t ->
+        match t.status with
+        | Pending -> incr n_pending
+        | In_progress -> incr n_active
+        | Done -> incr n_done
+        | Task_error -> incr n_error
+        | Cancelled -> incr n_cancelled)
+      tasks;
+    let total = List.length tasks in
+    let counts =
+      List.filter_map
+        (fun (n, label) ->
+          if n > 0 then Some (Printf.sprintf "%d %s" n label) else None)
+        [
+          (!n_pending, "pending");
+          (!n_active, "active");
+          (!n_done, "done");
+          (!n_error, "error");
+          (!n_cancelled, "cancelled");
+        ]
+    in
+    Buffer.add_string buf
+      (Printf.sprintf "\n%d tasks \xc2\xb7 %s" total
+         (String.concat " \xc2\xb7 " counts));
+    let ip_count = !n_active in
+    if ip_count >= warn_concurrent_in_progress then
+      Buffer.add_string buf
+        (Printf.sprintf
+           "\n\n\
+            \xe2\x9a\xa0\xef\xb8\x8f WARNING: %d tasks are in_progress. \
+            Consider completing or updating some before starting more work."
+           ip_count);
+    Buffer.contents buf
 
 let render_compact ~db ~session_key =
   let tasks = load_tasks ~db ~session_key () in

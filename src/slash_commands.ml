@@ -41,6 +41,7 @@ type result =
   | ForkAnd of string
   | Tools
   | Tasks
+  | TasksFull
   | Costs of costs_action
   | Usage of usage_action
   | Model of model_action
@@ -87,7 +88,7 @@ let commands =
     { name = "tools"; description = "List all available tools"; priority = 48 };
     {
       name = "tasks";
-      description = "Show the agent's current task tree";
+      description = "Show task tree (compact): /tasks [full]";
       priority = 70;
     };
     {
@@ -412,7 +413,11 @@ let handle text =
             | [] -> Reply "Usage: /fork_and <prompt>"
             | _ -> ForkAnd (String.concat " " args))
         | "tools" -> Tools
-        | "tasks" -> Tasks
+        | "tasks" -> (
+            match args with
+            | [ "full" ] -> TasksFull
+            | [] -> Tasks
+            | _ -> Reply "Usage: /tasks [full]")
         | "costs" -> (
             match args with
             | [] -> Costs CostsSummary
