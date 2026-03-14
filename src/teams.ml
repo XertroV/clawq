@@ -532,7 +532,7 @@ let handle_webhook ~(config : Runtime_config.teams_config)
                 | Reply text -> send_text text
                 | Help ->
                     let text =
-                      Slash_commands.format_help ~connector:Format_adapter.Plain
+                      Slash_commands.format_help ~connector:Format_adapter.Teams
                     in
                     send_text text
                 | Reset ->
@@ -648,7 +648,7 @@ let handle_webhook ~(config : Runtime_config.teams_config)
                             Tool_registry.partition_skills reg
                           in
                           Slash_commands.format_tools
-                            ~connector:Format_adapter.Plain tools skills
+                            ~connector:Format_adapter.Teams tools skills
                       | None -> "Tools are not enabled."
                     in
                     send_text text
@@ -666,7 +666,7 @@ let handle_webhook ~(config : Runtime_config.teams_config)
                       match Session.get_db session_manager with
                       | Some db ->
                           Slash_commands.format_costs
-                            ~connector:Format_adapter.Plain ~db action
+                            ~connector:Format_adapter.Teams ~db action
                       | None -> "Costs are not available (no database)."
                     in
                     send_text text
@@ -675,7 +675,7 @@ let handle_webhook ~(config : Runtime_config.teams_config)
                       match Session.get_db session_manager with
                       | Some db ->
                           Slash_commands.format_usage
-                            ~connector:Format_adapter.Plain ~db action
+                            ~connector:Format_adapter.Teams ~db action
                       | None -> "Usage is not available (no database)."
                     in
                     send_text text
@@ -696,7 +696,7 @@ let handle_webhook ~(config : Runtime_config.teams_config)
                             prefs.usage_counts
                         in
                         let text =
-                          format_model_show ~connector:Format_adapter.Plain
+                          format_model_show ~connector:Format_adapter.Teams
                             ~current ~favorites:prefs.favorites ~usage_ranked
                         in
                         send_text text
@@ -835,7 +835,7 @@ let handle_webhook ~(config : Runtime_config.teams_config)
                           |> List.filter (fun s -> s <> "")
                         in
                         let text =
-                          format_model_list ~connector:Format_adapter.Plain
+                          format_model_list ~connector:Format_adapter.Teams
                             ~models ~provider
                         in
                         send_text text
