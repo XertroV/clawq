@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B433
+priority: high
+status: pending
+tags: []
+title: 'connectors: for table output to connectors that don''t support tables, we can use a code block + the table code used by the CLI.'
+---
+
+connectors: for table output to connectors that don't support tables, we can use a code block + the table code used by the CLI.
