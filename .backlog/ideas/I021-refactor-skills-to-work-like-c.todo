@@ -1,0 +1,36 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 10
+id: I021
+priority: medium
+status: pending
+tags:
+    - idea
+    - planning
+title: Refactor skills to work like Claude Code's skills
+---
+Refactor clawq skills to follow Claude Code's skill model for richer structure and better agent integration.
+
+## Current clawq model
+- JSON files with shell command templates
+- Direct execution, stdout returned to agent
+- Each skill appears as a separate tool
+
+## Proposed Claude Code-style model
+- SKILL.md with YAML frontmatter + markdown instructions
+- Supporting files: scripts, templates, examples, references
+- Single Skill tool that loads skill instructions on-demand
+- Frontmatter metadata: allowed-tools, context, agent settings
+
+## Benefits
+- Richer structure (supporting files, examples, templates)
+- Better separation: instructions vs execution
+- More portable between agent implementations
+- Frontmatter control over tool access, model invocation, etc.
+
+## Migration path
+1. Support both formats during transition
+2. Convert existing skills (review-and-fix, watch_ci_after_push)
+3. Update skill_list, skill_create tools
+4. Document new format in skills docs
