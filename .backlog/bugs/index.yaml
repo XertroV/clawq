@@ -435,3 +435,4 @@ bugs:
     - file: B436-deadlock-responding-to-github.todo
     - file: B437-when-creating-sessions-we-shou.todo
     - file: B438-add-feature-for-teams-and-make.todo
+    - file: B439-teams-help-is-sent-as-a-nice-t.todo

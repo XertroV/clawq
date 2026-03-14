@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B439
+priority: high
+status: pending
+tags: []
+title: Teams /help is sent as a nice table, but /costs, /status, /usage etc are not (they should be). Also /tools is unformatted and unreadable on Teams. If possible, we should have a table type property for each provider, and use that to determine how we render tables for these kinds of responses.
+---
+
+Teams /help is sent as a nice table, but /costs, /status, /usage etc are not (they should be). Also /tools is unformatted and unreadable on Teams. If possible, we should have a table type property for each provider, and use that to determine how we render tables for these kinds of responses.
