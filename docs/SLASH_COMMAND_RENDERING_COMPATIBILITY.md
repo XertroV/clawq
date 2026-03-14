@@ -6,8 +6,8 @@ Last reviewed: 2026-03-14.
 
 ## Why This Exists
 
-- `/help` previously rendered as a Markdown table.
-- That is not portable across connectors.
+- `/help` previously rendered as a Markdown table for Teams, which was removed under the incorrect assumption that Teams doesn't support markdown tables.
+- That was restored in B435 after confirming Bot Framework v3 text messages DO support markdown tables.
 - Slash-command replies should prefer a shared safe text layout, with connector-specific rich rendering only when the connector has confirmed support.
 
 ## Connector Summary
@@ -16,10 +16,9 @@ Last reviewed: 2026-03-14.
 
 Source: https://learn.microsoft.com/en-us/microsoftteams/platform/resources/bot-v3/bots-text-formats
 
-- Text-only bot messages do not support table formatting.
-- Markdown/XML support is partial and platform-dependent.
-- Lists are not consistently supported on iOS/Android.
-- Safe default for slash commands: plain line-oriented text, avoid tables.
+- Bot Framework v3 text messages support markdown tables when `textFormat` is `"markdown"` (default).
+- Markdown tables render natively on desktop, web, iOS, and Android Teams clients.
+- Teams uses markdown tables for tabular data (`/costs`, `/usage`, `/status`, `/help`, `/model usage`).
 
 ### Telegram
 
@@ -59,24 +58,25 @@ Source: https://support.discord.com/hc/en-us/articles/210298617-Markdown-Text-10
 
 - Default slash-command layout should be connector-safe plain text.
 - Connector-specific rich renderers are allowed when they are explicitly supported and already wired for that connector.
-- Telegram uses dedicated rich HTML rendering. Discord, Slack, and Teams use code blocks for tabular data.
+- Telegram uses dedicated rich HTML rendering. Discord and Slack use code blocks for tabular data. Teams uses native markdown tables.
 - New slash-command output should be modeled as structured sections/rows first, then rendered per connector.
-- Do not introduce Markdown tables for shared slash-command output.
+- Do not introduce Markdown tables for connectors other than Teams.
 
 ## Practical Rules
 
 - Use aligned lines, short headings, bullet lists, and code formatting sparingly.
-- Avoid Markdown tables, HTML outside Telegram, and connector-specific syntax in shared formatters.
-- For tabular data: use `Table_format.render` (CLI-style space-padded columns) wrapped in `Format_adapter.code_block` to preserve monospace alignment on connectors. For `Plain`, `code_block` is a no-op.
+- Avoid Markdown tables on Discord, Slack, and Telegram. Teams supports them natively.
+- For tabular data: use `Format_adapter.render_table` which dispatches per connector — Teams gets `Table_format.render_markdown`, Telegram gets `<pre>`-wrapped plaintext, Plain gets raw plaintext, and others get `code_block`-wrapped plaintext.
 - If interactive UI is needed, prefer `Rich_message` with a text fallback.
 - When adding a new slash command, decide whether it needs:
   - a shared plain renderer only, or
-  - a shared plain renderer plus a Telegram HTML variant.
+  - a shared plain renderer plus connector-specific variants (Telegram HTML, Teams markdown tables).
 
 ## Current Implementation Direction
 
 - `src/slash_commands.ml` owns slash-command content rendering.
 - Connectors select a rendering target instead of formatting replies ad hoc.
 - Telegram uses HTML-specific renderers (`<pre>` for tables, `<b>` for headings).
-- Discord, Slack, and Teams use `Format_adapter.code_block` (triple-backtick fences) for tabular output like `/costs`, `/usage`, `/model usage`, and `/help`.
+- Teams uses native markdown tables (`Table_format.render_markdown`) for tabular output like `/costs`, `/usage`, `/model usage`, `/status`, and `/help`.
+- Discord and Slack use `Format_adapter.code_block` (triple-backtick fences) for tabular output.
 - Web/Plain receives raw text (no code block wrapping).

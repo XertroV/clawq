@@ -1,10 +1,15 @@
 ---
+claimed_at: "2026-03-14T05:30:18Z"
+claimed_by: cli-user
+completed_at: "2026-03-14T05:45:07Z"
 complexity: medium
 depends_on: []
+duration_minutes: 14.829173098416666
 estimate_hours: 1
 id: B435
 priority: high
-status: pending
+started_at: "2026-03-14T05:30:18Z"
+status: done
 tags: []
 title: /costs and /usage both send plaintext tables to Teams even though it supports markdown tables. We should preferentially send markdown tables, and only send plaintext tables when markdown is not supported.
 ---

@@ -251,7 +251,11 @@ let build_reply_body ~alert ~text ~mention ~mention_mode =
             (full_text, [ entity ]))
   in
   let base =
-    [ ("type", `String "message"); ("text", `String text_with_mention) ]
+    [
+      ("type", `String "message");
+      ("textFormat", `String "markdown");
+      ("text", `String text_with_mention);
+    ]
   in
   let base =
     base

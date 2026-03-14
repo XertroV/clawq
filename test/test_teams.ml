@@ -230,14 +230,14 @@ let test_slash_command_recognized_after_mention_strip () =
   Alcotest.(check string) "stripped to /help" "/help" stripped;
   match Slash_commands.handle stripped with
   | Slash_commands.Help ->
-      let text = Slash_commands.format_help ~connector:Format_adapter.Plain in
+      let text = Slash_commands.format_help ~connector:Format_adapter.Teams in
       Alcotest.(check bool)
         "help stays multiline" true
         (String.contains text '\n')
   | _ -> Alcotest.fail "expected Help from /help"
 
-let test_help_reply_body_uses_plain_multiline_text () =
-  let help_text = Slash_commands.format_help ~connector:Format_adapter.Plain in
+let test_help_reply_body_uses_markdown_table () =
+  let help_text = Slash_commands.format_help ~connector:Format_adapter.Teams in
   let body =
     Teams.build_reply_body ~alert:false ~text:help_text ~mention:None
       ~mention_mode:"entity"
@@ -249,7 +249,7 @@ let test_help_reply_body_uses_plain_multiline_text () =
     "help body stays multiline" true
     (String.contains text '\n');
   Alcotest.(check bool)
-    "help body avoids markdown table" false
+    "help body contains markdown table" true
     (try
        ignore
          (Str.search_forward
@@ -264,6 +264,17 @@ let test_slash_new_after_mention_strip () =
   match Slash_commands.handle stripped with
   | Slash_commands.Reset -> ()
   | _ -> Alcotest.fail "expected Reset from /new"
+
+let test_build_reply_body_includes_text_format () =
+  let body =
+    Teams.build_reply_body ~alert:false ~text:"hello" ~mention:None
+      ~mention_mode:"entity"
+  in
+  let json = Yojson.Safe.from_string body in
+  let open Yojson.Safe.Util in
+  Alcotest.(check string)
+    "textFormat is markdown" "markdown"
+    (json |> member "textFormat" |> to_string)
 
 let test_not_slash_after_mention_strip () =
   let stripped = Teams.strip_at_mentions "<at>Bot</at> hello world" in
@@ -308,10 +319,12 @@ let suite =
       test_encode_channel_id_format;
     Alcotest.test_case "slash /help recognized after mention strip" `Quick
       test_slash_command_recognized_after_mention_strip;
-    Alcotest.test_case "help reply body uses plain multiline text" `Quick
-      test_help_reply_body_uses_plain_multiline_text;
+    Alcotest.test_case "help reply body uses markdown table" `Quick
+      test_help_reply_body_uses_markdown_table;
     Alcotest.test_case "slash /new recognized after mention strip" `Quick
       test_slash_new_after_mention_strip;
+    Alcotest.test_case "build_reply_body includes textFormat" `Quick
+      test_build_reply_body_includes_text_format;
     Alcotest.test_case "normal message not a slash command" `Quick
       test_not_slash_after_mention_strip;
   ]

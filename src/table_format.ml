@@ -120,3 +120,26 @@ let render ?(indent = 2) ?(col_sep = "  ") ?(max_width = 0) columns rows =
   let header_lines = format_row header_cells in
   let row_lines = List.concat_map format_row rows in
   String.concat "\n" (header_lines @ row_lines)
+
+let render_markdown ?(escape_cell = Fun.id) columns rows =
+  let header =
+    "| "
+    ^ String.concat " | " (List.map (fun (col : column) -> col.header) columns)
+    ^ " |"
+  in
+  let separator =
+    "| "
+    ^ String.concat " | "
+        (List.map
+           (fun (col : column) ->
+             match col.align with Left -> ":---" | Right -> "---:")
+           columns)
+    ^ " |"
+  in
+  let data_rows =
+    List.map
+      (fun cells ->
+        "| " ^ String.concat " | " (List.map escape_cell cells) ^ " |")
+      rows
+  in
+  String.concat "\n" ([ header; separator ] @ data_rows)

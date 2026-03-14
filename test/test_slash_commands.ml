@@ -1044,11 +1044,10 @@ let test_format_help_slack_code_block () =
 let test_format_model_usage_empty () =
   let config = Runtime_config.default in
   let result =
-    Slash_commands.format_model_usage ~connector:Format_adapter.Discord
-      ~config []
+    Slash_commands.format_model_usage ~connector:Format_adapter.Discord ~config
+      []
   in
-  Alcotest.(check string)
-    "empty providers" "No providers configured." result
+  Alcotest.(check string) "empty providers" "No providers configured." result
 
 let test_format_model_usage_table () =
   let config = Runtime_config.default in
@@ -1058,26 +1057,26 @@ let test_format_model_usage_table () =
       state =
         Provider_quota.Known
           {
-            session = Some { used_pct = 42.0; resets_at = None; window_duration_s = None };
-            weekly = Some { used_pct = 75.0; resets_at = None; window_duration_s = None };
+            session =
+              Some
+                { used_pct = 42.0; resets_at = None; window_duration_s = None };
+            weekly =
+              Some
+                { used_pct = 75.0; resets_at = None; window_duration_s = None };
             monthly = None;
           };
       fetched_at = Unix.gettimeofday ();
     }
   in
   let result =
-    Slash_commands.format_model_usage ~connector:Format_adapter.Discord
-      ~config [ pq ]
+    Slash_commands.format_model_usage ~connector:Format_adapter.Discord ~config
+      [ pq ]
   in
-  Alcotest.(check bool)
-    "contains code block" true
-    (contains_str result "```");
+  Alcotest.(check bool) "contains code block" true (contains_str result "```");
   Alcotest.(check bool)
     "contains PROVIDER header" true
     (contains_str result "PROVIDER");
-  Alcotest.(check bool)
-    "contains openai" true
-    (contains_str result "openai");
+  Alcotest.(check bool) "contains openai" true (contains_str result "openai");
   Alcotest.(check bool)
     "contains bold heading" true
     (contains_str result "**Provider Quota/Usage**")
@@ -1193,6 +1192,85 @@ let test_format_status_telegram_html () =
   Alcotest.(check bool)
     "contains session counts" true
     (String_util.contains text "3 total, 1 active")
+
+let test_render_markdown_basic () =
+  let columns =
+    Table_format.
+      [
+        { header = "Name"; align = Left; min_width = 0; flex = false };
+        { header = "Value"; align = Right; min_width = 0; flex = false };
+      ]
+  in
+  let rows = [ [ "foo"; "42" ]; [ "bar"; "99" ] ] in
+  let output = Table_format.render_markdown columns rows in
+  Alcotest.(check bool)
+    "header row" true
+    (contains_str output "| Name | Value |");
+  Alcotest.(check bool)
+    "separator row" true
+    (contains_str output "| :--- | ---: |");
+  Alcotest.(check bool) "data row 1" true (contains_str output "| foo | 42 |");
+  Alcotest.(check bool) "data row 2" true (contains_str output "| bar | 99 |")
+
+let test_render_markdown_escape () =
+  let columns =
+    Table_format.
+      [ { header = "Col"; align = Left; min_width = 0; flex = false } ]
+  in
+  let rows = [ [ "a|b" ] ] in
+  let output =
+    Table_format.render_markdown
+      ~escape_cell:(Format_adapter.escape_table_cell Format_adapter.Teams)
+      columns rows
+  in
+  Alcotest.(check bool) "pipe escaped" true (contains_str output "a\\|b")
+
+let test_format_help_teams_markdown_table () =
+  let output = Slash_commands.format_help ~connector:Format_adapter.Teams in
+  Alcotest.(check bool)
+    "teams help has markdown table header" true
+    (contains_str output "| Command | Description |");
+  Alcotest.(check bool)
+    "teams help has separator" true
+    (contains_str output "| :---");
+  Alcotest.(check bool)
+    "teams help contains /help" true
+    (contains_str output "| /help |");
+  Alcotest.(check bool)
+    "teams help not wrapped in code block" false
+    (String.length output >= 3 && String.sub output 0 3 = "```")
+
+let test_format_costs_teams_markdown_table () =
+  with_request_stats_db (fun db ->
+      insert_request_stat ~db ~session_key:"teams:t1:conv" ~provider:"openai"
+        ~model:"gpt-5.4" ~prompt_tokens:1000 ~completion_tokens:200
+        ~cost_usd:0.10 ();
+      let output =
+        Slash_commands.format_costs ~connector:Format_adapter.Teams ~db
+          Slash_commands.CostsSummary
+      in
+      Alcotest.(check bool)
+        "teams costs has markdown table" true
+        (contains_str output "| PERIOD |");
+      Alcotest.(check bool)
+        "teams costs not wrapped in code block" false
+        (contains_str output "```"))
+
+let test_format_costs_discord_code_block () =
+  with_request_stats_db (fun db ->
+      insert_request_stat ~db ~session_key:"discord:chan:user"
+        ~provider:"openai" ~model:"gpt-5.4" ~prompt_tokens:1000
+        ~completion_tokens:200 ~cost_usd:0.10 ();
+      let output =
+        Slash_commands.format_costs ~connector:Format_adapter.Discord ~db
+          Slash_commands.CostsSummary
+      in
+      Alcotest.(check bool)
+        "discord costs wrapped in code block" true
+        (contains_str output "```");
+      Alcotest.(check bool)
+        "discord costs no markdown table pipes" false
+        (contains_str output "| PERIOD |"))
 
 let suite =
   [
@@ -1320,4 +1398,13 @@ let suite =
     Alcotest.test_case "format_status plain" `Quick test_format_status_plain;
     Alcotest.test_case "format_status telegram html" `Quick
       test_format_status_telegram_html;
+    Alcotest.test_case "render_markdown basic" `Quick test_render_markdown_basic;
+    Alcotest.test_case "render_markdown escape" `Quick
+      test_render_markdown_escape;
+    Alcotest.test_case "format help teams markdown table" `Quick
+      test_format_help_teams_markdown_table;
+    Alcotest.test_case "format costs teams markdown table" `Quick
+      test_format_costs_teams_markdown_table;
+    Alcotest.test_case "format costs discord code block" `Quick
+      test_format_costs_discord_code_block;
   ]

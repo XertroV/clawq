@@ -184,6 +184,25 @@ let format_help ~connector =
   match connector with
   | Format_adapter.Telegram_html -> help_text_telegram
   | Format_adapter.Plain -> help_text
+  | Format_adapter.Teams ->
+      let table_columns =
+        Table_format.
+          [
+            { header = "Command"; align = Left; min_width = 0; flex = false };
+            { header = "Description"; align = Left; min_width = 0; flex = true };
+          ]
+      in
+      let table_rows =
+        List.map (fun c -> [ "/" ^ c.name; c.description ]) commands
+      in
+      Format_adapter.bold Format_adapter.Teams "Available commands:"
+      ^ "\n\n"
+      ^ Table_format.render_markdown
+          ~escape_cell:(Format_adapter.escape_table_cell Format_adapter.Teams)
+          table_columns table_rows
+      ^ "\n\n"
+      ^ "Prefix a message with ! to interrupt the current turn in this session \
+         and send the rest as a normal message."
   | _ -> Format_adapter.code_block connector help_text
 
 let costs_usage =
@@ -633,8 +652,8 @@ let format_costs ~connector ~db action =
         in
         Format_adapter.bold connector "Cost Summary"
         ^ "\n"
-        ^ Format_adapter.code_block connector
-            (Table_format.render ~max_width:60 cost_summary_columns rows)
+        ^ Format_adapter.render_table connector ~max_width:60
+            cost_summary_columns rows
   | CostsSessions ->
       let sessions = Request_stats.summary_by_session ~db in
       if sessions = [] then "No cost data recorded yet."
@@ -663,8 +682,8 @@ let format_costs ~connector ~db action =
         in
         Format_adapter.bold connector "Session Costs"
         ^ "\n"
-        ^ Format_adapter.code_block connector
-            (Table_format.render ~max_width:60 session_columns rows)
+        ^ Format_adapter.render_table connector ~max_width:60 session_columns
+            rows
   | CostsSession key ->
       let s = Request_stats.summary_for_session ~db ~session_key:key in
       if s.total_turns = 0 then
@@ -673,8 +692,8 @@ let format_costs ~connector ~db action =
         let rows = [ cost_table_row "Total" s ] in
         Format_adapter.bold connector (Printf.sprintf "Costs for %s" key)
         ^ "\n"
-        ^ Format_adapter.code_block connector
-            (Table_format.render ~max_width:60 cost_summary_columns rows)
+        ^ Format_adapter.render_table connector ~max_width:60
+            cost_summary_columns rows
   | CostsModel ->
       let models = Request_stats.summary_by_model ~db in
       if models = [] then "No cost data recorded yet."
@@ -708,8 +727,7 @@ let format_costs ~connector ~db action =
         in
         Format_adapter.bold connector "Model Costs"
         ^ "\n"
-        ^ Format_adapter.code_block connector
-            (Table_format.render ~max_width:60 model_columns rows)
+        ^ Format_adapter.render_table connector ~max_width:60 model_columns rows
   | CostsProvider ->
       let providers = Request_stats.summary_by_provider ~db in
       if providers = [] then "No cost data recorded yet."
@@ -748,8 +766,8 @@ let format_costs ~connector ~db action =
         in
         Format_adapter.bold connector "Provider Costs"
         ^ "\n"
-        ^ Format_adapter.code_block connector
-            (Table_format.render ~max_width:60 provider_columns rows)
+        ^ Format_adapter.render_table connector ~max_width:60 provider_columns
+            rows
 
 let usage_table_row label (s : Request_stats.summary) =
   [
@@ -797,8 +815,8 @@ let format_usage ~connector ~db action =
         in
         Format_adapter.bold connector "Usage Summary"
         ^ "\n"
-        ^ Format_adapter.code_block connector
-            (Table_format.render ~max_width:60 usage_summary_columns rows)
+        ^ Format_adapter.render_table connector ~max_width:60
+            usage_summary_columns rows
   | UsageSessions ->
       let sessions = Request_stats.summary_by_session ~db in
       if sessions = [] then "No usage data recorded yet."
@@ -826,8 +844,8 @@ let format_usage ~connector ~db action =
         in
         Format_adapter.bold connector "Session Usage"
         ^ "\n"
-        ^ Format_adapter.code_block connector
-            (Table_format.render ~max_width:60 session_columns rows)
+        ^ Format_adapter.render_table connector ~max_width:60 session_columns
+            rows
   | UsageSession key ->
       let s = Request_stats.summary_for_session ~db ~session_key:key in
       if s.total_turns = 0 then
@@ -836,8 +854,8 @@ let format_usage ~connector ~db action =
         let rows = [ usage_table_row "Total" s ] in
         Format_adapter.bold connector (Printf.sprintf "Usage for %s" key)
         ^ "\n"
-        ^ Format_adapter.code_block connector
-            (Table_format.render ~max_width:60 usage_summary_columns rows)
+        ^ Format_adapter.render_table connector ~max_width:60
+            usage_summary_columns rows
   | UsageModel ->
       let models = Request_stats.summary_by_model ~db in
       if models = [] then "No usage data recorded yet."
@@ -869,8 +887,7 @@ let format_usage ~connector ~db action =
         in
         Format_adapter.bold connector "Model Usage"
         ^ "\n"
-        ^ Format_adapter.code_block connector
-            (Table_format.render ~max_width:60 model_columns rows)
+        ^ Format_adapter.render_table connector ~max_width:60 model_columns rows
   | UsageProvider ->
       let providers = Request_stats.summary_by_provider ~db in
       if providers = [] then "No usage data recorded yet."
@@ -907,8 +924,8 @@ let format_usage ~connector ~db action =
         in
         Format_adapter.bold connector "Provider Usage"
         ^ "\n"
-        ^ Format_adapter.code_block connector
-            (Table_format.render ~max_width:60 provider_columns rows)
+        ^ Format_adapter.render_table connector ~max_width:60 provider_columns
+            rows
 
 let read_daemon_state_json () =
   try
@@ -1023,8 +1040,7 @@ let format_status ~connector ~(db : Sqlite3.db option) ~session_count
   in
   Format_adapter.bold connector "Bot Status"
   ^ "\n"
-  ^ Format_adapter.code_block connector
-      (Table_format.render ~max_width:60 status_columns rows)
+  ^ Format_adapter.render_table connector ~max_width:60 status_columns rows
 
 let format_model_usage ~connector ~(config : Runtime_config.t)
     (results : Provider_quota.provider_quota list) =
@@ -1064,5 +1080,4 @@ let format_model_usage ~connector ~(config : Runtime_config.t)
     in
     Format_adapter.bold connector "Provider Quota/Usage"
     ^ "\n"
-    ^ Format_adapter.code_block connector
-        (Table_format.render ~max_width:60 columns rows)
+    ^ Format_adapter.render_table connector ~max_width:60 columns rows

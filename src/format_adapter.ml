@@ -106,3 +106,13 @@ let escape_table_cell connector text =
         text;
       Buffer.contents buf
   | Telegram_html | Plain -> text
+
+let render_table connector ?(max_width = 60) columns rows =
+  match connector with
+  | Teams ->
+      Table_format.render_markdown ~escape_cell:(escape_table_cell Teams)
+        columns rows
+  | Telegram_html ->
+      "<pre>" ^ Table_format.render ~max_width columns rows ^ "</pre>"
+  | Plain -> Table_format.render ~max_width columns rows
+  | _ -> code_block connector (Table_format.render ~max_width columns rows)
