@@ -128,10 +128,31 @@ function extractToolResultContent(content: unknown): string {
 }
 
 function normalizeSimpleMessage(msg: Record<string, unknown>, index: number): NormalizedMessage {
+  const role = mapRole(msg.role as string);
+  const content = typeof msg.content === "string" ? msg.content : "";
+
+  // Extract OpenAI-style tool_calls from assistant messages
+  const toolCalls: NormalizedToolCall[] = [];
+  if (Array.isArray(msg.tool_calls)) {
+    for (const tc of msg.tool_calls as Record<string, unknown>[]) {
+      const fn = tc.function as Record<string, unknown> | undefined;
+      toolCalls.push({
+        id: (tc.id as string) || "",
+        name: fn ? (fn.name as string) || "" : (tc.name as string) || "",
+        arguments: fn
+          ? typeof fn.arguments === "string" ? fn.arguments : JSON.stringify(fn.arguments, null, 2)
+          : typeof tc.arguments === "string" ? tc.arguments : JSON.stringify(tc.arguments, null, 2),
+      });
+    }
+  }
+
   return {
     index,
-    role: mapRole(msg.role as string),
-    content: typeof msg.content === "string" ? msg.content : "",
+    role,
+    content,
+    ...(toolCalls.length > 0 ? { toolCalls } : {}),
+    ...(msg.tool_call_id ? { toolCallId: msg.tool_call_id as string } : {}),
+    ...(msg.name && role === "tool" ? { toolName: msg.name as string } : {}),
   };
 }
 
