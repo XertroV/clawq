@@ -39,7 +39,8 @@ tasks:
       file: T004-teams-menu-adaptive-card.todo
       id: T004
       priority: medium
-      status: pending
+      status: done
+      tags: []
       title: Teams /menu Adaptive Card
     - complexity: low
       depends_on: []

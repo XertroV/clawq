@@ -1,13 +1,13 @@
 ---
+completed_at: null
 complexity: medium
 depends_on: []
 estimate_hours: 1.5
 id: P2.M4.E3.T004
 priority: medium
-status: pending
-tags:
-    - idea
-    - planning
+started_at: null
+status: done
+tags: []
 title: Teams /menu Adaptive Card
 ---
 Paginated command menu via Adaptive Card:
