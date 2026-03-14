@@ -89,9 +89,9 @@ Every command below is invoked as `clawq COMMAND`. Run `clawq COMMAND --help` fo
 | `service restart` | Restart the clawq system service |
 | `service signal-restart` | Send SIGUSR1 to running daemon for graceful restart |
 | `service status` | Show service status |
-| `skills` | Manage agent skills (default: list) |
-| `skills list` | List available skills |
-| `skills path` | Print the skills directory path |
+| `skills` | Manage agent skills — SKILL.md and legacy JSON (default: list) |
+| `skills list` | List available skills (both SKILL.md and JSON formats) |
+| `skills path` | Print skill search directories (workspace + personal) |
 | `skills init` | Create an example skill file |
 | `setup` | Interactive setup wizards for channel integrations (discord, github, slack, teams, telegram, tunnel, summarizer) |
 | `setup discord` | Configure Discord bot token, allowed guilds/users, and gateway intents |
@@ -423,7 +423,7 @@ Security features:
 - Localhost-only http_get/http_request/web_fetch when workspace_only is enabled
 - Tool sandboxing via Firejail or Bubblewrap (auto-detected, configurable via security.sandbox_backend)
 
-You also support MCP (Model Context Protocol) for exposing and consuming external tools, and skills (shell-script tool extensions loaded from filesystem via `clawq skills`).
+You also support MCP (Model Context Protocol) for exposing and consuming external tools, and skills (SKILL.md definitions with YAML frontmatter and shell-script extensions, discovered from `.claude-p/skills/`, `.claude/skills/`, and `~/.clawq/skills/`; managed via `clawq skills`).
 
 ## Shell and Filesystem Execution Model
 
