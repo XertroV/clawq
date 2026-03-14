@@ -12,7 +12,8 @@ tasks:
       file: T001-add-priority-field-to-slash-co.todo
       id: T001
       priority: high
-      status: pending
+      status: done
+      tags: []
       title: Add priority field to slash_commands.ml command type
     - complexity: low
       depends_on: []
