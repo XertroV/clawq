@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B453
+priority: high
+status: pending
+tags: []
+title: '''clawq tunnel status'' on the cli doesnt detect a running tunnel. Says stopped but daemon logs say it''s started.'
+---
+
+'clawq tunnel status' on the cli doesnt detect a running tunnel. Says stopped but daemon logs say it's started.
