@@ -1,0 +1,24 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B445
+priority: high
+status: pending
+tags: []
+title: failing to send message to teams with woken up thread
+---
+
+
+[19:57:23.375] INFO  Quota refresh: zaisession=13%  monthly=3% | kimi | groqUnknown (no_api) | openai-codexsession=1% (1h23m left)  weekly=76% (4d7h left)
+[20:00:01.397] INFO  Restored 13 messages for session teams:personal:19:3ed169b9886a4a1faadc1dc20687cc66@thread.v2
+[20:00:01.428] INFO  [teams:personal:19:3ed169b9886a4a1faadc1dc20687cc66@thread.v2] -> LLM provider=zai_coding model=glm-5 msgs=15 ~10k tok
+[20:00:10.548] INFO  [teams:personal:19:3ed169b9886a4a1faadc1dc20687cc66@thread.v2] Cost: model=glm-5 prompt=19663 completion=121 cost=0.020050 session_total=0.0201
+[20:00:10.575] INFO  [teams:personal:19:3ed169b9886a4a1faadc1dc20687cc66@thread.v2] Tool call: send_message (id=call_-7807012116078001248) args={"text":"**Daily Fact for Chris:**\n\nHoney never spoils. Archaeologists have found 3,000-year-old pots of honey in Egyptian tombs that were still perfectly edible. Honeys low moisture content, acidic pH, and hydrogen peroxide-producing enzymes make it inhospitable to bacteria and microorganisms that cause spoilage."}
+[20:00:10.866] INFO  [teams:personal:19:3ed169b9886a4a1faadc1dc20687cc66@thread.v2] Tool result: send_message -> Error sending message: Failure("resolution failed: no scheme")
+[20:00:10.889] INFO  [teams:personal:19:3ed169b9886a4a1faadc1dc20687cc66@thread.v2] -> LLM provider=zai_coding model=glm-5 msgs=17 ~10k tok
+[20:00:17.714] INFO  [teams:personal:19:3ed169b9886a4a1faadc1dc20687cc66@thread.v2] Cost: model=glm-5 prompt=19755 completion=104 cost=0.020088 session_total=0.0401
+[20:00:17.726] INFO  [teams:personal:19:3ed169b9886a4a1faadc1dc20687cc66@thread.v2] Tool call: send_message (id=call_-7807001017882507443) args={"text":"**Daily Fact for Chris:**\n\nHoney never spoils. Archaeologists have found 3,000-year-old pots of honey in Egyptian tombs that were still perfectly edible. Honeys low moisture content, acidic pH, and hydrogen peroxide-producing enzymes make it inhospitable to bacteria and microorganisms that cause spoilage."}
+[20:00:17.726] INFO  [teams:personal:19:3ed169b9886a4a1faadc1dc20687cc66@thread.v2] Tool result: send_message -> Error sending message: Failure("resolution failed: no scheme")
+[20:00:17.751] INFO  [teams:personal:19:3ed169b9886a4a1faadc1dc20687cc66@thread.v2] -> LLM provider=zai_coding model=glm-5 msgs=19 ~10k tok
+[20:00:29.133] INFO  [teams:personal:19:3ed169b9886a4a1faadc1dc20687cc66@thread.v2] Cost: model=glm-5 prompt=19847 completion=202 cost=0.020493 session_total=0.0606
