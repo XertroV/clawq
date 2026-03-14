@@ -181,5 +181,12 @@ ideas:
       status: done
       tags: []
       title: Refactor skills to work like Claude Code's skills
-    - file: I022-allow-for-backing-up-workspace.todo
+    - complexity: medium
+      depends_on: []
+      estimate_hours: 10
+      file: I022-allow-for-backing-up-workspace.todo
       id: I022
+      priority: medium
+      status: in_progress
+      tags: []
+      title: Allow for backing up workspace files into versions so we can safely try destructive actions and restore if something goes wrong.
