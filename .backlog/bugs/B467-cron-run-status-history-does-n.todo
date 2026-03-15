@@ -1,0 +1,28 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B467
+priority: high
+status: pending
+tags:
+    - cron
+    - teams
+    - observability
+title: Cron run status/history does not prove Teams delivery visibility
+---
+Problem
+Cron jobs can execute and even be recorded as ok while we still cannot conclusively prove that the outbound message became visible to the user in Teams. Current evidence mixes run completion, agent commentary, and delivery outcomes, leaving ambiguity during live tests.
+
+Why this matters
+For connector reliability work, we need durable proof of the difference between scheduled, generated, attempted delivery, accepted by connector, and failed delivery. Without that, Teams cron testing remains inconclusive and regressions are hard to diagnose.
+
+Acceptance criteria
+- Cron run lifecycle distinguishes at least: turn completed, delivery attempted, delivery accepted, delivery failed.
+- Teams send path logs pre-send and post-send facts sufficient to correlate a cron run with a specific outbound attempt.
+- Cron history/reporting surfaces delivery outcome distinctly instead of collapsing everything into generic ok/result preview.
+- A live Teams cron test can be verified from logs/history without relying on agent self-report.
+- Result previews do not masquerade as delivery proof.
+
+Notes
+Related to ongoing cron reliability work and Teams connector observability. This is separate from pure scheduling correctness; the gap is proof/accounting of delivery visibility.
