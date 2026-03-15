@@ -1620,6 +1620,57 @@ let test_shell_exec_head_or_tail_only_window_output () =
         "tail-only marker visible" true
         (contains tail_result "omitted 2 leading lines; showing last 2 of 4"))
 
+let test_shell_exec_total_lines_shown_with_head_or_tail () =
+  with_temp_workspace (fun workspace ->
+      let sandbox =
+        Sandbox.create ~backend:Sandbox.None ~workspace ~extra_allowed_paths:[]
+          ~workspace_only:false ()
+      in
+      let tool =
+        Tools_builtin.shell_exec ~workspace ~workspace_only:false
+          ~allowed_commands:[] ~extra_allowed_paths:[] ~sandbox
+      in
+      (* head+tail with truncation: total lines note present *)
+      let truncated_result =
+        Lwt_main.run
+          (tool.Tool.invoke
+             (`Assoc
+                [
+                  ("command", `String "printf 'a\nb\nc\nd\ne'");
+                  ("head", `Int 2);
+                  ("tail", `Int 2);
+                ]))
+      in
+      Alcotest.(check bool)
+        "truncated: stdout total lines note" true
+        (contains truncated_result "[stdout: 5 total lines]");
+      Alcotest.(check bool)
+        "truncated: stderr total lines note" true
+        (contains truncated_result "[stderr: 0 total lines]");
+      (* head+tail without truncation (output fits): total lines note present *)
+      let fits_result =
+        Lwt_main.run
+          (tool.Tool.invoke
+             (`Assoc
+                [
+                  ("command", `String "printf 'x\ny\nz'");
+                  ("head", `Int 5);
+                  ("tail", `Int 5);
+                ]))
+      in
+      Alcotest.(check bool)
+        "fits: stdout total lines note" true
+        (contains fits_result "[stdout: 3 total lines]");
+      (* no head/tail: no total lines note *)
+      let no_window_result =
+        Lwt_main.run
+          (tool.Tool.invoke
+             (`Assoc [ ("command", `String "printf 'a\nb\nc'") ]))
+      in
+      Alcotest.(check bool)
+        "no window: no total lines note" false
+        (contains no_window_result "total lines"))
+
 let test_background_task_logs_truncates_large_output () =
   with_temp_workspace (fun workspace ->
       let task =
@@ -2542,6 +2593,8 @@ let suite =
       test_shell_exec_head_tail_window_handles_trailing_newline;
     Alcotest.test_case "shell_exec head or tail only window output" `Quick
       test_shell_exec_head_or_tail_only_window_output;
+    Alcotest.test_case "shell_exec total lines with head or tail" `Quick
+      test_shell_exec_total_lines_shown_with_head_or_tail;
     Alcotest.test_case "background_task_logs truncates large output" `Quick
       test_background_task_logs_truncates_large_output;
     Alcotest.test_case "background_task_logs truncates long line" `Quick

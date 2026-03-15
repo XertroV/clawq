@@ -875,6 +875,13 @@ let shell_exec_with_hooks ~workspace ~workspace_only ~allowed_commands
       if String.length windowed <= max_chars then (windowed, false)
       else (String.sub windowed 0 max_chars ^ "\n... (truncated)", true)
     in
+    let total_lines_note =
+      match (head_lines, tail_lines) with
+      | None, None -> ""
+      | _ ->
+          let total = List.length (logical_lines text) in
+          Printf.sprintf "\n[%s: %d total lines]" label total
+    in
     let note =
       match (truncated_for_chars, full_output_path) with
       | true, Some path ->
@@ -887,7 +894,7 @@ let shell_exec_with_hooks ~workspace ~workspace_only ~allowed_commands
       | true, None -> Printf.sprintf "\n[%s truncated]" label
       | false, None -> ""
     in
-    (rendered, note)
+    (rendered, note ^ total_lines_note)
   in
   let render_command_result ~exit_code ~stdout ~stderr ~head_lines ~tail_lines =
     let stdout_rendered, stdout_note =
