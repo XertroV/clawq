@@ -1,0 +1,24 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B468
+priority: high
+status: pending
+tags: []
+title: HEARTBEAT_OK-only heartbeat turns should not bloat session context
+---
+Problem
+Heartbeat polls that result in a trivial `HEARTBEAT_OK` reply are still retained in normal session history, adding noise and wasting context window on operational no-op turns.
+
+Why this matters
+Frequent heartbeats can accumulate substantial context bloat while carrying no durable semantic value when the outcome is just `HEARTBEAT_OK`. This reduces effective context capacity and makes summaries/history noisier.
+
+Acceptance criteria
+- Heartbeat polls that read HEARTBEAT.md and conclude with exactly `HEARTBEAT_OK` do not remain in the normal conversation/context log used for future model context.
+- Non-trivial heartbeat actions (notifications sent, checks performed with meaningful findings, errors, or non-OK replies) remain auditable.
+- The behavior preserves enough operational traceability to debug heartbeat execution without polluting normal chat context.
+- Compaction/history behavior clearly distinguishes prunable no-op heartbeats from meaningful session activity.
+
+Notes
+Likely implementation could treat no-op heartbeat turns as ephemeral or log them only to a separate operational channel/store rather than the main conversational transcript.
