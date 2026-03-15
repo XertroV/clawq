@@ -636,6 +636,26 @@ type pending_consent = {
   expires_at : float;
 }
 
+type file_upload_delivery = File_consent_card | Temp_download_url
+type invoke_response = { status_code : int; body_json : Yojson.Safe.t }
+
+let make_invoke_response ?(body = `Assoc []) status_code =
+  {
+    status_code;
+    body_json = `Assoc [ ("status", `Int status_code); ("body", body) ];
+  }
+
+let ok_invoke_response () = make_invoke_response 200
+let unauthorized_invoke_response () = make_invoke_response 401
+
+let invoke_response_body (response : invoke_response) =
+  Yojson.Safe.to_string response.body_json
+
+let select_file_upload_delivery ~file_consent_cards ~team_id ~is_group =
+  match (file_consent_cards, team_id, is_group) with
+  | true, "", false -> File_consent_card
+  | _ -> Temp_download_url
+
 let pending_consents : (string, pending_consent) Hashtbl.t = Hashtbl.create 16
 
 let generate_consent_id () =
@@ -813,7 +833,7 @@ let send_file_info_card ~(config : Runtime_config.teams_config) ~service_url
               conversation_id);
       Lwt.return_unit
 
-(* Handle fileConsent/invoke activities. Returns the invoke response body
+(* Handle fileConsent/invoke activities. Returns the invoke response
    immediately — Teams requires a fast HTTP 200 reply. OneDrive upload and
    FileInfoCard delivery run in the background via Lwt.async. *)
 let handle_file_consent_invoke ~(config : Runtime_config.teams_config) json =
@@ -834,9 +854,12 @@ let handle_file_consent_invoke ~(config : Runtime_config.teams_config) json =
   let effective_service_url =
     if service_url = "" then config.service_url else service_url
   in
+  Logs.info (fun m ->
+      m "Teams: file consent invoke action=%s consent_id=%s conv=%s" action
+        consent_id conversation_id);
   if consent_id = "" then (
     Logs.warn (fun m -> m "Teams: file consent invoke with no consentId");
-    Lwt.return {|{"status":200}|})
+    Lwt.return (ok_invoke_response ()))
   else
     match action with
     | "accept" -> (
@@ -861,7 +884,7 @@ let handle_file_consent_invoke ~(config : Runtime_config.teams_config) json =
                         m "Teams: file consent error reply failed: %s"
                           (Printexc.to_string exn));
                     Lwt.return_unit));
-            Lwt.return {|{"status":200}|}
+            Lwt.return (ok_invoke_response ())
         | Some pending ->
             let upload_info =
               try value |> member "uploadInfo" with _ -> `Null
@@ -881,7 +904,7 @@ let handle_file_consent_invoke ~(config : Runtime_config.teams_config) json =
             if upload_url = "" then (
               Logs.warn (fun m ->
                   m "Teams: file consent accepted but no uploadUrl");
-              Lwt.return {|{"status":200}|})
+              Lwt.return (ok_invoke_response ()))
             else begin
               (* Upload to OneDrive and send FileInfoCard in background —
                  Teams requires a fast HTTP 200 invoke response *)
@@ -927,17 +950,17 @@ let handle_file_consent_invoke ~(config : Runtime_config.teams_config) json =
                           m "Teams: file consent upload background error: %s"
                             (Printexc.to_string exn));
                       Lwt.return_unit));
-              Lwt.return {|{"status":200}|}
+              Lwt.return (ok_invoke_response ())
             end)
     | "decline" ->
         Logs.info (fun m ->
             m "Teams: file consent declined for id=%s" consent_id);
         (* Clean up pending consent if still present *)
         ignore (get_pending_consent consent_id);
-        Lwt.return {|{"status":200}|}
+        Lwt.return (ok_invoke_response ())
     | _ ->
         Logs.warn (fun m -> m "Teams: unknown file consent action=%s" action);
-        Lwt.return {|{"status":200}|}
+        Lwt.return (ok_invoke_response ())
 
 (* Handle invoke activities from Teams. Returns (status_code, response_body).
    Called synchronously from http_server — caller responds with this status. *)
@@ -948,7 +971,8 @@ let handle_invoke ~(config : Runtime_config.teams_config) ~auth_header body_str
   match auth_result with
   | Error reason ->
       Logs.warn (fun m -> m "Teams: invoke auth failed: %s" reason);
-      Lwt.return (401, {|{"status":401}|})
+      let response = unauthorized_invoke_response () in
+      Lwt.return (response.status_code, invoke_response_body response)
   | Ok () -> (
       try
         let json = Yojson.Safe.from_string body_str in
@@ -958,15 +982,17 @@ let handle_invoke ~(config : Runtime_config.teams_config) ~auth_header body_str
         in
         match name with
         | "fileConsent/invoke" ->
-            let* body = handle_file_consent_invoke ~config json in
-            Lwt.return (200, body)
+            let* response = handle_file_consent_invoke ~config json in
+            Lwt.return (response.status_code, invoke_response_body response)
         | _ ->
             Logs.debug (fun m -> m "Teams: unhandled invoke name=%s" name);
-            Lwt.return (200, {|{"status":200}|})
+            let response = ok_invoke_response () in
+            Lwt.return (response.status_code, invoke_response_body response)
       with exn ->
         Logs.err (fun m ->
             m "Teams: invoke handler error: %s" (Printexc.to_string exn));
-        Lwt.return (200, {|{"status":200}|}))
+        let response = ok_invoke_response () in
+        Lwt.return (response.status_code, invoke_response_body response))
 
 let make_status_notifier ~(config : Runtime_config.teams_config) ~service_url
     ~conversation_id ~reply_to_id : Status_message.notifier =
@@ -1452,57 +1478,7 @@ let handle_webhook ~(config : Runtime_config.teams_config)
                     let filename =
                       Printf.sprintf "session_%s_%d.json" safe_key timestamp
                     in
-                    if config.file_consent_cards then (
-                      (* Try FileConsentCard flow (OneDrive upload) *)
-                      let consent_id =
-                        store_pending_consent ~content ~filename
-                          ~content_type:"application/json" ~ttl_s:600.0
-                      in
-                      let* result =
-                        send_file_consent_card ~config
-                          ~service_url:effective_service_url ~conversation_id
-                          ~reply_to_id:activity_id ~filename
-                          ~description:"Session debug dump"
-                          ~size_bytes:(String.length content) ~consent_id ()
-                      in
-                      match result with
-                      | Ok () -> Lwt.return_unit
-                      | Error err ->
-                          Logs.warn (fun m ->
-                              m
-                                "Teams: FileConsentCard failed (%s), falling \
-                                 back to temp download"
-                                err);
-                          (* Fall back to temp download *)
-                          let token =
-                            Temp_downloads.add ~content
-                              ~content_type:"application/json" ~filename
-                              ~ttl_s:3600.0
-                          in
-                          let msg =
-                            match Temp_downloads.download_url token with
-                            | Some url ->
-                                Printf.sprintf
-                                  "Session dump available for download (%d \
-                                   bytes, expires in 1 hour):\n\n\
-                                   %s"
-                                  (String.length content) url
-                            | None ->
-                                let max_len = 25000 in
-                                if String.length content <= max_len then content
-                                else
-                                  Printf.sprintf
-                                    "Session dump (truncated — configure \
-                                     tunnel.url for full file download):\n\
-                                     %s\n\
-                                     ...\n\n\
-                                     Full dump: %d bytes"
-                                    (String.sub content 0 max_len)
-                                    (String.length content)
-                          in
-                          send_text msg)
-                    else
-                      (* Temp download approach (file_consent_cards=false) *)
+                    let send_temp_download ?prefix () =
                       let token =
                         Temp_downloads.add ~content
                           ~content_type:"application/json" ~filename
@@ -1529,7 +1505,60 @@ let handle_webhook ~(config : Runtime_config.teams_config)
                                 (String.sub content 0 max_len)
                                 (String.length content)
                       in
+                      let msg =
+                        match prefix with
+                        | None -> msg
+                        | Some prefix -> prefix ^ "\n\n" ^ msg
+                      in
                       send_text msg
+                    in
+                    begin match
+                      select_file_upload_delivery
+                        ~file_consent_cards:config.file_consent_cards ~team_id
+                        ~is_group
+                    with
+                    | File_consent_card -> (
+                        (* Try FileConsentCard flow (OneDrive upload) *)
+                        let consent_id =
+                          store_pending_consent ~content ~filename
+                            ~content_type:"application/json" ~ttl_s:600.0
+                        in
+                        let* result =
+                          send_file_consent_card ~config
+                            ~service_url:effective_service_url ~conversation_id
+                            ~reply_to_id:activity_id ~filename
+                            ~description:"Session debug dump"
+                            ~size_bytes:(String.length content) ~consent_id ()
+                        in
+                        match result with
+                        | Ok () -> Lwt.return_unit
+                        | Error err ->
+                            Logs.warn (fun m ->
+                                m
+                                  "Teams: FileConsentCard failed (%s), falling \
+                                   back to temp download"
+                                  err);
+                            send_temp_download ())
+                    | Temp_download_url ->
+                        if config.file_consent_cards then
+                          Logs.info (fun m ->
+                              m
+                                "Teams: using temp download fallback for debug \
+                                 dump in non-personal scope team=%s \
+                                 is_group=%b conv=%s"
+                                effective_team_id is_group conversation_id);
+                        let prefix =
+                          if
+                            config.file_consent_cards
+                            && (team_id <> "" || is_group)
+                          then
+                            Some
+                              "Teams file consent cards only work in personal \
+                               1:1 chats. Sending a download link instead."
+                          else None
+                        in
+                        send_temp_download ?prefix ()
+                    end
                 | Tools ->
                     let text =
                       match Session.get_tool_registry session_manager with

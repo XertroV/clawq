@@ -18,6 +18,44 @@ let activity_json ~activity_type ~text ~activity_id ~service_url ~user_id
     ]
   |> Yojson.Safe.to_string
 
+let test_teams_config () : Runtime_config.teams_config =
+  {
+    app_id = "test-app";
+    app_secret = "test-secret";
+    tenant_id = "test-tenant";
+    webhook_path = "/teams/webhook";
+    service_url = "https://smba.trafficmanager.net/amer";
+    allow_teams = [ "*" ];
+    allow_users = [ "*" ];
+    mention_mode = "entity";
+    file_consent_cards = true;
+  }
+
+let base64url_encode s =
+  Base64.encode_string s |> String.to_seq |> List.of_seq
+  |> List.filter (fun c -> c <> '=')
+  |> List.map (function '+' -> '-' | '/' -> '_' | c -> c)
+  |> List.to_seq |> String.of_seq
+
+let bearer_for_config (config : Runtime_config.teams_config) =
+  let now = int_of_float (Unix.gettimeofday ()) in
+  let header = {|{"alg":"none","typ":"JWT"}|} |> base64url_encode in
+  let payload =
+    Printf.sprintf
+      {|{"aud":"%s","iss":"https://api.botframework.com","exp":%d,"nbf":%d}|}
+      config.app_id (now + 3600) (now - 60)
+    |> base64url_encode
+  in
+  "Bearer " ^ header ^ "." ^ payload ^ ".sig"
+
+let check_ok_invoke_response ~msg body_str =
+  let json = Yojson.Safe.from_string body_str in
+  let open Yojson.Safe.Util in
+  Alcotest.(check int) (msg ^ " status") 200 (json |> member "status" |> to_int);
+  Alcotest.(check bool)
+    (msg ^ " body is object") true
+    (match json |> member "body" with `Assoc [] -> true | _ -> false)
+
 let test_parse_activity_returns_record () =
   let body =
     activity_json ~activity_type:"message" ~text:"hello" ~activity_id:"act-1"
@@ -198,6 +236,36 @@ let test_split_message_multi () =
   let long = String.make (Teams.max_message_chars + 100) 'x' in
   let chunks = Teams.split_message long in
   Alcotest.(check bool) "multiple chunks" true (List.length chunks > 1)
+
+let test_select_file_upload_delivery_personal_chat () =
+  Alcotest.(check bool)
+    "personal 1:1 uses consent card" true
+    (match
+       Teams.select_file_upload_delivery ~file_consent_cards:true ~team_id:""
+         ~is_group:false
+     with
+    | Teams.File_consent_card -> true
+    | Teams.Temp_download_url -> false)
+
+let test_select_file_upload_delivery_group_chat () =
+  Alcotest.(check bool)
+    "group chat falls back" true
+    (match
+       Teams.select_file_upload_delivery ~file_consent_cards:true ~team_id:""
+         ~is_group:true
+     with
+    | Teams.Temp_download_url -> true
+    | Teams.File_consent_card -> false)
+
+let test_select_file_upload_delivery_team_channel () =
+  Alcotest.(check bool)
+    "team channel falls back" true
+    (match
+       Teams.select_file_upload_delivery ~file_consent_cards:true ~team_id:"t1"
+         ~is_group:true
+     with
+    | Teams.Temp_download_url -> true
+    | Teams.File_consent_card -> false)
 
 let test_encode_decode_channel_id () =
   let service_url = "https://smba.trafficmanager.net/amer/" in
@@ -523,19 +591,7 @@ let test_file_consent_invoke_returns_immediately () =
     Teams.store_pending_consent ~content:"file data" ~filename:"test.json"
       ~content_type:"application/json" ~ttl_s:60.0
   in
-  let config : Runtime_config.teams_config =
-    {
-      app_id = "test-app";
-      app_secret = "test-secret";
-      tenant_id = "test-tenant";
-      webhook_path = "/teams/webhook";
-      service_url = "https://smba.trafficmanager.net/amer";
-      allow_teams = [ "*" ];
-      allow_users = [ "*" ];
-      mention_mode = "entity";
-      file_consent_cards = true;
-    }
-  in
+  let config = test_teams_config () in
   let invoke_json =
     `Assoc
       [
@@ -561,27 +617,16 @@ let test_file_consent_invoke_returns_immediately () =
             ] );
       ]
   in
-  let result =
+  let response =
     Lwt_main.run (Teams.handle_file_consent_invoke ~config invoke_json)
   in
-  Alcotest.(check string)
-    "invoke response is immediate 200" {|{"status":200}|} result
+  Alcotest.(check int) "invoke status code" 200 response.status_code;
+  check_ok_invoke_response ~msg:"invoke response is immediate 200"
+    (Teams.invoke_response_body response)
 
 let test_file_consent_invoke_expired_returns_200 () =
   (* With no pending consent, should still return 200 immediately *)
-  let config : Runtime_config.teams_config =
-    {
-      app_id = "test-app";
-      app_secret = "test-secret";
-      tenant_id = "test-tenant";
-      webhook_path = "/teams/webhook";
-      service_url = "https://smba.trafficmanager.net/amer";
-      allow_teams = [ "*" ];
-      allow_users = [ "*" ];
-      mention_mode = "entity";
-      file_consent_cards = true;
-    }
-  in
+  let config = test_teams_config () in
   let invoke_json =
     `Assoc
       [
@@ -598,30 +643,19 @@ let test_file_consent_invoke_expired_returns_200 () =
             ] );
       ]
   in
-  let result =
+  let response =
     Lwt_main.run (Teams.handle_file_consent_invoke ~config invoke_json)
   in
-  Alcotest.(check string)
-    "expired consent returns 200" {|{"status":200}|} result
+  Alcotest.(check int) "expired consent status code" 200 response.status_code;
+  check_ok_invoke_response ~msg:"expired consent returns 200"
+    (Teams.invoke_response_body response)
 
 let test_file_consent_invoke_decline () =
   let consent_id =
     Teams.store_pending_consent ~content:"data" ~filename:"d.json"
       ~content_type:"application/json" ~ttl_s:60.0
   in
-  let config : Runtime_config.teams_config =
-    {
-      app_id = "test-app";
-      app_secret = "test-secret";
-      tenant_id = "test-tenant";
-      webhook_path = "/teams/webhook";
-      service_url = "https://smba.trafficmanager.net/amer";
-      allow_teams = [ "*" ];
-      allow_users = [ "*" ];
-      mention_mode = "entity";
-      file_consent_cards = true;
-    }
-  in
+  let config = test_teams_config () in
   let invoke_json =
     `Assoc
       [
@@ -637,14 +671,58 @@ let test_file_consent_invoke_decline () =
             ] );
       ]
   in
-  let result =
+  let response =
     Lwt_main.run (Teams.handle_file_consent_invoke ~config invoke_json)
   in
-  Alcotest.(check string) "decline returns 200" {|{"status":200}|} result;
+  Alcotest.(check int) "decline status code" 200 response.status_code;
+  check_ok_invoke_response ~msg:"decline returns 200"
+    (Teams.invoke_response_body response);
   (* Pending consent should be cleaned up *)
   Alcotest.(check bool)
     "consent consumed on decline" true
     (Teams.get_pending_consent consent_id = None)
+
+let test_handle_invoke_file_consent_decline () =
+  let consent_id =
+    Teams.store_pending_consent ~content:"data" ~filename:"d.json"
+      ~content_type:"application/json" ~ttl_s:60.0
+  in
+  let config = test_teams_config () in
+  let body =
+    `Assoc
+      [
+        ("type", `String "invoke");
+        ("name", `String "fileConsent/invoke");
+        ("serviceUrl", `String "https://svc");
+        ("conversation", `Assoc [ ("id", `String "conv-1") ]);
+        ( "value",
+          `Assoc
+            [
+              ("action", `String "decline");
+              ("context", `Assoc [ ("consentId", `String consent_id) ]);
+            ] );
+      ]
+    |> Yojson.Safe.to_string
+  in
+  let status_code, body_str =
+    Lwt_main.run
+      (Teams.handle_invoke ~config ~auth_header:(bearer_for_config config) body)
+  in
+  Alcotest.(check int) "handle_invoke decline status code" 200 status_code;
+  check_ok_invoke_response ~msg:"handle_invoke decline body" body_str
+
+let test_handle_invoke_unknown_name_returns_ok () =
+  let config = test_teams_config () in
+  let body =
+    `Assoc [ ("type", `String "invoke"); ("name", `String "unknown/invoke") ]
+    |> Yojson.Safe.to_string
+  in
+  let status_code, body_str =
+    Lwt_main.run
+      (Teams.handle_invoke ~config ~auth_header:(bearer_for_config config) body)
+  in
+  Alcotest.(check int) "handle_invoke unknown status code" 200 status_code;
+  check_ok_invoke_response ~msg:"handle_invoke unknown body" body_str
 
 let test_is_retryable_status () =
   Alcotest.(check bool) "429 retryable" true (Teams.is_retryable_status 429);
@@ -747,6 +825,12 @@ let suite =
       test_build_reply_body_none_mode;
     Alcotest.test_case "split_message single" `Quick test_split_message_single;
     Alcotest.test_case "split_message multi" `Quick test_split_message_multi;
+    Alcotest.test_case "select file upload delivery personal chat" `Quick
+      test_select_file_upload_delivery_personal_chat;
+    Alcotest.test_case "select file upload delivery group chat" `Quick
+      test_select_file_upload_delivery_group_chat;
+    Alcotest.test_case "select file upload delivery team channel" `Quick
+      test_select_file_upload_delivery_team_channel;
     Alcotest.test_case "encode_decode channel_id roundtrip" `Quick
       test_encode_decode_channel_id;
     Alcotest.test_case "decode channel_id with pipe in conversation_id" `Quick
@@ -807,4 +891,8 @@ let suite =
       test_file_consent_invoke_expired_returns_200;
     Alcotest.test_case "file consent invoke decline" `Quick
       test_file_consent_invoke_decline;
+    Alcotest.test_case "handle_invoke file consent decline" `Quick
+      test_handle_invoke_file_consent_decline;
+    Alcotest.test_case "handle_invoke unknown name returns ok" `Quick
+      test_handle_invoke_unknown_name_returns_ok;
   ]

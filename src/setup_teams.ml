@@ -82,8 +82,12 @@ let post_setup_instructions ~webhook_path ~gateway_port ~tunnel_url =
        - Messaging endpoint:  %s
        - App ID and Tenant ID should match your config
     4. Under "Channels", add "Microsoft Teams"
-    5. In your Teams admin center, approve the bot for your organization
-    6. Install the bot in the desired Teams channels
+    5. In your Teams app manifest, set the bot's "supportsFiles" field to true
+       if you want /debug_dump_chat file uploads to work
+    6. File uploads via Teams consent cards only work in personal 1:1 chats;
+       team channels and group chats fall back to download links
+    7. In your Teams admin center, approve the bot for your organization
+    8. Install the bot in Teams (personal chat for file uploads)
 %s|}
     messaging_endpoint
     (match tunnel_url with

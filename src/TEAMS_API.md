@@ -284,6 +284,11 @@ uses a layered approach controlled by `file_consent_cards` config (default: `tru
 
 ### FileConsentCard Flow (Primary, `file_consent_cards: true`)
 
+This flow is only supported in **personal 1:1 chats**. Microsoft Teams bot
+file upload requires the bot app manifest to set `"supportsFiles": true`.
+For team channels and group chats, clawq should fall back to the temp-download
+URL path instead of sending a consent card.
+
 1. Bot sends a `FileConsentCard` attachment prompting user consent:
 ```json
 {
@@ -301,13 +306,20 @@ uses a layered approach controlled by `file_consent_cards` config (default: `tru
 }
 ```
 2. User clicks Accept → Teams sends an `invoke` activity with `name: "fileConsent/invoke"`.
-3. Bot responds with HTTP 200 **immediately** (Teams has a short invoke timeout).
+3. Bot responds with HTTP 200 **immediately** (Teams has a short invoke timeout)
+   using an explicit invoke response body:
+```json
+{
+  "status": 200,
+  "body": {}
+}
+```
 4. In the background: bot uploads file content to the `uploadUrl` from the invoke's `uploadInfo` via HTTP PUT.
 5. Bot sends a `FileInfoCard` referencing the uploaded OneDrive file.
 6. If user declines, bot acknowledges silently.
 
 Pending consent data is stored in memory with a 10-minute TTL. Invoke activities require
-an immediate HTTP 200 response — the actual upload runs asynchronously via `Lwt.async`.
+an immediate HTTP 200 invoke response — the actual upload runs asynchronously via `Lwt.async`.
 Regular message activities use HTTP 202 + async processing.
 
 ### Temp Download URL (Fallback, or `file_consent_cards: false`)
@@ -338,7 +350,11 @@ Regular message activities use HTTP 202 + async processing.
    - Set Messaging Endpoint to `https://your-domain/teams/webhook` (or your configured path).
    - Set the Microsoft App ID to the AAD app ID above.
 6. Add the bot to a Teams channel in the Bot Service resource.
-7. In Teams: add the bot to a team or use it in a personal chat.
+7. In the Teams app manifest, set the bot's `supportsFiles` field to `true`
+   if you want file uploads such as `/debug_dump_chat`.
+8. In Teams: add the bot to a team or use it in a personal chat. File uploads
+   only work in personal 1:1 chats; team channels and group chats fall back to
+   download links.
 
 ## Session Key Format
 
