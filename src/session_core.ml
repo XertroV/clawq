@@ -538,7 +538,7 @@ let session_heartbeat_opt_in mgr ~key =
   | _ -> false
 
 let heartbeat_routing_applies mgr ~key =
-  mgr.config.heartbeat.heartbeat_enabled && session_heartbeat_opt_in mgr ~key
+  mgr.config.heartbeat.enabled && session_heartbeat_opt_in mgr ~key
 
 let set_session_heartbeat mgr ~key ~enabled =
   if not (heartbeat_supported_session_key key) then
@@ -562,7 +562,7 @@ let session_heartbeat_status_text mgr ~key =
     heartbeat_unsupported_reason key
   else
     let session_enabled = session_heartbeat_opt_in mgr ~key in
-    let global_enabled = mgr.config.heartbeat.heartbeat_enabled in
+    let global_enabled = mgr.config.heartbeat.enabled in
     if global_enabled then
       Printf.sprintf "Session %s: heartbeat = %s" key
         (if session_enabled then "on" else "off")

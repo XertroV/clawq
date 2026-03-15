@@ -546,15 +546,12 @@ let test_parse_heartbeat_config () =
       }|}
   in
   let cfg = Config_loader.parse_config json in
-  Alcotest.(check bool)
-    "heartbeat_enabled parsed" false cfg.heartbeat.heartbeat_enabled;
+  Alcotest.(check bool) "heartbeat_enabled parsed" false cfg.heartbeat.enabled;
   Alcotest.(check int)
-    "heartbeat_interval_seconds parsed" 250
-    cfg.heartbeat.heartbeat_interval_seconds;
+    "heartbeat_interval_seconds parsed" 250 cfg.heartbeat.interval_seconds;
   Alcotest.(check int)
-    "heartbeat_quiet_start parsed" 22 cfg.heartbeat.heartbeat_quiet_start;
-  Alcotest.(check int)
-    "heartbeat_quiet_end parsed" 7 cfg.heartbeat.heartbeat_quiet_end
+    "heartbeat_quiet_start parsed" 22 cfg.heartbeat.quiet_start;
+  Alcotest.(check int) "heartbeat_quiet_end parsed" 7 cfg.heartbeat.quiet_end
 
 let test_migrate_heartbeat_prefixed_keys () =
   (* Old configs may have heartbeat.heartbeat_x keys; migration should rename
@@ -570,22 +567,17 @@ let test_migrate_heartbeat_prefixed_keys () =
     }|}
     (fun path ->
       let cfg = Config_loader.load ~path () in
-      Alcotest.(check bool)
-        "enabled migrated" false cfg.heartbeat.heartbeat_enabled;
+      Alcotest.(check bool) "enabled migrated" false cfg.heartbeat.enabled;
       Alcotest.(check int)
-        "interval_seconds migrated" 250 cfg.heartbeat.heartbeat_interval_seconds;
-      Alcotest.(check int)
-        "quiet_start migrated" 21 cfg.heartbeat.heartbeat_quiet_start;
-      Alcotest.(check int)
-        "quiet_end migrated" 6 cfg.heartbeat.heartbeat_quiet_end)
+        "interval_seconds migrated" 250 cfg.heartbeat.interval_seconds;
+      Alcotest.(check int) "quiet_start migrated" 21 cfg.heartbeat.quiet_start;
+      Alcotest.(check int) "quiet_end migrated" 6 cfg.heartbeat.quiet_end)
 
 let test_to_json_notify_uses_short_keys () =
   let cfg =
     {
       Runtime_config.default with
-      notify =
-        Some
-          { Runtime_config.notify_channel = "telegram"; notify_target = "bob" };
+      notify = Some { Runtime_config.channel = "telegram"; target = "bob" };
     }
   in
   let json = Runtime_config.to_json cfg in
@@ -608,12 +600,7 @@ let test_notify_roundtrip () =
   let cfg =
     {
       Runtime_config.default with
-      notify =
-        Some
-          {
-            Runtime_config.notify_channel = "telegram";
-            notify_target = "alice";
-          };
+      notify = Some { Runtime_config.channel = "telegram"; target = "alice" };
     }
   in
   let json = Runtime_config.to_json cfg in
@@ -621,9 +608,8 @@ let test_notify_roundtrip () =
   match cfg2.notify with
   | None -> Alcotest.fail "expected notify config after roundtrip"
   | Some nc ->
-      Alcotest.(check string)
-        "notify_channel roundtrip" "telegram" nc.notify_channel;
-      Alcotest.(check string) "notify_target roundtrip" "alice" nc.notify_target
+      Alcotest.(check string) "notify_channel roundtrip" "telegram" nc.channel;
+      Alcotest.(check string) "notify_target roundtrip" "alice" nc.target
 
 let test_to_json_summarizer_uses_short_keys () =
   let json = Runtime_config.to_json Runtime_config.default in
@@ -649,7 +635,7 @@ let test_summarizer_roundtrip () =
       summarizer =
         {
           Runtime_config.default_summarizer_config with
-          summarizer_enabled = false;
+          enabled = false;
           threshold_chars = 9999;
         };
     }
@@ -657,7 +643,7 @@ let test_summarizer_roundtrip () =
   let json = Runtime_config.to_json cfg in
   let cfg2 = Config_loader.parse_config json in
   Alcotest.(check bool)
-    "summarizer_enabled roundtrip" false cfg2.summarizer.summarizer_enabled;
+    "summarizer_enabled roundtrip" false cfg2.summarizer.enabled;
   Alcotest.(check int)
     "threshold_chars roundtrip" 9999 cfg2.summarizer.threshold_chars
 
@@ -676,11 +662,10 @@ let test_summarizer_legacy_keys_compat () =
       ]
   in
   let cfg = Config_loader.parse_config json in
-  Alcotest.(check bool)
-    "legacy summarizer_enabled" false cfg.summarizer.summarizer_enabled;
+  Alcotest.(check bool) "legacy summarizer_enabled" false cfg.summarizer.enabled;
   Alcotest.(check string)
     "legacy summarizer_model" "openai:gpt-4o-mini"
-    (Pmodel.to_string cfg.summarizer.summarizer_model);
+    (Pmodel.to_string cfg.summarizer.model);
   Alcotest.(check int) "threshold_chars" 7777 cfg.summarizer.threshold_chars
 
 let test_summarizer_canonical_keys_preferred () =
@@ -699,11 +684,10 @@ let test_summarizer_canonical_keys_preferred () =
       ]
   in
   let cfg = Config_loader.parse_config json in
-  Alcotest.(check bool)
-    "canonical enabled wins" true cfg.summarizer.summarizer_enabled;
+  Alcotest.(check bool) "canonical enabled wins" true cfg.summarizer.enabled;
   Alcotest.(check string)
     "canonical model wins" "openai:gpt-4o"
-    (Pmodel.to_string cfg.summarizer.summarizer_model)
+    (Pmodel.to_string cfg.summarizer.model)
 
 let test_to_json_includes_task_tree_notifications () =
   let cfg =
@@ -817,21 +801,16 @@ let test_full_config_roundtrip () =
         };
       heartbeat =
         {
-          Runtime_config.heartbeat_enabled = false;
-          heartbeat_interval_seconds = 120;
-          heartbeat_quiet_start = 22;
-          heartbeat_quiet_end = 7;
+          Runtime_config.enabled = false;
+          interval_seconds = 120;
+          quiet_start = 22;
+          quiet_end = 7;
         };
-      notify =
-        Some
-          {
-            Runtime_config.notify_channel = "discord";
-            notify_target = "user123";
-          };
+      notify = Some { Runtime_config.channel = "discord"; target = "user123" };
       summarizer =
         {
           Runtime_config.default_summarizer_config with
-          summarizer_enabled = false;
+          enabled = false;
           threshold_chars = 5000;
           max_age_days = 60;
         };
@@ -870,25 +849,21 @@ let test_full_config_roundtrip () =
     "memory.max_message_age_days" cfg.memory.max_message_age_days
     cfg2.memory.max_message_age_days;
   Alcotest.(check bool)
-    "heartbeat.enabled" cfg.heartbeat.heartbeat_enabled
-    cfg2.heartbeat.heartbeat_enabled;
+    "heartbeat.enabled" cfg.heartbeat.enabled cfg2.heartbeat.enabled;
   Alcotest.(check int)
-    "heartbeat.interval_seconds" cfg.heartbeat.heartbeat_interval_seconds
-    cfg2.heartbeat.heartbeat_interval_seconds;
+    "heartbeat.interval_seconds" cfg.heartbeat.interval_seconds
+    cfg2.heartbeat.interval_seconds;
   Alcotest.(check int)
-    "heartbeat.quiet_start" cfg.heartbeat.heartbeat_quiet_start
-    cfg2.heartbeat.heartbeat_quiet_start;
+    "heartbeat.quiet_start" cfg.heartbeat.quiet_start cfg2.heartbeat.quiet_start;
   Alcotest.(check int)
-    "heartbeat.quiet_end" cfg.heartbeat.heartbeat_quiet_end
-    cfg2.heartbeat.heartbeat_quiet_end;
+    "heartbeat.quiet_end" cfg.heartbeat.quiet_end cfg2.heartbeat.quiet_end;
   (match cfg2.notify with
   | None -> Alcotest.fail "notify should be present"
   | Some nc ->
-      Alcotest.(check string) "notify.channel" "discord" nc.notify_channel;
-      Alcotest.(check string) "notify.target" "user123" nc.notify_target);
+      Alcotest.(check string) "notify.channel" "discord" nc.channel;
+      Alcotest.(check string) "notify.target" "user123" nc.target);
   Alcotest.(check bool)
-    "summarizer.enabled" cfg.summarizer.summarizer_enabled
-    cfg2.summarizer.summarizer_enabled;
+    "summarizer.enabled" cfg.summarizer.enabled cfg2.summarizer.enabled;
   Alcotest.(check int)
     "summarizer.threshold_chars" cfg.summarizer.threshold_chars
     cfg2.summarizer.threshold_chars;

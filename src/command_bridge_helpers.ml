@@ -415,7 +415,7 @@ let cmd_debug_prompt args =
         end
       in
       let heartbeat_routing_applies =
-        cfg.heartbeat.heartbeat_enabled
+        cfg.heartbeat.enabled
         && Session.heartbeat_supported_session_key session_key
         && Memory.session_heartbeat_enabled ~db ~session_key
       in

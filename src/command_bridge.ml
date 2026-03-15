@@ -1237,7 +1237,7 @@ let cmd_debug_context args =
   in
   let is_main = session_key = "__main__" in
   let heartbeat_routing_applies =
-    cfg.heartbeat.heartbeat_enabled
+    cfg.heartbeat.enabled
     && Session.heartbeat_supported_session_key session_key
     && Memory.session_heartbeat_enabled ~db ~session_key
   in
@@ -1411,8 +1411,8 @@ let cmd_watcher args =
          Primary models:     %s\n\
          Fallback models:    %s\n\
          Ignore patterns:    %s\n"
-        ew.ec_enabled pid_status ew.scan_interval_s ew.cooldown_s
-        ew.max_errors_per_batch ew.auto_fix_enabled ew.ec_commit_tag
+        ew.enabled pid_status ew.scan_interval_s ew.cooldown_s
+        ew.max_errors_per_batch ew.auto_fix_enabled ew.commit_tag
         (String.concat ", " ew.primary_models)
         (String.concat ", " ew.fallback_models)
         (if ew.ignore_patterns = [] then "(none)"

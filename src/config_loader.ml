@@ -1322,38 +1322,25 @@ let parse_config ?(resolve_secrets = true) json =
   let heartbeat =
     try
       let h = json |> member "heartbeat" in
-      let heartbeat_enabled =
-        try h |> member "enabled" |> to_bool with _ -> true
-      in
-      let heartbeat_interval_seconds =
+      let enabled = try h |> member "enabled" |> to_bool with _ -> true in
+      let interval_seconds =
         try h |> member "interval_seconds" |> to_int with _ -> 250
       in
-      let heartbeat_quiet_start =
+      let quiet_start =
         try h |> member "quiet_start" |> to_int with _ -> 23
       in
-      let heartbeat_quiet_end =
-        try h |> member "quiet_end" |> to_int with _ -> 8
-      in
-      ({
-         heartbeat_enabled;
-         heartbeat_interval_seconds;
-         heartbeat_quiet_start;
-         heartbeat_quiet_end;
-       }
+      let quiet_end = try h |> member "quiet_end" |> to_int with _ -> 8 in
+      ({ enabled; interval_seconds; quiet_start; quiet_end }
         : Runtime_config.heartbeat_config)
     with _ -> Runtime_config.default.heartbeat
   in
   let notify =
     try
       let n = json |> member "notify" in
-      let notify_channel =
-        try n |> member "channel" |> to_string with _ -> ""
-      in
-      let notify_target =
-        try n |> member "target" |> to_string with _ -> ""
-      in
-      if notify_channel <> "" && notify_target <> "" then
-        Some ({ notify_channel; notify_target } : Runtime_config.notify_config)
+      let channel = try n |> member "channel" |> to_string with _ -> "" in
+      let target = try n |> member "target" |> to_string with _ -> "" in
+      if channel <> "" && target <> "" then
+        Some ({ channel; target } : Runtime_config.notify_config)
       else None
     with _ -> None
   in
@@ -1412,19 +1399,19 @@ let parse_config ?(resolve_secrets = true) json =
     try
       let s = json |> member "summarizer" in
       let def = Runtime_config.default_summarizer_config in
-      let summarizer_enabled =
+      let enabled =
         try s |> member "enabled" |> to_bool
         with _ -> (
           (* backwards compat: accept legacy "summarizer_enabled" key *)
           try s |> member "summarizer_enabled" |> to_bool
-          with _ -> def.summarizer_enabled)
+          with _ -> def.enabled)
       in
-      let summarizer_model =
+      let model =
         try Pmodel.parse_exn (s |> member "model" |> to_string)
         with _ -> (
           (* backwards compat: accept legacy "summarizer_model" key *)
           try Pmodel.parse_exn (s |> member "summarizer_model" |> to_string)
-          with _ -> def.summarizer_model)
+          with _ -> def.model)
       in
       let escalation_model =
         try
@@ -1462,8 +1449,8 @@ let parse_config ?(resolve_secrets = true) json =
         with _ -> def.envelope_template
       in
       ({
-         summarizer_enabled;
-         summarizer_model;
+         enabled;
+         model;
          escalation_model;
          threshold_chars;
          p1_max_chars;
@@ -1576,8 +1563,11 @@ let parse_config ?(resolve_secrets = true) json =
       (try
          let ew = json |> member "error_watcher" in
          let def = Runtime_config.default_error_watcher_config in
-         let ec_enabled =
-           try ew |> member "enabled" |> to_bool with _ -> def.ec_enabled
+         let enabled =
+           try ew |> member "enabled" |> to_bool
+           with _ -> (
+             (* backwards compat: accept legacy "ec_enabled" key *)
+             try ew |> member "ec_enabled" |> to_bool with _ -> def.enabled)
          in
          let scan_interval_s =
            try ew |> member "scan_interval_s" |> to_float
@@ -1606,12 +1596,15 @@ let parse_config ?(resolve_secrets = true) json =
            try ew |> member "auto_fix_enabled" |> to_bool
            with _ -> def.auto_fix_enabled
          in
-         let ec_commit_tag =
-           try ew |> member "ec_commit_tag" |> to_string
-           with _ -> def.ec_commit_tag
+         let commit_tag =
+           try ew |> member "commit_tag" |> to_string
+           with _ -> (
+             (* backwards compat: accept legacy "ec_commit_tag" key *)
+             try ew |> member "ec_commit_tag" |> to_string
+             with _ -> def.commit_tag)
          in
          ({
-            ec_enabled;
+            enabled;
             scan_interval_s;
             primary_models;
             fallback_models;
@@ -1619,7 +1612,7 @@ let parse_config ?(resolve_secrets = true) json =
             max_errors_per_batch;
             ignore_patterns;
             auto_fix_enabled;
-            ec_commit_tag;
+            commit_tag;
           }
            : Runtime_config.error_watcher_config)
        with _ -> Runtime_config.default_error_watcher_config);
@@ -1762,20 +1755,11 @@ let warn_invalid_config ~config_path issues =
 
 let default_path () = Dot_dir.config_path ()
 
-(* Rename heartbeat.heartbeat_x -> heartbeat.x for any old key that has no
-   corresponding new key already present. Applied in-memory before parse and
-   backfill so the canonical short names take effect immediately and the
-   backfill pass will persist the clean form. *)
+(* Rename legacy prefixed keys to canonical short names within sub-objects.
+   Applied in-memory before parse and backfill so the canonical short names
+   take effect immediately and the backfill pass will persist the clean form. *)
 let migrate_config_json (json : Yojson.Safe.t) : Yojson.Safe.t =
-  let renames =
-    [
-      ("heartbeat_enabled", "enabled");
-      ("heartbeat_interval_seconds", "interval_seconds");
-      ("heartbeat_quiet_start", "quiet_start");
-      ("heartbeat_quiet_end", "quiet_end");
-    ]
-  in
-  let migrate_heartbeat = function
+  let migrate_keys renames = function
     | `Assoc fields ->
         let fields =
           List.fold_left
@@ -1792,12 +1776,34 @@ let migrate_config_json (json : Yojson.Safe.t) : Yojson.Safe.t =
         `Assoc fields
     | other -> other
   in
+  let heartbeat_renames =
+    [
+      ("heartbeat_enabled", "enabled");
+      ("heartbeat_interval_seconds", "interval_seconds");
+      ("heartbeat_quiet_start", "quiet_start");
+      ("heartbeat_quiet_end", "quiet_end");
+    ]
+  in
+  let notify_renames =
+    [ ("notify_channel", "channel"); ("notify_target", "target") ]
+  in
+  let error_watcher_renames =
+    [ ("ec_enabled", "enabled"); ("ec_commit_tag", "commit_tag") ]
+  in
+  let summarizer_renames =
+    [ ("summarizer_enabled", "enabled"); ("summarizer_model", "model") ]
+  in
   match json with
   | `Assoc top ->
       `Assoc
         (List.map
            (fun (k, v) ->
-             if k = "heartbeat" then (k, migrate_heartbeat v) else (k, v))
+             match k with
+             | "heartbeat" -> (k, migrate_keys heartbeat_renames v)
+             | "notify" -> (k, migrate_keys notify_renames v)
+             | "error_watcher" -> (k, migrate_keys error_watcher_renames v)
+             | "summarizer" -> (k, migrate_keys summarizer_renames v)
+             | _ -> (k, v))
            top)
   | other -> other
 

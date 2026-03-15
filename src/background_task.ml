@@ -1570,7 +1570,7 @@ let routing_from_context ?context ?notify_cfg () =
       match notify_cfg with
       | Some notify ->
           let notify : Runtime_config.notify_config = notify in
-          (None, Some notify.notify_channel, Some notify.notify_target)
+          (None, Some notify.channel, Some notify.target)
       | None -> (None, None, None))
 
 let build_delegate_prompt ~automerge:_ ~goal =

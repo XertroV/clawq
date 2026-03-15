@@ -5,7 +5,7 @@ let heartbeat_status_text ~db ~config ~session_key =
     Session.heartbeat_unsupported_reason session_key
   else
     let enabled = Memory.session_heartbeat_enabled ~db ~session_key in
-    if config.Runtime_config.heartbeat.heartbeat_enabled then
+    if config.Runtime_config.heartbeat.enabled then
       Printf.sprintf "Session %s: heartbeat = %s" session_key
         (if enabled then "on" else "off")
     else

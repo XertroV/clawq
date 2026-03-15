@@ -147,7 +147,7 @@ let maybe_summarize ~(config : Runtime_config.t) ~(db : Sqlite3.db option)
   let open Lwt.Syntax in
   let sc = config.summarizer in
   (* Check if disabled *)
-  if not sc.summarizer_enabled then Lwt.return (Passthrough original)
+  if not sc.enabled then Lwt.return (Passthrough original)
   else if
     (* Check exclusion list *)
     List.mem tool_name sc.excluded_tools
@@ -210,7 +210,7 @@ let maybe_summarize ~(config : Runtime_config.t) ~(db : Sqlite3.db option)
                   m "[summarizer] LLM call failed: %s" (Printexc.to_string exn));
               Lwt.return (Error (Printexc.to_string exn)))
         in
-        let* result = try_summarize sc.summarizer_model in
+        let* result = try_summarize sc.model in
         let* final_result =
           match result with
           | Ok (text, usage, model_used)
@@ -228,7 +228,7 @@ let maybe_summarize ~(config : Runtime_config.t) ~(db : Sqlite3.db option)
               in
               Logs.info (fun m ->
                   m "[summarizer] escalating from %s to %s"
-                    (Pmodel.to_string sc.summarizer_model)
+                    (Pmodel.to_string sc.model)
                     (Pmodel.to_string escalation_pm));
               let* esc_result = try_summarize escalation_pm in
               match esc_result with

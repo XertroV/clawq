@@ -106,8 +106,8 @@ let validate_p2_must_be_less_than_p1 () =
 let build_json_roundtrip () =
   let sc : Runtime_config.summarizer_config =
     {
-      summarizer_enabled = true;
-      summarizer_model = Pmodel.parse_exn "anthropic:claude-sonnet-4-6";
+      enabled = true;
+      model = Pmodel.parse_exn "anthropic:claude-sonnet-4-6";
       escalation_model = Some (Pmodel.parse_exn "anthropic:claude-opus-4-6");
       threshold_chars = 2000;
       p1_max_chars = 150_000;
@@ -120,10 +120,10 @@ let build_json_roundtrip () =
   in
   let json = Setup_summarizer.build_summarizer_json ~sc in
   let config = Config_loader.parse_config ~resolve_secrets:false json in
-  Alcotest.(check bool) "enabled" true config.summarizer.summarizer_enabled;
+  Alcotest.(check bool) "enabled" true config.summarizer.enabled;
   Alcotest.(check string)
     "model" "anthropic:claude-sonnet-4-6"
-    (Pmodel.to_string config.summarizer.summarizer_model);
+    (Pmodel.to_string config.summarizer.model);
   (match config.summarizer.escalation_model with
   | Some m ->
       Alcotest.(check string)
@@ -146,7 +146,7 @@ let build_json_defaults () =
   let sc = Runtime_config.default_summarizer_config in
   let json = Setup_summarizer.build_summarizer_json ~sc in
   let config = Config_loader.parse_config ~resolve_secrets:false json in
-  Alcotest.(check bool) "enabled" true config.summarizer.summarizer_enabled;
+  Alcotest.(check bool) "enabled" true config.summarizer.enabled;
   Alcotest.(check int) "threshold" 1500 config.summarizer.threshold_chars;
   Alcotest.(check int) "p1_max" 200_000 config.summarizer.p1_max_chars;
   Alcotest.(check int) "p2_max" 12_000 config.summarizer.p2_max_chars
@@ -159,14 +159,14 @@ let build_json_merge_existing () =
   let sc : Runtime_config.summarizer_config =
     {
       Runtime_config.default_summarizer_config with
-      summarizer_enabled = false;
+      enabled = false;
       threshold_chars = 3000;
     }
   in
   let overlay = Setup_summarizer.build_summarizer_json ~sc in
   let result = Setup_common.deep_merge_json existing overlay in
   let config = Config_loader.parse_config ~resolve_secrets:false result in
-  Alcotest.(check bool) "enabled" false config.summarizer.summarizer_enabled;
+  Alcotest.(check bool) "enabled" false config.summarizer.enabled;
   Alcotest.(check int) "threshold" 3000 config.summarizer.threshold_chars
 
 let build_json_escalation_none () =
@@ -199,8 +199,8 @@ let post_instructions_content () =
   let sc : Runtime_config.summarizer_config =
     {
       Runtime_config.default_summarizer_config with
-      summarizer_enabled = true;
-      summarizer_model = Pmodel.parse_exn "groq:llama-3.3-70b";
+      enabled = true;
+      model = Pmodel.parse_exn "groq:llama-3.3-70b";
       threshold_chars = 2500;
     }
   in

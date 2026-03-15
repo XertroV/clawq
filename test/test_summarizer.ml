@@ -320,10 +320,7 @@ let test_passthrough_disabled () =
     {
       Runtime_config.default with
       summarizer =
-        {
-          Runtime_config.default_summarizer_config with
-          summarizer_enabled = false;
-        };
+        { Runtime_config.default_summarizer_config with enabled = false };
     }
   in
   let long_content = String.make 5000 'x' in

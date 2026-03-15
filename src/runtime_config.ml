@@ -366,13 +366,13 @@ type telemetry_config = {
 }
 
 type heartbeat_config = {
-  heartbeat_enabled : bool;
-  heartbeat_interval_seconds : int;
-  heartbeat_quiet_start : int;
-  heartbeat_quiet_end : int;
+  enabled : bool;
+  interval_seconds : int;
+  quiet_start : int;
+  quiet_end : int;
 }
 
-type notify_config = { notify_channel : string; notify_target : string }
+type notify_config = { channel : string; target : string }
 
 type web_search_config = {
   search_provider : string;  (** "brave" or "ddg" (DuckDuckGo) *)
@@ -393,7 +393,7 @@ type zai_mcp_config = {
 type interactive_config = { enable_question_notes : bool }
 
 type error_watcher_config = {
-  ec_enabled : bool;
+  enabled : bool;
   scan_interval_s : float;
   primary_models : string list;
   fallback_models : string list;
@@ -401,7 +401,7 @@ type error_watcher_config = {
   max_errors_per_batch : int;
   ignore_patterns : string list;
   auto_fix_enabled : bool;
-  ec_commit_tag : string;
+  commit_tag : string;
 }
 
 type observer_config = {
@@ -416,8 +416,8 @@ type observer_config = {
 }
 
 type summarizer_config = {
-  summarizer_enabled : bool;
-  summarizer_model : Pmodel.t;
+  enabled : bool;
+  model : Pmodel.t;
   escalation_model : Pmodel.t option;
   threshold_chars : int;
   p1_max_chars : int;
@@ -468,7 +468,7 @@ let default_error_watcher_config : error_watcher_config =
   let v = Build_info.version in
   let n = String.length v in
   {
-    ec_enabled = n >= 4 && String.sub v (n - 4) 4 = "-dev";
+    enabled = n >= 4 && String.sub v (n - 4) 4 = "-dev";
     scan_interval_s = 30.0;
     primary_models = [ "anthropic:claude-opus-4-6"; "openai-codex:gpt-5.4" ];
     fallback_models = [ "zai_coding:glm-5"; "kimi_coding:kimi-for-code" ];
@@ -476,7 +476,7 @@ let default_error_watcher_config : error_watcher_config =
     max_errors_per_batch = 10;
     ignore_patterns = [];
     auto_fix_enabled = false;
-    ec_commit_tag = "[INTERNAL_EC]";
+    commit_tag = "[INTERNAL_EC]";
   }
 
 let default_interactive_config : interactive_config =
@@ -496,8 +496,8 @@ let default_observer_config : observer_config =
 
 let default_summarizer_config : summarizer_config =
   {
-    summarizer_enabled = true;
-    summarizer_model = Pmodel.parse_exn "groq:openai/gpt-oss-120b";
+    enabled = true;
+    model = Pmodel.parse_exn "groq:openai/gpt-oss-120b";
     escalation_model = None;
     threshold_chars = 1500;
     p1_max_chars = 200_000;
@@ -662,10 +662,10 @@ let default =
     agent_bindings = [];
     heartbeat =
       {
-        heartbeat_enabled = true;
-        heartbeat_interval_seconds = 250;
-        heartbeat_quiet_start = 23;
-        heartbeat_quiet_end = 8;
+        enabled = true;
+        interval_seconds = 250;
+        quiet_start = 23;
+        quiet_end = 8;
       };
     notify = None;
     web_search = None;
@@ -1575,10 +1575,10 @@ let to_json (cfg : t) : Yojson.Safe.t =
         ( "heartbeat",
           `Assoc
             [
-              ("enabled", `Bool cfg.heartbeat.heartbeat_enabled);
-              ("interval_seconds", `Int cfg.heartbeat.heartbeat_interval_seconds);
-              ("quiet_start", `Int cfg.heartbeat.heartbeat_quiet_start);
-              ("quiet_end", `Int cfg.heartbeat.heartbeat_quiet_end);
+              ("enabled", `Bool cfg.heartbeat.enabled);
+              ("interval_seconds", `Int cfg.heartbeat.interval_seconds);
+              ("quiet_start", `Int cfg.heartbeat.quiet_start);
+              ("quiet_end", `Int cfg.heartbeat.quiet_end);
             ] );
       ]
   in
@@ -1590,8 +1590,7 @@ let to_json (cfg : t) : Yojson.Safe.t =
             ( "notify",
               `Assoc
                 [
-                  ("channel", `String nc.notify_channel);
-                  ("target", `String nc.notify_target);
+                  ("channel", `String nc.channel); ("target", `String nc.target);
                 ] );
           ]
     | None -> fields
@@ -1673,8 +1672,8 @@ let to_json (cfg : t) : Yojson.Safe.t =
         ( "summarizer",
           `Assoc
             ([
-               ("enabled", `Bool sum.summarizer_enabled);
-               ("model", `String (Pmodel.to_string sum.summarizer_model));
+               ("enabled", `Bool sum.enabled);
+               ("model", `String (Pmodel.to_string sum.model));
                ("threshold_chars", `Int sum.threshold_chars);
                ("p1_max_chars", `Int sum.p1_max_chars);
                ("p2_max_chars", `Int sum.p2_max_chars);
@@ -1780,7 +1779,7 @@ let to_json (cfg : t) : Yojson.Safe.t =
         ( "error_watcher",
           `Assoc
             [
-              ("enabled", `Bool ew.ec_enabled);
+              ("enabled", `Bool ew.enabled);
               ("scan_interval_s", `Float ew.scan_interval_s);
               ( "primary_models",
                 `List (List.map (fun s -> `String s) ew.primary_models) );
@@ -1791,7 +1790,7 @@ let to_json (cfg : t) : Yojson.Safe.t =
               ( "ignore_patterns",
                 `List (List.map (fun s -> `String s) ew.ignore_patterns) );
               ("auto_fix_enabled", `Bool ew.auto_fix_enabled);
-              ("ec_commit_tag", `String ew.ec_commit_tag);
+              ("commit_tag", `String ew.commit_tag);
             ] );
       ]
   in

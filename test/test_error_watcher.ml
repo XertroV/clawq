@@ -188,12 +188,12 @@ let test_config_defaults () =
   let cfg = Runtime_config.default_error_watcher_config in
   Alcotest.(check bool)
     "ec_enabled matches dev build" true
-    (cfg.ec_enabled = Error_watcher.is_dev_build ());
+    (cfg.enabled = Error_watcher.is_dev_build ());
   Alcotest.(check (float 0.01)) "scan_interval" 30.0 cfg.scan_interval_s;
   Alcotest.(check (float 0.01)) "cooldown" 300.0 cfg.cooldown_s;
   Alcotest.(check int) "max_errors_per_batch" 10 cfg.max_errors_per_batch;
   Alcotest.(check bool) "auto_fix disabled" false cfg.auto_fix_enabled;
-  Alcotest.(check string) "commit tag" "[INTERNAL_EC]" cfg.ec_commit_tag
+  Alcotest.(check string) "commit tag" "[INTERNAL_EC]" cfg.commit_tag
 
 let test_normalize_first_line () =
   let a = Error_watcher.normalize_first_line "Error on port 8080: conn 42" in

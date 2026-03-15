@@ -61,8 +61,8 @@ let validate_p2_max_chars ~p1_max s =
 let build_summarizer_json ~(sc : Runtime_config.summarizer_config) =
   let fields =
     [
-      ("enabled", `Bool sc.summarizer_enabled);
-      ("model", `String (Pmodel.to_string sc.summarizer_model));
+      ("enabled", `Bool sc.enabled);
+      ("model", `String (Pmodel.to_string sc.model));
       ( "escalation_model",
         match sc.escalation_model with
         | None -> `Null
@@ -82,7 +82,7 @@ let build_summarizer_json ~(sc : Runtime_config.summarizer_config) =
 (* ── Post-setup instructions ─────────────────────────────────────── *)
 
 let post_setup_instructions ~(sc : Runtime_config.summarizer_config) =
-  let model_str = Pmodel.to_string sc.summarizer_model in
+  let model_str = Pmodel.to_string sc.model in
   let esc_str =
     match sc.escalation_model with
     | None -> "(none)"
@@ -112,7 +112,7 @@ let post_setup_instructions ~(sc : Runtime_config.summarizer_config) =
     2. Summarization happens automatically during agent turns
     3. Use "unsummarize" tool to recover original content when needed
 |}
-    (if sc.summarizer_enabled then "yes" else "no")
+    (if sc.enabled then "yes" else "no")
     model_str esc_str sc.threshold_chars sc.p1_max_chars sc.p2_max_chars
     sc.context_window_messages sc.max_age_days
 
@@ -131,10 +131,8 @@ let draw_dashboard ~(sc : Runtime_config.summarizer_config) =
   let w = terminal_width () in
   clear_screen ();
   Printf.printf "\n";
-  let enabled_str =
-    if sc.summarizer_enabled then green "enabled" else dim "disabled"
-  in
-  let model_str = Pmodel.to_string sc.summarizer_model in
+  let enabled_str = if sc.enabled then green "enabled" else dim "disabled" in
+  let model_str = Pmodel.to_string sc.model in
   let esc_str =
     match sc.escalation_model with
     | None -> dim "(none)"
@@ -206,11 +204,10 @@ let run () =
           [
             ( "e",
               Printf.sprintf "Toggle enabled (%s)"
-                (if !sc.summarizer_enabled then "currently on"
-                 else "currently off") );
+                (if !sc.enabled then "currently on" else "currently off") );
             ( "m",
               Printf.sprintf "Set model (currently: %s)"
-                (Pmodel.to_string !sc.summarizer_model) );
+                (Pmodel.to_string !sc.model) );
             ("x", "Set escalation model (empty to clear)");
             ( "t",
               Printf.sprintf "Set threshold chars (currently: %d)"
@@ -256,18 +253,18 @@ let run () =
             end
             else quit := true
         | "e" ->
-            sc := { !sc with summarizer_enabled = not !sc.summarizer_enabled };
+            sc := { !sc with enabled = not !sc.enabled };
             dirty := true
         | "m" ->
             let rec get_model () =
               let s =
                 Setup_common.prompt_string ~prompt:"Model (provider:model)"
-                  ~default:(Pmodel.to_string !sc.summarizer_model)
+                  ~default:(Pmodel.to_string !sc.model)
                   ()
               in
               match validate_model s with
               | Ok m ->
-                  sc := { !sc with summarizer_model = m };
+                  sc := { !sc with model = m };
                   dirty := true
               | Error e ->
                   Setup_common.print_warning e;
@@ -524,7 +521,7 @@ let run () =
             Setup_common.press_enter_to_continue ()
       done;
       if !dirty then "Exited with unsaved changes."
-      else if !sc.summarizer_enabled then
+      else if !sc.enabled then
         Printf.sprintf "Summarizer setup complete. Model: %s."
-          (Pmodel.to_string !sc.summarizer_model)
+          (Pmodel.to_string !sc.model)
       else "Summarizer setup complete (summarizer disabled)."

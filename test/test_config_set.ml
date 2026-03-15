@@ -231,8 +231,7 @@ let test_summarizer_set_roundtrip () =
     Config_set.json_set [ "summarizer"; "threshold_chars" ] (`Int 5000) json
   in
   let cfg = Config_loader.parse_config json in
-  Alcotest.(check bool)
-    "enabled roundtrip" false cfg.summarizer.summarizer_enabled;
+  Alcotest.(check bool) "enabled roundtrip" false cfg.summarizer.enabled;
   Alcotest.(check int)
     "threshold_chars roundtrip" 5000 cfg.summarizer.threshold_chars
 

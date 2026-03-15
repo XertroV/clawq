@@ -609,7 +609,7 @@ let spawn_fix_task ~db ~config ~error_hash ~plan =
       tm.Unix.tm_sec
   in
   let branch = Printf.sprintf "ec/fix-%s-%s" error_hash timestamp in
-  let ec_commit_tag = config.Runtime_config.error_watcher.ec_commit_tag in
+  let ec_commit_tag = config.Runtime_config.error_watcher.commit_tag in
   let prompt =
     Printf.sprintf
       "Apply the following fix plan. All commits MUST include the tag %s in \

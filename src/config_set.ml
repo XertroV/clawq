@@ -331,7 +331,7 @@ let config_schema =
             ("quiet_start", L);
             ("quiet_end", L);
           ] );
-      ("notify", O [ ("notify_channel", L); ("notify_target", L) ]);
+      ("notify", O [ ("channel", L); ("target", L) ]);
       ( "web_search",
         O
           [
@@ -385,7 +385,7 @@ let config_schema =
             ("max_errors_per_batch", L);
             ("ignore_patterns", L);
             ("auto_fix_enabled", L);
-            ("ec_commit_tag", L);
+            ("commit_tag", L);
           ] );
     ]
 

@@ -940,9 +940,9 @@ let run ~(config : Runtime_config.t) =
                  m
                    "Summarizer config updated: enabled=%b→%b, model=%s→%s, \
                     threshold=%d→%d"
-                   old_sc.summarizer_enabled new_sc.summarizer_enabled
-                   (Pmodel.to_string old_sc.summarizer_model)
-                   (Pmodel.to_string new_sc.summarizer_model)
+                   old_sc.enabled new_sc.enabled
+                   (Pmodel.to_string old_sc.model)
+                   (Pmodel.to_string new_sc.model)
                    old_sc.threshold_chars new_sc.threshold_chars));
           (match tool_registry with
           | Some registry ->
@@ -961,7 +961,7 @@ let run ~(config : Runtime_config.t) =
                         (Printexc.to_string exn));
                   Lwt.return_unit));
           (* Handle EC process enable/disable on config reload *)
-          if new_config.error_watcher.ec_enabled && ec_state.pid = None then begin
+          if new_config.error_watcher.enabled && ec_state.pid = None then begin
             Logs.info (fun m ->
                 m "EC watcher enabled via config reload, starting");
             try Error_watcher.start_ec_process ec_state
@@ -969,8 +969,7 @@ let run ~(config : Runtime_config.t) =
               Logs.err (fun m ->
                   m "Failed to start EC process: %s" (Printexc.to_string exn))
           end
-          else if
-            (not new_config.error_watcher.ec_enabled) && ec_state.pid <> None
+          else if (not new_config.error_watcher.enabled) && ec_state.pid <> None
           then begin
             Logs.info (fun m ->
                 m "EC watcher disabled via config reload, stopping");
@@ -1187,7 +1186,7 @@ let run ~(config : Runtime_config.t) =
               Lwt.return_unit))
   | None -> ());
   (* Error Correction watcher process *)
-  if config.error_watcher.ec_enabled then begin
+  if config.error_watcher.enabled then begin
     Logs.info (fun m -> m "Starting Error Correction watcher process");
     (try Error_watcher.start_ec_process ec_state
      with exn ->
@@ -1235,9 +1234,9 @@ let run ~(config : Runtime_config.t) =
                         m
                           "Summarizer config updated (file watch): \
                            enabled=%b→%b, model=%s→%s, threshold=%d→%d"
-                          old_sc.summarizer_enabled new_sc.summarizer_enabled
-                          (Pmodel.to_string old_sc.summarizer_model)
-                          (Pmodel.to_string new_sc.summarizer_model)
+                          old_sc.enabled new_sc.enabled
+                          (Pmodel.to_string old_sc.model)
+                          (Pmodel.to_string new_sc.model)
                           old_sc.threshold_chars new_sc.threshold_chars));
                  (match tool_registry with
                  | Some registry ->
@@ -1256,8 +1255,7 @@ let run ~(config : Runtime_config.t) =
                                (Printexc.to_string exn));
                          Lwt.return_unit));
                  (* Handle EC process enable/disable on auto-reload *)
-                 if new_config.error_watcher.ec_enabled && ec_state.pid = None
-                 then begin
+                 if new_config.error_watcher.enabled && ec_state.pid = None then begin
                    Logs.info (fun m ->
                        m "EC watcher enabled via auto-reload, starting");
                    try Error_watcher.start_ec_process ec_state
@@ -1267,7 +1265,7 @@ let run ~(config : Runtime_config.t) =
                            (Printexc.to_string exn))
                  end
                  else if
-                   (not new_config.error_watcher.ec_enabled)
+                   (not new_config.error_watcher.enabled)
                    && ec_state.pid <> None
                  then begin
                    Logs.info (fun m ->
@@ -1466,19 +1464,16 @@ let run ~(config : Runtime_config.t) =
   let hb = config.heartbeat in
   Logs.info (fun m ->
       m "Heartbeat loop started: enabled=%b interval=%ds quiet=%d:00-%d:00"
-        hb.heartbeat_enabled hb.heartbeat_interval_seconds
-        hb.heartbeat_quiet_start hb.heartbeat_quiet_end);
+        hb.enabled hb.interval_seconds hb.quiet_start hb.quiet_end);
   Lwt.async (fun () ->
       Lwt.catch
         (fun () ->
           let rec hb_loop () =
             let open Lwt.Syntax in
             let cur_hb = (Session.get_config session_manager).heartbeat in
-            let* () =
-              Lwt_unix.sleep (float_of_int cur_hb.heartbeat_interval_seconds)
-            in
+            let* () = Lwt_unix.sleep (float_of_int cur_hb.interval_seconds) in
             let cur_hb = (Session.get_config session_manager).heartbeat in
-            if not cur_hb.heartbeat_enabled then begin
+            if not cur_hb.enabled then begin
               Logs.debug (fun m -> m "Heartbeat: disabled, skipping tick");
               hb_loop ()
             end
@@ -1486,13 +1481,9 @@ let run ~(config : Runtime_config.t) =
               let tm = Unix.localtime (Unix.gettimeofday ()) in
               let hour = tm.Unix.tm_hour in
               let in_quiet =
-                if cur_hb.heartbeat_quiet_start > cur_hb.heartbeat_quiet_end
-                then
-                  hour >= cur_hb.heartbeat_quiet_start
-                  || hour < cur_hb.heartbeat_quiet_end
-                else
-                  hour >= cur_hb.heartbeat_quiet_start
-                  && hour < cur_hb.heartbeat_quiet_end
+                if cur_hb.quiet_start > cur_hb.quiet_end then
+                  hour >= cur_hb.quiet_start || hour < cur_hb.quiet_end
+                else hour >= cur_hb.quiet_start && hour < cur_hb.quiet_end
               in
               if in_quiet then begin
                 Logs.debug (fun m -> m "Heartbeat: quiet hours, skipping");
