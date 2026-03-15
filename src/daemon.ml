@@ -205,14 +205,13 @@ let run ~(config : Runtime_config.t) =
           Tool_registry.register_skill registry s;
           Logs.info (fun m -> m "Loaded skill: %s" s.Tool.name))
         skills;
-      Tool_registry.register registry
-        (Skills.skill_create_tool ~workspace_only:config.security.workspace_only
-           ~allowed_commands:Tools_builtin.default_shell_allowlist registry);
+      Tool_registry.register registry (Skills.skill_create_tool ());
       let workspace = Runtime_config.effective_workspace config in
       Tool_registry.register registry
         (Skills.skill_list_tool ~workspace_dir:workspace ());
       let skill_cache = Skills.init_cache ~workspace_dir:workspace () in
-      Tool_registry.register registry (Skills.use_skill_tool ());
+      Tool_registry.register registry
+        (Skills.use_skill_tool ~workspace_only:config.security.workspace_only ());
       Lwt.async (fun () -> Skills.skill_watcher_loop skill_cache);
       Session_turn.expand_skill_refs_fn := Skills.expand_skill_refs;
       Logs.info (fun m ->

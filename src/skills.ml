@@ -49,7 +49,8 @@ let wait_for_interrupt interrupt_check =
 let load_skill ?(workspace_only = true) ?(timeout_secs = 30.0)
     ?(allowed_commands = Tools_builtin.default_shell_allowlist) path =
   try
-    let json = Yojson.Safe.from_file path in
+    let file_path = path in
+    let json = Yojson.Safe.from_file file_path in
     let open Yojson.Safe.Util in
     let name = json |> member "name" |> to_string in
     let description = json |> member "description" |> to_string in
@@ -63,6 +64,11 @@ let load_skill ?(workspace_only = true) ?(timeout_secs = 30.0)
       try json |> member "risk_level" |> to_string |> risk_level_of_string
       with _ -> Tool.Medium
     in
+    Logs.warn (fun m ->
+        m
+          "JSON skill '%s' at %s is deprecated. Convert to SKILL.md format \
+           (see docs/TOOLS.md)."
+          name file_path);
     let tool : Tool.t =
       {
         name;
@@ -217,12 +223,21 @@ let load_skill ?(workspace_only = true) ?(timeout_secs = 30.0)
 
 let load_all ?(dir = skills_dir ()) ?(workspace_only = true)
     ?(allowed_commands = Tools_builtin.default_shell_allowlist) () =
-  if Sys.file_exists dir && Sys.is_directory dir then
+  if Sys.file_exists dir && Sys.is_directory dir then (
     let files = Sys.readdir dir in
-    Array.to_list files
-    |> List.filter (fun f -> Filename.check_suffix f ".json")
-    |> List.filter_map (fun f ->
-        load_skill ~workspace_only ~allowed_commands (Filename.concat dir f))
+    let skills =
+      Array.to_list files
+      |> List.filter (fun f -> Filename.check_suffix f ".json")
+      |> List.filter_map (fun f ->
+          load_skill ~workspace_only ~allowed_commands (Filename.concat dir f))
+    in
+    if skills <> [] then
+      Logs.warn (fun m ->
+          m
+            "%d JSON skill(s) loaded from %s. JSON skills are deprecated; \
+             convert to SKILL.md format."
+            (List.length skills) dir);
+    skills)
   else []
 
 let list_skills ?(dir = skills_dir ()) () =
@@ -603,7 +618,7 @@ let skill_watcher_loop cache =
 
 (* ── Tool definitions ── *)
 
-let use_skill_tool () =
+let use_skill_tool ?(workspace_only = false) () =
   {
     Tool.name = "use_skill";
     description =
@@ -659,7 +674,9 @@ let use_skill_tool () =
                   substitute_arguments skill.instructions arguments
                 else skill.instructions
               in
-              Lwt.return body
+              let skill_dir = Filename.dirname skill.meta.md_source_path in
+              Skills_cmd_inject.expand_injections ~workspace_only ~skill_dir
+                body
           | None ->
               let names =
                 List.map
@@ -681,14 +698,14 @@ let use_skill_tool () =
     deferred = false;
   }
 
-let skill_create_tool ~workspace_only ~allowed_commands registry =
+let skill_create_tool () =
   {
     Tool.name = "skill_create";
     description =
-      "Create a persistent user-defined skill (shell command tool). The skill \
-       is saved to ~/.clawq/skills/ and becomes available immediately and in \
-       future sessions. The command field supports {{key}} template variables \
-       that map to the parameters schema.";
+      "Create a persistent SKILL.md skill. The skill is saved to \
+       ~/.clawq/skills/<name>/SKILL.md and becomes available immediately and \
+       in future sessions. The command is embedded as a !`command` injection \
+       in the skill body.";
     parameters_schema =
       `Assoc
         [
@@ -717,26 +734,8 @@ let skill_create_tool ~workspace_only ~allowed_commands registry =
                       ("type", `String "string");
                       ( "description",
                         `String
-                          "Shell command template. Use {{key}} for parameter \
-                           substitution." );
-                    ] );
-                ( "parameters",
-                  `Assoc
-                    [
-                      ("type", `String "object");
-                      ( "description",
-                        `String
-                          "JSON schema for command parameters (optional, \
-                           default: empty object)" );
-                    ] );
-                ( "risk_level",
-                  `Assoc
-                    [
-                      ("type", `String "string");
-                      ( "description",
-                        `String
-                          "Risk level: low, medium, or high (default: medium)"
-                      );
+                          "Shell command to embed. Use $ARGUMENTS for user \
+                           input." );
                     ] );
               ] );
           ( "required",
@@ -753,18 +752,6 @@ let skill_create_tool ~workspace_only ~allowed_commands registry =
         let command =
           try args |> member "command" |> to_string with _ -> ""
         in
-        let parameters =
-          try
-            let p = args |> member "parameters" in
-            if p = `Null then
-              `Assoc [ ("type", `String "object"); ("properties", `Assoc []) ]
-            else p
-          with _ ->
-            `Assoc [ ("type", `String "object"); ("properties", `Assoc []) ]
-        in
-        let risk_level =
-          try args |> member "risk_level" |> to_string with _ -> "medium"
-        in
         if name = "" then Lwt.return "Error: name is required"
         else if not (is_valid_skill_name name) then
           Lwt.return
@@ -774,48 +761,41 @@ let skill_create_tool ~workspace_only ~allowed_commands registry =
           Lwt.return "Error: description is required"
         else if command = "" then Lwt.return "Error: command is required"
         else
-          let collision =
-            match Tool_registry.find registry name with
-            | Some _ -> true
-            | None -> false
-          in
           let dir = init_dir () in
-          let path = Filename.concat dir (name ^ ".json") in
-          let json =
-            `Assoc
-              [
-                ("name", `String name);
-                ("description", `String description);
-                ("parameters", parameters);
-                ("command", `String command);
-                ("risk_level", `String risk_level);
-              ]
+          let skill_dir = Filename.concat dir name in
+          let path = Filename.concat skill_dir "SKILL.md" in
+          let content =
+            Printf.sprintf
+              "---\n\
+               name: %s\n\
+               description: %s\n\
+               ---\n\n\
+               Output of command:\n\n\
+               !`%s`\n"
+              name description command
           in
-          let content = Yojson.Safe.pretty_to_string json in
           Lwt.catch
             (fun () ->
               let open Lwt.Syntax in
+              (try
+                 if not (Sys.file_exists skill_dir) then
+                   Sys.mkdir skill_dir 0o755
+               with _ -> ());
               let* () =
                 Lwt_io.with_file ~mode:Lwt_io.Output path (fun oc ->
                     Lwt_io.write oc content)
               in
-              match load_skill ~workspace_only ~allowed_commands path with
-              | None ->
-                  Lwt.return
-                    (Printf.sprintf
-                       "Written skill to %s but it failed validation — check \
-                        command syntax"
-                       path)
-              | Some tool ->
-                  if not collision then Tool_registry.register registry tool;
-                  let note =
-                    if collision then
-                      " (note: name collides with existing tool, not \
-                       hot-reloaded — will take effect on restart)"
-                    else " (hot-reloaded into current session)"
-                  in
-                  Lwt.return
-                    (Printf.sprintf "Created skill '%s' at %s%s" name path note))
+              (match !global_cache with
+              | Some cache ->
+                  cache.md_skills <- scan_skill_dirs cache.search_dirs;
+                  cache.dir_mtimes <-
+                    List.map (fun d -> (d, get_dir_mtime d)) cache.search_dirs;
+                  cache.last_scan_time <- Unix.gettimeofday ()
+              | None -> ());
+              Lwt.return
+                (Printf.sprintf
+                   "Created SKILL.md skill '%s' at %s (available immediately)"
+                   name path))
             (fun exn ->
               Lwt.return ("Error writing skill: " ^ Printexc.to_string exn)));
     invoke_stream = None;
@@ -850,7 +830,7 @@ let skill_list_tool ?workspace_dir () =
                   try json |> member "description" |> to_string
                   with _ -> "(no description)"
                 in
-                Some (Printf.sprintf "- %s: %s [json]" name desc)
+                Some (Printf.sprintf "- %s: %s [json, DEPRECATED]" name desc)
               with _ -> Some (Printf.sprintf "- %s: (parse error)" f))
             files
         in

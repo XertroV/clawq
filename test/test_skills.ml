@@ -348,11 +348,7 @@ let make_tmp_skills_dir () =
   dir
 
 let test_skill_create_valid () =
-  let registry = Tool_registry.create () in
-  let tool =
-    Skills.skill_create_tool ~workspace_only:false ~allowed_commands:[] registry
-  in
-  let tmp_dir = make_tmp_skills_dir () in
+  let tool = Skills.skill_create_tool () in
   let orig_home = try Some (Sys.getenv "HOME") with Not_found -> None in
   Unix.putenv "HOME" (Filename.get_temp_dir_name ());
   let parent = Filename.concat (Filename.get_temp_dir_name ()) ".clawq" in
@@ -371,24 +367,23 @@ let test_skill_create_valid () =
   in
   let has_created =
     try
-      ignore (Str.search_forward (Str.regexp_string "Created skill") result 0);
+      ignore
+        (Str.search_forward (Str.regexp_string "Created SKILL.md") result 0);
       true
     with Not_found -> false
   in
   Alcotest.(check bool) "skill created" true has_created;
-  let found = Tool_registry.find registry "test_create" in
-  Alcotest.(check bool) "hot-reloaded" true (found <> None);
-  (try Sys.remove (Filename.concat sdir "test_create.json") with _ -> ());
+  let skill_dir = Filename.concat sdir "test_create" in
+  let skill_path = Filename.concat skill_dir "SKILL.md" in
+  Alcotest.(check bool) "SKILL.md exists" true (Sys.file_exists skill_path);
+  (try Sys.remove skill_path with _ -> ());
+  (try Sys.rmdir skill_dir with _ -> ());
   (try Sys.rmdir sdir with _ -> ());
   (try Sys.rmdir parent with _ -> ());
-  (try Sys.rmdir tmp_dir with _ -> ());
   match orig_home with Some h -> Unix.putenv "HOME" h | None -> ()
 
 let test_skill_create_invalid_name () =
-  let registry = Tool_registry.create () in
-  let tool =
-    Skills.skill_create_tool ~workspace_only:false ~allowed_commands:[] registry
-  in
+  let tool = Skills.skill_create_tool () in
   let result =
     Lwt_main.run
       (tool.invoke
@@ -407,10 +402,7 @@ let test_skill_create_invalid_name () =
      with Not_found -> false)
 
 let test_skill_create_missing_fields () =
-  let registry = Tool_registry.create () in
-  let tool =
-    Skills.skill_create_tool ~workspace_only:false ~allowed_commands:[] registry
-  in
+  let tool = Skills.skill_create_tool () in
   let r1 = Lwt_main.run (tool.invoke (`Assoc [ ("name", `String "x") ])) in
   Alcotest.(check bool)
     "missing desc" true
@@ -757,6 +749,110 @@ let test_skill_list_tool_both_formats () =
      with Not_found -> false);
   rm_rf base
 
+let test_skill_list_shows_deprecated () =
+  let base = make_temp_dir "skill_deprec" in
+  let clawq_dir = Filename.concat base ".clawq" in
+  Sys.mkdir clawq_dir 0o755;
+  let json_dir = Filename.concat clawq_dir "skills" in
+  Sys.mkdir json_dir 0o755;
+  write_file
+    (Filename.concat json_dir "old.json")
+    {|{"name": "old-skill", "description": "legacy", "parameters": {"type": "object", "properties": {}}, "command": "echo old", "risk_level": "low"}|};
+  let orig_home = try Some (Sys.getenv "HOME") with Not_found -> None in
+  Unix.putenv "HOME" base;
+  let tool = Skills.skill_list_tool () in
+  let result = Lwt_main.run (tool.invoke (`Assoc [])) in
+  (match orig_home with Some h -> Unix.putenv "HOME" h | None -> ());
+  Alcotest.(check bool)
+    "shows DEPRECATED" true
+    (try
+       ignore (Str.search_forward (Str.regexp_string "DEPRECATED") result 0);
+       true
+     with Not_found -> false);
+  rm_rf base
+
+let test_skill_create_md_format () =
+  let tool = Skills.skill_create_tool () in
+  let orig_home = try Some (Sys.getenv "HOME") with Not_found -> None in
+  Unix.putenv "HOME" (Filename.get_temp_dir_name ());
+  let parent = Filename.concat (Filename.get_temp_dir_name ()) ".clawq" in
+  (try Sys.mkdir parent 0o755 with _ -> ());
+  let sdir = Filename.concat parent "skills" in
+  (try Sys.mkdir sdir 0o755 with _ -> ());
+  let result =
+    Lwt_main.run
+      (tool.invoke
+         (`Assoc
+            [
+              ("name", `String "md_test");
+              ("description", `String "md test skill");
+              ("command", `String "echo md-works");
+            ]))
+  in
+  Alcotest.(check bool)
+    "created" true
+    (try
+       ignore (Str.search_forward (Str.regexp_string "SKILL.md") result 0);
+       true
+     with Not_found -> false);
+  let skill_dir = Filename.concat sdir "md_test" in
+  let skill_path = Filename.concat skill_dir "SKILL.md" in
+  Alcotest.(check bool) "SKILL.md file exists" true (Sys.file_exists skill_path);
+  let ic = open_in skill_path in
+  let content =
+    Fun.protect
+      (fun () ->
+        let len = in_channel_length ic in
+        let buf = Bytes.create len in
+        really_input ic buf 0 len;
+        Bytes.to_string buf)
+      ~finally:(fun () -> close_in ic)
+  in
+  Alcotest.(check bool)
+    "contains injection" true
+    (try
+       ignore
+         (Str.search_forward (Str.regexp_string "!`echo md-works`") content 0);
+       true
+     with Not_found -> false);
+  (try Sys.remove skill_path with _ -> ());
+  (try Sys.rmdir skill_dir with _ -> ());
+  (try Sys.rmdir sdir with _ -> ());
+  (try Sys.rmdir parent with _ -> ());
+  match orig_home with Some h -> Unix.putenv "HOME" h | None -> ()
+
+let test_use_skill_with_injection () =
+  let dir = make_temp_dir "skill_inject" in
+  let skills_dir = Filename.concat dir ".claude/skills" in
+  Sys.mkdir (Filename.concat dir ".claude") 0o755;
+  Sys.mkdir skills_dir 0o755;
+  let sd = Filename.concat skills_dir "inject-test" in
+  Sys.mkdir sd 0o755;
+  write_file
+    (Filename.concat sd "SKILL.md")
+    "---\n\
+     name: inject-test\n\
+     description: injection test\n\
+     ---\n\
+     Result: !`echo injected-value`";
+  let _cache = Skills.init_cache ~workspace_dir:dir () in
+  ignore _cache;
+  let tool = Skills.use_skill_tool () in
+  let result =
+    Lwt_main.run (tool.invoke (`Assoc [ ("name", `String "inject-test") ]))
+  in
+  Alcotest.(check bool)
+    "contains expanded value" true
+    (try
+       ignore
+         (Str.search_forward
+            (Str.regexp_string "Result: injected-value")
+            result 0);
+       true
+     with Not_found -> false);
+  Skills.global_cache := None;
+  rm_rf dir
+
 let suite =
   [
     Alcotest.test_case "template substitution" `Quick test_substitute_template;
@@ -809,4 +905,10 @@ let suite =
     Alcotest.test_case "slash command skill" `Quick test_slash_command_skill;
     Alcotest.test_case "skill list tool both formats" `Quick
       test_skill_list_tool_both_formats;
+    Alcotest.test_case "skill list shows deprecated" `Quick
+      test_skill_list_shows_deprecated;
+    Alcotest.test_case "skill create md format" `Quick
+      test_skill_create_md_format;
+    Alcotest.test_case "use skill with injection" `Quick
+      test_use_skill_with_injection;
   ]

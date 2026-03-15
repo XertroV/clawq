@@ -61,6 +61,7 @@
   migrate
   audit
   skills
+  skills_cmd_inject
   vector
   secret_store
   html_page

@@ -55,6 +55,27 @@ SKILL.md skills (from `.claude-p/skills/`, `.claude/skills/`, `~/.clawq/skills/`
 
 Skills can also be referenced via `@skill-name` in messages (auto-attached as context) or invoked via the `use_skill` tool.
 
+### Command Injection in SKILL.md
+
+SKILL.md bodies support command injection via `` !`command` `` syntax. When the skill is invoked, each `` !`...` `` expression is replaced with the command's stdout output. This enables dynamic content in skill instructions.
+
+Example SKILL.md body:
+```
+Current git status:
+!`git status --short`
+
+Recent commits:
+!`git log --oneline -5`
+```
+
+Scripts in the skill's directory are automatically added to PATH, so a skill at `~/.clawq/skills/my-skill/SKILL.md` can reference `~/.clawq/skills/my-skill/helper.sh` as just `helper.sh` in injections.
+
+When `workspace_only` security is enabled, command injections are subject to the same shell safety checks as JSON skills (allowlist, no unsafe syntax).
+
+### JSON Skills (Deprecated)
+
+Legacy JSON skills (`.json` files in `~/.clawq/skills/`) are still loaded but deprecated. A warning is emitted when JSON skills are loaded. The `skill_create` tool now creates SKILL.md skills instead of JSON. Convert existing JSON skills to SKILL.md format by creating a `<name>/SKILL.md` file with the command embedded as `` !`command` ``.
+
 ## Adding a New Command
 
 1. Add an entry to `Slash_commands.commands` in `src/slash_commands.ml` with appropriate priority
