@@ -273,6 +273,7 @@ let test_update_tool_writes_restart_marker_from_session_context () =
              Tool.session_key = Some "telegram:123:456";
              send_progress = None;
              interrupt_check = None;
+             inject_system_messages = None;
            }
          (`Assoc [ ("mode", `String "git") ]))
   in

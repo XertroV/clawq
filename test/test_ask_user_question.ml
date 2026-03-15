@@ -148,6 +148,7 @@ let test_empty_questions_error () =
            Tool.session_key = Some "telegram:123";
            send_progress = None;
            interrupt_check = None;
+           inject_system_messages = None;
          }
      in
      let open Lwt.Syntax in
@@ -209,6 +210,7 @@ let test_multi_question_sequential () =
          Tool.session_key = Some key;
          send_progress = None;
          interrupt_check = None;
+         inject_system_messages = None;
        }
      in
      let* result = tool.Tool.invoke ~context:ctx args in

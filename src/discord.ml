@@ -491,24 +491,28 @@ let handle_message ~(discord_config : Runtime_config.discord_config)
           (fun (s : Skills.skill_md_meta) -> s.md_name)
           (Skills.available_skills ())
       in
-      let cmd_result, msg =
+      let* cmd_result, msg, skill_injections, loaded_skill_name =
         match Slash_commands.handle ~skill_names msg.content with
         | Slash_commands.SkillInvoke (name, args) -> (
-            match Skills.find_skill_md name with
-            | Some skill ->
-                let content =
-                  Skills.substitute_arguments skill.instructions args
-                in
-                let text =
-                  Printf.sprintf "[Skill: %s]\n%s\n\nUser request: %s" name
-                    content args
-                in
-                (Slash_commands.NotACommand, { msg with content = text })
-            | None ->
-                ( Slash_commands.Reply
-                    (Printf.sprintf "Skill '%s' not found." name),
-                  msg ))
-        | other -> (other, msg)
+            let* result = Skills.expand_slash_skill ~name ~args () in
+            match result with
+            | Ok r ->
+                Lwt.return
+                  ( Slash_commands.NotACommand,
+                    msg,
+                    [ r.skill_injection ],
+                    Some name )
+            | Error err_msg ->
+                Lwt.return (Slash_commands.Reply err_msg, msg, [], None))
+        | other -> Lwt.return (other, msg, [], None)
+      in
+      let* () =
+        match loaded_skill_name with
+        | Some name ->
+            send_message_fn ~bot_token:discord_config.bot_token
+              ~channel_id:msg.channel_id
+              ~text:(Printf.sprintf "Loaded skill: %s" name)
+        | None -> Lwt.return_unit
       in
       match cmd_result with
       | Reply text ->
@@ -1069,7 +1073,7 @@ let handle_message ~(discord_config : Runtime_config.discord_config)
                   (fun () ->
                     let* response =
                       Session.turn_stream session_mgr ~key ~message:msg.content
-                        ~channel_name:msg.channel_id
+                        ~skill_injections ~channel_name:msg.channel_id
                         ~channel_type:discord_channel_type
                         ~sender_id:msg.author_id ~channel:"discord"
                         ~channel_id:msg.channel_id ~message_id:msg.id

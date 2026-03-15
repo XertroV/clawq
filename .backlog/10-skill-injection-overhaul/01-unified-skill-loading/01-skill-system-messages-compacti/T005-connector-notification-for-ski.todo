@@ -1,14 +1,17 @@
 ---
+claimed_at: "2026-03-15T05:45:54Z"
+claimed_by: cli-user
+completed_at: "2026-03-15T06:24:07Z"
 complexity: low
 depends_on:
     - P10.M1.E1.T001
+duration_minutes: 38.220105422083336
 estimate_hours: 1
 id: P10.M1.E1.T005
 priority: medium
-status: pending
-tags:
-    - idea
-    - planning
+started_at: "2026-03-15T05:45:54Z"
+status: done
+tags: []
 title: Connector notification for skill loading
 ---
 When a skill is loaded via @mention or /slash, send "Loaded skill: X" to the user via the connector's normal send_message. NOT for use_skill (tool log shows it). Skill system messages (instructions) never sent via connector.

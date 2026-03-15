@@ -28,7 +28,7 @@ bootstrap:
 
 build:
 	$(call check_dune_lock,_build)
-	dune build
+	dune build 2> >(tee _build/.last-build.log >&2)
 
 restart:
 	$(CLAWQ_BIN) service signal-restart

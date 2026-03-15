@@ -316,6 +316,20 @@ let execute_tool_calls_stream ~config ~(tool_registry : Tool_registry.t option)
                                         (Provider.ToolOutputDelta
                                            { id = tc.id; chunk = text }));
                                 interrupt_check;
+                                inject_system_messages =
+                                  Some
+                                    (fun msgs ->
+                                      let msgs =
+                                        Skill_dedup.dedup_skill_injections
+                                          ~history:!history_ref msgs
+                                      in
+                                      List.iter
+                                        (fun content ->
+                                          history_ref :=
+                                            Provider.make_message ~role:"system"
+                                              ~content
+                                            :: !history_ref)
+                                        msgs);
                               }
                             in
                             match tool.invoke_stream with
@@ -498,6 +512,20 @@ let execute_tool_calls ~config ~(tool_registry : Tool_registry.t option)
                                 Tool.session_key;
                                 send_progress = None;
                                 interrupt_check;
+                                inject_system_messages =
+                                  Some
+                                    (fun msgs ->
+                                      let msgs =
+                                        Skill_dedup.dedup_skill_injections
+                                          ~history:!history_ref msgs
+                                      in
+                                      List.iter
+                                        (fun content ->
+                                          history_ref :=
+                                            Provider.make_message ~role:"system"
+                                              ~content
+                                            :: !history_ref)
+                                        msgs);
                               }
                             in
                             tool.invoke ~context args)

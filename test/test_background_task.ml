@@ -635,6 +635,7 @@ let test_enqueue_tool_uses_context_session_key () =
                  Tool.session_key = Some "telegram:42:user";
                  send_progress = None;
                  interrupt_check = None;
+                 inject_system_messages = None;
                }
              args)
       in
@@ -1308,6 +1309,7 @@ let test_routing_from_context_prefers_context_over_env () =
           Tool.session_key = Some "discord:77:guilduser";
           send_progress = None;
           interrupt_check = None;
+          inject_system_messages = None;
         }
       in
       let session_key, channel, channel_id =

@@ -344,24 +344,27 @@ let handle_event ~(config : Runtime_config.slack_config)
                 (fun (s : Skills.skill_md_meta) -> s.md_name)
                 (Skills.available_skills ())
             in
-            let cmd_result, text =
+            let* cmd_result, text, skill_injections, loaded_skill_name =
               match Slash_commands.handle ~skill_names text with
               | Slash_commands.SkillInvoke (name, args) -> (
-                  match Skills.find_skill_md name with
-                  | Some skill ->
-                      let content =
-                        Skills.substitute_arguments skill.instructions args
-                      in
-                      let msg =
-                        Printf.sprintf "[Skill: %s]\n%s\n\nUser request: %s"
-                          name content args
-                      in
-                      (Slash_commands.NotACommand, msg)
-                  | None ->
-                      ( Slash_commands.Reply
-                          (Printf.sprintf "Skill '%s' not found." name),
-                        text ))
-              | other -> (other, text)
+                  let* result = Skills.expand_slash_skill ~name ~args () in
+                  match result with
+                  | Ok r ->
+                      Lwt.return
+                        ( Slash_commands.NotACommand,
+                          text,
+                          [ r.skill_injection ],
+                          Some name )
+                  | Error err_msg ->
+                      Lwt.return (Slash_commands.Reply err_msg, text, [], None))
+              | other -> Lwt.return (other, text, [], None)
+            in
+            let* () =
+              match loaded_skill_name with
+              | Some name ->
+                  send_message_fn ~bot_token:config.bot_token ~channel_id
+                    ~text:(Printf.sprintf "Loaded skill: %s" name)
+              | None -> Lwt.return_unit
             in
             match cmd_result with
             | Reply reply_text ->
@@ -964,10 +967,11 @@ let handle_event ~(config : Runtime_config.slack_config)
                         (fun () ->
                           let* response =
                             Session.turn_stream session_manager ~key
-                              ~message:text ~channel_name:channel_id
-                              ~channel_type:"group" ~sender_id:user_id
-                              ~channel:"slack" ~channel_id ~message_id:ts
-                              ~on_drain_progress ~before_drain ~on_chunk ()
+                              ~message:text ~skill_injections
+                              ~channel_name:channel_id ~channel_type:"group"
+                              ~sender_id:user_id ~channel:"slack" ~channel_id
+                              ~message_id:ts ~on_drain_progress ~before_drain
+                              ~on_chunk ()
                           in
                           Lwt.return (Ok response))
                         (fun exn -> Lwt.return (Error (Printexc.to_string exn))))

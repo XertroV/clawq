@@ -35,6 +35,7 @@
   string_util
   path_util
   agent_cost
+  skill_dedup
   agent_tools
   agent
   session_core

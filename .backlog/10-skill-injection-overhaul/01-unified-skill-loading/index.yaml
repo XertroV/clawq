@@ -9,9 +9,9 @@ epics:
       locked: false
       name: Skill System Messages & Compaction
       path: 01-skill-system-messages-compacti
-      status: pending
+      status: done
 estimate_hours: 11
 id: P10.M1
 locked: false
 name: Unified Skill Loading
-status: pending
+status: done

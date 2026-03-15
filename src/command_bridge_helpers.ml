@@ -333,6 +333,11 @@ let build_tool_registry ?db (cfg : Runtime_config.t) =
     Tool_registry.register registry
       (Skills.use_skill_tool ~workspace_only:cfg.security.workspace_only ());
     Session_turn.expand_skill_refs_fn := Skills.expand_skill_refs;
+    (Agent.find_skill_for_reload_fn :=
+       fun name ->
+         match Skills.find_skill_md name with
+         | Some s -> Some (s.meta.md_description, s.instructions)
+         | None -> None);
     Some registry
   end
 

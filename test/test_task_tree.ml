@@ -664,6 +664,7 @@ let test_tool_invoke_round_trip () =
       Tool.session_key = Some "s1";
       send_progress = None;
       interrupt_check = None;
+      inject_system_messages = None;
     }
   in
   let result = Lwt_main.run (tool_t.invoke ~context:ctx args) in
@@ -1896,6 +1897,7 @@ let test_tool_notify_called_on_success () =
       Tool.session_key = Some "test:1";
       send_progress = None;
       interrupt_check = None;
+      inject_system_messages = None;
     }
   in
   let result = Lwt_main.run (tool_t.invoke ~context:ctx args) in
@@ -1932,6 +1934,7 @@ let test_tool_notify_not_called_on_error () =
       Tool.session_key = Some "test:1";
       send_progress = None;
       interrupt_check = None;
+      inject_system_messages = None;
     }
   in
   let result = Lwt_main.run (tool_t.invoke ~context:ctx args) in
@@ -1955,6 +1958,7 @@ let test_tool_no_notify_when_none () =
       Tool.session_key = Some "test:1";
       send_progress = None;
       interrupt_check = None;
+      inject_system_messages = None;
     }
   in
   let result = Lwt_main.run (tool_t.invoke ~context:ctx args) in

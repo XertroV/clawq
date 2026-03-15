@@ -247,6 +247,7 @@ let test_skill_interrupt_kills_descendants () =
                        Tool.session_key = Some "web:test";
                        send_progress = None;
                        interrupt_check = Some (fun () -> !interrupted);
+                       inject_system_messages = None;
                      }
                    (`Assoc [])
                in
@@ -581,19 +582,44 @@ let test_use_skill_tool_found () =
   let _cache = Skills.init_cache ~workspace_dir:dir () in
   ignore _cache;
   let tool = Skills.use_skill_tool () in
+  (* use_skill now returns brief ack and injects system message *)
+  let injected = ref [] in
+  let context =
+    {
+      Tool.session_key = None;
+      send_progress = None;
+      interrupt_check = None;
+      inject_system_messages = Some (fun msgs -> injected := !injected @ msgs);
+    }
+  in
   let result =
     Lwt_main.run
-      (tool.invoke
+      (tool.invoke ~context
          (`Assoc
             [ ("name", `String "test-use"); ("arguments", `String "my args") ]))
   in
   Alcotest.(check bool)
-    "contains Follow" true
+    "brief ack" true
     (try
-       ignore
-         (Str.search_forward (Str.regexp_string "Follow: my args") result 0);
+       ignore (Str.search_forward (Str.regexp_string "Loaded skill") result 0);
        true
      with Not_found -> false);
+  Alcotest.(check bool)
+    "has_args: true" true
+    (try
+       ignore (Str.search_forward (Str.regexp_string "has_args: true") result 0);
+       true
+     with Not_found -> false);
+  Alcotest.(check bool)
+    "system message injected with expanded content" true
+    (match !injected with
+    | [ msg ] -> (
+        try
+          ignore
+            (Str.search_forward (Str.regexp_string "Follow: my args") msg 0);
+          true
+        with Not_found -> false)
+    | _ -> false);
   Skills.global_cache := None;
   rm_rf dir
 
@@ -838,20 +864,264 @@ let test_use_skill_with_injection () =
   let _cache = Skills.init_cache ~workspace_dir:dir () in
   ignore _cache;
   let tool = Skills.use_skill_tool () in
+  let injected = ref [] in
+  let context =
+    {
+      Tool.session_key = None;
+      send_progress = None;
+      interrupt_check = None;
+      inject_system_messages = Some (fun msgs -> injected := !injected @ msgs);
+    }
+  in
   let result =
-    Lwt_main.run (tool.invoke (`Assoc [ ("name", `String "inject-test") ]))
+    Lwt_main.run
+      (tool.invoke ~context (`Assoc [ ("name", `String "inject-test") ]))
   in
   Alcotest.(check bool)
-    "contains expanded value" true
+    "brief ack returned" true
     (try
-       ignore
-         (Str.search_forward
-            (Str.regexp_string "Result: injected-value")
-            result 0);
+       ignore (Str.search_forward (Str.regexp_string "Loaded skill") result 0);
+       true
+     with Not_found -> false);
+  Alcotest.(check bool)
+    "system message contains expanded value" true
+    (match !injected with
+    | [ msg ] -> (
+        try
+          ignore
+            (Str.search_forward
+               (Str.regexp_string "Result: injected-value")
+               msg 0);
+          true
+        with Not_found -> false)
+    | _ -> false);
+  Skills.global_cache := None;
+  rm_rf dir
+
+let test_expand_slash_skill_found () =
+  let dir = make_temp_dir "slash_expand" in
+  let skills_dir = Filename.concat dir ".claude/skills" in
+  Sys.mkdir (Filename.concat dir ".claude") 0o755;
+  Sys.mkdir skills_dir 0o755;
+  let sd = Filename.concat skills_dir "my-skill" in
+  Sys.mkdir sd 0o755;
+  write_file
+    (Filename.concat sd "SKILL.md")
+    "---\nname: my-skill\ndescription: test skill\n---\nDo this: $ARGUMENTS";
+  let _cache = Skills.init_cache ~workspace_dir:dir () in
+  (* No args: injection has raw body *)
+  (match
+     Lwt_main.run (Skills.expand_slash_skill ~name:"my-skill" ~args:"" ())
+   with
+  | Ok r ->
+      Alcotest.(check bool) "has_args false" false r.has_args;
+      Alcotest.(check bool)
+        "injection contains skill header" true
+        (try
+           ignore
+             (Str.search_forward
+                (Str.regexp_string "[Skill: my-skill]")
+                r.skill_injection 0);
+           true
+         with Not_found -> false);
+      Alcotest.(check bool)
+        "injection contains raw body" true
+        (try
+           ignore
+             (Str.search_forward
+                (Str.regexp_string "Do this: $ARGUMENTS")
+                r.skill_injection 0);
+           true
+         with Not_found -> false)
+  | Error _ -> Alcotest.fail "expected Ok");
+  (* With args: $ARGUMENTS substituted *)
+  (match
+     Lwt_main.run
+       (Skills.expand_slash_skill ~name:"my-skill" ~args:"hello world" ())
+   with
+  | Ok r ->
+      Alcotest.(check bool) "has_args true" true r.has_args;
+      Alcotest.(check bool)
+        "injection contains expanded args" true
+        (try
+           ignore
+             (Str.search_forward
+                (Str.regexp_string "Do this: hello world")
+                r.skill_injection 0);
+           true
+         with Not_found -> false)
+  | Error _ -> Alcotest.fail "expected Ok");
+  Skills.global_cache := None;
+  rm_rf dir
+
+let test_expand_slash_skill_not_found () =
+  let dir = make_temp_dir "slash_nf" in
+  Sys.mkdir (Filename.concat dir ".claude") 0o755;
+  Sys.mkdir (Filename.concat dir ".claude/skills") 0o755;
+  let _cache = Skills.init_cache ~workspace_dir:dir () in
+  (match
+     Lwt_main.run (Skills.expand_slash_skill ~name:"nonexistent" ~args:"" ())
+   with
+  | Error msg ->
+      Alcotest.(check bool)
+        "error mentions skill name" true
+        (try
+           ignore (Str.search_forward (Str.regexp_string "nonexistent") msg 0);
+           true
+         with Not_found -> false)
+  | Ok _ -> Alcotest.fail "expected Error");
+  Skills.global_cache := None;
+  rm_rf dir
+
+let test_use_skill_no_context () =
+  let dir = make_temp_dir "skill_noctx" in
+  let skills_dir = Filename.concat dir ".claude/skills" in
+  Sys.mkdir (Filename.concat dir ".claude") 0o755;
+  Sys.mkdir skills_dir 0o755;
+  let sd = Filename.concat skills_dir "ctx-test" in
+  Sys.mkdir sd 0o755;
+  write_file
+    (Filename.concat sd "SKILL.md")
+    "---\nname: ctx-test\ndescription: test\n---\nInstructions here";
+  let _cache = Skills.init_cache ~workspace_dir:dir () in
+  let tool = Skills.use_skill_tool () in
+  (* Without context, should still return brief ack without crashing *)
+  let result =
+    Lwt_main.run (tool.invoke (`Assoc [ ("name", `String "ctx-test") ]))
+  in
+  Alcotest.(check bool)
+    "brief ack" true
+    (try
+       ignore (Str.search_forward (Str.regexp_string "Loaded skill") result 0);
        true
      with Not_found -> false);
   Skills.global_cache := None;
   rm_rf dir
+
+let test_dedup_no_args_skill () =
+  let history =
+    [
+      Provider.make_message ~role:"system"
+        ~content:"[Skill: my-skill]\nDo something";
+      Provider.make_message ~role:"user" ~content:"hello";
+    ]
+  in
+  let injections = [ "[Skill: my-skill]\nDo something" ] in
+  let result = Skill_dedup.dedup_skill_injections ~history injections in
+  Alcotest.(check int) "one result" 1 (List.length result);
+  let r = List.hd result in
+  Alcotest.(check bool)
+    "deduped to already loaded" true
+    (try
+       ignore (Str.search_forward (Str.regexp_string "already loaded") r 0);
+       true
+     with Not_found -> false)
+
+let test_dedup_with_args_not_deduped () =
+  let history =
+    [
+      Provider.make_message ~role:"system"
+        ~content:"[Skill: my-skill (args)]\nDo this: hello";
+      Provider.make_message ~role:"user" ~content:"hi";
+    ]
+  in
+  let injections = [ "[Skill: my-skill (args)]\nDo this: world" ] in
+  let result = Skill_dedup.dedup_skill_injections ~history injections in
+  Alcotest.(check int) "one result" 1 (List.length result);
+  let r = List.hd result in
+  Alcotest.(check bool)
+    "not deduped (has args)" true
+    (try
+       ignore (Str.search_forward (Str.regexp_string "Do this: world") r 0);
+       true
+     with Not_found -> false)
+
+let test_dedup_new_skill_not_deduped () =
+  let history =
+    [
+      Provider.make_message ~role:"system"
+        ~content:"[Skill: other-skill]\nOther instructions";
+    ]
+  in
+  let injections = [ "[Skill: my-skill]\nDo something" ] in
+  let result = Skill_dedup.dedup_skill_injections ~history injections in
+  Alcotest.(check int) "one result" 1 (List.length result);
+  let r = List.hd result in
+  Alcotest.(check bool)
+    "not deduped (different skill)" true
+    (try
+       ignore (Str.search_forward (Str.regexp_string "Do something") r 0);
+       true
+     with Not_found -> false)
+
+let test_compaction_skill_reload () =
+  let dir = make_temp_dir "compact_reload" in
+  let skills_dir = Filename.concat dir ".claude/skills" in
+  Sys.mkdir (Filename.concat dir ".claude") 0o755;
+  Sys.mkdir skills_dir 0o755;
+  let sd = Filename.concat skills_dir "reload-me" in
+  Sys.mkdir sd 0o755;
+  write_file
+    (Filename.concat sd "SKILL.md")
+    "---\nname: reload-me\ndescription: reloadable\n---\nReload instructions";
+  let _cache = Skills.init_cache ~workspace_dir:dir () in
+  (Agent.find_skill_for_reload_fn :=
+     fun name ->
+       match Skills.find_skill_md name with
+       | Some s -> Some (s.meta.md_description, s.instructions)
+       | None -> None);
+  let to_compact =
+    [
+      Provider.make_message ~role:"system"
+        ~content:"[Skill: reload-me]\nReload instructions";
+      Provider.make_message ~role:"user" ~content:"do work";
+      Provider.make_message ~role:"assistant" ~content:"done";
+    ]
+  in
+  let to_keep = [ Provider.make_message ~role:"user" ~content:"more work" ] in
+  let result = Agent.reload_skills_after_compaction ~to_compact ~to_keep in
+  Alcotest.(check int) "one skill reloaded" 1 (List.length result);
+  let msg = List.hd result in
+  Alcotest.(check string) "role is system" "system" msg.role;
+  Alcotest.(check bool)
+    "marked autoloaded" true
+    (try
+       ignore
+         (Str.search_forward
+            (Str.regexp_string "autoloaded after compaction")
+            msg.content 0);
+       true
+     with Not_found -> false);
+  Alcotest.(check bool)
+    "contains instructions" true
+    (try
+       ignore
+         (Str.search_forward
+            (Str.regexp_string "Reload instructions")
+            msg.content 0);
+       true
+     with Not_found -> false);
+  (Agent.find_skill_for_reload_fn := fun _ -> None);
+  Skills.global_cache := None;
+  rm_rf dir
+
+let test_compaction_no_reload_if_kept () =
+  (Agent.find_skill_for_reload_fn := fun _ -> Some ("desc", "body"));
+  let to_compact =
+    [
+      Provider.make_message ~role:"system"
+        ~content:"[Skill: kept-skill]\nInstructions";
+    ]
+  in
+  let to_keep =
+    [
+      Provider.make_message ~role:"system"
+        ~content:"[Skill: kept-skill]\nInstructions";
+    ]
+  in
+  let result = Agent.reload_skills_after_compaction ~to_compact ~to_keep in
+  Alcotest.(check int) "no reload (already kept)" 0 (List.length result);
+  Agent.find_skill_for_reload_fn := fun _ -> None
 
 let suite =
   [
@@ -911,4 +1181,18 @@ let suite =
       test_skill_create_md_format;
     Alcotest.test_case "use skill with injection" `Quick
       test_use_skill_with_injection;
+    Alcotest.test_case "expand slash skill found" `Quick
+      test_expand_slash_skill_found;
+    Alcotest.test_case "expand slash skill not found" `Quick
+      test_expand_slash_skill_not_found;
+    Alcotest.test_case "use skill no context" `Quick test_use_skill_no_context;
+    Alcotest.test_case "dedup no-args skill" `Quick test_dedup_no_args_skill;
+    Alcotest.test_case "dedup with-args not deduped" `Quick
+      test_dedup_with_args_not_deduped;
+    Alcotest.test_case "dedup new skill not deduped" `Quick
+      test_dedup_new_skill_not_deduped;
+    Alcotest.test_case "compaction skill reload" `Quick
+      test_compaction_skill_reload;
+    Alcotest.test_case "compaction no reload if kept" `Quick
+      test_compaction_no_reload_if_kept;
   ]

@@ -347,24 +347,20 @@ let handler ~session_manager ~require_pairing ~auth_token
                     (fun (s : Skills.skill_md_meta) -> s.md_name)
                     (Skills.available_skills ())
                 in
-                let cmd_result, message =
+                let* cmd_result, message, skill_injections =
                   match Slash_commands.handle ~skill_names message with
                   | Slash_commands.SkillInvoke (name, args) -> (
-                      match Skills.find_skill_md name with
-                      | Some skill ->
-                          let content =
-                            Skills.substitute_arguments skill.instructions args
-                          in
-                          let msg =
-                            Printf.sprintf "[Skill: %s]\n%s\n\nUser request: %s"
-                              name content args
-                          in
-                          (Slash_commands.NotACommand, msg)
-                      | None ->
-                          ( Slash_commands.Reply
-                              (Printf.sprintf "Skill '%s' not found." name),
-                            message ))
-                  | other -> (other, message)
+                      let* result = Skills.expand_slash_skill ~name ~args () in
+                      match result with
+                      | Ok r ->
+                          Lwt.return
+                            ( Slash_commands.NotACommand,
+                              message,
+                              [ r.skill_injection ] )
+                      | Error err_msg ->
+                          Lwt.return (Slash_commands.Reply err_msg, message, [])
+                      )
+                  | other -> Lwt.return (other, message, [])
                 in
                 match cmd_result with
                 | Slash_commands.Help | Slash_commands.Menu _ ->
@@ -530,7 +526,8 @@ let handler ~session_manager ~require_pairing ~auth_token
                       Lwt.catch
                         (fun () ->
                           let* response =
-                            Session.turn session_manager ~key ~message ()
+                            Session.turn session_manager ~key ~message
+                              ~skill_injections ()
                           in
                           Lwt.return (Ok response))
                         (fun exn -> Lwt.return (Error (Printexc.to_string exn)))
@@ -915,24 +912,20 @@ let handler ~session_manager ~require_pairing ~auth_token
                     (fun (s : Skills.skill_md_meta) -> s.md_name)
                     (Skills.available_skills ())
                 in
-                let cmd_result, message =
+                let* cmd_result, message, skill_injections =
                   match Slash_commands.handle ~skill_names message with
                   | Slash_commands.SkillInvoke (name, args) -> (
-                      match Skills.find_skill_md name with
-                      | Some skill ->
-                          let content =
-                            Skills.substitute_arguments skill.instructions args
-                          in
-                          let msg =
-                            Printf.sprintf "[Skill: %s]\n%s\n\nUser request: %s"
-                              name content args
-                          in
-                          (Slash_commands.NotACommand, msg)
-                      | None ->
-                          ( Slash_commands.Reply
-                              (Printf.sprintf "Skill '%s' not found." name),
-                            message ))
-                  | other -> (other, message)
+                      let* result = Skills.expand_slash_skill ~name ~args () in
+                      match result with
+                      | Ok r ->
+                          Lwt.return
+                            ( Slash_commands.NotACommand,
+                              message,
+                              [ r.skill_injection ] )
+                      | Error err_msg ->
+                          Lwt.return (Slash_commands.Reply err_msg, message, [])
+                      )
+                  | other -> Lwt.return (other, message, [])
                 in
                 match cmd_result with
                 | Slash_commands.Reply text -> sse_reply text
@@ -1355,7 +1348,7 @@ let handler ~session_manager ~require_pairing ~auth_token
                               (fun () ->
                                 let* _response =
                                   Session.turn_stream session_manager ~key
-                                    ~message
+                                    ~message ~skill_injections
                                     ~on_chunk:(fun chunk ->
                                       let data =
                                         Yojson.Safe.to_string

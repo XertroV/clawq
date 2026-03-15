@@ -101,11 +101,11 @@ phases:
       description: 'Unify skill loading across all activation pathways to use system messages, add deduplication, fix command injection gap, and handle compaction. Plan: ~/.claude-w/plans/stateless-orbiting-hippo.md'
       estimate_hours: 11
       id: P10
-      locked: false
+      locked: true
       name: Skill Injection Overhaul
       path: 10-skill-injection-overhaul
       priority: high
-      status: pending
+      status: done
       weeks: 2
 project: Clawq
 stats:

@@ -498,6 +498,7 @@ let test_send_message_uses_send_fn_over_send_progress () =
                    send_progress_called := true;
                    Lwt.return_unit);
              interrupt_check = None;
+             inject_system_messages = None;
            }
          (`Assoc [ ("text", `String "status update") ]))
   in
@@ -551,6 +552,7 @@ let test_send_message_with_buttons_rich_notifier () =
              Tool.session_key = Some "telegram:1:1";
              send_progress = None;
              interrupt_check = None;
+             inject_system_messages = None;
            }
          (`Assoc
             [
@@ -636,6 +638,7 @@ let test_send_message_plain_text_via_rich_notifier () =
              Tool.session_key = Some "telegram:1:1";
              send_progress = None;
              interrupt_check = None;
+             inject_system_messages = None;
            }
          (`Assoc [ ("text", `String "plain text update") ]))
   in
@@ -689,6 +692,7 @@ let test_send_poll_rich_notifier () =
              Tool.session_key = Some "telegram:1:1";
              send_progress = None;
              interrupt_check = None;
+             inject_system_messages = None;
            }
          (`Assoc
             [
@@ -1869,6 +1873,7 @@ let test_shell_exec_interrupts_running_process () =
                    Tool.session_key = Some "web:test";
                    send_progress = None;
                    interrupt_check = Some (fun () -> !interrupted);
+                   inject_system_messages = None;
                  }
                (`Assoc [ ("command", `String "sleep 10") ])
            in
@@ -1918,6 +1923,7 @@ let test_shell_exec_interrupt_moves_to_background () =
                    Tool.session_key = Some "web:test";
                    send_progress = None;
                    interrupt_check = Some (fun () -> !interrupted);
+                   inject_system_messages = None;
                  }
                (`Assoc [ ("command", `String command) ])
            in
@@ -2035,6 +2041,7 @@ let test_shell_exec_injects_session_id_env () =
           Tool.session_key = Some "telegram:42:testuser";
           send_progress = None;
           interrupt_check = None;
+          inject_system_messages = None;
         }
       in
       let result =
@@ -2223,6 +2230,7 @@ let test_shell_exec_starts_ci_watch_asynchronously_after_push () =
               Tool.session_key = Some "telegram:42:testuser";
               send_progress = None;
               interrupt_check = None;
+              inject_system_messages = None;
             }
           in
           let result =
@@ -2312,6 +2320,7 @@ let test_shell_exec_cd_prefix_push_uses_cd_repo_path () =
               Tool.session_key = Some "telegram:42:testuser";
               send_progress = None;
               interrupt_check = None;
+              inject_system_messages = None;
             }
           in
           let command = Printf.sprintf "cd %s && git push" repo in

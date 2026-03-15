@@ -45,6 +45,7 @@ let test_basic_detach () =
                    Tool.session_key = Some "web:test";
                    send_progress = None;
                    interrupt_check = Some (fun () -> !interrupted);
+                   inject_system_messages = None;
                  }
                (`Assoc [ ("command", `String "echo hello; sleep 0.3") ])
            in
@@ -89,6 +90,7 @@ let test_status_running () =
                    Tool.session_key = Some "web:test";
                    send_progress = None;
                    interrupt_check = Some (fun () -> !interrupted);
+                   inject_system_messages = None;
                  }
                (`Assoc [ ("command", `String "sleep 0.5") ])
            in
@@ -141,6 +143,7 @@ let test_result_windowed () =
                    Tool.session_key = Some "web:test";
                    send_progress = None;
                    interrupt_check = Some (fun () -> !interrupted);
+                   inject_system_messages = None;
                  }
                (`Assoc
                   [
@@ -199,6 +202,7 @@ let test_exit_code_captured () =
                    Tool.session_key = Some "web:test";
                    send_progress = None;
                    interrupt_check = Some (fun () -> !interrupted);
+                   inject_system_messages = None;
                  }
                (`Assoc [ ("command", `String "sleep 0.1; exit 42") ])
            in
@@ -253,6 +257,7 @@ let test_result_while_running () =
                    Tool.session_key = Some "web:test";
                    send_progress = None;
                    interrupt_check = Some (fun () -> !interrupted);
+                   inject_system_messages = None;
                  }
                (`Assoc [ ("command", `String "sleep 5") ])
            in

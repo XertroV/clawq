@@ -214,6 +214,11 @@ let run ~(config : Runtime_config.t) =
         (Skills.use_skill_tool ~workspace_only:config.security.workspace_only ());
       Lwt.async (fun () -> Skills.skill_watcher_loop skill_cache);
       Session_turn.expand_skill_refs_fn := Skills.expand_skill_refs;
+      (Agent.find_skill_for_reload_fn :=
+         fun name ->
+           match Skills.find_skill_md name with
+           | Some s -> Some (s.meta.md_description, s.instructions)
+           | None -> None);
       Logs.info (fun m ->
           m "Tools enabled, registered built-in tools + %d skills"
             (List.length skills));

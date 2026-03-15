@@ -209,6 +209,51 @@ let runtime_context_usage agent ~compacted_before_turn =
 (* Number of most-recent messages kept verbatim after compaction. *)
 let compaction_keep_recent = 20
 
+(* Extract skill names from compacted messages that aren't already in kept
+   messages, so we can auto-reload them after compaction. *)
+let skills_to_reload ~to_compact ~to_keep =
+  let kept_skills = Hashtbl.create 4 in
+  List.iter
+    (fun (msg : Provider.message) ->
+      if msg.role = "system" then
+        match Skill_dedup.extract_skill_name_from_injection msg.content with
+        | Some name -> Hashtbl.replace kept_skills name ()
+        | None -> ())
+    to_keep;
+  let seen = Hashtbl.create 4 in
+  List.filter_map
+    (fun (msg : Provider.message) ->
+      if msg.role = "system" then
+        match Skill_dedup.extract_skill_name_from_injection msg.content with
+        | Some name
+          when (not (Hashtbl.mem kept_skills name))
+               && not (Hashtbl.mem seen name) ->
+            Hashtbl.replace seen name ();
+            Some name
+        | _ -> None
+      else None)
+    to_compact
+
+let find_skill_for_reload_fn : (string -> (string * string) option) ref =
+  ref (fun _name -> None)
+
+let reload_skills_after_compaction ~to_compact ~to_keep =
+  let names = skills_to_reload ~to_compact ~to_keep in
+  List.filter_map
+    (fun name ->
+      match !find_skill_for_reload_fn name with
+      | Some (_desc, instructions) ->
+          let content =
+            Printf.sprintf "[Skill: %s (autoloaded after compaction)]\n%s" name
+              instructions
+          in
+          Some (Provider.make_message ~role:"system" ~content)
+      | None ->
+          Logs.debug (fun m ->
+              m "Skill '%s' no longer available for post-compaction reload" name);
+          None)
+    names
+
 (* History must have more than this many messages before force-compression
    is attempted (to avoid compressing already-tiny histories). *)
 let context_recovery_min_history = 6
@@ -347,14 +392,18 @@ let summarize_messages_with_config config messages =
   let prompt =
     "Summarize the following conversation excerpt concisely. Preserve key \
      facts, decisions, and context that would be needed to continue the \
-     conversation. Output only the summary, no preamble.\n\n" ^ content
+     conversation. Output only the summary, no preamble.\n\
+     IMPORTANT: Do NOT include skill instruction bodies (messages starting \
+     with \"[Skill: ...]\") in the summary. Only note which skills were loaded \
+     by name — the system will automatically reload them.\n\n" ^ content
   in
   let msgs =
     [
       Provider.make_message ~role:"system"
         ~content:
           "You are a conversation summarizer. Be concise but preserve all \
-           important context.";
+           important context. Exclude skill instruction bodies from the \
+           summary — just note skill names that were active.";
       Provider.make_message ~role:"user" ~content:prompt;
     ]
   in
@@ -754,8 +803,11 @@ let compact_history_if_needed agent ?db () =
         let summary_msg =
           Provider.make_message ~role:"assistant" ~content:merged_summary
         in
-        (* Rebuild history (newest-first) as: recent messages then summary. *)
-        agent.history <- List.rev (summary_msg :: to_keep);
+        (* Reload skills lost to compaction *)
+        let skill_msgs = reload_skills_after_compaction ~to_compact ~to_keep in
+        (* Rebuild history (newest-first) as:
+           recent messages, then summary, then skill reloads (oldest). *)
+        agent.history <- List.rev (skill_msgs @ [ summary_msg ] @ to_keep);
         let post_tokens = estimate_history_tokens agent.history in
         Lwt.return_some
           { pre_tokens = current_tokens; post_tokens; context_window = cw }
@@ -887,7 +939,8 @@ let force_compact_history agent ?db ?compact_cbs () =
       let summary_msg =
         Provider.make_message ~role:"assistant" ~content:merged_summary
       in
-      agent.history <- List.rev (summary_msg :: to_keep);
+      let skill_msgs = reload_skills_after_compaction ~to_compact ~to_keep in
+      agent.history <- List.rev (skill_msgs @ [ summary_msg ] @ to_keep);
       let post_tokens = estimate_history_tokens agent.history in
       Lwt.return_some { pre_tokens; post_tokens; context_window = cw }
     end
@@ -1038,7 +1091,10 @@ let apply_compact_result agent plan ~summary =
     let summary_msg =
       Provider.make_message ~role:"assistant" ~content:summary
     in
-    agent.history <- new_msgs @ List.rev (summary_msg :: to_keep);
+    let skill_msgs =
+      reload_skills_after_compaction ~to_compact:plan.cp_to_compact ~to_keep
+    in
+    agent.history <- new_msgs @ List.rev (skill_msgs @ [ summary_msg ] @ to_keep);
     let post_tokens = estimate_history_tokens agent.history in
     Some
       {
@@ -1351,6 +1407,20 @@ let execute_tool_calls_stream agent ~db ~audit_enabled ~session_key
                                         (Provider.ToolOutputDelta
                                            { id = tc.id; chunk = text }));
                                 interrupt_check;
+                                inject_system_messages =
+                                  Some
+                                    (fun msgs ->
+                                      let msgs =
+                                        Skill_dedup.dedup_skill_injections
+                                          ~history:agent.history msgs
+                                      in
+                                      List.iter
+                                        (fun content ->
+                                          agent.history <-
+                                            Provider.make_message ~role:"system"
+                                              ~content
+                                            :: agent.history)
+                                        msgs);
                               }
                             in
                             match tool.invoke_stream with
@@ -1529,6 +1599,20 @@ let execute_tool_calls agent ~db ~audit_enabled ~session_key ?interrupt_check
                                 Tool.session_key;
                                 send_progress = None;
                                 interrupt_check;
+                                inject_system_messages =
+                                  Some
+                                    (fun msgs ->
+                                      let msgs =
+                                        Skill_dedup.dedup_skill_injections
+                                          ~history:agent.history msgs
+                                      in
+                                      List.iter
+                                        (fun content ->
+                                          agent.history <-
+                                            Provider.make_message ~role:"system"
+                                              ~content
+                                            :: agent.history)
+                                        msgs);
                               }
                             in
                             tool.invoke ~context args)

@@ -1,14 +1,17 @@
 ---
+claimed_at: "2026-03-15T05:45:54Z"
+claimed_by: cli-user
+completed_at: "2026-03-15T06:24:07Z"
 complexity: high
 depends_on:
     - P10.M1.E1.T001
+duration_minutes: 38.21764347248333
 estimate_hours: 3
 id: P10.M1.E1.T004
 priority: medium
-status: pending
-tags:
-    - idea
-    - planning
+started_at: "2026-03-15T05:45:54Z"
+status: done
+tags: []
 title: Compaction-aware skill reloading
 ---
 Two changes: (1) Instruct the compaction summarizer to exclude skill instruction bodies from the summary. (2) After compaction, auto-reload eligible skills as system messages marked autoloaded. Target message order after compaction: `[system prompt] → [skill system msgs (autoloaded)] → [compaction summary] → [conversation continues]`.

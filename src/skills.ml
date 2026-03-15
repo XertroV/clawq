@@ -571,26 +571,31 @@ let extract_skill_refs (skills : skill_md_meta list) message =
     done;
     List.rev !results
 
-let expand_skill_refs message =
+let expand_skill_refs ?(workspace_only = false) message =
+  let open Lwt.Syntax in
   let skills = available_skills () in
   let refs = extract_skill_refs skills message in
   let md_skills =
     List.map (fun (s : skill_md_meta) -> (s.md_name, s.md_description)) skills
   in
-  if refs = [] then (message, [], md_skills)
+  if refs = [] then Lwt.return (message, [], md_skills)
   else
-    let injections =
-      List.filter_map
+    let* injections =
+      Lwt_list.filter_map_s
         (fun (_text, (meta : skill_md_meta)) ->
           match find_skill_md meta.md_name with
           | Some skill ->
-              Some
-                (Printf.sprintf "[Skill: %s]\n%s" meta.md_name
-                   skill.instructions)
-          | None -> None)
+              let skill_dir = Filename.dirname skill.meta.md_source_path in
+              let* expanded =
+                Skills_cmd_inject.expand_injections ~workspace_only ~skill_dir
+                  skill.instructions
+              in
+              Lwt.return_some
+                (Printf.sprintf "[Skill: %s]\n%s" meta.md_name expanded)
+          | None -> Lwt.return_none)
         refs
     in
-    (message, injections, md_skills)
+    Lwt.return (message, injections, md_skills)
 
 (* ── Background watcher ── *)
 
@@ -616,14 +621,43 @@ let skill_watcher_loop cache =
   in
   loop ()
 
+(* ── Skill injection deduplication (delegated to Skill_dedup) ── *)
+
+let dedup_skill_injections = Skill_dedup.dedup_skill_injections
+
+(* ── Shared skill expansion for /slash commands ── *)
+
+type slash_skill_result = { skill_injection : string; has_args : bool }
+
+let expand_slash_skill ?(workspace_only = false) ~name ~args () =
+  match find_skill_md name with
+  | Some skill ->
+      let has_args = args <> "" in
+      let body =
+        if has_args then substitute_arguments skill.instructions args
+        else skill.instructions
+      in
+      let skill_dir = Filename.dirname skill.meta.md_source_path in
+      let open Lwt.Syntax in
+      let* expanded =
+        Skills_cmd_inject.expand_injections ~workspace_only ~skill_dir body
+      in
+      let header =
+        if has_args then Printf.sprintf "[Skill: %s (args)]" name
+        else Printf.sprintf "[Skill: %s]" name
+      in
+      let injection = Printf.sprintf "%s\n%s" header expanded in
+      Lwt.return (Ok { skill_injection = injection; has_args })
+  | None -> Lwt.return (Error (Printf.sprintf "Skill '%s' not found." name))
+
 (* ── Tool definitions ── *)
 
 let use_skill_tool ?(workspace_only = false) () =
   {
     Tool.name = "use_skill";
     description =
-      "Invoke a skill by name. Loads the skill's SKILL.md instructions and \
-       returns them for you to follow. See Available Skills in runtime \
+      "Invoke a skill by name. Loads the skill's SKILL.md instructions as a \
+       system message for you to follow. See Available Skills in runtime \
        context.";
     parameters_schema =
       `Assoc
@@ -653,7 +687,7 @@ let use_skill_tool ?(workspace_only = false) () =
           ("required", `List [ `String "name" ]);
         ];
     invoke =
-      (fun ?context:_ args ->
+      (fun ?context args ->
         let open Yojson.Safe.Util in
         let name = try args |> member "name" |> to_string with _ -> "" in
         let arguments =
@@ -669,14 +703,34 @@ let use_skill_tool ?(workspace_only = false) () =
         else
           match find_skill_md name with
           | Some skill ->
+              let has_args = arguments <> "" in
               let body =
-                if arguments <> "" then
+                if has_args then
                   substitute_arguments skill.instructions arguments
                 else skill.instructions
               in
               let skill_dir = Filename.dirname skill.meta.md_source_path in
-              Skills_cmd_inject.expand_injections ~workspace_only ~skill_dir
-                body
+              let open Lwt.Syntax in
+              let* expanded =
+                Skills_cmd_inject.expand_injections ~workspace_only ~skill_dir
+                  body
+              in
+              let header =
+                if has_args then Printf.sprintf "[Skill: %s (args)]" name
+                else Printf.sprintf "[Skill: %s]" name
+              in
+              let injection = Printf.sprintf "%s\n%s" header expanded in
+              (match context with
+              | Some ctx -> (
+                  match ctx.Tool.inject_system_messages with
+                  | Some inject -> inject [ injection ]
+                  | None -> ())
+              | None -> ());
+              Lwt.return
+                (Printf.sprintf
+                   "Loaded skill \"%s\" (has_args: %b). Instructions injected \
+                    as system message — follow them now."
+                   name has_args)
           | None ->
               let names =
                 List.map

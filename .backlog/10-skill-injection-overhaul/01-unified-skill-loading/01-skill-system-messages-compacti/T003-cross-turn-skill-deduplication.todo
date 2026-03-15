@@ -1,14 +1,17 @@
 ---
+claimed_at: "2026-03-15T05:45:54Z"
+claimed_by: cli-user
+completed_at: "2026-03-15T06:24:06Z"
 complexity: medium
 depends_on:
     - P10.M1.E1.T001
+duration_minutes: 38.21517688385
 estimate_hours: 2
 id: P10.M1.E1.T003
 priority: medium
-status: pending
-tags:
-    - idea
-    - planning
+started_at: "2026-03-15T05:45:54Z"
+status: done
+tags: []
 title: Cross-turn skill deduplication
 ---
 When a skill is invoked without arguments (any pathway), check if the same skill system message already exists in recent history. If so, add a brief system message "User invoked skill X (already loaded) — follow those instructions." instead of re-injecting the full body. Dedup key: skill name + whether args are provided (NOT command expansion output — assume same if $ARGUMENTS not used/provided).

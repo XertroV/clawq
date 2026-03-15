@@ -4,6 +4,7 @@ type invoke_context = {
   session_key : string option;
   send_progress : (string -> unit Lwt.t) option;
   interrupt_check : (unit -> string option) option;
+  inject_system_messages : (string list -> unit) option;
 }
 
 type invoke_stream =
@@ -23,4 +24,9 @@ type t = {
 }
 
 let default_context =
-  { session_key = None; send_progress = None; interrupt_check = None }
+  {
+    session_key = None;
+    send_progress = None;
+    interrupt_check = None;
+    inject_system_messages = None;
+  }

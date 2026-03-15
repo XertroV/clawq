@@ -101,8 +101,30 @@ let spawn_postmortem_agent mgr ~stuck_history ~session_key ~reason ?db () =
   end
 
 let expand_skill_refs_fn :
-    (string -> string * string list * (string * string) list) ref =
-  ref (fun message -> (message, [], []))
+    (string -> (string * string list * (string * string) list) Lwt.t) ref =
+  ref (fun message -> Lwt.return (message, [], []))
+
+let extract_skill_names_from_injections injections =
+  List.filter_map
+    (fun inj ->
+      if String.length inj > 8 && String.sub inj 0 8 = "[Skill: " then
+        match String.index_opt inj ']' with
+        | Some i -> Some (String.sub inj 8 (i - 8))
+        | None -> None
+      else None)
+    injections
+
+let notify_skill_loads ~send injections =
+  let names = extract_skill_names_from_injections injections in
+  List.iter
+    (fun name ->
+      Lwt.async (fun () ->
+          Lwt.catch
+            (fun () -> send (Printf.sprintf "Loaded skill: %s" name))
+            (fun _ -> Lwt.return_unit)))
+    names
+
+let dedup_skill_injections = Skill_dedup.dedup_skill_injections
 
 let run_locked_turn mgr ~key agent interrupt ~message ?(content_parts = [])
     ?(attachments = []) ?(skill_injections = [])
@@ -111,7 +133,7 @@ let run_locked_turn mgr ~key agent interrupt ~message ?(content_parts = [])
   let open Lwt.Syntax in
   let interrupt_check () = !interrupt in
   interrupt := None;
-  let message, auto_injections, auto_md_skills =
+  let* message, auto_injections, auto_md_skills =
     !expand_skill_refs_fn message
   in
   let skill_injections = skill_injections @ auto_injections in
@@ -127,6 +149,11 @@ let run_locked_turn mgr ~key agent interrupt ~message ?(content_parts = [])
         in
         explicit @ deduped_auto
   in
+  (* Send "Loaded skill: X" notification for @mention skills *)
+  (if auto_injections <> [] then
+     match Session_core.find_registered_notifier mgr ~key with
+     | Some send -> notify_skill_loads ~send auto_injections
+     | None -> ());
   (match mgr.Session_core.db with
   | Some db when mgr.config.security.audit_enabled ->
       Audit.log ~db
@@ -134,6 +161,9 @@ let run_locked_turn mgr ~key agent interrupt ~message ?(content_parts = [])
            { session_key = key; role = "user"; content_preview = message })
   | _ -> ());
   Session_core.inject_attachment_context agent attachments;
+  let skill_injections =
+    dedup_skill_injections ~history:agent.Agent.history skill_injections
+  in
   List.iter
     (fun content ->
       agent.Agent.history <-
@@ -389,8 +419,8 @@ let drain_queued_messages mgr ~key agent interrupt ?on_drain_progress () =
         ~drained_any:false ())
 
 let rec turn mgr ~key ~message ?(content_parts = []) ?(attachments = [])
-    ?channel_name ?channel_type ?sender_id ?sender_name ?channel ?channel_id
-    ?message_id ?before_drain () =
+    ?(skill_injections = []) ?channel_name ?channel_type ?sender_id ?sender_name
+    ?channel ?channel_id ?message_id ?before_drain () =
   Session_core.with_live_activity mgr ~key (fun () ->
       let open Lwt.Syntax in
       let* () = Session_core.mark_autonomous_activity_started mgr ~key in
@@ -434,8 +464,9 @@ let rec turn mgr ~key ~message ?(content_parts = []) ?(attachments = [])
                 Session_core.with_in_flight mgr (fun () ->
                     let* response =
                       run_locked_turn mgr ~key agent interrupt ~message
-                        ~content_parts ~attachments ?channel_name ?channel_type
-                        ?sender_id ?sender_name ?channel ?channel_id ()
+                        ~content_parts ~attachments ~skill_injections
+                        ?channel_name ?channel_type ?sender_id ?sender_name
+                        ?channel ?channel_id ()
                     in
                     let* () =
                       match before_drain with
@@ -448,8 +479,8 @@ let rec turn mgr ~key ~message ?(content_parts = []) ?(attachments = [])
                     Lwt.return response)))
 
 let try_turn mgr ~key ~message ?(content_parts = []) ?(attachments = [])
-    ?channel_name ?channel_type ?sender_id ?sender_name ?channel ?channel_id
-    ?message_id ?before_drain () =
+    ?(skill_injections = []) ?channel_name ?channel_type ?sender_id ?sender_name
+    ?channel ?channel_id ?message_id ?before_drain () =
   Session_core.with_live_activity mgr ~key (fun () ->
       let open Lwt.Syntax in
       let* () = Session_core.mark_autonomous_activity_started mgr ~key in
@@ -467,8 +498,9 @@ let try_turn mgr ~key ~message ?(content_parts = []) ?(attachments = [])
               Session_core.with_in_flight mgr (fun () ->
                   let* response =
                     run_locked_turn mgr ~key agent interrupt ~message
-                      ~content_parts ~attachments ?channel_name ?channel_type
-                      ?sender_id ?sender_name ?channel ?channel_id ()
+                      ~content_parts ~attachments ~skill_injections
+                      ?channel_name ?channel_type ?sender_id ?sender_name
+                      ?channel ?channel_id ()
                   in
                   let* () =
                     match before_drain with
@@ -581,8 +613,9 @@ let fork_and_run mgr ~parent_key ~prompt ~send_reply =
                   (fun _ -> Lwt.return_unit))))
 
 let turn_stream mgr ~key ~message ?(content_parts = []) ?(attachments = [])
-    ?channel_name ?channel_type ?sender_id ?sender_name ?channel ?channel_id
-    ?message_id ?on_drain_progress ?before_drain ~on_chunk () =
+    ?(skill_injections = []) ?channel_name ?channel_type ?sender_id ?sender_name
+    ?channel ?channel_id ?message_id ?on_drain_progress ?before_drain ~on_chunk
+    () =
   Session_core.with_live_activity mgr ~key (fun () ->
       let open Lwt.Syntax in
       let* () = Session_core.mark_autonomous_activity_started mgr ~key in
@@ -631,9 +664,17 @@ let turn_stream mgr ~key ~message ?(content_parts = []) ?(attachments = [])
                 Session_core.with_in_flight mgr (fun () ->
                     let interrupt_check () = !interrupt in
                     interrupt := None;
-                    let message, auto_injections, md_skills =
+                    let* message, auto_injections, auto_md_skills =
                       !expand_skill_refs_fn message
                     in
+                    let all_injections = skill_injections @ auto_injections in
+                    let md_skills = auto_md_skills in
+                    (* Send "Loaded skill: X" notification for @mention skills *)
+                    if auto_injections <> [] then
+                      notify_skill_loads
+                        ~send:(fun text ->
+                          on_chunk (Provider.Delta (text ^ "\n")))
+                        auto_injections;
                     (match mgr.db with
                     | Some db when mgr.config.security.audit_enabled ->
                         Audit.log ~db
@@ -645,12 +686,16 @@ let turn_stream mgr ~key ~message ?(content_parts = []) ?(attachments = [])
                              })
                     | _ -> ());
                     Session_core.inject_attachment_context agent attachments;
+                    let all_injections =
+                      dedup_skill_injections ~history:agent.Agent.history
+                        all_injections
+                    in
                     List.iter
                       (fun content ->
                         agent.Agent.history <-
                           Provider.make_message ~role:"system" ~content
                           :: agent.Agent.history)
-                      auto_injections;
+                      all_injections;
                     let effective_message =
                       match
                         (channel_name, channel_type, sender_id, sender_name)

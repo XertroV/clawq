@@ -304,24 +304,28 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
             (Skills.available_skills ())
         in
         let cmd_result = Slash_commands.handle ~skill_names user_text in
-        let cmd_result, user_text =
+        let* cmd_result, user_text, skill_injections, loaded_skill_name =
           match cmd_result with
           | Slash_commands.SkillInvoke (name, args) -> (
-              match Skills.find_skill_md name with
-              | Some skill ->
-                  let content =
-                    Skills.substitute_arguments skill.instructions args
-                  in
-                  let msg =
-                    Printf.sprintf "[Skill: %s]\n%s\n\nUser request: %s" name
-                      content args
-                  in
-                  (Slash_commands.NotACommand, msg)
-              | None ->
-                  ( Slash_commands.Reply
-                      (Printf.sprintf "Skill '%s' not found." name),
-                    user_text ))
-          | other -> (other, user_text)
+              let* result = Skills.expand_slash_skill ~name ~args () in
+              match result with
+              | Ok r ->
+                  Lwt.return
+                    ( Slash_commands.NotACommand,
+                      user_text,
+                      [ r.skill_injection ],
+                      Some name )
+              | Error msg ->
+                  Lwt.return (Slash_commands.Reply msg, user_text, [], None))
+          | other -> Lwt.return (other, user_text, [], None)
+        in
+        let* () =
+          match loaded_skill_name with
+          | Some name ->
+              send_message ~bot_token ~chat_id:update.chat_id
+                ~text:(Printf.sprintf "Loaded skill: %s" name)
+                ()
+          | None -> Lwt.return_unit
         in
         match cmd_result with
         | Reply text -> send_message ~bot_token ~chat_id:update.chat_id ~text ()
@@ -1136,8 +1140,9 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
                             let turn_p =
                               Session.turn_stream session_mgr ~key ~message:msg
                                 ~content_parts:!image_content_parts
-                                ~channel_name:"telegram" ~channel_type:"dm"
-                                ~channel:"telegram" ~channel_id:update.chat_id
+                                ~skill_injections ~channel_name:"telegram"
+                                ~channel_type:"dm" ~channel:"telegram"
+                                ~channel_id:update.chat_id
                                 ~message_id:(string_of_int update.message_id)
                                 ~on_drain_progress ~before_drain ~on_chunk ()
                             in
