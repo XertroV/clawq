@@ -20,6 +20,7 @@ type provider_config = {
   quota_credentials_file : string option;
   quota_threshold : float option;
   quota_check_enabled : bool;
+  prompt_cache_retention : string option;
 }
 
 let default_provider_config : provider_config =
@@ -37,6 +38,7 @@ let default_provider_config : provider_config =
     quota_credentials_file = None;
     quota_threshold = None;
     quota_check_enabled = true;
+    prompt_cache_retention = Some "24h";
   }
 
 type agent_defaults = {

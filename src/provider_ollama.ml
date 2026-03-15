@@ -105,7 +105,8 @@ let parse_tool_calls_from_message msg_json =
   with _ -> []
 
 let complete ~(config : Runtime_config.t)
-    ~(provider : Runtime_config.provider_config) ~model ~messages ?tools () =
+    ~(provider : Runtime_config.provider_config) ~model ~messages ?tools
+    ?session_key:_ () =
   let open Lwt.Syntax in
   let base_url =
     match provider.base_url with Some url -> url | None -> default_base_url
@@ -186,7 +187,7 @@ let complete ~(config : Runtime_config.t)
 
 let complete_streaming ~(config : Runtime_config.t)
     ~(provider : Runtime_config.provider_config) ~model ~messages ?tools
-    ~on_chunk () =
+    ?session_key:_ ~on_chunk () =
   let open Lwt.Syntax in
   let base_url =
     match provider.base_url with Some url -> url | None -> default_base_url

@@ -376,7 +376,8 @@ let fixup_input_item_ordering items =
   in
   loop [] "" items
 
-let build_body ~model ~messages tools =
+let build_body ~model ~messages ?session_key
+    ~(provider : Runtime_config.provider_config) tools =
   let instructions, non_system_messages = extract_instructions messages in
   let non_system_messages =
     Message_history.ensure_tool_group_integrity non_system_messages
@@ -417,10 +418,16 @@ let build_body ~model ~messages tools =
        ("parallel_tool_calls", `Bool true);
        ("include", `List [ `String "reasoning.encrypted_content" ]);
      ]
+    @ (match tools_to_responses_tools tools with
+      | `List [] -> []
+      | mapped -> [ ("tools", mapped) ])
+    @ (match provider.prompt_cache_retention with
+      | Some r -> [ ("prompt_cache_retention", `String r) ]
+      | None -> [])
     @
-    match tools_to_responses_tools tools with
-    | `List [] -> []
-    | mapped -> [ ("tools", mapped) ])
+    match session_key with
+    | Some k -> [ ("prompt_cache_key", `String k) ]
+    | None -> [])
   |> Yojson.Safe.to_string
 
 let append_unique_tool_call acc call =
@@ -683,7 +690,8 @@ let process_stream stream ~on_chunk =
        ~usage:!usage_acc ~provider_response_items_json:!response_items_json_acc
        ~thinking ())
 
-let do_request ~provider_name ~provider ~model ~messages ?tools ~on_chunk () =
+let do_request ~provider_name ~provider ~model ~messages ?tools ?session_key
+    ~on_chunk () =
   let open Lwt.Syntax in
   let* auth =
     Openai_codex_oauth.get_auth_header ~provider_name:(Some provider_name)
@@ -704,7 +712,7 @@ let do_request ~provider_name ~provider ~model ~messages ?tools ~on_chunk () =
         | Some account_id -> [ ("ChatGPT-Account-Id", account_id) ]
         | None -> []
       in
-      let body = build_body ~model ~messages tools in
+      let body = build_body ~model ~messages ?session_key ~provider tools in
       Http_client.post_stream_with ~uri:responses_uri ~headers ~body
         ~label:"OpenAI Codex error"
         ~on_error:(fun r ->
@@ -747,7 +755,8 @@ let do_request ~provider_name ~provider ~model ~messages ?tools ~on_chunk () =
         ~on_ok:(fun stream -> process_stream stream ~on_chunk)
         ()
 
-let complete ~(config : Runtime_config.t) ~provider ~model ~messages ?tools () =
+let complete ~(config : Runtime_config.t) ~provider ~model ~messages ?tools
+    ?session_key () =
   let provider_name =
     match
       List.find_opt
@@ -757,12 +766,12 @@ let complete ~(config : Runtime_config.t) ~provider ~model ~messages ?tools () =
     | Some (name, _) -> name
     | None -> Openai_codex_oauth.default_provider_name
   in
-  do_request ~provider_name ~provider ~model ~messages ?tools
+  do_request ~provider_name ~provider ~model ~messages ?tools ?session_key
     ~on_chunk:(fun _ -> Lwt.return_unit)
     ()
 
 let complete_streaming ~(config : Runtime_config.t) ~provider ~model ~messages
-    ?tools ~on_chunk () =
+    ?tools ?session_key ~on_chunk () =
   let provider_name =
     match
       List.find_opt
@@ -772,4 +781,5 @@ let complete_streaming ~(config : Runtime_config.t) ~provider ~model ~messages
     | Some (name, _) -> name
     | None -> Openai_codex_oauth.default_provider_name
   in
-  do_request ~provider_name ~provider ~model ~messages ?tools ~on_chunk ()
+  do_request ~provider_name ~provider ~model ~messages ?tools ?session_key
+    ~on_chunk ()

@@ -1870,6 +1870,10 @@ let turn agent ~user_message ?db ?session_key ?interrupt_check ?inject_messages
     in
     match (usage, session_key) with
     | Some (pt, ct, api_cached), Some sid -> (
+        if pt > 0 then
+          Logs.info (fun m ->
+              m "[cache] cached=%d/%d (%.0f%%) prompt tokens" api_cached pt
+                (100.0 *. float_of_int api_cached /. float_of_int pt));
         Cost_tracker.record_turn ~model ~prompt_tokens:pt ~completion_tokens:ct
           ~session_id:sid;
         Model_preferences.increment_usage model |> ignore;
@@ -1927,9 +1931,12 @@ let turn agent ~user_message ?db ?session_key ?interrupt_check ?inject_messages
                        ~added_prompt_tokens:added ~cache_hit
                        ~api_cached_tokens:api_cached ())
             in
+            let cached_tokens =
+              if api_cached > 0 then Some api_cached else None
+            in
             Request_stats.record ~db ~session_key:sid ~provider:pname ~model
               ~prompt_tokens:pt ~completion_tokens:ct ?cost_usd:cost_usd_opt
-              ~added_prompt_tokens:added ()
+              ~added_prompt_tokens:added ?cached_tokens ()
         | None -> ())
     | _ -> ()
   in
@@ -2187,6 +2194,10 @@ let turn_stream agent ~user_message ?db ?session_key ?interrupt_check
     in
     match (usage, session_key) with
     | Some (pt, ct, api_cached), Some sid -> (
+        if pt > 0 then
+          Logs.info (fun m ->
+              m "[cache] cached=%d/%d (%.0f%%) prompt tokens" api_cached pt
+                (100.0 *. float_of_int api_cached /. float_of_int pt));
         Cost_tracker.record_turn ~model ~prompt_tokens:pt ~completion_tokens:ct
           ~session_id:sid;
         Model_preferences.increment_usage model |> ignore;
@@ -2244,9 +2255,12 @@ let turn_stream agent ~user_message ?db ?session_key ?interrupt_check
                        ~added_prompt_tokens:added ~cache_hit
                        ~api_cached_tokens:api_cached ())
             in
+            let cached_tokens =
+              if api_cached > 0 then Some api_cached else None
+            in
             Request_stats.record ~db ~session_key:sid ~provider:pname ~model
               ~prompt_tokens:pt ~completion_tokens:ct ?cost_usd:cost_usd_opt
-              ~added_prompt_tokens:added ()
+              ~added_prompt_tokens:added ?cached_tokens ()
         | None -> ())
     | _ -> ()
   in

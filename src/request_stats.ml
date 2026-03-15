@@ -3,6 +3,7 @@ type summary = {
   total_prompt_tokens : int;
   total_completion_tokens : int;
   total_added_prompt_tokens : int;
+  total_cached_tokens : int;
   total_turns : int;
 }
 
@@ -21,15 +22,16 @@ let zero_summary =
     total_prompt_tokens = 0;
     total_completion_tokens = 0;
     total_added_prompt_tokens = 0;
+    total_cached_tokens = 0;
     total_turns = 0;
   }
 
 let record ~db ~session_key ?message_id ~provider ~model ~prompt_tokens
-    ~completion_tokens ?cost_usd ?added_prompt_tokens () =
+    ~completion_tokens ?cost_usd ?added_prompt_tokens ?cached_tokens () =
   let sql =
     "INSERT INTO request_stats (session_key, message_id, provider, model, \
-     prompt_tokens, completion_tokens, cost_usd, added_prompt_tokens) VALUES \
-     (?, ?, ?, ?, ?, ?, ?, ?)"
+     prompt_tokens, completion_tokens, cost_usd, added_prompt_tokens, \
+     cached_tokens) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
   in
   try
     let stmt = Sqlite3.prepare db sql in
@@ -58,6 +60,11 @@ let record ~db ~session_key ?message_id ~provider ~model ~prompt_tokens
           (Sqlite3.bind stmt 8
              (match added_prompt_tokens with
              | Some a -> Sqlite3.Data.INT (Int64.of_int a)
+             | None -> Sqlite3.Data.NULL));
+        ignore
+          (Sqlite3.bind stmt 9
+             (match cached_tokens with
+             | Some c -> Sqlite3.Data.INT (Int64.of_int c)
              | None -> Sqlite3.Data.NULL));
         match Sqlite3.step stmt with
         | Sqlite3.Rc.DONE ->
@@ -114,21 +121,25 @@ let read_summary_row stmt =
   let apt =
     Sqlite3.column stmt 3 |> Sqlite3.Data.to_int |> Option.value ~default:0
   in
-  let turns =
+  let cached =
     Sqlite3.column stmt 4 |> Sqlite3.Data.to_int |> Option.value ~default:0
+  in
+  let turns =
+    Sqlite3.column stmt 5 |> Sqlite3.Data.to_int |> Option.value ~default:0
   in
   {
     total_cost_usd = cost;
     total_prompt_tokens = pt;
     total_completion_tokens = ct;
     total_added_prompt_tokens = apt;
+    total_cached_tokens = cached;
     total_turns = turns;
   }
 
 let summary_sql_cols =
   "COALESCE(SUM(cost_usd), 0.0), COALESCE(SUM(prompt_tokens), 0), \
    COALESCE(SUM(completion_tokens), 0), COALESCE(SUM(added_prompt_tokens), 0), \
-   COUNT(*)"
+   COALESCE(SUM(cached_tokens), 0), COUNT(*)"
 
 let total_summary ~db =
   let sql = "SELECT " ^ summary_sql_cols ^ " FROM request_stats" in
@@ -224,17 +235,21 @@ let summary_by_session ~db =
                 Sqlite3.column stmt 4 |> Sqlite3.Data.to_int
                 |> Option.value ~default:0
               in
-              let turns =
+              let cached =
                 Sqlite3.column stmt 5 |> Sqlite3.Data.to_int
                 |> Option.value ~default:0
               in
+              let turns =
+                Sqlite3.column stmt 6 |> Sqlite3.Data.to_int
+                |> Option.value ~default:0
+              in
               let first_req =
-                match Sqlite3.column stmt 6 with
+                match Sqlite3.column stmt 7 with
                 | Sqlite3.Data.TEXT s -> s
                 | _ -> ""
               in
               let last_req =
-                match Sqlite3.column stmt 7 with
+                match Sqlite3.column stmt 8 with
                 | Sqlite3.Data.TEXT s -> s
                 | _ -> ""
               in
@@ -247,6 +262,7 @@ let summary_by_session ~db =
                       total_prompt_tokens = pt;
                       total_completion_tokens = ct;
                       total_added_prompt_tokens = apt;
+                      total_cached_tokens = cached;
                       total_turns = turns;
                     };
                   first_request = first_req;
@@ -302,8 +318,12 @@ let summary_by_model ~db =
                 Sqlite3.column stmt 5 |> Sqlite3.Data.to_int
                 |> Option.value ~default:0
               in
-              let turns =
+              let cached =
                 Sqlite3.column stmt 6 |> Sqlite3.Data.to_int
+                |> Option.value ~default:0
+              in
+              let turns =
+                Sqlite3.column stmt 7 |> Sqlite3.Data.to_int
                 |> Option.value ~default:0
               in
               rows :=
@@ -316,6 +336,7 @@ let summary_by_model ~db =
                       total_prompt_tokens = pt;
                       total_completion_tokens = ct;
                       total_added_prompt_tokens = apt;
+                      total_cached_tokens = cached;
                       total_turns = turns;
                     };
                 }
@@ -371,8 +392,12 @@ let summary_by_model_for_period ~db ~since =
                 Sqlite3.column stmt 5 |> Sqlite3.Data.to_int
                 |> Option.value ~default:0
               in
-              let turns =
+              let cached =
                 Sqlite3.column stmt 6 |> Sqlite3.Data.to_int
+                |> Option.value ~default:0
+              in
+              let turns =
+                Sqlite3.column stmt 7 |> Sqlite3.Data.to_int
                 |> Option.value ~default:0
               in
               rows :=
@@ -385,6 +410,7 @@ let summary_by_model_for_period ~db ~since =
                       total_prompt_tokens = pt;
                       total_completion_tokens = ct;
                       total_added_prompt_tokens = apt;
+                      total_cached_tokens = cached;
                       total_turns = turns;
                     };
                 }
@@ -433,8 +459,12 @@ let summary_by_provider ~db =
                 Sqlite3.column stmt 4 |> Sqlite3.Data.to_int
                 |> Option.value ~default:0
               in
-              let turns =
+              let cached =
                 Sqlite3.column stmt 5 |> Sqlite3.Data.to_int
+                |> Option.value ~default:0
+              in
+              let turns =
+                Sqlite3.column stmt 6 |> Sqlite3.Data.to_int
                 |> Option.value ~default:0
               in
               rows :=
@@ -444,6 +474,7 @@ let summary_by_provider ~db =
                     total_prompt_tokens = pt;
                     total_completion_tokens = ct;
                     total_added_prompt_tokens = apt;
+                    total_cached_tokens = cached;
                     total_turns = turns;
                   } )
                 :: !rows;

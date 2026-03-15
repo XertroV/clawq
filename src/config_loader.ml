@@ -111,6 +111,14 @@ let parse_config ?(resolve_secrets = true) json =
           let quota_check_enabled =
             try v |> member "quota_check_enabled" |> to_bool with _ -> true
           in
+          let prompt_cache_retention =
+            try
+              match v |> member "prompt_cache_retention" with
+              | `Null -> None
+              | `Bool false -> None
+              | s -> Some (to_string s)
+            with _ -> Some "24h"
+          in
           ( name,
             ({
                api_key;
@@ -126,6 +134,7 @@ let parse_config ?(resolve_secrets = true) json =
                quota_credentials_file;
                quota_threshold;
                quota_check_enabled;
+               prompt_cache_retention;
              }
               : Runtime_config.provider_config) ))
     with _ -> []

@@ -204,7 +204,8 @@ let parse_anthropic_response body model =
     Error ("Failed to parse Anthropic response: " ^ Printexc.to_string exn)
 
 let complete ~(config : Runtime_config.t)
-    ~(provider : Runtime_config.provider_config) ~model ~messages ?tools () =
+    ~(provider : Runtime_config.provider_config) ~model ~messages ?tools
+    ?session_key:_ () =
   let open Lwt.Syntax in
   let base_url =
     match provider.base_url with
@@ -265,7 +266,7 @@ let complete ~(config : Runtime_config.t)
 
 let complete_streaming ~(config : Runtime_config.t)
     ~(provider : Runtime_config.provider_config) ~model ~messages ?tools
-    ~on_chunk () =
+    ?session_key:_ ~on_chunk () =
   let open Lwt.Syntax in
   let base_url =
     match provider.base_url with

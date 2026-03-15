@@ -239,7 +239,8 @@ let make_request_body ~config ~messages ~tools =
   `Assoc body_fields |> Yojson.Safe.to_string
 
 let complete ~(config : Runtime_config.t)
-    ~(provider : Runtime_config.provider_config) ~model ~messages ?tools () =
+    ~(provider : Runtime_config.provider_config) ~model ~messages ?tools
+    ?session_key:_ () =
   let open Lwt.Syntax in
   let api_key = provider.api_key in
   let base_url =
@@ -263,7 +264,7 @@ let complete ~(config : Runtime_config.t)
 
 let complete_streaming ~(config : Runtime_config.t)
     ~(provider : Runtime_config.provider_config) ~model ~messages ?tools
-    ~on_chunk () =
+    ?session_key:_ ~on_chunk () =
   let open Lwt.Syntax in
   let api_key = provider.api_key in
   let base_url =

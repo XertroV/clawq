@@ -459,6 +459,7 @@ type complete_fn =
   model:string ->
   messages:message list ->
   ?tools:Yojson.Safe.t ->
+  ?session_key:string ->
   unit ->
   completion_response Lwt.t
 
@@ -468,6 +469,7 @@ type stream_fn =
   model:string ->
   messages:message list ->
   ?tools:Yojson.Safe.t ->
+  ?session_key:string ->
   on_chunk:(stream_event -> unit Lwt.t) ->
   unit ->
   completion_response Lwt.t
@@ -725,7 +727,7 @@ let complete ~(config : Runtime_config.t) ~messages ?tools ?session_key
           m "%s-> LLM provider=%s model=%s msgs=%d ~%dk tok" sk_tag
             provider_name model (List.length messages)
             (estimate_messages_tokens messages / 1000));
-      fn ~config ~provider ~model ~messages ?tools ()
+      fn ~config ~provider ~model ~messages ?tools ?session_key ()
   | None -> (
       let base_url =
         match provider.base_url with
@@ -752,6 +754,12 @@ let complete ~(config : Runtime_config.t) ~messages ?tools ?session_key
       in
       let body_fields =
         body_fields @ provider_extra_body_fields ~provider_name ~provider
+      in
+      let body_fields =
+        match (kind, provider.prompt_cache_retention) with
+        | (OpenAICompat | OpenAICodex), Some r ->
+            body_fields @ [ ("prompt_cache_retention", `String r) ]
+        | _ -> body_fields
       in
       let body = `Assoc body_fields |> Yojson.Safe.to_string in
       let headers = [ ("Authorization", "Bearer " ^ provider.api_key) ] in
@@ -1129,7 +1137,7 @@ let complete_stream ~(config : Runtime_config.t) ~messages ?tools ?session_key
           m "%s-> LLM provider=%s model=%s msgs=%d ~%dk tok" sk_tag
             provider_name model (List.length messages)
             (estimate_messages_tokens messages / 1000));
-      fn ~config ~provider ~model ~messages ?tools ~on_chunk ()
+      fn ~config ~provider ~model ~messages ?tools ?session_key ~on_chunk ()
   | None ->
       let base_url =
         match provider.base_url with
@@ -1157,6 +1165,12 @@ let complete_stream ~(config : Runtime_config.t) ~messages ?tools ?session_key
       in
       let body_fields =
         body_fields @ provider_extra_body_fields ~provider_name ~provider
+      in
+      let body_fields =
+        match (kind, provider.prompt_cache_retention) with
+        | (OpenAICompat | OpenAICodex), Some r ->
+            body_fields @ [ ("prompt_cache_retention", `String r) ]
+        | _ -> body_fields
       in
       let body = `Assoc body_fields |> Yojson.Safe.to_string in
       let headers = [ ("Authorization", "Bearer " ^ provider.api_key) ] in

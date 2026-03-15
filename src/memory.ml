@@ -1,4 +1,4 @@
-let schema_version = 20
+let schema_version = 21
 
 type session_activity = Active | Inactive | Any
 
@@ -227,6 +227,7 @@ let init_request_stats_schema db =
     \     completion_tokens INTEGER NOT NULL,\n\
     \     cost_usd REAL,\n\
     \     added_prompt_tokens INTEGER,\n\
+    \     cached_tokens INTEGER,\n\
     \     requested_at TEXT NOT NULL DEFAULT (datetime('now'))\n\
     \   )";
   exec_exn db
@@ -533,9 +534,23 @@ let migrate_schema db current_version =
   | 18 ->
       init_quota_history_schema db;
       add_thinking_content_columns db;
+      (try
+         exec_exn db
+           "ALTER TABLE request_stats ADD COLUMN cached_tokens INTEGER"
+       with _ -> ());
       set_schema_version db schema_version
   | 19 ->
       add_thinking_content_columns db;
+      (try
+         exec_exn db
+           "ALTER TABLE request_stats ADD COLUMN cached_tokens INTEGER"
+       with _ -> ());
+      set_schema_version db schema_version
+  | 20 ->
+      (try
+         exec_exn db
+           "ALTER TABLE request_stats ADD COLUMN cached_tokens INTEGER"
+       with _ -> ());
       set_schema_version db schema_version
   | n when n = schema_version ->
       init_session_schema db;

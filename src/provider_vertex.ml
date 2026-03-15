@@ -140,7 +140,8 @@ let make_request_body ~config ~messages ~tools =
 let parse_response = Provider_gemini.parse_gemini_response
 
 let complete ~(config : Runtime_config.t)
-    ~(provider : Runtime_config.provider_config) ~model ~messages ?tools () =
+    ~(provider : Runtime_config.provider_config) ~model ~messages ?tools
+    ?session_key:_ () =
   let open Lwt.Syntax in
   let project_id = get_project_id provider in
   let location = get_location provider in
@@ -169,7 +170,7 @@ let complete ~(config : Runtime_config.t)
 
 let complete_streaming ~(config : Runtime_config.t)
     ~(provider : Runtime_config.provider_config) ~model ~messages ?tools
-    ~on_chunk () =
+    ?session_key:_ ~on_chunk () =
   let open Lwt.Syntax in
   let project_id = get_project_id provider in
   let location = get_location provider in

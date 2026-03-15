@@ -703,6 +703,7 @@ let test_codex_stream_preserves_response_output_items () =
 let test_codex_build_body_drops_orphan_tool_outputs () =
   let body =
     Provider_openai_codex.build_body ~model:"gpt-5"
+      ~provider:Runtime_config.default_provider_config
       ~messages:
         [
           Provider.make_message ~role:"system" ~content:"sys";
