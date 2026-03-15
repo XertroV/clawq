@@ -505,7 +505,9 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
         | Bg action ->
             let text =
               match Session.get_db session_mgr with
-              | Some db -> Slash_commands.format_bg ~db action
+              | Some db ->
+                  Slash_commands.format_bg
+                    ~connector:Format_adapter.Telegram_html ~db action
               | None -> "Background tasks are not available (no database)."
             in
             send_chunked_html_with_fallback ~bot_token ~chat_id:update.chat_id

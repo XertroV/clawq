@@ -364,38 +364,42 @@ let max_inactive_shown = 3
 
 let rec format_task_list tasks = format_task_list_with_hidden tasks 0
 
+and task_list_table_data tasks =
+  let columns =
+    Table_format.
+      [
+        { header = "ID"; align = Right; min_width = 2; flex = false };
+        { header = "RUNNER"; align = Left; min_width = 6; flex = false };
+        { header = "STATUS"; align = Left; min_width = 6; flex = false };
+        { header = "HEALTH"; align = Left; min_width = 6; flex = false };
+        { header = "RUNTIME"; align = Left; min_width = 7; flex = false };
+        { header = "BRANCH"; align = Left; min_width = 6; flex = false };
+        { header = "REPO"; align = Left; min_width = 4; flex = true };
+      ]
+  in
+  let rows =
+    List.map
+      (fun (task : task) ->
+        let branch = if task.branch = "" then "-" else task.branch in
+        let runtime = runtime_string task in
+        let health = diagnose_health task in
+        [
+          string_of_int task.id;
+          string_of_runner task.runner;
+          string_of_status task.status;
+          string_of_health health;
+          runtime;
+          branch;
+          task.repo_path;
+        ])
+      tasks
+  in
+  (columns, rows)
+
 and format_task_list_with_hidden tasks hidden_count =
   if tasks = [] && hidden_count = 0 then "No background tasks."
   else
-    let columns =
-      Table_format.
-        [
-          { header = "ID"; align = Right; min_width = 2; flex = false };
-          { header = "RUNNER"; align = Left; min_width = 6; flex = false };
-          { header = "STATUS"; align = Left; min_width = 6; flex = false };
-          { header = "HEALTH"; align = Left; min_width = 6; flex = false };
-          { header = "RUNTIME"; align = Left; min_width = 7; flex = false };
-          { header = "BRANCH"; align = Left; min_width = 6; flex = false };
-          { header = "REPO"; align = Left; min_width = 4; flex = true };
-        ]
-    in
-    let rows =
-      List.map
-        (fun (task : task) ->
-          let branch = if task.branch = "" then "-" else task.branch in
-          let runtime = runtime_string task in
-          let health = diagnose_health task in
-          [
-            string_of_int task.id;
-            string_of_runner task.runner;
-            string_of_status task.status;
-            string_of_health health;
-            runtime;
-            branch;
-            task.repo_path;
-          ])
-        tasks
-    in
+    let columns, rows = task_list_table_data tasks in
     let footer =
       if hidden_count > 0 then
         Printf.sprintf

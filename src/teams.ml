@@ -1578,7 +1578,9 @@ let handle_webhook ~(config : Runtime_config.teams_config)
                 | Bg action ->
                     let text =
                       match Session.get_db session_manager with
-                      | Some db -> Slash_commands.format_bg ~db action
+                      | Some db ->
+                          Slash_commands.format_bg
+                            ~connector:Format_adapter.Teams ~db action
                       | None ->
                           "Background tasks are not available (no database)."
                     in

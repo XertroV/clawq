@@ -456,7 +456,9 @@ let handler ~session_manager ~require_pairing ~auth_token
                 | Slash_commands.Bg action ->
                     let response =
                       match Session.get_db session_manager with
-                      | Some db -> Slash_commands.format_bg ~db action
+                      | Some db ->
+                          Slash_commands.format_bg
+                            ~connector:Format_adapter.Plain ~db action
                       | None ->
                           "Background tasks are not available (no database)."
                     in
@@ -1059,7 +1061,9 @@ let handler ~session_manager ~require_pairing ~auth_token
                 | Slash_commands.Bg action ->
                     let text =
                       match Session.get_db session_manager with
-                      | Some db -> Slash_commands.format_bg ~db action
+                      | Some db ->
+                          Slash_commands.format_bg
+                            ~connector:Format_adapter.Plain ~db action
                       | None ->
                           "Background tasks are not available (no database)."
                     in

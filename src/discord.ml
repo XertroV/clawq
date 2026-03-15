@@ -697,7 +697,9 @@ let handle_message ~(discord_config : Runtime_config.discord_config)
       | Bg action ->
           let text =
             match Session.get_db session_mgr with
-            | Some db -> Slash_commands.format_bg ~db action
+            | Some db ->
+                Slash_commands.format_bg ~connector:Format_adapter.Discord ~db
+                  action
             | None -> "Background tasks are not available (no database)."
           in
           send_message_fn ~bot_token:discord_config.bot_token

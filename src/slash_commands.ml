@@ -1347,14 +1347,32 @@ let format_active ~connector ~db ~(config : Runtime_config.t) () =
   end;
   Buffer.contents buf
 
-let format_bg ~db action =
+let format_bg ~connector ~db action =
   match action with
   | BgList ->
       let tasks, hidden = Background_task.list_tasks_for_display ~db in
-      Background_task.format_task_list_with_hidden tasks hidden
+      if tasks = [] && hidden = 0 then "No background tasks."
+      else
+        let columns, rows = Background_task.task_list_table_data tasks in
+        let footer =
+          if hidden > 0 then
+            Printf.sprintf
+              "\n\
+              \  (%d older task%s hidden. Use `clawq background show <id>` to \
+               view.)"
+              hidden
+              (if hidden = 1 then "" else "s")
+          else ""
+        in
+        Format_adapter.bold connector "Background tasks:"
+        ^ "\n"
+        ^ Format_adapter.render_table connector ~max_width:80 columns rows
+        ^ footer
   | BgShow id -> (
       match Background_task.get_task ~db ~id with
-      | Some task -> Background_task.format_task_summary ~full:true task
+      | Some task ->
+          Format_adapter.code_block connector
+            (Background_task.format_task_summary ~full:true task)
       | None -> Printf.sprintf "No background task found with id %d." id)
   | BgLogs id -> (
       match Background_task.get_task ~db ~id with
@@ -1381,7 +1399,8 @@ let format_bg ~db action =
                            done
                          with End_of_file -> ());
                         Printf.sprintf "Task %d logs (%s):\n%s" id path
-                          (Buffer.contents buf))
+                          (Format_adapter.code_block connector
+                             (Buffer.contents buf)))
                       else (
                         seek_in ic (len - max_bytes);
                         let buf = Buffer.create max_bytes in
@@ -1392,7 +1411,9 @@ let format_bg ~db action =
                          with End_of_file -> ());
                         Printf.sprintf
                           "Task %d logs (last ~%d bytes of %s):\n...%s" id
-                          max_bytes path (Buffer.contents buf)))
+                          max_bytes path
+                          (Format_adapter.code_block connector
+                             (Buffer.contents buf))))
                 with exn ->
                   Printf.sprintf "Error reading log for task %d: %s" id
                     (Printexc.to_string exn))))
