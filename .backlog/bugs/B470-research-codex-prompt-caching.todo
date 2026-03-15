@@ -1,0 +1,25 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B470
+priority: high
+status: pending
+tags: []
+title: Research Codex prompt caching behavior and clawq request shape
+---
+Problem
+We need to understand how OpenAI Codex/OpenAI prompt caching works, what request/prompt properties are required to get good cache hit rates, and whether clawq's current request assembly/sending path is compatible with effective caching or likely to cause avoidable cache misses.
+
+Why this matters
+Prompt caching can materially reduce cost and latency, but only if we assemble requests in a cache-friendly way. Without clear research and analysis, we risk paying repeatedly for semantically identical context due to small prompt-shape differences or request-assembly mistakes.
+
+Acceptance criteria
+- Research current public guidance/docs for OpenAI/Codex prompt caching behavior and cache-hit requirements.
+- Summarize what parts of requests must remain stable for cache hits and what kinds of changes cause misses.
+- Analyze clawq's OpenAI/Codex request assembly path and identify whether its current prompt construction and message ordering should cache effectively.
+- Identify likely sources of cache misses in clawq (for example changing prefixes, timestamps, tool metadata, system/developer prompt churn, message reordering, or model/endpoint differences) if present.
+- Recommend concrete changes, if needed, to improve cache friendliness.
+
+Notes
+Focus first on Codex/OpenAI paths actually used by clawq, including delegated/background-task flows if they differ from main-session request assembly.
