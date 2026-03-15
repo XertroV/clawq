@@ -10,7 +10,7 @@ priority: high
 started_at: "2026-03-15T11:20:10Z"
 status: in_progress
 tags: []
-title: send_message results should say not to repeat delivered info
+title: send_message results should say do not repeat already sent/delivered info
 ---
 Problem
 When `send_message` succeeds, agents often still repeat the same information synchronously in-band, bloating the conversation and interrupting autonomous flow. The tool result should explicitly instruct the agent that, assuming delivery, the information does not need to be repeated in the chat reply.
