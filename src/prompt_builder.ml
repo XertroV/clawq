@@ -496,7 +496,10 @@ let build ~(config : Runtime_config.t) ~tool_registry ?(attachments = [])
       add "## Tools";
       let tool_lines = tools_block tool_registry in
       if tool_lines = [] then add "- No tools registered."
-      else List.iter add tool_lines
+      else List.iter add tool_lines;
+      add "";
+      add "Example tool call:";
+      add "  shell_exec(command=\"ls -la\", head=100, tail=100)"
     end;
     add "";
     add "## Clawq Runtime";

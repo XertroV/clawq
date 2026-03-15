@@ -588,6 +588,44 @@ let test_background_tasks_appear_after_context_usage () =
       Alcotest.(check bool)
         "background tasks before task tree" true (bg_pos < tree_pos))
 
+let test_tools_section_includes_shell_exec_example () =
+  with_temp_workspace (fun workspace ->
+      let registry = Tool_registry.create () in
+      Tool_registry.register registry
+        {
+          Tool.name = "shell_exec";
+          description = "Execute a shell command";
+          parameters_schema = `Null;
+          invoke = (fun ?context:_ _ -> Lwt.return "ok");
+          invoke_stream = None;
+          risk_level = Tool.Low;
+          deferred = false;
+        };
+      let prompt_cfg =
+        {
+          Runtime_config.default.prompt with
+          dynamic_enabled = true;
+          include_tools_section = true;
+          include_safety_section = false;
+          include_runtime_section = false;
+          include_datetime_section = false;
+          include_autonomy_section = false;
+          include_workspace_section = false;
+        }
+      in
+      let cfg =
+        { Runtime_config.default with workspace; prompt = prompt_cfg }
+      in
+      let prompt =
+        Prompt_builder.build ~config:cfg ~tool_registry:(Some registry) ()
+      in
+      Alcotest.(check bool)
+        "has example tool call header" true
+        (contains prompt "Example tool call:");
+      Alcotest.(check bool)
+        "has shell_exec example" true
+        (contains prompt "shell_exec(command="))
+
 let test_runtime_context_includes_directory_contents () =
   with_temp_workspace (fun workspace ->
       write_file (Filename.concat workspace "README.md") "hello";
@@ -656,6 +694,8 @@ let suite =
       test_tools_block_sorted_alphabetically;
     Alcotest.test_case "background tasks appear after context usage" `Quick
       test_background_tasks_appear_after_context_usage;
+    Alcotest.test_case "tools section includes shell_exec example" `Quick
+      test_tools_section_includes_shell_exec_example;
     Alcotest.test_case "runtime context includes directory contents" `Quick
       test_runtime_context_includes_directory_contents;
   ]
