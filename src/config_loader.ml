@@ -1413,11 +1413,18 @@ let parse_config ?(resolve_secrets = true) json =
       let s = json |> member "summarizer" in
       let def = Runtime_config.default_summarizer_config in
       let summarizer_enabled =
-        try s |> member "enabled" |> to_bool with _ -> def.summarizer_enabled
+        try s |> member "enabled" |> to_bool
+        with _ -> (
+          (* backwards compat: accept legacy "summarizer_enabled" key *)
+          try s |> member "summarizer_enabled" |> to_bool
+          with _ -> def.summarizer_enabled)
       in
       let summarizer_model =
         try Pmodel.parse_exn (s |> member "model" |> to_string)
-        with _ -> def.summarizer_model
+        with _ -> (
+          (* backwards compat: accept legacy "summarizer_model" key *)
+          try Pmodel.parse_exn (s |> member "summarizer_model" |> to_string)
+          with _ -> def.summarizer_model)
       in
       let escalation_model =
         try

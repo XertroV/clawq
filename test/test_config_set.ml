@@ -105,7 +105,24 @@ let test_validate_path () =
     (valid [ "workspace"; "sub" ] schema);
   Alcotest.(check bool)
     "invalid provider field" false
-    (valid [ "providers"; "openai"; "bogus_field" ] schema)
+    (valid [ "providers"; "openai"; "bogus_field" ] schema);
+  (* Summarizer paths match config_loader JSON keys *)
+  Alcotest.(check bool)
+    "summarizer.enabled" true
+    (valid [ "summarizer"; "enabled" ] schema);
+  Alcotest.(check bool)
+    "summarizer.model" true
+    (valid [ "summarizer"; "model" ] schema);
+  Alcotest.(check bool)
+    "summarizer.threshold_chars" true
+    (valid [ "summarizer"; "threshold_chars" ] schema);
+  (* Legacy redundant paths should be rejected *)
+  Alcotest.(check bool)
+    "summarizer.summarizer_enabled rejected" false
+    (valid [ "summarizer"; "summarizer_enabled" ] schema);
+  Alcotest.(check bool)
+    "summarizer.summarizer_model rejected" false
+    (valid [ "summarizer"; "summarizer_model" ] schema)
 
 let test_validate_set_path () =
   let valid = Config_set.validate_set_path in
@@ -203,6 +220,21 @@ let test_set_reasoning_effort_null () =
           Alcotest.(check (option string))
             "reasoning_effort cleared" (Some "null")
             (Option.map Yojson.Safe.to_string value))
+
+let test_summarizer_set_roundtrip () =
+  (* Verify that config_set writes JSON keys that config_loader reads *)
+  let json = `Assoc [] in
+  let json =
+    Config_set.json_set [ "summarizer"; "enabled" ] (`Bool false) json
+  in
+  let json =
+    Config_set.json_set [ "summarizer"; "threshold_chars" ] (`Int 5000) json
+  in
+  let cfg = Config_loader.parse_config json in
+  Alcotest.(check bool)
+    "enabled roundtrip" false cfg.summarizer.summarizer_enabled;
+  Alcotest.(check int)
+    "threshold_chars roundtrip" 5000 cfg.summarizer.threshold_chars
 
 let test_is_secret_path () =
   Alcotest.(check bool)
@@ -308,6 +340,8 @@ let suite =
     Alcotest.test_case "validate set path" `Quick test_validate_set_path;
     Alcotest.test_case "set rejects invalid key" `Quick
       test_set_rejects_invalid_key;
+    Alcotest.test_case "summarizer set roundtrip" `Quick
+      test_summarizer_set_roundtrip;
     Alcotest.test_case "set reasoning_effort string" `Quick
       test_set_reasoning_effort_string;
     Alcotest.test_case "set reasoning_effort null" `Quick

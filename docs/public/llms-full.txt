@@ -348,7 +348,7 @@ Note: `providers.*.default_model` is the model identifier as understood by that 
 
 **observer** — turn observer for detecting stuck/looping agent behavior. `enabled` (default true), `model` (default `"groq:openai/gpt-oss-120b"`), `check_every_n_messages` (default 5), `round1_window` (default 8), `round2_window` (default 30), `thinking_token_threshold` (default 5000), `consecutive_errors_threshold` (default 3), `repeat_call_threshold` (default 2).
 
-**summarizer** — autosummarizer for long tool output. `summarizer_enabled` (default true), `summarizer_model` (default `"groq:openai/gpt-oss-120b"`), `escalation_model` (optional), `threshold_chars` (default 1500), `p1_max_chars` (default 200000), `p2_max_chars` (default 12000), `context_window_messages` (default 4), `excluded_tools` (default `["tool_search", "unsummarize", "summarize_thread", "thread_summary"]`), `max_age_days` (default 30), `envelope_template` (optional).
+**summarizer** — autosummarizer for long tool output. `enabled` (default true), `model` (default `"groq:openai/gpt-oss-120b"`), `escalation_model` (optional), `threshold_chars` (default 1500), `p1_max_chars` (default 200000), `p2_max_chars` (default 12000), `context_window_messages` (default 4), `excluded_tools` (default `["tool_search", "unsummarize", "summarize_thread", "thread_summary"]`), `max_age_days` (default 30), `envelope_template` (optional). Changes take effect live via daemon file watcher or SIGHUP (no restart needed). Legacy keys `summarizer_enabled` and `summarizer_model` are accepted for backwards compatibility.
 
 ### Secret encryption
 

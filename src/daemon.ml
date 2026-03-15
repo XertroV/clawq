@@ -926,12 +926,24 @@ let run ~(config : Runtime_config.t) =
         Logs.info (fun m -> m "SIGHUP received, reloading config...");
         try
           let new_config = Config_loader.load () in
+          let old_config = !current_config in
           sandbox := make_sandbox new_config;
           current_config := new_config;
           Session.set_sandbox session_manager !sandbox;
           Session.update_config ~source:"config_reload" session_manager
             new_config;
           Http_debug.sync_config new_config.log;
+          (let old_sc = old_config.summarizer in
+           let new_sc = new_config.summarizer in
+           if old_sc <> new_sc then
+             Logs.info (fun m ->
+                 m
+                   "Summarizer config updated: enabled=%b→%b, model=%s→%s, \
+                    threshold=%d→%d"
+                   old_sc.summarizer_enabled new_sc.summarizer_enabled
+                   (Pmodel.to_string old_sc.summarizer_model)
+                   (Pmodel.to_string new_sc.summarizer_model)
+                   old_sc.threshold_chars new_sc.threshold_chars));
           (match tool_registry with
           | Some registry ->
               refresh_runtime_bound_tools ~config:new_config ~session_manager
@@ -1209,12 +1221,24 @@ let run ~(config : Runtime_config.t) =
                if st.Unix.st_mtime > !last_config_mtime then begin
                  last_config_mtime := st.Unix.st_mtime;
                  let new_config = Config_loader.load () in
+                 let old_config = !current_config in
                  sandbox := make_sandbox new_config;
                  current_config := new_config;
                  Session.set_sandbox session_manager !sandbox;
                  Session.update_config ~source:"config_reload" session_manager
                    new_config;
                  Http_debug.sync_config new_config.log;
+                 (let old_sc = old_config.summarizer in
+                  let new_sc = new_config.summarizer in
+                  if old_sc <> new_sc then
+                    Logs.info (fun m ->
+                        m
+                          "Summarizer config updated (file watch): \
+                           enabled=%b→%b, model=%s→%s, threshold=%d→%d"
+                          old_sc.summarizer_enabled new_sc.summarizer_enabled
+                          (Pmodel.to_string old_sc.summarizer_model)
+                          (Pmodel.to_string new_sc.summarizer_model)
+                          old_sc.threshold_chars new_sc.threshold_chars));
                  (match tool_registry with
                  | Some registry ->
                      refresh_runtime_bound_tools ~config:new_config

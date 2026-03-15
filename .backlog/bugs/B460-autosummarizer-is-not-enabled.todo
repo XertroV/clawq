@@ -1,14 +1,15 @@
 ---
 claimed_at: "2026-03-15T06:45:39Z"
 claimed_by: cli-user
-completed_at: null
+completed_at: "2026-03-15T06:57:49Z"
 complexity: medium
 depends_on: []
+duration_minutes: 12.169672514366667
 estimate_hours: 1
 id: B460
 priority: high
 started_at: "2026-03-15T06:45:39Z"
-status: in_progress
+status: done
 tags: []
 title: autosummarizer is not enabled/disabled live with config (should be). Also all other summarizer settings should be too
 ---

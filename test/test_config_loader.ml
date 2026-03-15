@@ -661,6 +661,50 @@ let test_summarizer_roundtrip () =
   Alcotest.(check int)
     "threshold_chars roundtrip" 9999 cfg2.summarizer.threshold_chars
 
+let test_summarizer_legacy_keys_compat () =
+  (* Legacy JSON uses "summarizer_enabled" and "summarizer_model" keys *)
+  let json =
+    `Assoc
+      [
+        ( "summarizer",
+          `Assoc
+            [
+              ("summarizer_enabled", `Bool false);
+              ("summarizer_model", `String "openai:gpt-4o-mini");
+              ("threshold_chars", `Int 7777);
+            ] );
+      ]
+  in
+  let cfg = Config_loader.parse_config json in
+  Alcotest.(check bool)
+    "legacy summarizer_enabled" false cfg.summarizer.summarizer_enabled;
+  Alcotest.(check string)
+    "legacy summarizer_model" "openai:gpt-4o-mini"
+    (Pmodel.to_string cfg.summarizer.summarizer_model);
+  Alcotest.(check int) "threshold_chars" 7777 cfg.summarizer.threshold_chars
+
+let test_summarizer_canonical_keys_preferred () =
+  (* When both canonical and legacy keys are present, canonical wins *)
+  let json =
+    `Assoc
+      [
+        ( "summarizer",
+          `Assoc
+            [
+              ("enabled", `Bool true);
+              ("summarizer_enabled", `Bool false);
+              ("model", `String "openai:gpt-4o");
+              ("summarizer_model", `String "openai:gpt-4o-mini");
+            ] );
+      ]
+  in
+  let cfg = Config_loader.parse_config json in
+  Alcotest.(check bool)
+    "canonical enabled wins" true cfg.summarizer.summarizer_enabled;
+  Alcotest.(check string)
+    "canonical model wins" "openai:gpt-4o"
+    (Pmodel.to_string cfg.summarizer.summarizer_model)
+
 let test_to_json_includes_task_tree_notifications () =
   let cfg =
     {
@@ -932,6 +976,10 @@ let suite =
     Alcotest.test_case "to_json summarizer uses short keys" `Quick
       test_to_json_summarizer_uses_short_keys;
     Alcotest.test_case "summarizer roundtrip" `Quick test_summarizer_roundtrip;
+    Alcotest.test_case "summarizer legacy keys compat" `Quick
+      test_summarizer_legacy_keys_compat;
+    Alcotest.test_case "summarizer canonical keys preferred" `Quick
+      test_summarizer_canonical_keys_preferred;
     Alcotest.test_case "to_json includes task_tree_notifications" `Quick
       test_to_json_includes_task_tree_notifications;
     Alcotest.test_case "task_tree_notifications roundtrip" `Quick

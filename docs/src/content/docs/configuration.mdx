@@ -657,7 +657,7 @@ An array of routing bindings that dispatch messages to specific agents by patter
 ```json
 {
   "summarizer": {
-    "summarizer_enabled": true,
+    "enabled": true,
     "threshold_chars": 1500
   }
 }
@@ -665,8 +665,8 @@ An array of routing bindings that dispatch messages to specific agents by patter
 
 | Field | Default | Description |
 |-------|---------|-------------|
-| `summarizer_enabled` | `true` | Enable autosummarizer for long tool output |
-| `summarizer_model` | `"groq:openai/gpt-oss-120b"` | Model for summarization |
+| `enabled` | `true` | Enable autosummarizer for long tool output |
+| `model` | `"groq:openai/gpt-oss-120b"` | Model for summarization |
 | `escalation_model` | -- | Optional stronger model for escalation |
 | `threshold_chars` | `1500` | Character threshold to trigger summarization |
 | `p1_max_chars` | `200000` | Max chars for phase 1 |

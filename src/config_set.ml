@@ -361,8 +361,8 @@ let config_schema =
       ( "summarizer",
         O
           [
-            ("summarizer_enabled", L);
-            ("summarizer_model", L);
+            ("enabled", L);
+            ("model", L);
             ("escalation_model", L);
             ("threshold_chars", L);
             ("p1_max_chars", L);
