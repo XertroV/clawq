@@ -1,10 +1,14 @@
 ---
+claimed_at: "2026-03-15T10:40:58Z"
+claimed_by: cli-user
+completed_at: null
 complexity: medium
 depends_on: []
 estimate_hours: 2
 id: B477
 priority: medium
-status: pending
+started_at: "2026-03-15T10:40:58Z"
+status: in_progress
 tags: []
 title: Add /cron slash command for cron management
 ---
