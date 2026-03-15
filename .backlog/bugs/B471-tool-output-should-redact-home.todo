@@ -1,0 +1,21 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B471
+priority: high
+status: pending
+tags: []
+title: Tool output should redact home dir as ~ in path annotations
+---
+Problem
+Tool output rendered into chat currently shows absolute paths like `in /home/user/src/blah`, which needlessly exposes the full home directory path and is noisier than necessary.
+
+Why this matters
+User-facing tool output should prefer concise, familiar path rendering and avoid leaking full home-directory prefixes when a `~` form would communicate the same thing.
+
+Acceptance criteria
+- User-visible tool output path annotations render files under the current user home directory with `~` prefix instead of the absolute home path.
+- Applies to the common `in /home/...` style execution annotations and equivalent path snippets in tool output formatting.
+- Non-home absolute paths remain unchanged.
+- Existing functionality and path resolution semantics are unaffected; this is presentation-only.

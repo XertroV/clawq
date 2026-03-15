@@ -467,3 +467,4 @@ bugs:
     - file: B468-heartbeat-ok-only-heartbeat-tu.todo
     - file: B469-send-message-results-should-sa.todo
     - file: B470-research-codex-prompt-caching.todo
+    - file: B471-tool-output-should-redact-home.todo
