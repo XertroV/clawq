@@ -1,0 +1,27 @@
+---
+complexity: low
+depends_on: []
+estimate_hours: 1
+id: B497
+priority: high
+status: pending
+tags:
+    - skills
+    - tools
+    - slash-command
+title: /tools skills table shows stale/out-of-date skill list
+---
+Problem
+The /tools slash command includes a table of available skills, but the list is out of date and does not reflect the current set of discoverable skills.
+
+Why this matters
+Users rely on /tools to discover available skills. Showing stale information leads to confusion and missed functionality.
+
+Acceptance criteria
+- /tools output lists all currently discoverable skills (from ~/.clawq/skills/, workspace, and shared skill directories)
+- Skill names and descriptions match the current SKILL.md frontmatter
+- Adding/removing a skill file and re-running /tools shows the updated list without requiring a daemon restart
+
+Notes
+- Related: B324 (separate skills from tools in /tools output)
+- May need to ensure skill discovery is fresh at query time or properly invalidated
