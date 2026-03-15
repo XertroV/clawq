@@ -1,14 +1,15 @@
 ---
 claimed_at: "2026-03-15T06:56:43Z"
 claimed_by: cli-user
-completed_at: null
+completed_at: "2026-03-15T06:59:28Z"
 complexity: medium
 depends_on: []
+duration_minutes: 2.7531222265666666
 estimate_hours: 1
 id: B462
 priority: high
 started_at: "2026-03-15T06:56:43Z"
-status: in_progress
+status: done
 tags: []
 title: 'postmortem sessions should be started from scratch, not reloaded -- they are one time use. example from logs: ESC[90m[09:00:14.139]ESC[0m ESC[32mINFO ESC[0m Restored 110 messages for session __postmortem_teams:personal:19:3ed169b9886a4a1faadc1dc20687cc66@thread.v2'
 ---

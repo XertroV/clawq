@@ -681,19 +681,26 @@ let get_or_create_locked mgr ~key =
       let agent =
         Agent.create ~config:mgr.config ?tool_registry:mgr.tool_registry ()
       in
+      let is_postmortem =
+        let plen = String.length postmortem_session_prefix in
+        String.length key >= plen
+        && String.sub key 0 plen = postmortem_session_prefix
+      in
       (match mgr.db with
       | Some db ->
-          let history = Memory.load_history ~db ~session_key:key in
-          if history <> [] then begin
-            let sanitized =
-              Message_history.ensure_tool_group_integrity history
-            in
-            agent.history <- List.rev sanitized;
-            Logs.info (fun m ->
-                m "Restored %d messages for session %s" (List.length sanitized)
-                  key);
-            if List.length sanitized <> List.length history then
-              Memory.replace_session_messages ~db ~session_key:key sanitized
+          if not is_postmortem then begin
+            let history = Memory.load_history ~db ~session_key:key in
+            if history <> [] then begin
+              let sanitized =
+                Message_history.ensure_tool_group_integrity history
+              in
+              agent.history <- List.rev sanitized;
+              Logs.info (fun m ->
+                  m "Restored %d messages for session %s"
+                    (List.length sanitized) key);
+              if List.length sanitized <> List.length history then
+                Memory.replace_session_messages ~db ~session_key:key sanitized
+            end
           end
       | None -> ());
       (match mgr.db with

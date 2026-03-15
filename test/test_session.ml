@@ -969,6 +969,29 @@ let test_spawn_postmortem_agent_circuit_breaker_blocks_recursive_postmortems ()
       Alcotest.(check int)
         "recursive postmortem launch suppressed" 0 (List.length !launches))
 
+let test_postmortem_session_starts_fresh_not_restored () =
+  let db = Memory.init ~db_path:":memory:" () in
+  let config = Runtime_config.default in
+  let mgr = Session.create ~config ~db () in
+  let key = "__postmortem_web:stuck@1234567890" in
+  Memory.store_message ~db ~session_key:key
+    (Provider.make_message ~role:"user" ~content:"old postmortem msg");
+  Memory.store_message ~db ~session_key:key
+    (Provider.make_message ~role:"assistant" ~content:"old postmortem reply");
+  Alcotest.(check int)
+    "pre-existing history in DB" 2
+    (List.length (Memory.load_history ~db ~session_key:key));
+  Lwt_main.run
+    (Session.with_session_lock mgr ~key (fun agent _interrupt ->
+         Alcotest.(check int)
+           "postmortem session starts with empty history" 0
+           (List.length agent.Agent.history);
+         Lwt.return_unit));
+  (* Old history remains in DB — postmortem history is preserved *)
+  Alcotest.(check int)
+    "postmortem history preserved in DB" 2
+    (List.length (Memory.load_history ~db ~session_key:key))
+
 let test_live_activity_tracks_nested_scopes () =
   let config = Runtime_config.default in
   let mgr = Session.create ~config () in
@@ -3742,6 +3765,8 @@ let suite =
     Alcotest.test_case
       "postmortem circuit breaker suppresses recursive postmortems" `Quick
       test_spawn_postmortem_agent_circuit_breaker_blocks_recursive_postmortems;
+    Alcotest.test_case "postmortem session starts fresh, not restored from DB"
+      `Quick test_postmortem_session_starts_fresh_not_restored;
     Alcotest.test_case
       "enqueue message if busy marks interrupt and preserves message" `Quick
       test_enqueue_message_if_busy_marks_interrupt_and_preserves_message;

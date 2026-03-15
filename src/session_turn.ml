@@ -514,7 +514,10 @@ let () =
   spawn_postmortem_agent_fn :=
     fun mgr ~stuck_history ~session_key ~reason ?db () ->
       let open Lwt.Syntax in
-      let postmortem_session_key = "__postmortem_" ^ session_key in
+      let postmortem_session_key =
+        Printf.sprintf "__postmortem_%s@%d" session_key
+          (int_of_float (Unix.gettimeofday ()))
+      in
       let evidence_summary = Postmortem.format_history_text stuck_history in
       let correction = "(postmortem agent will determine correction)" in
       let* doc_path =
