@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B458
+priority: high
+status: pending
+tags: []
+title: Investigate how skills are loaded into the chat log (both from in text /mentions and via use_skill(name='x'))
+---
+
+Investigate how skills are loaded into the chat log (both from in text /mentions and via use_skill(name='x'))
