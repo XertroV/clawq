@@ -1,0 +1,32 @@
+---
+complexity: high
+depends_on: []
+estimate_hours: 3
+id: B463
+priority: high
+status: pending
+tags: []
+title: Cron runs can be marked ok even when Teams delivery times out; inspect recent Teams resume/migration gap
+---
+Observed evidence from today:
+- Cron job daily_fact_chris fired at local ~09:00 (daemon log lines around 09:00:07 restoring Teams session and starting LLM turn).
+- Delivery then failed with repeated sending failures and `Failure("HTTP timeout in post_json after 30.0s")`.
+- Despite that, cron_runs row recorded status=ok because scheduler marks success when Session.turn returns text, not when connector delivery is confirmed.
+
+Known clarifications:
+- It is acceptable for DB timestamps to remain UTC.
+- Scheduler matching appears to use local time (`Unix.localtime now`).
+- The real defects are delivery/outcome semantics and observability/resume gaps.
+
+Investigate and plan around:
+1. Cron success semantics: cron_runs should not be marked ok when downstream connector delivery fails or times out.
+2. Observability: add explicit per-run logging for cron trigger/start/finish and connector delivery outcome.
+3. Teams resume/routing regression within the last 24h: user recalls a similar Teams chat resume failure that was supposedly fixed via a DB migration. Inspect recent history, migrations, DB state, and code changes to determine what was changed, whether the migration actually applied, and whether additional required state/fields are still missing.
+4. Determine whether the resumed Teams session lacked required metadata (service_url/channel_id/session key mapping/etc.) or whether migration/data repair was incomplete.
+5. Acceptance criteria should include identifying the exact recent fix/migration, verifying DB state against expected schema/data, and distinguishing whether the cron failure is the same root cause or a new one.
+
+Acceptance criteria:
+- [ ] Root cause established for cron run marked ok despite Teams delivery timeout
+- [ ] Root cause established for recent Teams resume/migration issue or ruled out as unrelated
+- [ ] Exact migration/change identified and DB state verified
+- [ ] Clear implementation plan proposed for success semantics + logging + any migration/data repair follow-up
