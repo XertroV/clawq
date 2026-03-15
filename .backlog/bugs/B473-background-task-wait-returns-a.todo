@@ -15,6 +15,7 @@ Why this matters
 The tool is intended to block until completion or a substantive timeout. Returning almost immediately creates churn, encourages repeated tool-call loops, and weakens background-worker supervision.
 
 Acceptance criteria
+- Default timeout is 4 minutes when no explicit timeout is supplied.
 - background_task_wait normally waits for the requested interval or until task completion unless there is a genuine external interrupt.
 - Spurious near-immediate returns are eliminated or clearly distinguished from real interruptions.
 - Tool output makes the cause of early return explicit.
