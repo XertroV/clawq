@@ -53,6 +53,17 @@ let result_to_string = function
   | Slash_commands.Status -> "Status"
   | Slash_commands.Menu page -> "Menu(" ^ string_of_int page ^ ")"
   | Slash_commands.Active -> "Active"
+  | Slash_commands.Bg Slash_commands.BgList -> "Bg(List)"
+  | Slash_commands.Bg (Slash_commands.BgShow id) ->
+      "Bg(Show " ^ string_of_int id ^ ")"
+  | Slash_commands.Bg (Slash_commands.BgLogs id) ->
+      "Bg(Logs " ^ string_of_int id ^ ")"
+  | Slash_commands.Bg (Slash_commands.BgCancel id) ->
+      "Bg(Cancel " ^ string_of_int id ^ ")"
+  | Slash_commands.Bg (Slash_commands.BgRetry id) ->
+      "Bg(Retry " ^ string_of_int id ^ ")"
+  | Slash_commands.Bg (Slash_commands.BgCreate prompt) ->
+      "Bg(Create " ^ prompt ^ ")"
   | Slash_commands.DebugDumpChat -> "DebugDumpChat"
   | Slash_commands.SkillInvoke (name, args) ->
       "SkillInvoke(" ^ name ^ ", " ^ args ^ ")"
@@ -85,6 +96,7 @@ let result_eq a b =
   | Slash_commands.Model _, Slash_commands.Model _ -> true
   | Slash_commands.Menu a, Slash_commands.Menu b -> a = b
   | Slash_commands.Active, Slash_commands.Active -> true
+  | Slash_commands.Bg a, Slash_commands.Bg b -> a = b
   | Slash_commands.DebugDumpChat, Slash_commands.DebugDumpChat -> true
   | Slash_commands.SkillInvoke (a1, a2), Slash_commands.SkillInvoke (b1, b2) ->
       a1 = b1 && a2 = b2
@@ -424,6 +436,96 @@ let test_usage_usage_on_invalid_args () =
 let test_active () =
   Alcotest.check result_testable "/active" Slash_commands.Active
     (Slash_commands.handle "/active")
+
+let test_bg_list () =
+  Alcotest.check result_testable "/bg" (Slash_commands.Bg Slash_commands.BgList)
+    (Slash_commands.handle "/bg")
+
+let test_bg_list_explicit () =
+  Alcotest.check result_testable "/bg list"
+    (Slash_commands.Bg Slash_commands.BgList)
+    (Slash_commands.handle "/bg list")
+
+let test_bg_show () =
+  Alcotest.check result_testable "/bg show 42"
+    (Slash_commands.Bg (Slash_commands.BgShow 42))
+    (Slash_commands.handle "/bg show 42")
+
+let test_bg_show_bare_id () =
+  Alcotest.check result_testable "/bg 7"
+    (Slash_commands.Bg (Slash_commands.BgShow 7))
+    (Slash_commands.handle "/bg 7")
+
+let test_bg_logs () =
+  Alcotest.check result_testable "/bg logs 5"
+    (Slash_commands.Bg (Slash_commands.BgLogs 5))
+    (Slash_commands.handle "/bg logs 5")
+
+let test_bg_cancel () =
+  Alcotest.check result_testable "/bg cancel 3"
+    (Slash_commands.Bg (Slash_commands.BgCancel 3))
+    (Slash_commands.handle "/bg cancel 3")
+
+let test_bg_stop_alias () =
+  Alcotest.check result_testable "/bg stop 3"
+    (Slash_commands.Bg (Slash_commands.BgCancel 3))
+    (Slash_commands.handle "/bg stop 3")
+
+let test_bg_retry () =
+  Alcotest.check result_testable "/bg retry 1"
+    (Slash_commands.Bg (Slash_commands.BgRetry 1))
+    (Slash_commands.handle "/bg retry 1")
+
+let test_bg_invalid_id () =
+  match Slash_commands.handle "/bg show abc" with
+  | Slash_commands.Reply s ->
+      Alcotest.(check bool)
+        "mentions invalid" true
+        (String_util.contains s "Invalid task id")
+  | other ->
+      Alcotest.fail
+        (Printf.sprintf "expected Reply(invalid), got %s"
+           (result_to_string other))
+
+let test_bg_unknown_subcommand () =
+  match Slash_commands.handle "/bg foobar" with
+  | Slash_commands.Reply s ->
+      Alcotest.(check bool)
+        "mentions usage" true
+        (String_util.contains s "Usage:")
+  | other ->
+      Alcotest.fail
+        (Printf.sprintf "expected Reply(usage), got %s" (result_to_string other))
+
+let test_bg_background_alias () =
+  Alcotest.check result_testable "/background"
+    (Slash_commands.Bg Slash_commands.BgList)
+    (Slash_commands.handle "/background")
+
+let test_bg_log_alias () =
+  Alcotest.check result_testable "/bg log 5"
+    (Slash_commands.Bg (Slash_commands.BgLogs 5))
+    (Slash_commands.handle "/bg log 5")
+
+let test_bg_create () =
+  Alcotest.check result_testable "/bg create fix the bug"
+    (Slash_commands.Bg (Slash_commands.BgCreate "fix the bug"))
+    (Slash_commands.handle "/bg create fix the bug")
+
+let test_bg_start_alias () =
+  Alcotest.check result_testable "/bg start deploy it"
+    (Slash_commands.Bg (Slash_commands.BgCreate "deploy it"))
+    (Slash_commands.handle "/bg start deploy it")
+
+let test_bg_create_empty_prompt () =
+  match Slash_commands.handle "/bg create" with
+  | Slash_commands.Reply s ->
+      Alcotest.(check bool)
+        "mentions usage" true
+        (String_util.contains s "Usage:")
+  | other ->
+      Alcotest.fail
+        (Printf.sprintf "expected Reply(usage), got %s" (result_to_string other))
 
 let test_leading_whitespace () =
   Alcotest.check result_testable "padded status" Slash_commands.Status
@@ -1595,6 +1697,23 @@ let suite =
     Alcotest.test_case "/usage invalid args" `Quick
       test_usage_usage_on_invalid_args;
     Alcotest.test_case "/active" `Quick test_active;
+    Alcotest.test_case "/bg list" `Quick test_bg_list;
+    Alcotest.test_case "/bg list explicit" `Quick test_bg_list_explicit;
+    Alcotest.test_case "/bg show <id>" `Quick test_bg_show;
+    Alcotest.test_case "/bg <id> bare" `Quick test_bg_show_bare_id;
+    Alcotest.test_case "/bg logs <id>" `Quick test_bg_logs;
+    Alcotest.test_case "/bg cancel <id>" `Quick test_bg_cancel;
+    Alcotest.test_case "/bg stop alias" `Quick test_bg_stop_alias;
+    Alcotest.test_case "/bg retry <id>" `Quick test_bg_retry;
+    Alcotest.test_case "/bg invalid id" `Quick test_bg_invalid_id;
+    Alcotest.test_case "/bg unknown subcommand" `Quick
+      test_bg_unknown_subcommand;
+    Alcotest.test_case "/background alias" `Quick test_bg_background_alias;
+    Alcotest.test_case "/bg log alias" `Quick test_bg_log_alias;
+    Alcotest.test_case "/bg create" `Quick test_bg_create;
+    Alcotest.test_case "/bg start alias" `Quick test_bg_start_alias;
+    Alcotest.test_case "/bg create empty prompt" `Quick
+      test_bg_create_empty_prompt;
     Alcotest.test_case "/show-thinking toggle" `Quick test_show_thinking_toggle;
     Alcotest.test_case "/show-thinking status" `Quick test_show_thinking_status;
     Alcotest.test_case "/show-thinking aliases" `Quick

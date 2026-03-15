@@ -158,6 +158,7 @@ Available in chat-integrated channels that support slash commands.
 - `/costs [session [KEY]|model|provider]` — show cost breakdowns; no args shows a summary by time period (today, 7d, 30d, all)
 - `/usage [session [KEY]|model|provider]` — show token usage breakdowns; no args shows a summary by time period
 - `/active` — show active 5-hour window usage: cost/tokens summary, per-model breakdown, and provider quota percentages
+- `/bg [list|show|logs|cancel|retry|create] [id|prompt]` — background task management; `/bg` or `/bg list` lists tasks, `/bg show <id>` shows details, `/bg logs <id>` shows recent log output, `/bg cancel <id>` cancels a task, `/bg retry <id>` retries a failed task, `/bg create <prompt>` creates a new background task (aliases: `/bg start`, `/bg new`); alias `/background`
 - `/uptime` — show current daemon uptime
 - `/debug_dump_chat` (alias `/debug-dump-chat`) — dump the current session state to a file and send as attachment
 - `/show_thinking` (alias `/show-thinking`, `/toggle-show-thinking`) — toggle display of model thinking blocks in responses; `/show_thinking status` to check current state

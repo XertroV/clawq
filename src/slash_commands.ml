@@ -26,6 +26,14 @@ type usage_action =
   | UsageModel
   | UsageProvider
 
+type bg_action =
+  | BgList
+  | BgShow of int
+  | BgLogs of int
+  | BgCancel of int
+  | BgRetry of int
+  | BgCreate of string
+
 type result =
   | Reply of string
   | Help
@@ -47,6 +55,7 @@ type result =
   | Model of model_action
   | Menu of int
   | Active
+  | Bg of bg_action
   | DebugDumpChat
   | SkillInvoke of string * string
   | NotACommand
@@ -107,6 +116,12 @@ let commands =
       name = "active";
       description = "Show active 5-hour window usage (cost, tokens, quota)";
       priority = 63;
+    };
+    {
+      name = "bg";
+      description =
+        "Background tasks: /bg [list/show/logs/cancel/retry/create] [id/prompt]";
+      priority = 57;
     };
     {
       name = "delegate";
@@ -434,6 +449,60 @@ let handle ?(skill_names = []) text =
             | [ "provider" ] -> Costs CostsProvider
             | _ -> Reply costs_usage)
         | "active" -> Active
+        | "bg" | "background" -> (
+            let bg_usage =
+              "Usage: /bg [subcommand] [id]\n\
+              \  /bg                    - List all background tasks\n\
+              \  /bg list               - List all background tasks\n\
+              \  /bg show <id>          - Show details for a task\n\
+              \  /bg logs <id>          - Show recent log output for a task\n\
+              \  /bg cancel <id>        - Cancel a running or queued task\n\
+              \  /bg retry <id>         - Retry a failed task\n\
+              \  /bg create <prompt>    - Create a new background task"
+            in
+            match args with
+            | [] | [ "list" ] -> Bg BgList
+            | [ "show"; id_str ] | [ id_str ] -> (
+                match int_of_string_opt id_str with
+                | Some id -> Bg (BgShow id)
+                | None ->
+                    Reply
+                      (Printf.sprintf
+                         "Invalid task id '%s'. Expected an integer.\n%s" id_str
+                         bg_usage))
+            | [ "logs"; id_str ] | [ "log"; id_str ] -> (
+                match int_of_string_opt id_str with
+                | Some id -> Bg (BgLogs id)
+                | None ->
+                    Reply
+                      (Printf.sprintf
+                         "Invalid task id '%s'. Expected an integer.\n%s" id_str
+                         bg_usage))
+            | [ "cancel"; id_str ] | [ "stop"; id_str ] -> (
+                match int_of_string_opt id_str with
+                | Some id -> Bg (BgCancel id)
+                | None ->
+                    Reply
+                      (Printf.sprintf
+                         "Invalid task id '%s'. Expected an integer.\n%s" id_str
+                         bg_usage))
+            | [ "retry"; id_str ] -> (
+                match int_of_string_opt id_str with
+                | Some id -> Bg (BgRetry id)
+                | None ->
+                    Reply
+                      (Printf.sprintf
+                         "Invalid task id '%s'. Expected an integer.\n%s" id_str
+                         bg_usage))
+            | "create" :: rest | "start" :: rest | "new" :: rest -> (
+                let prompt = String.concat " " rest in
+                match String.trim prompt with
+                | "" ->
+                    Reply
+                      "Usage: /bg create <prompt>\n\
+                       Provide a prompt describing the task to run."
+                | prompt -> Bg (BgCreate prompt))
+            | _ -> Reply bg_usage)
         | "usage" -> (
             match args with
             | [] -> Usage UsageSummary
@@ -1175,6 +1244,78 @@ let format_active ~connector ~db ~(config : Runtime_config.t) () =
     end
   end;
   Buffer.contents buf
+
+let format_bg ~db action =
+  match action with
+  | BgList ->
+      let tasks, hidden = Background_task.list_tasks_for_display ~db in
+      Background_task.format_task_list_with_hidden tasks hidden
+  | BgShow id -> (
+      match Background_task.get_task ~db ~id with
+      | Some task -> Background_task.format_task_summary ~full:true task
+      | None -> Printf.sprintf "No background task found with id %d." id)
+  | BgLogs id -> (
+      match Background_task.get_task ~db ~id with
+      | None -> Printf.sprintf "No background task found with id %d." id
+      | Some task -> (
+          match task.log_path with
+          | None | Some "" -> Printf.sprintf "Task %d has no log file." id
+          | Some path -> (
+              if not (Sys.file_exists path) then
+                Printf.sprintf "Log file not found: %s" path
+              else
+                try
+                  let ic = open_in path in
+                  Fun.protect
+                    ~finally:(fun () -> close_in_noerr ic)
+                    (fun () ->
+                      let len = in_channel_length ic in
+                      let max_bytes = 4000 in
+                      if len <= max_bytes then (
+                        let buf = Buffer.create len in
+                        (try
+                           while true do
+                             Buffer.add_char buf (input_char ic)
+                           done
+                         with End_of_file -> ());
+                        Printf.sprintf "Task %d logs (%s):\n%s" id path
+                          (Buffer.contents buf))
+                      else (
+                        seek_in ic (len - max_bytes);
+                        let buf = Buffer.create max_bytes in
+                        (try
+                           while true do
+                             Buffer.add_char buf (input_char ic)
+                           done
+                         with End_of_file -> ());
+                        Printf.sprintf
+                          "Task %d logs (last ~%d bytes of %s):\n...%s" id
+                          max_bytes path (Buffer.contents buf)))
+                with exn ->
+                  Printf.sprintf "Error reading log for task %d: %s" id
+                    (Printexc.to_string exn))))
+  | BgCancel id -> (
+      match Background_task.cancel ~db ~id with
+      | Ok msg -> msg
+      | Error msg -> msg)
+  | BgRetry id -> (
+      match Background_task.retry ~db ~id with
+      | Ok msg -> msg
+      | Error msg -> msg)
+  | BgCreate prompt -> (
+      match Background_task.resolve_runner () with
+      | Error msg -> Printf.sprintf "Cannot create task: %s" msg
+      | Ok (runner, default_model) -> (
+          let repo_path = Sys.getcwd () in
+          let result =
+            Background_task.enqueue ~db ~runner ?model:default_model ~repo_path
+              ~prompt ()
+          in
+          match result with
+          | Ok id ->
+              Printf.sprintf "Background task #%d created (runner: %s)." id
+                (Background_task.string_of_runner runner)
+          | Error msg -> Printf.sprintf "Failed to create task: %s" msg))
 
 let read_daemon_state_json () =
   try
