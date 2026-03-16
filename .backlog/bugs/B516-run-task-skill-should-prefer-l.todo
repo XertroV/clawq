@@ -1,0 +1,32 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 2
+id: B516
+priority: medium
+status: pending
+tags: []
+title: run-task skill should prefer local runner with agent roles for small/medium tasks
+---
+Problem
+The run-task skill currently recommends external runners (opencode with zai-coding-plan/glm-5) for all tasks. This is heavyweight for smaller tasks and doesn't leverage clawq's native agent role/template system. For many backlog items, a local runner (subagent executing within clawq's own session context) would be more efficient and avoid external CLI dependencies.
+
+Why this matters
+- External runners (codex, claude, opencode, etc.) add friction: auth, session management, startup latency
+- Many tasks don't need full coding CLI capabilities — they need reasoning, file ops, git, and backlog tools
+- Local runner with agent roles would be faster for small/medium work and keeps session state in DB
+- Reduces reliance on external quota/limits for routine work
+- Aligns with B501 (local runner for cron) and the broader agent role/template ecosystem
+
+Acceptance criteria
+- run-task skill updated to prefer local runner for small/medium tasks (heuristics or explicit sizing)
+- Local runner uses agent roles/templates (e.g., "coder" role with appropriate tool restrictions)
+- Skill documents when to escalate to external coding runners (large/complex tasks)
+- Existing opencode+zai-coding-plan path remains available as fallback/upgrade path
+- Skill is refined and optimized overall (current guidance is verbose and could be sharper)
+
+Notes
+- Current skill recommends runner="opencode" model="zai-coding-plan/glm-5" universally
+- Related: B501 (local runner for cron), B487 (runner aliases), B488 (follow-up prompts), I013 (planning mode via bg tasks)
+- "Local runner" here means delegate/background_task with use_worktree=true but without external CLI — clawq spawns its own subagent with a defined role/template
+- Future work: add explicit coding runner path for tasks requiring specialized coding tools/models
