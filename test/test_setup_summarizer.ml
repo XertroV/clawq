@@ -29,25 +29,25 @@ let validate_model_empty_model () =
   | Error _ -> ()
   | Ok _ -> Alcotest.fail "expected error for empty model"
 
-(* ── validate_positive_int ───────────────────────────────────────── *)
+(* ── validate_positive_int (now in Setup_common) ────────────────── *)
 
 let validate_positive_int_valid () =
-  Alcotest.(check (result int string))
-    "valid" (Ok 42)
-    (Setup_summarizer.validate_positive_int "42")
+  Alcotest.(check (result string string))
+    "valid" (Ok "42")
+    (Setup_common.validate_positive_int "42")
 
 let validate_positive_int_zero () =
-  match Setup_summarizer.validate_positive_int "0" with
+  match Setup_common.validate_positive_int "0" with
   | Error _ -> ()
   | Ok _ -> Alcotest.fail "expected error for zero"
 
 let validate_positive_int_negative () =
-  match Setup_summarizer.validate_positive_int "-5" with
+  match Setup_common.validate_positive_int "-5" with
   | Error _ -> ()
   | Ok _ -> Alcotest.fail "expected error for negative"
 
 let validate_positive_int_non_numeric () =
-  match Setup_summarizer.validate_positive_int "abc" with
+  match Setup_common.validate_positive_int "abc" with
   | Error _ -> ()
   | Ok _ -> Alcotest.fail "expected error for non-numeric"
 

@@ -2,39 +2,23 @@
 
 (* ── Pure validation / builder functions (tested) ────────────────── *)
 
-let validate_timeout s =
-  match float_of_string_opt s with
-  | Some v when v > 0.0 -> Ok s
-  | Some _ -> Error "Timeout must be greater than 0."
-  | None -> Error "Timeout must be a valid number."
-
 let validate_retries s =
   match int_of_string_opt s with
   | Some v when v >= 0 -> Ok s
   | Some _ -> Error "Max retries must be 0 or greater."
   | None -> Error "Max retries must be a valid integer."
 
-let validate_delay s =
-  match float_of_string_opt s with
-  | Some v when v > 0.0 -> Ok s
-  | Some _ -> Error "Base delay must be greater than 0."
-  | None -> Error "Base delay must be a valid number."
-
 let build_resilience_json ~timeout_s ~max_retries ~base_delay_s
     ~fallback_provider =
   let fp_val =
     if fallback_provider = "" then `Null else `String fallback_provider
   in
-  `Assoc
+  Setup_common.build_section_json ~section_name:"resilience"
     [
-      ( "resilience",
-        `Assoc
-          [
-            ("timeout_s", `Float timeout_s);
-            ("max_retries", `Int max_retries);
-            ("base_delay_s", `Float base_delay_s);
-            ("fallback_provider", fp_val);
-          ] );
+      ("timeout_s", `Float timeout_s);
+      ("max_retries", `Int max_retries);
+      ("base_delay_s", `Float base_delay_s);
+      ("fallback_provider", fp_val);
     ]
 
 let post_setup_instructions =
@@ -73,7 +57,7 @@ let run () =
     Setup_tui.make_float_field ~key:"t" ~label:"Timeout (s)"
       ~menu_label:"Set request timeout (seconds)"
       ~description:"Seconds before an LLM API call times out. Must be > 0."
-      ~validate:validate_timeout
+      ~validate:Setup_common.validate_float_positive
       ~default:(get_r (fun c -> c.Runtime_config.timeout_s))
       ()
   in
@@ -91,7 +75,7 @@ let run () =
       ~menu_label:"Set base retry delay (seconds)"
       ~description:
         "Base delay between retries. Actual delay uses exponential backoff."
-      ~validate:validate_delay
+      ~validate:Setup_common.validate_float_positive
       ~default:(get_r (fun c -> c.Runtime_config.base_delay_s))
       ()
   in

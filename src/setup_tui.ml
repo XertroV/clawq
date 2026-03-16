@@ -142,11 +142,17 @@ let get_str_list f =
     String.split_on_char ',' s |> List.map String.trim
     |> List.filter (fun s -> s <> "")
 
+let get_str_opt f = match !(f.value) with "" -> None | s -> Some s
 let set_str f s = f.value := s
 let set_bool f b = f.value := string_of_bool b
 let set_int f n = f.value := string_of_int n
 let set_float f x = f.value := string_of_float x
 let set_str_list f lst = f.value := String.concat "," lst
+
+let check_required_str_fields field_error_pairs =
+  match List.find_opt (fun (f, _) -> get_str f = "") field_error_pairs with
+  | Some (_, err) -> Error err
+  | None -> Ok ()
 
 (* Display *)
 

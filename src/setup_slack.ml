@@ -22,7 +22,7 @@ let validate_app_token s =
 
 let build_slack_json ~bot_token ~signing_secret ~events_path ~allow_channels
     ~allow_users ~app_token ~socket_mode =
-  let fields =
+  Setup_common.build_channel_json ~channel_name:"slack"
     [
       ("bot_token", `String bot_token);
       ("signing_secret", `String signing_secret);
@@ -32,8 +32,6 @@ let build_slack_json ~bot_token ~signing_secret ~events_path ~allow_channels
       ("app_token", `String app_token);
       ("socket_mode", `Bool socket_mode);
     ]
-  in
-  `Assoc [ ("channels", `Assoc [ ("slack", `Assoc fields) ]) ]
 
 let post_setup_instructions ~events_path ~socket_mode ~gateway_port ~tunnel_url
     =
@@ -200,9 +198,8 @@ let run () =
             ~socket_mode:(Setup_tui.get_bool socket_mode));
       pre_save_check =
         (fun () ->
-          if Setup_tui.get_str bot_token = "" then
-            Error "Bot token is required."
-          else Ok ());
+          Setup_tui.check_required_str_fields
+            [ (bot_token, "Bot token is required.") ]);
       post_instructions = live_instructions;
     }
   in

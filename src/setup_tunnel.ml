@@ -43,7 +43,7 @@ let build_tunnel_json ~(tc : Runtime_config.tunnel_config) =
       ("config_dir", `String tc.config_dir);
     ]
   in
-  `Assoc [ ("tunnel", `Assoc fields) ]
+  Setup_common.build_section_json ~section_name:"tunnel" fields
 
 let post_setup_instructions ~(tc : Runtime_config.tunnel_config) ~gateway_port =
   let mode_desc =

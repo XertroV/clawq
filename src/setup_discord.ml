@@ -38,20 +38,12 @@ let intent_names intents =
     intent_flags
 
 let build_discord_json ~bot_token ~allow_guilds ~allow_users ~intents =
-  `Assoc
+  Setup_common.build_channel_json ~channel_name:"discord"
     [
-      ( "channels",
-        `Assoc
-          [
-            ( "discord",
-              `Assoc
-                [
-                  ("bot_token", `String bot_token);
-                  ("allow_guilds", Setup_common.json_string_list allow_guilds);
-                  ("allow_users", Setup_common.json_string_list allow_users);
-                  ("intents", `Int intents);
-                ] );
-          ] );
+      ("bot_token", `String bot_token);
+      ("allow_guilds", Setup_common.json_string_list allow_guilds);
+      ("allow_users", Setup_common.json_string_list allow_users);
+      ("intents", `Int intents);
     ]
 
 let post_setup_instructions =
@@ -180,9 +172,8 @@ let run () =
             ~intents:(Setup_tui.get_int intents_field));
       pre_save_check =
         (fun () ->
-          if Setup_tui.get_str bot_token = "" then
-            Error "Bot token is required before saving."
-          else Ok ());
+          Setup_tui.check_required_str_fields
+            [ (bot_token, "Bot token is required before saving.") ]);
       post_instructions = (fun () -> post_setup_instructions);
     }
   in

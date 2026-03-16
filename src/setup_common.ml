@@ -277,6 +277,21 @@ let validate_model_canonical s =
     | Ok m -> Ok (Pmodel.to_string m)
     | Error msg -> Error msg
 
+let validate_choice_from ?(what = "") valid_choices s =
+  let trimmed = String.trim s in
+  if List.mem trimmed valid_choices then Ok trimmed
+  else
+    let options = String.concat ", " valid_choices in
+    Error
+      (if what = "" then Printf.sprintf "Must be one of: %s" options
+       else Printf.sprintf "%s must be one of: %s" what options)
+
+let validate_float_positive s =
+  match float_of_string_opt (String.trim s) with
+  | Some f when f > 0.0 -> Ok s
+  | Some _ -> Error "Value must be greater than 0."
+  | None -> Error "Value must be a valid number."
+
 let get_gateway_and_tunnel_url () =
   let cfg = try Config_loader.load () with _ -> Runtime_config.default in
   let gateway_port = cfg.gateway.port in
@@ -297,6 +312,13 @@ let parse_csv_list ?(default_star = true) s =
 (* ── JSON helpers ──────────────────────────────────────────────── *)
 
 let json_string_list lst = `List (List.map (fun s -> `String s) lst)
+let json_optional_string s = if String.trim s = "" then `Null else `String s
+
+let build_channel_json ~channel_name fields =
+  `Assoc [ ("channels", `Assoc [ (channel_name, `Assoc fields) ]) ]
+
+let build_section_json ~section_name fields =
+  `Assoc [ (section_name, `Assoc fields) ]
 
 (* ── Config loading helpers ────────────────────────────────────── *)
 

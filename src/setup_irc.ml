@@ -19,25 +19,16 @@ let validate_nick s =
 
 let build_irc_json ~host ~port ~tls ~nick ~password ~sasl ~channels ~allow_from
     =
-  let password_json = match password with "" -> `Null | s -> `String s in
-  `Assoc
+  Setup_common.build_channel_json ~channel_name:"irc"
     [
-      ( "channels",
-        `Assoc
-          [
-            ( "irc",
-              `Assoc
-                [
-                  ("host", `String host);
-                  ("port", `Int port);
-                  ("tls", `Bool tls);
-                  ("nick", `String nick);
-                  ("password", password_json);
-                  ("sasl", `Bool sasl);
-                  ("channels", Setup_common.json_string_list channels);
-                  ("allow_from", Setup_common.json_string_list allow_from);
-                ] );
-          ] );
+      ("host", `String host);
+      ("port", `Int port);
+      ("tls", `Bool tls);
+      ("nick", `String nick);
+      ("password", Setup_common.json_optional_string password);
+      ("sasl", `Bool sasl);
+      ("channels", Setup_common.json_string_list channels);
+      ("allow_from", Setup_common.json_string_list allow_from);
     ]
 
 let post_setup_instructions =
@@ -193,9 +184,8 @@ let run () =
       ~allow_from:(Setup_tui.get_str_list allow_from_field)
   in
   let pre_save_check () =
-    if Setup_tui.get_str host_field = "" then Error "Host is required."
-    else if Setup_tui.get_str nick_field = "" then Error "Nick is required."
-    else Ok ()
+    Setup_tui.check_required_str_fields
+      [ (host_field, "Host is required."); (nick_field, "Nick is required.") ]
   in
   let spec =
     {

@@ -4,22 +4,15 @@
 
 let valid_channels = [ "telegram"; "discord"; "slack"; "email" ]
 
-let validate_channel s =
-  if List.mem s valid_channels then Ok s
-  else
-    Error
-      (Printf.sprintf "Channel must be one of: %s."
-         (String.concat ", " valid_channels))
+let validate_channel =
+  Setup_common.validate_choice_from ~what:"Channel" valid_channels
 
 let validate_target s =
   if String.trim s = "" then Error "Target must not be empty." else Ok s
 
 let build_notify_json ~channel ~target =
-  `Assoc
-    [
-      ( "notify",
-        `Assoc [ ("channel", `String channel); ("target", `String target) ] );
-    ]
+  Setup_common.build_section_json ~section_name:"notify"
+    [ ("channel", `String channel); ("target", `String target) ]
 
 let post_setup_instructions =
   {|

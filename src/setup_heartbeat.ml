@@ -9,16 +9,12 @@ let validate_hour s =
   | None -> Error "Hour must be a valid integer."
 
 let build_heartbeat_json ~enabled ~interval_seconds ~quiet_start ~quiet_end =
-  `Assoc
+  Setup_common.build_section_json ~section_name:"heartbeat"
     [
-      ( "heartbeat",
-        `Assoc
-          [
-            ("enabled", `Bool enabled);
-            ("interval_seconds", `Int interval_seconds);
-            ("quiet_start", `Int quiet_start);
-            ("quiet_end", `Int quiet_end);
-          ] );
+      ("enabled", `Bool enabled);
+      ("interval_seconds", `Int interval_seconds);
+      ("quiet_start", `Int quiet_start);
+      ("quiet_end", `Int quiet_end);
     ]
 
 let post_setup_instructions =

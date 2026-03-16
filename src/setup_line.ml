@@ -11,19 +11,11 @@ let validate_channel_secret s =
     ~hint:"Find it in the LINE Developers console." s
 
 let build_line_json ~channel_access_token ~channel_secret ~allow_from =
-  `Assoc
+  Setup_common.build_channel_json ~channel_name:"line"
     [
-      ( "channels",
-        `Assoc
-          [
-            ( "line",
-              `Assoc
-                [
-                  ("channel_access_token", `String channel_access_token);
-                  ("channel_secret", `String channel_secret);
-                  ("allow_from", Setup_common.json_string_list allow_from);
-                ] );
-          ] );
+      ("channel_access_token", `String channel_access_token);
+      ("channel_secret", `String channel_secret);
+      ("allow_from", Setup_common.json_string_list allow_from);
     ]
 
 let post_setup_instructions =
@@ -121,11 +113,11 @@ let run () =
             ~allow_from:(Setup_tui.get_str_list allow_from));
       pre_save_check =
         (fun () ->
-          if Setup_tui.get_str channel_access_token = "" then
-            Error "Channel access token is required."
-          else if Setup_tui.get_str channel_secret = "" then
-            Error "Channel secret is required."
-          else Ok ());
+          Setup_tui.check_required_str_fields
+            [
+              (channel_access_token, "Channel access token is required.");
+              (channel_secret, "Channel secret is required.");
+            ]);
       post_instructions = (fun () -> post_setup_instructions);
     }
   in

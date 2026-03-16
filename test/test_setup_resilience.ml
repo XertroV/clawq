@@ -3,25 +3,25 @@
 let validate_timeout_valid () =
   Alcotest.(check (result string string))
     "valid timeout" (Ok "120.0")
-    (Setup_resilience.validate_timeout "120.0")
+    (Setup_common.validate_float_positive "120.0")
 
 let validate_timeout_integer () =
   Alcotest.(check (result string string))
     "integer timeout ok" (Ok "60")
-    (Setup_resilience.validate_timeout "60")
+    (Setup_common.validate_float_positive "60")
 
 let validate_timeout_zero () =
-  match Setup_resilience.validate_timeout "0" with
+  match Setup_common.validate_float_positive "0" with
   | Error _ -> ()
   | Ok _ -> Alcotest.fail "expected error for zero timeout"
 
 let validate_timeout_negative () =
-  match Setup_resilience.validate_timeout "-1.0" with
+  match Setup_common.validate_float_positive "-1.0" with
   | Error _ -> ()
   | Ok _ -> Alcotest.fail "expected error for negative timeout"
 
 let validate_timeout_non_number () =
-  match Setup_resilience.validate_timeout "abc" with
+  match Setup_common.validate_float_positive "abc" with
   | Error _ -> ()
   | Ok _ -> Alcotest.fail "expected error for non-number"
 
@@ -48,15 +48,15 @@ let validate_retries_non_int () =
 let validate_delay_valid () =
   Alcotest.(check (result string string))
     "valid delay" (Ok "1.0")
-    (Setup_resilience.validate_delay "1.0")
+    (Setup_common.validate_float_positive "1.0")
 
 let validate_delay_zero () =
-  match Setup_resilience.validate_delay "0" with
+  match Setup_common.validate_float_positive "0" with
   | Error _ -> ()
   | Ok _ -> Alcotest.fail "expected error for zero delay"
 
 let validate_delay_negative () =
-  match Setup_resilience.validate_delay "-0.5" with
+  match Setup_common.validate_float_positive "-0.5" with
   | Error _ -> ()
   | Ok _ -> Alcotest.fail "expected error for negative delay"
 

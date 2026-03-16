@@ -37,7 +37,7 @@ let validate_webhook_url = Setup_common.validate_url
 
 let build_dingtalk_json ~app_key ~app_secret ~agent_id ~allow_from ~webhook_url
     =
-  let fields =
+  let base =
     [
       ("app_key", `String app_key);
       ("app_secret", `String app_secret);
@@ -47,10 +47,10 @@ let build_dingtalk_json ~app_key ~app_secret ~agent_id ~allow_from ~webhook_url
   in
   let fields =
     match webhook_url with
-    | Some url -> fields @ [ ("webhook_url", `String url) ]
-    | None -> fields
+    | Some url -> base @ [ ("webhook_url", `String url) ]
+    | None -> base
   in
-  `Assoc [ ("channels", `Assoc [ ("dingtalk", `Assoc fields) ]) ]
+  Setup_common.build_channel_json ~channel_name:"dingtalk" fields
 
 let post_setup_instructions =
   {|
@@ -175,12 +175,12 @@ let run () =
             ~webhook_url:wh);
       pre_save_check =
         (fun () ->
-          if Setup_tui.get_str app_key = "" then Error "App key is required."
-          else if Setup_tui.get_str app_secret = "" then
-            Error "App secret is required."
-          else if Setup_tui.get_str agent_id = "" then
-            Error "Agent ID is required."
-          else Ok ());
+          Setup_tui.check_required_str_fields
+            [
+              (app_key, "App key is required.");
+              (app_secret, "App secret is required.");
+              (agent_id, "Agent ID is required.");
+            ]);
       post_instructions = (fun () -> post_setup_instructions);
     }
   in

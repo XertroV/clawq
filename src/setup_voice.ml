@@ -4,13 +4,8 @@
 
 let valid_voices = [ "alloy"; "echo"; "fable"; "onyx"; "nova"; "shimmer" ]
 
-let validate_voice s =
-  let trimmed = String.trim s in
-  if List.mem trimmed valid_voices then Ok trimmed
-  else
-    Error
-      (Printf.sprintf "Voice must be one of: %s"
-         (String.concat ", " valid_voices))
+let validate_voice =
+  Setup_common.validate_choice_from ~what:"Voice" valid_voices
 
 let validate_speed s =
   match float_of_string_opt (String.trim s) with
@@ -23,7 +18,7 @@ let validate_speed s =
 
 let build_voice_json ~stt_enabled ~tts_enabled ~tts_provider ~tts_model
     ~tts_voice ~tts_speed ~audio_dir =
-  let fields =
+  Setup_common.build_section_json ~section_name:"voice"
     [
       ("stt_enabled", `Bool stt_enabled);
       ("tts_enabled", `Bool tts_enabled);
@@ -34,8 +29,6 @@ let build_voice_json ~stt_enabled ~tts_enabled ~tts_provider ~tts_model
       ("tts_speed", `Float tts_speed);
       ("audio_dir", `String audio_dir);
     ]
-  in
-  `Assoc [ ("voice", `Assoc fields) ]
 
 (* ── Load existing config ────────────────────────────────────────── *)
 

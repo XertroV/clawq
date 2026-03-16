@@ -42,25 +42,17 @@ let validate_poll_interval s =
 
 let build_email_json ~imap_host ~imap_port ~smtp_host ~smtp_port ~username
     ~password ~from_address ~allow_from ~poll_interval_s =
-  `Assoc
+  Setup_common.build_channel_json ~channel_name:"email"
     [
-      ( "channels",
-        `Assoc
-          [
-            ( "email",
-              `Assoc
-                [
-                  ("imap_host", `String imap_host);
-                  ("imap_port", `Int imap_port);
-                  ("smtp_host", `String smtp_host);
-                  ("smtp_port", `Int smtp_port);
-                  ("username", `String username);
-                  ("password", `String password);
-                  ("from_address", `String from_address);
-                  ("allow_from", Setup_common.json_string_list allow_from);
-                  ("poll_interval_s", `Float poll_interval_s);
-                ] );
-          ] );
+      ("imap_host", `String imap_host);
+      ("imap_port", `Int imap_port);
+      ("smtp_host", `String smtp_host);
+      ("smtp_port", `Int smtp_port);
+      ("username", `String username);
+      ("password", `String password);
+      ("from_address", `String from_address);
+      ("allow_from", Setup_common.json_string_list allow_from);
+      ("poll_interval_s", `Float poll_interval_s);
     ]
 
 let post_setup_instructions =
@@ -250,17 +242,14 @@ let run () =
       ~poll_interval_s:(Setup_tui.get_float poll_interval_field)
   in
   let pre_save_check () =
-    if Setup_tui.get_str imap_host_field = "" then
-      Error "IMAP host is required."
-    else if Setup_tui.get_str smtp_host_field = "" then
-      Error "SMTP host is required."
-    else if Setup_tui.get_str username_field = "" then
-      Error "Username is required."
-    else if Setup_tui.get_str password_field = "" then
-      Error "Password is required."
-    else if Setup_tui.get_str from_address_field = "" then
-      Error "From address is required."
-    else Ok ()
+    Setup_tui.check_required_str_fields
+      [
+        (imap_host_field, "IMAP host is required.");
+        (smtp_host_field, "SMTP host is required.");
+        (username_field, "Username is required.");
+        (password_field, "Password is required.");
+        (from_address_field, "From address is required.");
+      ]
   in
   let spec =
     {

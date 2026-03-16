@@ -6,22 +6,18 @@ let build_prompt_json ~dynamic_enabled ~include_tools_section
     ~include_safety_section ~include_workspace_section ~include_runtime_section
     ~include_datetime_section ~include_autonomy_section ~workspace_files
     ~max_workspace_file_chars ~max_workspace_total_chars =
-  `Assoc
+  Setup_common.build_section_json ~section_name:"prompt"
     [
-      ( "prompt",
-        `Assoc
-          [
-            ("dynamic_enabled", `Bool dynamic_enabled);
-            ("include_tools_section", `Bool include_tools_section);
-            ("include_safety_section", `Bool include_safety_section);
-            ("include_workspace_section", `Bool include_workspace_section);
-            ("include_runtime_section", `Bool include_runtime_section);
-            ("include_datetime_section", `Bool include_datetime_section);
-            ("include_autonomy_section", `Bool include_autonomy_section);
-            ("workspace_files", Setup_common.json_string_list workspace_files);
-            ("max_workspace_file_chars", `Int max_workspace_file_chars);
-            ("max_workspace_total_chars", `Int max_workspace_total_chars);
-          ] );
+      ("dynamic_enabled", `Bool dynamic_enabled);
+      ("include_tools_section", `Bool include_tools_section);
+      ("include_safety_section", `Bool include_safety_section);
+      ("include_workspace_section", `Bool include_workspace_section);
+      ("include_runtime_section", `Bool include_runtime_section);
+      ("include_datetime_section", `Bool include_datetime_section);
+      ("include_autonomy_section", `Bool include_autonomy_section);
+      ("workspace_files", Setup_common.json_string_list workspace_files);
+      ("max_workspace_file_chars", `Int max_workspace_file_chars);
+      ("max_workspace_total_chars", `Int max_workspace_total_chars);
     ]
 
 let post_setup_instructions =

@@ -15,15 +15,11 @@ let validate_secret s =
 (* ── JSON builder (tested) ───────────────────────────────────────── *)
 
 let build_totp_json ~totp_enabled ~totp_secret ~session_ttl_hours =
-  `Assoc
+  Setup_common.build_section_json ~section_name:"totp"
     [
-      ( "totp",
-        `Assoc
-          [
-            ("enabled", `Bool totp_enabled);
-            ("secret", `String totp_secret);
-            ("session_ttl_hours", `Int session_ttl_hours);
-          ] );
+      ("enabled", `Bool totp_enabled);
+      ("secret", `String totp_secret);
+      ("session_ttl_hours", `Int session_ttl_hours);
     ]
 
 (* Generate a base32-like TOTP secret from random bytes.

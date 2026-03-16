@@ -27,21 +27,13 @@ let validate_max_chunk_bytes s =
 
 let build_signal_json ~base_url ~account ~api_mode ~allow_from ~max_chunk_bytes
     =
-  `Assoc
+  Setup_common.build_channel_json ~channel_name:"signal"
     [
-      ( "channels",
-        `Assoc
-          [
-            ( "signal",
-              `Assoc
-                [
-                  ("base_url", `String base_url);
-                  ("account", `String account);
-                  ("api_mode", `String api_mode);
-                  ("allow_from", Setup_common.json_string_list allow_from);
-                  ("max_chunk_bytes", `Int max_chunk_bytes);
-                ] );
-          ] );
+      ("base_url", `String base_url);
+      ("account", `String account);
+      ("api_mode", `String api_mode);
+      ("allow_from", Setup_common.json_string_list allow_from);
+      ("max_chunk_bytes", `Int max_chunk_bytes);
     ]
 
 let post_setup_instructions =
@@ -168,13 +160,13 @@ let run () =
             ~max_chunk_bytes:(Setup_tui.get_int max_chunk_bytes));
       pre_save_check =
         (fun () ->
-          if Setup_tui.get_str base_url = "" then
-            Error "Base URL is required. Example: http://localhost:8080"
-          else if Setup_tui.get_str account = "" then
-            Error
-              "Account phone number is required. Enter the E.164 number \
-               registered with signal-cli, e.g. +15551234567"
-          else Ok ());
+          Setup_tui.check_required_str_fields
+            [
+              (base_url, "Base URL is required. Example: http://localhost:8080");
+              ( account,
+                "Account phone number is required. Enter the E.164 number \
+                 registered with signal-cli, e.g. +15551234567" );
+            ]);
       post_instructions = (fun () -> post_setup_instructions);
     }
   in

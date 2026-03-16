@@ -51,21 +51,13 @@ let validate_user_id s =
 
 let build_matrix_json ~homeserver_url ~access_token ~user_id ~allow_rooms
     ~allow_users =
-  `Assoc
+  Setup_common.build_channel_json ~channel_name:"matrix"
     [
-      ( "channels",
-        `Assoc
-          [
-            ( "matrix",
-              `Assoc
-                [
-                  ("homeserver_url", `String homeserver_url);
-                  ("access_token", `String access_token);
-                  ("user_id", `String user_id);
-                  ("allow_rooms", Setup_common.json_string_list allow_rooms);
-                  ("allow_users", Setup_common.json_string_list allow_users);
-                ] );
-          ] );
+      ("homeserver_url", `String homeserver_url);
+      ("access_token", `String access_token);
+      ("user_id", `String user_id);
+      ("allow_rooms", Setup_common.json_string_list allow_rooms);
+      ("allow_users", Setup_common.json_string_list allow_users);
     ]
 
 let post_setup_instructions =
@@ -197,17 +189,17 @@ let run () =
       ~allow_users:(Setup_tui.get_str_list allow_users_field)
   in
   let pre_save_check () =
-    if Setup_tui.get_str homeserver_url_field = "" then
-      Error "Homeserver URL is required. Example: https://matrix.org"
-    else if Setup_tui.get_str access_token_field = "" then
-      Error
-        "Access token is required. Obtain it from Element: Settings > Help & \
-         About > Access Token"
-    else if Setup_tui.get_str user_id_field = "" then
-      Error
-        "User ID is required. Format: @localpart:homeserver, e.g. \
-         @clawqbot:matrix.org"
-    else Ok ()
+    Setup_tui.check_required_str_fields
+      [
+        ( homeserver_url_field,
+          "Homeserver URL is required. Example: https://matrix.org" );
+        ( access_token_field,
+          "Access token is required. Obtain it from Element: Settings > Help & \
+           About > Access Token" );
+        ( user_id_field,
+          "User ID is required. Format: @localpart:homeserver, e.g. \
+           @clawqbot:matrix.org" );
+      ]
   in
   let spec =
     {

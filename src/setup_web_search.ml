@@ -31,7 +31,7 @@ let build_web_search_json ~provider ~api_key ~num_results ~base_url =
     @ (if api_key = "" then [] else [ ("api_key", `String api_key) ])
     @ match base_url with None -> [] | Some u -> [ ("base_url", `String u) ]
   in
-  `Assoc [ ("web_search", `Assoc fields) ]
+  Setup_common.build_section_json ~section_name:"web_search" fields
 
 (* ── Load existing config ────────────────────────────────────────── *)
 
@@ -99,10 +99,7 @@ let run () =
           let provider = Setup_tui.get_str provider_field in
           let api_key = Setup_tui.get_str api_key_field in
           let num_results = Setup_tui.get_int num_results_field in
-          let base_url =
-            let u = Setup_tui.get_str base_url_field in
-            if u = "" then None else Some u
-          in
+          let base_url = Setup_tui.get_str_opt base_url_field in
           build_web_search_json ~provider ~api_key ~num_results ~base_url);
       pre_save_check =
         (fun () ->

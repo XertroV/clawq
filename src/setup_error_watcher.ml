@@ -26,21 +26,17 @@ let validate_commit_tag s =
 let build_error_watcher_json ~enabled ~scan_interval_s ~primary_models
     ~fallback_models ~cooldown_s ~max_errors_per_batch ~ignore_patterns
     ~auto_fix_enabled ~commit_tag =
-  `Assoc
+  Setup_common.build_section_json ~section_name:"error_watcher"
     [
-      ( "error_watcher",
-        `Assoc
-          [
-            ("enabled", `Bool enabled);
-            ("scan_interval_s", `Float scan_interval_s);
-            ("primary_models", Setup_common.json_string_list primary_models);
-            ("fallback_models", Setup_common.json_string_list fallback_models);
-            ("cooldown_s", `Float cooldown_s);
-            ("max_errors_per_batch", `Int max_errors_per_batch);
-            ("ignore_patterns", Setup_common.json_string_list ignore_patterns);
-            ("auto_fix_enabled", `Bool auto_fix_enabled);
-            ("commit_tag", `String commit_tag);
-          ] );
+      ("enabled", `Bool enabled);
+      ("scan_interval_s", `Float scan_interval_s);
+      ("primary_models", Setup_common.json_string_list primary_models);
+      ("fallback_models", Setup_common.json_string_list fallback_models);
+      ("cooldown_s", `Float cooldown_s);
+      ("max_errors_per_batch", `Int max_errors_per_batch);
+      ("ignore_patterns", Setup_common.json_string_list ignore_patterns);
+      ("auto_fix_enabled", `Bool auto_fix_enabled);
+      ("commit_tag", `String commit_tag);
     ]
 
 let post_setup_instructions =

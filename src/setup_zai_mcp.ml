@@ -6,15 +6,11 @@ let validate_key s =
   if String.trim s = "" then Error "API key must not be empty." else Ok s
 
 let build_zai_mcp_json ~key ~websearch_enabled ~webfetch_enabled =
-  `Assoc
+  Setup_common.build_section_json ~section_name:"zai_mcp"
     [
-      ( "zai_mcp",
-        `Assoc
-          [
-            ("api_key", `String key);
-            ("websearch_enabled", `Bool websearch_enabled);
-            ("webfetch_enabled", `Bool webfetch_enabled);
-          ] );
+      ("api_key", `String key);
+      ("websearch_enabled", `Bool websearch_enabled);
+      ("webfetch_enabled", `Bool webfetch_enabled);
     ]
 
 let post_setup_instructions =

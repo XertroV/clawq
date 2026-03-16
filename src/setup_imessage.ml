@@ -10,18 +10,10 @@ let validate_poll_interval s =
   | None -> Error "Poll interval must be a valid number (e.g. 5.0)."
 
 let build_imessage_json ~poll_interval_s ~allow_from =
-  `Assoc
+  Setup_common.build_channel_json ~channel_name:"imessage"
     [
-      ( "channels",
-        `Assoc
-          [
-            ( "imessage",
-              `Assoc
-                [
-                  ("poll_interval_s", `Float poll_interval_s);
-                  ("allow_from", Setup_common.json_string_list allow_from);
-                ] );
-          ] );
+      ("poll_interval_s", `Float poll_interval_s);
+      ("allow_from", Setup_common.json_string_list allow_from);
     ]
 
 let post_setup_instructions =

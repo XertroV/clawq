@@ -38,20 +38,12 @@ let validate_verify_token s =
 
 let build_whatsapp_json ~phone_number_id ~access_token ~verify_token ~allow_from
     =
-  `Assoc
+  Setup_common.build_channel_json ~channel_name:"whatsapp"
     [
-      ( "channels",
-        `Assoc
-          [
-            ( "whatsapp",
-              `Assoc
-                [
-                  ("phone_number_id", `String phone_number_id);
-                  ("access_token", `String access_token);
-                  ("verify_token", `String verify_token);
-                  ("allow_from", Setup_common.json_string_list allow_from);
-                ] );
-          ] );
+      ("phone_number_id", `String phone_number_id);
+      ("access_token", `String access_token);
+      ("verify_token", `String verify_token);
+      ("allow_from", Setup_common.json_string_list allow_from);
     ]
 
 let post_setup_instructions =
@@ -173,13 +165,12 @@ let run () =
             ~allow_from:(Setup_tui.get_str_list allow_from));
       pre_save_check =
         (fun () ->
-          if Setup_tui.get_str phone_number_id = "" then
-            Error "Phone number ID is required."
-          else if Setup_tui.get_str access_token = "" then
-            Error "Access token is required."
-          else if Setup_tui.get_str verify_token = "" then
-            Error "Verify token is required."
-          else Ok ());
+          Setup_tui.check_required_str_fields
+            [
+              (phone_number_id, "Phone number ID is required.");
+              (access_token, "Access token is required.");
+              (verify_token, "Verify token is required.");
+            ]);
       post_instructions = (fun () -> post_setup_instructions);
     }
   in

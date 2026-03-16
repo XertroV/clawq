@@ -8,20 +8,16 @@ let validate_positive_int = Setup_common.validate_positive_int
 let build_observer_json ~enabled ~model ~check_every_n_messages ~round1_window
     ~round2_window ~thinking_token_threshold ~consecutive_errors_threshold
     ~repeat_call_threshold =
-  `Assoc
+  Setup_common.build_section_json ~section_name:"observer"
     [
-      ( "observer",
-        `Assoc
-          [
-            ("enabled", `Bool enabled);
-            ("model", `String model);
-            ("check_every_n_messages", `Int check_every_n_messages);
-            ("round1_window", `Int round1_window);
-            ("round2_window", `Int round2_window);
-            ("thinking_token_threshold", `Int thinking_token_threshold);
-            ("consecutive_errors_threshold", `Int consecutive_errors_threshold);
-            ("repeat_call_threshold", `Int repeat_call_threshold);
-          ] );
+      ("enabled", `Bool enabled);
+      ("model", `String model);
+      ("check_every_n_messages", `Int check_every_n_messages);
+      ("round1_window", `Int round1_window);
+      ("round2_window", `Int round2_window);
+      ("thinking_token_threshold", `Int thinking_token_threshold);
+      ("consecutive_errors_threshold", `Int consecutive_errors_threshold);
+      ("repeat_call_threshold", `Int repeat_call_threshold);
     ]
 
 let post_setup_instructions =

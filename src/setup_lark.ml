@@ -33,23 +33,15 @@ let validate_verification_token s =
 
 let build_lark_json ~enabled ~app_id ~app_secret ~verification_token ~endpoint
     ~mode ~allow_users =
-  `Assoc
+  Setup_common.build_channel_json ~channel_name:"lark"
     [
-      ( "channels",
-        `Assoc
-          [
-            ( "lark",
-              `Assoc
-                [
-                  ("enabled", `Bool enabled);
-                  ("app_id", `String app_id);
-                  ("app_secret", `String app_secret);
-                  ("verification_token", `String verification_token);
-                  ("endpoint", `String endpoint);
-                  ("mode", `String mode);
-                  ("allow_users", Setup_common.json_string_list allow_users);
-                ] );
-          ] );
+      ("enabled", `Bool enabled);
+      ("app_id", `String app_id);
+      ("app_secret", `String app_secret);
+      ("verification_token", `String verification_token);
+      ("endpoint", `String endpoint);
+      ("mode", `String mode);
+      ("allow_users", Setup_common.json_string_list allow_users);
     ]
 
 let post_setup_instructions =
@@ -208,12 +200,12 @@ let run () =
       ~allow_users:(Setup_tui.get_str_list allow_users_field)
   in
   let pre_save_check () =
-    if Setup_tui.get_str app_id_field = "" then Error "App ID is required."
-    else if Setup_tui.get_str app_secret_field = "" then
-      Error "App Secret is required."
-    else if Setup_tui.get_str verification_token_field = "" then
-      Error "Verification Token is required."
-    else Ok ()
+    Setup_tui.check_required_str_fields
+      [
+        (app_id_field, "App ID is required.");
+        (app_secret_field, "App Secret is required.");
+        (verification_token_field, "Verification Token is required.");
+      ]
   in
   let spec =
     {

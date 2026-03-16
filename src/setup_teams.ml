@@ -43,23 +43,15 @@ let validate_tenant_id s =
 
 let build_teams_json ~app_id ~app_secret ~tenant_id ~webhook_path ~service_url
     ~allow_teams ~allow_users =
-  `Assoc
+  Setup_common.build_channel_json ~channel_name:"teams"
     [
-      ( "channels",
-        `Assoc
-          [
-            ( "teams",
-              `Assoc
-                [
-                  ("app_id", `String app_id);
-                  ("app_secret", `String app_secret);
-                  ("tenant_id", `String tenant_id);
-                  ("webhook_path", `String webhook_path);
-                  ("service_url", `String service_url);
-                  ("allow_teams", Setup_common.json_string_list allow_teams);
-                  ("allow_users", Setup_common.json_string_list allow_users);
-                ] );
-          ] );
+      ("app_id", `String app_id);
+      ("app_secret", `String app_secret);
+      ("tenant_id", `String tenant_id);
+      ("webhook_path", `String webhook_path);
+      ("service_url", `String service_url);
+      ("allow_teams", Setup_common.json_string_list allow_teams);
+      ("allow_users", Setup_common.json_string_list allow_users);
     ]
 
 let post_setup_instructions ~webhook_path ~gateway_port ~tunnel_url =
@@ -196,12 +188,12 @@ let run () =
             ~allow_users:(Setup_tui.get_str_list allow_users));
       pre_save_check =
         (fun () ->
-          if Setup_tui.get_str app_id = "" then Error "App ID is required."
-          else if Setup_tui.get_str app_secret = "" then
-            Error "App Secret is required."
-          else if Setup_tui.get_str tenant_id = "" then
-            Error "Tenant ID is required."
-          else Ok ());
+          Setup_tui.check_required_str_fields
+            [
+              (app_id, "App ID is required.");
+              (app_secret, "App Secret is required.");
+              (tenant_id, "Tenant ID is required.");
+            ]);
       post_instructions = live_instructions;
     }
   in

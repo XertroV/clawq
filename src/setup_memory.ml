@@ -18,24 +18,20 @@ let build_memory_json ~backend ~search_enabled ~vector_weight ~keyword_weight
     ~embedding_model ~embedding_provider ~compaction_threshold_percent
     ~max_messages_per_session ~max_message_age_days ~pre_compaction_flush
     ~task_tree_purge_after_days =
-  let opt_str_or_null s = if s = "" then `Null else `String s in
-  `Assoc
+  Setup_common.build_section_json ~section_name:"memory"
     [
-      ( "memory",
-        `Assoc
-          [
-            ("backend", `String backend);
-            ("search_enabled", `Bool search_enabled);
-            ("vector_weight", `Int vector_weight);
-            ("keyword_weight", `Int keyword_weight);
-            ("embedding_model", opt_str_or_null embedding_model);
-            ("embedding_provider", opt_str_or_null embedding_provider);
-            ("compaction_threshold_percent", `Int compaction_threshold_percent);
-            ("max_messages_per_session", `Int max_messages_per_session);
-            ("max_message_age_days", `Int max_message_age_days);
-            ("pre_compaction_flush", `Bool pre_compaction_flush);
-            ("task_tree_purge_after_days", `Int task_tree_purge_after_days);
-          ] );
+      ("backend", `String backend);
+      ("search_enabled", `Bool search_enabled);
+      ("vector_weight", `Int vector_weight);
+      ("keyword_weight", `Int keyword_weight);
+      ("embedding_model", Setup_common.json_optional_string embedding_model);
+      ( "embedding_provider",
+        Setup_common.json_optional_string embedding_provider );
+      ("compaction_threshold_percent", `Int compaction_threshold_percent);
+      ("max_messages_per_session", `Int max_messages_per_session);
+      ("max_message_age_days", `Int max_message_age_days);
+      ("pre_compaction_flush", `Bool pre_compaction_flush);
+      ("task_tree_purge_after_days", `Int task_tree_purge_after_days);
     ]
 
 let post_setup_instructions =

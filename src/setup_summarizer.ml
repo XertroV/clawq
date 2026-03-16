@@ -6,12 +6,6 @@ let validate_model s =
   let trimmed = String.trim s in
   match Pmodel.parse trimmed with Ok _ as ok -> ok | Error _ as err -> err
 
-let validate_positive_int s =
-  match int_of_string_opt (String.trim s) with
-  | None -> Error "Not a valid integer."
-  | Some n when n <= 0 -> Error "Value must be positive (> 0)."
-  | Some n -> Ok n
-
 let validate_non_negative_int s =
   match int_of_string_opt (String.trim s) with
   | None -> Error "Not a valid integer."
@@ -26,9 +20,10 @@ let validate_tool_name s =
   else Ok trimmed
 
 let validate_threshold_chars s =
-  match validate_positive_int s with
+  match Setup_common.validate_positive_int s with
   | Error _ as err -> err
-  | Ok n ->
+  | Ok s ->
+      let n = int_of_string (String.trim s) in
       let warning =
         if n < 500 then
           Some "Warning: very low threshold may cause excessive summarization."
@@ -61,7 +56,7 @@ let build_summarizer_json ~(sc : Runtime_config.summarizer_config) =
         match sc.envelope_template with None -> `Null | Some t -> `String t );
     ]
   in
-  `Assoc [ ("summarizer", `Assoc fields) ]
+  Setup_common.build_section_json ~section_name:"summarizer" fields
 
 (* ── Post-setup instructions ─────────────────────────────────────── *)
 

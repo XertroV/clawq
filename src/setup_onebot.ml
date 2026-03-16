@@ -38,24 +38,13 @@ let validate_http_url s =
 
 let build_onebot_json ~ws_url ~http_url ~access_token ~allow_from ~allow_groups
     =
-  let access_token_json =
-    match access_token with "" -> `Null | s -> `String s
-  in
-  `Assoc
+  Setup_common.build_channel_json ~channel_name:"onebot"
     [
-      ( "channels",
-        `Assoc
-          [
-            ( "onebot",
-              `Assoc
-                [
-                  ("ws_url", `String ws_url);
-                  ("http_url", `String http_url);
-                  ("access_token", access_token_json);
-                  ("allow_from", Setup_common.json_string_list allow_from);
-                  ("allow_groups", Setup_common.json_string_list allow_groups);
-                ] );
-          ] );
+      ("ws_url", `String ws_url);
+      ("http_url", `String http_url);
+      ("access_token", match access_token with "" -> `Null | s -> `String s);
+      ("allow_from", Setup_common.json_string_list allow_from);
+      ("allow_groups", Setup_common.json_string_list allow_groups);
     ]
 
 let post_setup_instructions =
@@ -180,11 +169,11 @@ let run () =
       ~allow_groups:(Setup_tui.get_str_list allow_groups_field)
   in
   let pre_save_check () =
-    if Setup_tui.get_str ws_url_field = "" then
-      Error "WebSocket URL is required."
-    else if Setup_tui.get_str http_url_field = "" then
-      Error "HTTP URL is required."
-    else Ok ()
+    Setup_tui.check_required_str_fields
+      [
+        (ws_url_field, "WebSocket URL is required.");
+        (http_url_field, "HTTP URL is required.");
+      ]
   in
   let spec =
     {

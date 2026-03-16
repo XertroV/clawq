@@ -60,21 +60,13 @@ let validate_relays_list s =
              (String.concat ", " bad))
 
 let build_nostr_json ~relays ~private_key ~pubkey ~nak_path ~allow_from =
-  `Assoc
+  Setup_common.build_channel_json ~channel_name:"nostr"
     [
-      ( "channels",
-        `Assoc
-          [
-            ( "nostr",
-              `Assoc
-                [
-                  ("relays", Setup_common.json_string_list relays);
-                  ("private_key", `String private_key);
-                  ("pubkey", `String pubkey);
-                  ("nak_path", `String nak_path);
-                  ("allow_from", Setup_common.json_string_list allow_from);
-                ] );
-          ] );
+      ("relays", Setup_common.json_string_list relays);
+      ("private_key", `String private_key);
+      ("pubkey", `String pubkey);
+      ("nak_path", `String nak_path);
+      ("allow_from", Setup_common.json_string_list allow_from);
     ]
 
 let post_setup_instructions =

@@ -50,21 +50,13 @@ let validate_team_id s =
 
 let build_mattermost_json ~url ~access_token ~team_id ~channel_ids ~allow_users
     =
-  `Assoc
+  Setup_common.build_channel_json ~channel_name:"mattermost"
     [
-      ( "channels",
-        `Assoc
-          [
-            ( "mattermost",
-              `Assoc
-                [
-                  ("url", `String url);
-                  ("access_token", `String access_token);
-                  ("team_id", `String team_id);
-                  ("channel_ids", Setup_common.json_string_list channel_ids);
-                  ("allow_users", Setup_common.json_string_list allow_users);
-                ] );
-          ] );
+      ("url", `String url);
+      ("access_token", `String access_token);
+      ("team_id", `String team_id);
+      ("channel_ids", Setup_common.json_string_list channel_ids);
+      ("allow_users", Setup_common.json_string_list allow_users);
     ]
 
 let post_setup_instructions =
@@ -182,12 +174,12 @@ let run () =
             ~allow_users:(Setup_tui.get_str_list allow_users));
       pre_save_check =
         (fun () ->
-          if Setup_tui.get_str url = "" then Error "URL is required."
-          else if Setup_tui.get_str access_token = "" then
-            Error "Access token is required."
-          else if Setup_tui.get_str team_id = "" then
-            Error "Team ID is required."
-          else Ok ());
+          Setup_tui.check_required_str_fields
+            [
+              (url, "URL is required.");
+              (access_token, "Access token is required.");
+              (team_id, "Team ID is required.");
+            ]);
       post_instructions = (fun () -> post_setup_instructions);
     }
   in
