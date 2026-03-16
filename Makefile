@@ -201,6 +201,7 @@ test: docker-test-image
 		-v "$(CURDIR):/home/opam/clawq" \
 		-v $(DOCKER_TEST_BUILD_VOL):/home/opam/_build \
 		-e DUNE_BUILD_DIR=/home/opam/_build \
+		--tmpfs /tmp:exec,size=2G \
 		$(DOCKER_TEST_IMAGE) \
 		make test-nocontainer SHELL_SWITCH=$(DOCKER_TEST_SWITCH)
 
@@ -209,6 +210,7 @@ test-all: docker-test-image
 		-v "$(CURDIR):/home/opam/clawq" \
 		-v $(DOCKER_TEST_BUILD_VOL):/home/opam/_build \
 		-e DUNE_BUILD_DIR=/home/opam/_build \
+		--tmpfs /tmp:exec,size=2G \
 		$(DOCKER_TEST_IMAGE) \
 		make test-all-nocontainer SHELL_SWITCH=$(DOCKER_TEST_SWITCH)
 
