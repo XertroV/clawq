@@ -53,8 +53,8 @@ let post_setup_instructions =
 (* ── Load existing config ────────────────────────────────────────── *)
 
 let load_existing () =
-  try (Config_loader.load ()).observer
-  with _ -> Runtime_config.default_observer_config
+  Setup_common.load_config_field_or
+    ~default:Runtime_config.default_observer_config (fun cfg -> cfg.observer)
 
 (* ── Main wizard ─────────────────────────────────────────────────── *)
 

@@ -56,10 +56,8 @@ let build_teams_json ~app_id ~app_secret ~tenant_id ~webhook_path ~service_url
                   ("tenant_id", `String tenant_id);
                   ("webhook_path", `String webhook_path);
                   ("service_url", `String service_url);
-                  ( "allow_teams",
-                    `List (List.map (fun s -> `String s) allow_teams) );
-                  ( "allow_users",
-                    `List (List.map (fun s -> `String s) allow_users) );
+                  ("allow_teams", Setup_common.json_string_list allow_teams);
+                  ("allow_users", Setup_common.json_string_list allow_users);
                 ] );
           ] );
     ]
@@ -101,10 +99,7 @@ let post_setup_instructions ~webhook_path ~gateway_port ~tunnel_url =
 (* -- Load existing config ---------------------------------------------- *)
 
 let load_existing () =
-  try
-    let cfg = Config_loader.load () in
-    cfg.channels.teams
-  with _ -> None
+  Setup_common.load_config_opt (fun cfg -> cfg.channels.teams)
 
 (* -- Main wizard ------------------------------------------------------- *)
 

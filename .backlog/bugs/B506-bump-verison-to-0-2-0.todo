@@ -1,9 +1,11 @@
 ---
+completed_at: null
 complexity: medium
 depends_on: []
 estimate_hours: 1
 id: B506
 priority: high
+started_at: "2026-03-16T08:09:14Z"
 status: pending
 tags: []
 title: bump verison to 0.2.0

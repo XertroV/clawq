@@ -63,10 +63,7 @@ let post_setup_instructions =
 (* ── Load existing config ────────────────────────────────────────── *)
 
 let load_existing_providers () =
-  try
-    let cfg = Config_loader.load () in
-    cfg.providers
-  with _ -> []
+  Setup_common.load_config_field_or ~default:[] (fun cfg -> cfg.providers)
 
 (* ── Draw provider list ──────────────────────────────────────────── *)
 

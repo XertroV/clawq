@@ -38,8 +38,7 @@ let build_signal_json ~base_url ~account ~api_mode ~allow_from ~max_chunk_bytes
                   ("base_url", `String base_url);
                   ("account", `String account);
                   ("api_mode", `String api_mode);
-                  ( "allow_from",
-                    `List (List.map (fun s -> `String s) allow_from) );
+                  ("allow_from", Setup_common.json_string_list allow_from);
                   ("max_chunk_bytes", `Int max_chunk_bytes);
                 ] );
           ] );
@@ -90,10 +89,7 @@ let post_setup_instructions =
 (* ── Load existing config ────────────────────────────────────────── *)
 
 let load_existing () =
-  try
-    let cfg = Config_loader.load () in
-    cfg.channels.signal
-  with _ -> None
+  Setup_common.load_config_opt (fun cfg -> cfg.channels.signal)
 
 (* ── Main wizard ─────────────────────────────────────────────────── *)
 

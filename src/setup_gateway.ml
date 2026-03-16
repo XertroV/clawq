@@ -52,7 +52,8 @@ let post_setup_instructions =
 (* ── Load existing config ────────────────────────────────────────── *)
 
 let load_existing () =
-  try (Config_loader.load ()).gateway with _ -> Runtime_config.default.gateway
+  Setup_common.load_config_field_or ~default:Runtime_config.default.gateway
+    (fun cfg -> cfg.gateway)
 
 (* ── Main wizard ─────────────────────────────────────────────────── *)
 

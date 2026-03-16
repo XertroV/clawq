@@ -47,10 +47,8 @@ let build_discord_json ~bot_token ~allow_guilds ~allow_users ~intents =
               `Assoc
                 [
                   ("bot_token", `String bot_token);
-                  ( "allow_guilds",
-                    `List (List.map (fun s -> `String s) allow_guilds) );
-                  ( "allow_users",
-                    `List (List.map (fun s -> `String s) allow_users) );
+                  ("allow_guilds", Setup_common.json_string_list allow_guilds);
+                  ("allow_users", Setup_common.json_string_list allow_users);
                   ("intents", `Int intents);
                 ] );
           ] );
@@ -84,10 +82,7 @@ let post_setup_instructions =
 (* ── Load existing config ────────────────────────────────────────── *)
 
 let load_existing () =
-  try
-    let cfg = Config_loader.load () in
-    cfg.channels.discord
-  with _ -> None
+  Setup_common.load_config_opt (fun cfg -> cfg.channels.discord)
 
 (* ── Intent toggler ──────────────────────────────────────────────── *)
 

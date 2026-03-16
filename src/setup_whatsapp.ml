@@ -49,8 +49,7 @@ let build_whatsapp_json ~phone_number_id ~access_token ~verify_token ~allow_from
                   ("phone_number_id", `String phone_number_id);
                   ("access_token", `String access_token);
                   ("verify_token", `String verify_token);
-                  ( "allow_from",
-                    `List (List.map (fun s -> `String s) allow_from) );
+                  ("allow_from", Setup_common.json_string_list allow_from);
                 ] );
           ] );
     ]
@@ -101,10 +100,7 @@ let post_setup_instructions =
 (* ── Load existing config ────────────────────────────────────────── *)
 
 let load_existing () =
-  try
-    let cfg = Config_loader.load () in
-    cfg.channels.whatsapp
-  with _ -> None
+  Setup_common.load_config_opt (fun cfg -> cfg.channels.whatsapp)
 
 (* ── Main wizard ─────────────────────────────────────────────────── *)
 

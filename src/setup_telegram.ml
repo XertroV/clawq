@@ -19,7 +19,7 @@ let validate_bot_token s =
 let account_to_json name (acct : Runtime_config.telegram_account) =
   let fields =
     [ ("bot_token", `String acct.bot_token) ]
-    @ [ ("allow_from", `List (List.map (fun s -> `String s) acct.allow_from)) ]
+    @ [ ("allow_from", Setup_common.json_string_list acct.allow_from) ]
   in
   let fields =
     match acct.totp with
@@ -96,10 +96,7 @@ let post_setup_instructions ~account_name =
 (* ── Load existing config ────────────────────────────────────────── *)
 
 let load_existing () =
-  try
-    let cfg = Config_loader.load () in
-    cfg.channels.telegram
-  with _ -> None
+  Setup_common.load_config_opt (fun cfg -> cfg.channels.telegram)
 
 (* ── TUI drawing ─────────────────────────────────────────────────── *)
 

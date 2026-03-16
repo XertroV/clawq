@@ -68,12 +68,11 @@ let build_nostr_json ~relays ~private_key ~pubkey ~nak_path ~allow_from =
             ( "nostr",
               `Assoc
                 [
-                  ("relays", `List (List.map (fun s -> `String s) relays));
+                  ("relays", Setup_common.json_string_list relays);
                   ("private_key", `String private_key);
                   ("pubkey", `String pubkey);
                   ("nak_path", `String nak_path);
-                  ( "allow_from",
-                    `List (List.map (fun s -> `String s) allow_from) );
+                  ("allow_from", Setup_common.json_string_list allow_from);
                 ] );
           ] );
     ]
@@ -120,10 +119,7 @@ let post_setup_instructions =
 (* ── Load existing config ────────────────────────────────────────── *)
 
 let load_existing () =
-  try
-    let cfg = Config_loader.load () in
-    cfg.channels.nostr
-  with _ -> None
+  Setup_common.load_config_opt (fun cfg -> cfg.channels.nostr)
 
 (* ── Main wizard ─────────────────────────────────────────────────── *)
 

@@ -18,8 +18,7 @@ let build_prompt_json ~dynamic_enabled ~include_tools_section
             ("include_runtime_section", `Bool include_runtime_section);
             ("include_datetime_section", `Bool include_datetime_section);
             ("include_autonomy_section", `Bool include_autonomy_section);
-            ( "workspace_files",
-              `List (List.map (fun s -> `String s) workspace_files) );
+            ("workspace_files", Setup_common.json_string_list workspace_files);
             ("max_workspace_file_chars", `Int max_workspace_file_chars);
             ("max_workspace_total_chars", `Int max_workspace_total_chars);
           ] );
@@ -52,11 +51,7 @@ let post_setup_instructions =
 
 (* ── Load existing config ────────────────────────────────────────── *)
 
-let load_existing () =
-  try
-    let cfg = Config_loader.load () in
-    Some cfg.prompt
-  with _ -> None
+let load_existing () = Setup_common.load_config_field (fun cfg -> cfg.prompt)
 
 (* ── Main wizard ─────────────────────────────────────────────────── *)
 

@@ -1,9 +1,11 @@
 ---
+completed_at: null
 complexity: medium
 depends_on: []
 estimate_hours: 1
 id: B487
 priority: high
+started_at: "2026-03-16T08:09:14Z"
 status: pending
 tags: []
 title: 'add to background tasks as an aux system: aliases for runners. eg codex for codex using gpt-5.4, codex-spark for gpt-5.3-codex-spark, opus for claude-opus-4-6 via claude code, glm-5 for opencode using zai-coding-plan:glm-5, etc'

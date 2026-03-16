@@ -27,8 +27,8 @@ let build_slack_json ~bot_token ~signing_secret ~events_path ~allow_channels
       ("bot_token", `String bot_token);
       ("signing_secret", `String signing_secret);
       ("events_path", `String events_path);
-      ("allow_channels", `List (List.map (fun s -> `String s) allow_channels));
-      ("allow_users", `List (List.map (fun s -> `String s) allow_users));
+      ("allow_channels", Setup_common.json_string_list allow_channels);
+      ("allow_users", Setup_common.json_string_list allow_users);
       ("app_token", `String app_token);
       ("socket_mode", `Bool socket_mode);
     ]
@@ -101,10 +101,7 @@ let post_setup_instructions ~events_path ~socket_mode ~gateway_port ~tunnel_url
 (* ── Load existing config ────────────────────────────────────────── *)
 
 let load_existing () =
-  try
-    let cfg = Config_loader.load () in
-    cfg.channels.slack
-  with _ -> None
+  Setup_common.load_config_opt (fun cfg -> cfg.channels.slack)
 
 (* ── Main wizard ─────────────────────────────────────────────────── *)
 

@@ -313,6 +313,25 @@ let prompt_for_field f =
           print_error e;
           false)
 
+(* Returns Ok true if saved, Ok false if check failed, Error msg on write fail *)
+let try_save spec =
+  match spec.pre_save_check () with
+  | Error e ->
+      Setup_common.print_warning e;
+      Setup_common.press_enter_to_continue ();
+      false
+  | Ok () -> (
+      let json = spec.build_json () in
+      match Setup_common.merge_and_write_config json with
+      | Ok path ->
+          Setup_common.print_success (Printf.sprintf "Saved to %s" path);
+          true
+      | Error e ->
+          Setup_common.print_error
+            (Printf.sprintf "Failed to write config: %s" e);
+          Setup_common.press_enter_to_continue ();
+          false)
+
 let run_wizard spec =
   match Setup_common.check_tty () with
   | Error e -> e
@@ -356,49 +375,20 @@ let run_wizard spec =
                       ~prompt:"You have unsaved changes. Save before exiting?"
                       ~default:true ()
                   in
-                  if save then
-                    match spec.pre_save_check () with
-                    | Error e ->
-                        Setup_common.print_warning e;
-                        Setup_common.press_enter_to_continue ()
-                    | Ok () -> (
-                        let json = spec.build_json () in
-                        match Setup_common.merge_and_write_config json with
-                        | Ok path ->
-                            Setup_common.print_success
-                              (Printf.sprintf "Saved to %s" path);
-                            quit := true
-                        | Error e ->
-                            Setup_common.print_error
-                              (Printf.sprintf "Failed to write config: %s" e);
-                            Setup_common.press_enter_to_continue ())
+                  if save then (if try_save spec then quit := true)
                   else quit := true
                 end
                 else quit := true
             | "h" ->
                 Printf.printf "%s" (spec.post_instructions ());
                 Setup_common.press_enter_to_continue ()
-            | "s" -> (
+            | "s" ->
                 if not !dirty then (
                   Setup_common.print_warning "No changes to save.";
                   Setup_common.press_enter_to_continue ())
-                else
-                  match spec.pre_save_check () with
-                  | Error e ->
-                      Setup_common.print_warning e;
-                      Setup_common.press_enter_to_continue ()
-                  | Ok () -> (
-                      let json = spec.build_json () in
-                      match Setup_common.merge_and_write_config json with
-                      | Ok path ->
-                          Setup_common.print_success
-                            (Printf.sprintf "Saved to %s" path);
-                          dirty := false;
-                          Setup_common.press_enter_to_continue ()
-                      | Error e ->
-                          Setup_common.print_error
-                            (Printf.sprintf "Failed to write config: %s" e);
-                          Setup_common.press_enter_to_continue ()))
+                else if try_save spec then (
+                  dirty := false;
+                  Setup_common.press_enter_to_continue ())
             | _ ->
                 Setup_common.print_warning
                   (Printf.sprintf "Unknown option: %s" key);

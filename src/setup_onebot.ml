@@ -52,10 +52,8 @@ let build_onebot_json ~ws_url ~http_url ~access_token ~allow_from ~allow_groups
                   ("ws_url", `String ws_url);
                   ("http_url", `String http_url);
                   ("access_token", access_token_json);
-                  ( "allow_from",
-                    `List (List.map (fun s -> `String s) allow_from) );
-                  ( "allow_groups",
-                    `List (List.map (fun s -> `String s) allow_groups) );
+                  ("allow_from", Setup_common.json_string_list allow_from);
+                  ("allow_groups", Setup_common.json_string_list allow_groups);
                 ] );
           ] );
     ]
@@ -98,10 +96,7 @@ let post_setup_instructions =
 (* ── Load existing config ────────────────────────────────────────── *)
 
 let load_existing () =
-  try
-    let cfg = Config_loader.load () in
-    cfg.channels.onebot
-  with _ -> None
+  Setup_common.load_config_opt (fun cfg -> cfg.channels.onebot)
 
 (* ── Main wizard ─────────────────────────────────────────────────── *)
 

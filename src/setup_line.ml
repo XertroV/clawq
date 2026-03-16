@@ -21,8 +21,7 @@ let build_line_json ~channel_access_token ~channel_secret ~allow_from =
                 [
                   ("channel_access_token", `String channel_access_token);
                   ("channel_secret", `String channel_secret);
-                  ( "allow_from",
-                    `List (List.map (fun s -> `String s) allow_from) );
+                  ("allow_from", Setup_common.json_string_list allow_from);
                 ] );
           ] );
     ]
@@ -64,10 +63,7 @@ let post_setup_instructions =
 (* ── Load existing config ────────────────────────────────────────── *)
 
 let load_existing () =
-  try
-    let cfg = Config_loader.load () in
-    cfg.channels.line
-  with _ -> None
+  Setup_common.load_config_opt (fun cfg -> cfg.channels.line)
 
 (* ── Main wizard ─────────────────────────────────────────────────── *)
 

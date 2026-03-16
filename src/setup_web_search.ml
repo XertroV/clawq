@@ -35,11 +35,7 @@ let build_web_search_json ~provider ~api_key ~num_results ~base_url =
 
 (* ── Load existing config ────────────────────────────────────────── *)
 
-let load_existing () =
-  try
-    let cfg = Config_loader.load () in
-    cfg.web_search
-  with _ -> None
+let load_existing () = Setup_common.load_config_opt (fun cfg -> cfg.web_search)
 
 (* ── Run wizard ──────────────────────────────────────────────────── *)
 

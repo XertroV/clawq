@@ -62,10 +62,8 @@ let build_matrix_json ~homeserver_url ~access_token ~user_id ~allow_rooms
                   ("homeserver_url", `String homeserver_url);
                   ("access_token", `String access_token);
                   ("user_id", `String user_id);
-                  ( "allow_rooms",
-                    `List (List.map (fun s -> `String s) allow_rooms) );
-                  ( "allow_users",
-                    `List (List.map (fun s -> `String s) allow_users) );
+                  ("allow_rooms", Setup_common.json_string_list allow_rooms);
+                  ("allow_users", Setup_common.json_string_list allow_users);
                 ] );
           ] );
     ]
@@ -117,10 +115,7 @@ let post_setup_instructions =
 (* ── Load existing config ────────────────────────────────────────── *)
 
 let load_existing () =
-  try
-    let cfg = Config_loader.load () in
-    cfg.channels.matrix
-  with _ -> None
+  Setup_common.load_config_opt (fun cfg -> cfg.channels.matrix)
 
 (* ── Main wizard ─────────────────────────────────────────────────── *)
 

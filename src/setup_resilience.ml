@@ -61,10 +61,7 @@ let post_setup_instructions =
 (* ── Load existing config ────────────────────────────────────────── *)
 
 let load_existing () =
-  try
-    let cfg = Config_loader.load () in
-    Some cfg.resilience
-  with _ -> None
+  Setup_common.load_config_field (fun cfg -> cfg.resilience)
 
 (* ── Main wizard ─────────────────────────────────────────────────── *)
 

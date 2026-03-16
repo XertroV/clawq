@@ -34,9 +34,8 @@ let build_irc_json ~host ~port ~tls ~nick ~password ~sasl ~channels ~allow_from
                   ("nick", `String nick);
                   ("password", password_json);
                   ("sasl", `Bool sasl);
-                  ("channels", `List (List.map (fun s -> `String s) channels));
-                  ( "allow_from",
-                    `List (List.map (fun s -> `String s) allow_from) );
+                  ("channels", Setup_common.json_string_list channels);
+                  ("allow_from", Setup_common.json_string_list allow_from);
                 ] );
           ] );
     ]
@@ -86,10 +85,7 @@ let post_setup_instructions =
 (* ── Load existing config ────────────────────────────────────────── *)
 
 let load_existing () =
-  try
-    let cfg = Config_loader.load () in
-    cfg.channels.irc
-  with _ -> None
+  Setup_common.load_config_opt (fun cfg -> cfg.channels.irc)
 
 (* ── Main wizard ─────────────────────────────────────────────────── *)
 

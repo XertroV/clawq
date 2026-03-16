@@ -61,10 +61,8 @@ let build_mattermost_json ~url ~access_token ~team_id ~channel_ids ~allow_users
                   ("url", `String url);
                   ("access_token", `String access_token);
                   ("team_id", `String team_id);
-                  ( "channel_ids",
-                    `List (List.map (fun s -> `String s) channel_ids) );
-                  ( "allow_users",
-                    `List (List.map (fun s -> `String s) allow_users) );
+                  ("channel_ids", Setup_common.json_string_list channel_ids);
+                  ("allow_users", Setup_common.json_string_list allow_users);
                 ] );
           ] );
     ]
@@ -107,10 +105,7 @@ let post_setup_instructions =
 (* ── Load existing config ────────────────────────────────────────── *)
 
 let load_existing () =
-  try
-    let cfg = Config_loader.load () in
-    cfg.channels.mattermost
-  with _ -> None
+  Setup_common.load_config_opt (fun cfg -> cfg.channels.mattermost)
 
 (* ── Main wizard ─────────────────────────────────────────────────── *)
 

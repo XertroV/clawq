@@ -33,14 +33,11 @@ let build_error_watcher_json ~enabled ~scan_interval_s ~primary_models
           [
             ("enabled", `Bool enabled);
             ("scan_interval_s", `Float scan_interval_s);
-            ( "primary_models",
-              `List (List.map (fun s -> `String s) primary_models) );
-            ( "fallback_models",
-              `List (List.map (fun s -> `String s) fallback_models) );
+            ("primary_models", Setup_common.json_string_list primary_models);
+            ("fallback_models", Setup_common.json_string_list fallback_models);
             ("cooldown_s", `Float cooldown_s);
             ("max_errors_per_batch", `Int max_errors_per_batch);
-            ( "ignore_patterns",
-              `List (List.map (fun s -> `String s) ignore_patterns) );
+            ("ignore_patterns", Setup_common.json_string_list ignore_patterns);
             ("auto_fix_enabled", `Bool auto_fix_enabled);
             ("commit_tag", `String commit_tag);
           ] );
@@ -74,8 +71,9 @@ let post_setup_instructions =
 (* ── Load existing config ────────────────────────────────────────── *)
 
 let load_existing () =
-  try (Config_loader.load ()).error_watcher
-  with _ -> Runtime_config.default_error_watcher_config
+  Setup_common.load_config_field_or
+    ~default:Runtime_config.default_error_watcher_config (fun cfg ->
+      cfg.error_watcher)
 
 (* ── Main wizard ─────────────────────────────────────────────────── *)
 

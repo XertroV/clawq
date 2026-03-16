@@ -57,8 +57,7 @@ let build_email_json ~imap_host ~imap_port ~smtp_host ~smtp_port ~username
                   ("username", `String username);
                   ("password", `String password);
                   ("from_address", `String from_address);
-                  ( "allow_from",
-                    `List (List.map (fun s -> `String s) allow_from) );
+                  ("allow_from", Setup_common.json_string_list allow_from);
                   ("poll_interval_s", `Float poll_interval_s);
                 ] );
           ] );
@@ -114,10 +113,7 @@ let post_setup_instructions =
 (* ── Load existing config ────────────────────────────────────────── *)
 
 let load_existing () =
-  try
-    let cfg = Config_loader.load () in
-    cfg.channels.email
-  with _ -> None
+  Setup_common.load_config_opt (fun cfg -> cfg.channels.email)
 
 (* ── Main wizard ─────────────────────────────────────────────────── *)
 

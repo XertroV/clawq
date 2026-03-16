@@ -30,8 +30,8 @@ let repo_to_json (r : Runtime_config.github_repo_config) =
       ("name", `String r.name);
       ("webhook_secret", `String r.webhook_secret);
       ("webhook_path", `String r.webhook_path);
-      ("allow_users", `List (List.map (fun s -> `String s) r.allow_users));
-      ("react_to", `List (List.map (fun s -> `String s) r.react_to));
+      ("allow_users", Setup_common.json_string_list r.allow_users);
+      ("react_to", Setup_common.json_string_list r.react_to);
       ("include_pr_files", `Bool r.include_pr_files);
     ]
   in
@@ -134,10 +134,7 @@ let post_setup_instructions ~repo_name ~webhook_path ~webhook_secret
 (* ── Load existing config ────────────────────────────────────────── *)
 
 let load_existing () =
-  try
-    let cfg = Config_loader.load () in
-    cfg.channels.github
-  with _ -> None
+  Setup_common.load_config_opt (fun cfg -> cfg.channels.github)
 
 (* ── TUI drawing ─────────────────────────────────────────────────── *)
 

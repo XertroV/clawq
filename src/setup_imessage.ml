@@ -19,8 +19,7 @@ let build_imessage_json ~poll_interval_s ~allow_from =
               `Assoc
                 [
                   ("poll_interval_s", `Float poll_interval_s);
-                  ( "allow_from",
-                    `List (List.map (fun s -> `String s) allow_from) );
+                  ("allow_from", Setup_common.json_string_list allow_from);
                 ] );
           ] );
     ]
@@ -60,10 +59,7 @@ let post_setup_instructions =
 (* ── Load existing config ────────────────────────────────────────── *)
 
 let load_existing () =
-  try
-    let cfg = Config_loader.load () in
-    cfg.channels.imessage
-  with _ -> None
+  Setup_common.load_config_opt (fun cfg -> cfg.channels.imessage)
 
 (* ── Main wizard ─────────────────────────────────────────────────── *)
 

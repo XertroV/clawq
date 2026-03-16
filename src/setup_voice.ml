@@ -39,11 +39,7 @@ let build_voice_json ~stt_enabled ~tts_enabled ~tts_provider ~tts_model
 
 (* ── Load existing config ────────────────────────────────────────── *)
 
-let load_existing () =
-  try
-    let cfg = Config_loader.load () in
-    cfg.voice
-  with _ -> None
+let load_existing () = Setup_common.load_config_opt (fun cfg -> cfg.voice)
 
 (* ── Run wizard ──────────────────────────────────────────────────── *)
 

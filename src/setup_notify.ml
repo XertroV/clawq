@@ -46,7 +46,7 @@ let post_setup_instructions =
 
 (* ── Load existing config ────────────────────────────────────────── *)
 
-let load_existing () = try (Config_loader.load ()).notify with _ -> None
+let load_existing () = Setup_common.load_config_opt (fun cfg -> cfg.notify)
 
 (* ── Main wizard ─────────────────────────────────────────────────── *)
 

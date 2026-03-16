@@ -61,7 +61,7 @@ let build_security_json ~workspace_only ~audit_enabled ~tools_enabled
                   ("export_before_purge", `Bool audit_export_before_purge);
                 ] );
             ( "extra_allowed_paths",
-              `List (List.map (fun s -> `String s) extra_allowed_paths) );
+              Setup_common.json_string_list extra_allowed_paths );
           ] );
     ]
 
@@ -105,8 +105,8 @@ let post_setup_instructions =
 (* ── Load existing config ────────────────────────────────────────── *)
 
 let load_existing () =
-  try (Config_loader.load ()).security
-  with _ -> Runtime_config.default.security
+  Setup_common.load_config_field_or ~default:Runtime_config.default.security
+    (fun cfg -> cfg.security)
 
 (* ── Main wizard ─────────────────────────────────────────────────── *)
 

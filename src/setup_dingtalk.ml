@@ -42,7 +42,7 @@ let build_dingtalk_json ~app_key ~app_secret ~agent_id ~allow_from ~webhook_url
       ("app_key", `String app_key);
       ("app_secret", `String app_secret);
       ("agent_id", `String agent_id);
-      ("allow_from", `List (List.map (fun s -> `String s) allow_from));
+      ("allow_from", Setup_common.json_string_list allow_from);
     ]
   in
   let fields =
@@ -90,10 +90,7 @@ let post_setup_instructions =
 (* ── Load existing config ────────────────────────────────────────── *)
 
 let load_existing () =
-  try
-    let cfg = Config_loader.load () in
-    cfg.channels.dingtalk
-  with _ -> None
+  Setup_common.load_config_opt (fun cfg -> cfg.channels.dingtalk)
 
 (* ── Main wizard ─────────────────────────────────────────────────── *)
 

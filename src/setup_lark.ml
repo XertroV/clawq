@@ -47,8 +47,7 @@ let build_lark_json ~enabled ~app_id ~app_secret ~verification_token ~endpoint
                   ("verification_token", `String verification_token);
                   ("endpoint", `String endpoint);
                   ("mode", `String mode);
-                  ( "allow_users",
-                    `List (List.map (fun s -> `String s) allow_users) );
+                  ("allow_users", Setup_common.json_string_list allow_users);
                 ] );
           ] );
     ]
@@ -99,10 +98,7 @@ let post_setup_instructions =
 (* ── Load existing config ────────────────────────────────────────── *)
 
 let load_existing () =
-  try
-    let cfg = Config_loader.load () in
-    cfg.channels.lark
-  with _ -> None
+  Setup_common.load_config_opt (fun cfg -> cfg.channels.lark)
 
 (* ── Main wizard ─────────────────────────────────────────────────── *)
 

@@ -293,3 +293,15 @@ let parse_csv_list ?(default_star = true) s =
     |> List.filter (fun s -> s <> "")
   in
   if items = [] && default_star then [ "*" ] else items
+
+(* ── JSON helpers ──────────────────────────────────────────────── *)
+
+let json_string_list lst = `List (List.map (fun s -> `String s) lst)
+
+(* ── Config loading helpers ────────────────────────────────────── *)
+
+let load_config_opt f = try f (Config_loader.load ()) with _ -> None
+let load_config_field f = try Some (f (Config_loader.load ())) with _ -> None
+
+let load_config_field_or ~default f =
+  try f (Config_loader.load ()) with _ -> default

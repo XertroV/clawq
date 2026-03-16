@@ -55,7 +55,7 @@ let build_summarizer_json ~(sc : Runtime_config.summarizer_config) =
       ("p1_max_chars", `Int sc.p1_max_chars);
       ("p2_max_chars", `Int sc.p2_max_chars);
       ("context_window_messages", `Int sc.context_window_messages);
-      ("excluded_tools", `List (List.map (fun s -> `String s) sc.excluded_tools));
+      ("excluded_tools", Setup_common.json_string_list sc.excluded_tools);
       ("max_age_days", `Int sc.max_age_days);
       ( "envelope_template",
         match sc.envelope_template with None -> `Null | Some t -> `String t );
@@ -103,10 +103,9 @@ let post_setup_instructions ~(sc : Runtime_config.summarizer_config) =
 (* ── Load existing config ────────────────────────────────────────── *)
 
 let load_existing () =
-  try
-    let cfg = Config_loader.load () in
-    cfg.summarizer
-  with _ -> Runtime_config.default_summarizer_config
+  Setup_common.load_config_field_or
+    ~default:Runtime_config.default_summarizer_config (fun cfg ->
+      cfg.summarizer)
 
 (* ── Main wizard ─────────────────────────────────────────────────── *)
 

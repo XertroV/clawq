@@ -91,10 +91,8 @@ let post_setup_instructions ~(tc : Runtime_config.tunnel_config) ~gateway_port =
 (* ── Load existing config ────────────────────────────────────────── *)
 
 let load_existing () =
-  try
-    let cfg = Config_loader.load () in
-    cfg.tunnel
-  with _ -> Runtime_config.default.tunnel
+  Setup_common.load_config_field_or ~default:Runtime_config.default.tunnel
+    (fun cfg -> cfg.tunnel)
 
 (* ── Main wizard ─────────────────────────────────────────────────── *)
 

@@ -66,11 +66,7 @@ let post_setup_instructions =
 
 (* ── Load existing config ────────────────────────────────────────── *)
 
-let load_existing () =
-  try
-    let cfg = Config_loader.load () in
-    Some cfg.memory
-  with _ -> None
+let load_existing () = Setup_common.load_config_field (fun cfg -> cfg.memory)
 
 (* ── Main wizard ─────────────────────────────────────────────────── *)
 
