@@ -214,7 +214,7 @@ ideas:
       file: I025-add-support-for-agents-synthes.todo
       id: I025
       priority: medium
-      status: in_progress
+      status: done
       tags: []
       title: Add support for agents -- synthesize agent templates using reference projects (opencode, codex, etc in ~/src/ or ~/src/pag-server/ref-projects/), search online for best templates for planning, coding, etc, use the relevant `better-*` skills, and add these as builtins. We need to support user-supplied agent templates too.
     - file: I026-pair-coding-use-agents-support.todo
