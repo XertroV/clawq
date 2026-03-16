@@ -1,14 +1,15 @@
 ---
 claimed_at: "2026-03-16T02:21:09Z"
 claimed_by: cli-user
-completed_at: null
+completed_at: "2026-03-16T02:31:30Z"
 complexity: medium
 depends_on: []
+duration_minutes: 10.352723259983334
 estimate_hours: 1
 id: B505
 priority: high
 started_at: "2026-03-16T02:21:09Z"
-status: in_progress
+status: done
 tags: []
 title: fix tests (failing in docker at least)
 ---

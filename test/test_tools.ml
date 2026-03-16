@@ -1484,9 +1484,9 @@ let test_shell_exec_saves_full_output_when_truncated () =
           ~allowed_commands:[] ~extra_allowed_paths:[] ~sandbox
       in
       let long_text = String.make 25050 'x' in
-      let py = Printf.sprintf "python - <<'PY'\nprint(%S)\nPY" long_text in
+      let cmd = "head -c 25050 /dev/zero | tr '\\0' 'x'; echo" in
       let result =
-        Lwt_main.run (tool.Tool.invoke (`Assoc [ ("command", `String py) ]))
+        Lwt_main.run (tool.Tool.invoke (`Assoc [ ("command", `String cmd) ]))
       in
       Alcotest.(check bool)
         "mentions saved stdout path" true

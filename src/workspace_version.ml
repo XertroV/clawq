@@ -49,10 +49,12 @@ let rec list_files_recursive ~base ~prefix =
 let write_meta ~version_path ~workspace ~files =
   let t = Unix.gettimeofday () in
   let tm = Unix.localtime t in
+  let frac = t -. floor t in
+  let millis = int_of_float (frac *. 1000.0) in
   let timestamp =
-    Printf.sprintf "%04d-%02d-%02dT%02d:%02d:%02d" (tm.Unix.tm_year + 1900)
+    Printf.sprintf "%04d-%02d-%02dT%02d:%02d:%02d.%03d" (tm.Unix.tm_year + 1900)
       (tm.Unix.tm_mon + 1) tm.Unix.tm_mday tm.Unix.tm_hour tm.Unix.tm_min
-      tm.Unix.tm_sec
+      tm.Unix.tm_sec millis
   in
   let json =
     `Assoc

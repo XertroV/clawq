@@ -1,7 +1,8 @@
 FROM ocaml/opam:ubuntu-24.04-ocaml-5.1
 
 RUN sudo apt-get update && \
-    sudo apt-get install -y libsqlite3-dev libgmp-dev pkg-config && \
+    sudo apt-get install -y libsqlite3-dev libgmp-dev pkg-config python3 && \
+    sudo ln -sf /usr/bin/python3 /usr/bin/python && \
     sudo rm -rf /var/lib/apt/lists/*
 
 WORKDIR /home/opam/clawq

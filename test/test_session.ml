@@ -3552,9 +3552,14 @@ let test_runtime_context_block_ignores_prompt_toggles () =
   Alcotest.(check bool)
     "includes workspace" true
     (string_contains output "Effective workspace:");
-  Alcotest.(check bool)
-    "includes git field" true
-    (string_contains output "Git branch:");
+  (* Git fields only appear when running inside a git repo *)
+  (match Prompt_builder.find_git_root_and_dir (Sys.getcwd ()) with
+  | Some _ ->
+      Alcotest.(check bool)
+        "includes git field" true
+        (string_contains output "Git branch:"
+        || string_contains output "Git repo root:")
+  | None -> ());
   Alcotest.(check bool)
     "includes timezone" true
     (string_contains output "Local timezone:");
