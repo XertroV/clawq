@@ -167,7 +167,7 @@ let run () =
   in
   let spec : Setup_tui.wizard_spec =
     {
-      title = "Discord Bot Configuration";
+      title = " Discord Bot Configuration ";
       docs_url = "https://clawq.org/channels/#discord";
       fields = [ bot_token; allow_guilds; allow_users; intents_field ];
       extra_actions =

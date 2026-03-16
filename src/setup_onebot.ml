@@ -193,7 +193,7 @@ let run () =
   in
   let spec =
     {
-      Setup_tui.title = "OneBot Channel Configuration";
+      Setup_tui.title = " OneBot Channel Configuration ";
       docs_url = "https://clawq.org/channels/#onebot";
       fields;
       extra_actions = [];

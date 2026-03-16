@@ -19,32 +19,21 @@ let validate_agent_id s =
           ID in DingTalk Open Platform > App capabilities > Robot."
          trimmed)
 
-let validate_non_empty label hint s =
-  let trimmed = String.trim s in
-  if trimmed = "" then
-    Error (Printf.sprintf "%s cannot be empty. %s" label hint)
-  else Ok trimmed
-
 let validate_app_key s =
-  validate_non_empty "App key"
-    "Find it in DingTalk Open Platform > your app > Credentials and Basic Info."
+  Setup_common.validate_non_empty ~what:"App key"
+    ~hint:
+      "Find it in DingTalk Open Platform > your app > Credentials and Basic \
+       Info."
     s
 
 let validate_app_secret s =
-  validate_non_empty "App secret"
-    "Find it in DingTalk Open Platform > your app > Credentials and Basic Info."
+  Setup_common.validate_non_empty ~what:"App secret"
+    ~hint:
+      "Find it in DingTalk Open Platform > your app > Credentials and Basic \
+       Info."
     s
 
-let validate_webhook_url s =
-  let trimmed = String.trim s in
-  if trimmed = "" then Ok ""
-  else if
-    (String.length trimmed >= 7 && String.sub trimmed 0 7 = "http://")
-    || (String.length trimmed >= 8 && String.sub trimmed 0 8 = "https://")
-  then Ok trimmed
-  else
-    Error
-      "Webhook URL must start with http:// or https://, or leave empty to skip."
+let validate_webhook_url = Setup_common.validate_url
 
 let build_dingtalk_json ~app_key ~app_secret ~agent_id ~allow_from ~webhook_url
     =

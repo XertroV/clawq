@@ -112,7 +112,7 @@ let run () =
   in
   let generate_secret () =
     let secret = generate_totp_secret () in
-    totp_secret.value := secret;
+    Setup_tui.set_str totp_secret secret;
     Setup_common.print_success
       (Printf.sprintf "Generated TOTP secret: %s" secret);
     Printf.printf "  %s\n"

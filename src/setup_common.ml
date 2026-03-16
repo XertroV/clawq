@@ -252,9 +252,11 @@ let validate_positive_int s =
   | Some _ -> Error "Value must be a positive integer."
   | None -> Error "Value must be a valid integer."
 
-let validate_non_empty ~what s =
+let validate_non_empty ~what ?hint s =
   let trimmed = String.trim s in
-  if trimmed = "" then Error (Printf.sprintf "%s cannot be empty." what)
+  if trimmed = "" then
+    let msg = Printf.sprintf "%s cannot be empty." what in
+    Error (match hint with Some h -> msg ^ " " ^ h | None -> msg)
   else Ok trimmed
 
 let validate_url s =
@@ -266,6 +268,24 @@ let validate_url s =
        || (String.length trimmed >= 8 && String.sub trimmed 0 8 = "https://"))
   then Ok trimmed
   else Error "URL must be empty or start with http:// or https://"
+
+let validate_model_canonical s =
+  let trimmed = String.trim s in
+  if trimmed = "" then Error "Model must not be empty."
+  else
+    match Pmodel.parse trimmed with
+    | Ok m -> Ok (Pmodel.to_string m)
+    | Error msg -> Error msg
+
+let get_gateway_and_tunnel_url () =
+  let cfg = try Config_loader.load () with _ -> Runtime_config.default in
+  let gateway_port = cfg.gateway.port in
+  let tunnel_url =
+    if cfg.tunnel.enabled && String.trim cfg.tunnel.url <> "" then
+      Some cfg.tunnel.url
+    else None
+  in
+  (gateway_port, tunnel_url)
 
 let parse_csv_list ?(default_star = true) s =
   let items =

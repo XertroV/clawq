@@ -2,23 +2,6 @@
 
 (* ── Pure validation / builder functions (tested) ────────────────── *)
 
-let validate_port s =
-  let trimmed = String.trim s in
-  match int_of_string_opt trimmed with
-  | None ->
-      Error
-        (Printf.sprintf
-           "Port must be a valid integer, got: %s. IMAP default: 993, SMTP \
-            default: 587."
-           trimmed)
-  | Some n when n < 1 || n > 65535 ->
-      Error
-        (Printf.sprintf
-           "Port must be between 1 and 65535, got %d. IMAP default: 993, SMTP \
-            default: 587."
-           n)
-  | Some _ -> Ok trimmed
-
 let validate_email s =
   let trimmed = String.trim s in
   if trimmed = "" then
@@ -157,7 +140,7 @@ let run () =
       ~description:
         "IMAP server port. Default: 993 (TLS). Use 143 for STARTTLS (not \
          recommended)."
-      ~validate:validate_port
+      ~validate:Setup_common.validate_port
       ~default:
         (match existing with
         | Some e -> e.Runtime_config.imap_port
@@ -180,7 +163,7 @@ let run () =
       ~menu_label:"Set SMTP port"
       ~description:
         "SMTP server port. Default: 587 (STARTTLS). Some servers use 465 (TLS)."
-      ~validate:validate_port
+      ~validate:Setup_common.validate_port
       ~default:
         (match existing with
         | Some e -> e.Runtime_config.smtp_port
@@ -285,7 +268,7 @@ let run () =
   in
   let spec =
     {
-      Setup_tui.title = "Email Channel Configuration";
+      Setup_tui.title = " Email Channel Configuration ";
       docs_url = "https://clawq.org/channels/#email";
       fields;
       extra_actions = [];

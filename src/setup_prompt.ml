@@ -2,12 +2,6 @@
 
 (* ── Pure validation / builder functions (tested) ────────────────── *)
 
-let validate_positive_int s =
-  match int_of_string_opt s with
-  | Some v when v > 0 -> Ok s
-  | Some _ -> Error "Value must be a positive integer."
-  | None -> Error "Value must be a valid integer."
-
 let build_prompt_json ~dynamic_enabled ~include_tools_section
     ~include_safety_section ~include_workspace_section ~include_runtime_section
     ~include_datetime_section ~include_autonomy_section ~workspace_files
@@ -134,7 +128,7 @@ let run () =
     Setup_tui.make_int_field ~key:"mf" ~label:"Max chars/file"
       ~menu_label:"Set max chars per workspace file"
       ~description:"Maximum characters read from each workspace file."
-      ~validate:validate_positive_int
+      ~validate:Setup_common.validate_positive_int
       ~default:(get_p (fun c -> c.Runtime_config.max_workspace_file_chars))
       ()
   in
@@ -142,7 +136,7 @@ let run () =
     Setup_tui.make_int_field ~key:"mt" ~label:"Max total workspace chars"
       ~menu_label:"Set max total workspace chars"
       ~description:"Maximum total characters across all workspace files."
-      ~validate:validate_positive_int
+      ~validate:Setup_common.validate_positive_int
       ~default:(get_p (fun c -> c.Runtime_config.max_workspace_total_chars))
       ()
   in

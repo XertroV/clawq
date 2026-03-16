@@ -17,22 +17,18 @@ let validate_app_id s =
           Console > Credentials & Basic Info."
          trimmed)
 
-let validate_non_empty label hint s =
-  let trimmed = String.trim s in
-  if trimmed = "" then
-    Error (Printf.sprintf "%s cannot be empty. %s" label hint)
-  else Ok trimmed
-
 let validate_app_secret s =
-  validate_non_empty "App Secret"
-    "Find it in Feishu/Lark Developer Console > your app > Credentials & Basic \
-     Info."
+  Setup_common.validate_non_empty ~what:"App Secret"
+    ~hint:
+      "Find it in Feishu/Lark Developer Console > your app > Credentials & \
+       Basic Info."
     s
 
 let validate_verification_token s =
-  validate_non_empty "Verification Token"
-    "Find it in Feishu/Lark Developer Console > your app > Event Subscriptions \
-     (after setting the Request URL)."
+  Setup_common.validate_non_empty ~what:"Verification Token"
+    ~hint:
+      "Find it in Feishu/Lark Developer Console > your app > Event \
+       Subscriptions (after setting the Request URL)."
     s
 
 let build_lark_json ~enabled ~app_id ~app_secret ~verification_token ~endpoint
@@ -225,7 +221,7 @@ let run () =
   in
   let spec =
     {
-      Setup_tui.title = "Lark (Feishu) Channel Configuration";
+      Setup_tui.title = " Lark (Feishu) Channel Configuration ";
       docs_url = "https://clawq.org/channels/#lark";
       fields;
       extra_actions = [];

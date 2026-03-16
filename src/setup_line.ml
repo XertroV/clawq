@@ -2,18 +2,13 @@
 
 (* ── Pure validation / builder functions (tested) ────────────────── *)
 
-let validate_non_empty label s =
-  let trimmed = String.trim s in
-  if trimmed = "" then
-    Error
-      (Printf.sprintf
-         "%s cannot be empty. Find it in the LINE Developers console." label)
-  else Ok trimmed
-
 let validate_channel_access_token s =
-  validate_non_empty "Channel access token" s
+  Setup_common.validate_non_empty ~what:"Channel access token"
+    ~hint:"Find it in the LINE Developers console." s
 
-let validate_channel_secret s = validate_non_empty "Channel secret" s
+let validate_channel_secret s =
+  Setup_common.validate_non_empty ~what:"Channel secret"
+    ~hint:"Find it in the LINE Developers console." s
 
 let build_line_json ~channel_access_token ~channel_secret ~allow_from =
   `Assoc

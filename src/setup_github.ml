@@ -373,13 +373,7 @@ let edit_repo_at ~repos ~idx =
 
 let show_repo_instructions repos idx =
   let (r : Runtime_config.github_repo_config) = List.nth !repos (idx - 1) in
-  let cfg = try Config_loader.load () with _ -> Runtime_config.default in
-  let gateway_port = cfg.gateway.port in
-  let tunnel_url =
-    if cfg.tunnel.enabled && String.trim cfg.tunnel.url <> "" then
-      Some cfg.tunnel.url
-    else None
-  in
+  let gateway_port, tunnel_url = Setup_common.get_gateway_and_tunnel_url () in
   let instructions =
     post_setup_instructions ~repo_name:r.name ~webhook_path:r.webhook_path
       ~webhook_secret:r.webhook_secret ~gateway_port ~tunnel_url

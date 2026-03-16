@@ -89,18 +89,6 @@ let validate_threshold_chars_high_warning () =
   | Ok (_, None) -> Alcotest.fail "expected warning for high value"
   | _ -> Alcotest.fail "unexpected result"
 
-(* ── validate_p1/p2 cross-validation ─────────────────────────────── *)
-
-let validate_p1_must_exceed_p2 () =
-  match Setup_summarizer.validate_p1_max_chars ~p2_max:12000 "5000" with
-  | Error _ -> ()
-  | Ok _ -> Alcotest.fail "expected error: p1 <= p2"
-
-let validate_p2_must_be_less_than_p1 () =
-  match Setup_summarizer.validate_p2_max_chars ~p1_max:200000 "300000" with
-  | Error _ -> ()
-  | Ok _ -> Alcotest.fail "expected error: p2 >= p1"
-
 (* ── build_json roundtrip ────────────────────────────────────────── *)
 
 let build_json_roundtrip () =
@@ -247,10 +235,6 @@ let suite =
       validate_threshold_chars_low_warning;
     Alcotest.test_case "validate_threshold_chars high warning" `Quick
       validate_threshold_chars_high_warning;
-    Alcotest.test_case "validate_p1 must exceed p2" `Quick
-      validate_p1_must_exceed_p2;
-    Alcotest.test_case "validate_p2 must be less than p1" `Quick
-      validate_p2_must_be_less_than_p1;
     Alcotest.test_case "build_json roundtrip" `Quick build_json_roundtrip;
     Alcotest.test_case "build_json defaults" `Quick build_json_defaults;
     Alcotest.test_case "build_json merge existing" `Quick

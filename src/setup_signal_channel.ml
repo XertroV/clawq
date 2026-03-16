@@ -6,14 +6,7 @@
 let validate_url s =
   let trimmed = String.trim s in
   if trimmed = "" then Error "Base URL cannot be empty."
-  else if
-    (String.length trimmed >= 7 && String.sub trimmed 0 7 = "http://")
-    || (String.length trimmed >= 8 && String.sub trimmed 0 8 = "https://")
-  then Ok trimmed
-  else
-    Error
-      (Printf.sprintf "Base URL must start with http:// or https://. Got: %s"
-         trimmed)
+  else Setup_common.validate_url trimmed
 
 let validate_max_chunk_bytes s =
   let trimmed = String.trim s in
@@ -165,7 +158,7 @@ let run () =
   in
   let spec : Setup_tui.wizard_spec =
     {
-      title = "Signal Channel Configuration";
+      title = " Signal Channel Configuration ";
       docs_url = "https://clawq.org/channels/#signal";
       fields = [ base_url; account; api_mode; allow_from; max_chunk_bytes ];
       extra_actions = [];

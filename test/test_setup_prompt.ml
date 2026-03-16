@@ -3,20 +3,20 @@
 let validate_positive_int_valid () =
   Alcotest.(check (result string string))
     "valid int 8000" (Ok "8000")
-    (Setup_prompt.validate_positive_int "8000")
+    (Setup_common.validate_positive_int "8000")
 
 let validate_positive_int_zero () =
-  match Setup_prompt.validate_positive_int "0" with
+  match Setup_common.validate_positive_int "0" with
   | Error _ -> ()
   | Ok _ -> Alcotest.fail "expected error for zero"
 
 let validate_positive_int_negative () =
-  match Setup_prompt.validate_positive_int "-1" with
+  match Setup_common.validate_positive_int "-1" with
   | Error _ -> ()
   | Ok _ -> Alcotest.fail "expected error for negative"
 
 let validate_positive_int_non_int () =
-  match Setup_prompt.validate_positive_int "abc" with
+  match Setup_common.validate_positive_int "abc" with
   | Error _ -> ()
   | Ok _ -> Alcotest.fail "expected error for non-integer"
 

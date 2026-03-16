@@ -2,15 +2,8 @@
 
 (* ── Pure validation / builder functions (tested) ────────────────── *)
 
-let validate_model s =
-  if String.trim s = "" then Error "Model must not be empty."
-  else match Pmodel.parse s with Ok _ -> Ok s | Error msg -> Error msg
-
-let validate_positive_int s =
-  match int_of_string_opt s with
-  | Some v when v > 0 -> Ok s
-  | Some _ -> Error "Value must be a positive integer."
-  | None -> Error "Value must be a valid integer."
+let validate_model = Setup_common.validate_model_canonical
+let validate_positive_int = Setup_common.validate_positive_int
 
 let build_observer_json ~enabled ~model ~check_every_n_messages ~round1_window
     ~round2_window ~thinking_token_threshold ~consecutive_errors_threshold

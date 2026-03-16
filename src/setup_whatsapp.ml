@@ -18,11 +18,6 @@ let validate_phone_number_id s =
           Developer Console > WhatsApp > Getting Started."
          trimmed)
 
-let validate_non_empty label s =
-  let trimmed = String.trim s in
-  if trimmed = "" then Error (Printf.sprintf "%s cannot be empty." label)
-  else Ok trimmed
-
 let validate_access_token s =
   let trimmed = String.trim s in
   if trimmed = "" then
@@ -169,7 +164,7 @@ let run () =
   in
   let spec : Setup_tui.wizard_spec =
     {
-      title = "WhatsApp Channel Configuration";
+      title = " WhatsApp Channel Configuration ";
       docs_url = "https://clawq.org/channels/#whatsapp";
       fields = [ phone_number_id; access_token; verify_token; allow_from ];
       extra_actions = [];

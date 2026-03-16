@@ -22,16 +22,11 @@ let validate_url s =
       "URL must start with http:// or https:// (e.g. \
        https://mattermost.example.com)"
 
-let validate_non_empty_field label hint s =
-  let trimmed = String.trim s in
-  if trimmed = "" then
-    Error (Printf.sprintf "%s cannot be empty. %s" label hint)
-  else Ok trimmed
-
 let validate_access_token s =
-  validate_non_empty_field "Access token"
-    "Create a personal access token in Mattermost: Account Settings > Security \
-     > Personal Access Tokens."
+  Setup_common.validate_non_empty ~what:"Access token"
+    ~hint:
+      "Create a personal access token in Mattermost: Account Settings > \
+       Security > Personal Access Tokens."
     s
 
 let validate_team_id s =

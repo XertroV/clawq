@@ -170,20 +170,14 @@ let run () =
       ()
   in
   let live_instructions () =
-    let cfg = try Config_loader.load () with _ -> Runtime_config.default in
-    let gateway_port = cfg.gateway.port in
-    let tunnel_url =
-      if cfg.tunnel.enabled && String.trim cfg.tunnel.url <> "" then
-        Some cfg.tunnel.url
-      else None
-    in
+    let gateway_port, tunnel_url = Setup_common.get_gateway_and_tunnel_url () in
     post_setup_instructions
       ~webhook_path:(Setup_tui.get_str webhook_path)
       ~gateway_port ~tunnel_url
   in
   let spec : Setup_tui.wizard_spec =
     {
-      title = "MS Teams Bot Configuration";
+      title = " MS Teams Bot Configuration ";
       docs_url = "https://clawq.org/channels/#ms-teams";
       fields =
         [

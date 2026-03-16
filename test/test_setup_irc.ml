@@ -3,30 +3,30 @@
 let validate_port_valid () =
   Alcotest.(check (result string string))
     "valid port" (Ok "6697")
-    (Setup_irc.validate_port "6697")
+    (Setup_common.validate_port "6697")
 
 let validate_port_min () =
   Alcotest.(check (result string string))
     "min port" (Ok "1")
-    (Setup_irc.validate_port "1")
+    (Setup_common.validate_port "1")
 
 let validate_port_max () =
   Alcotest.(check (result string string))
     "max port" (Ok "65535")
-    (Setup_irc.validate_port "65535")
+    (Setup_common.validate_port "65535")
 
 let validate_port_zero () =
-  match Setup_irc.validate_port "0" with
+  match Setup_common.validate_port "0" with
   | Error _ -> ()
   | Ok _ -> Alcotest.fail "expected error for port 0"
 
 let validate_port_too_large () =
-  match Setup_irc.validate_port "65536" with
+  match Setup_common.validate_port "65536" with
   | Error _ -> ()
   | Ok _ -> Alcotest.fail "expected error for port > 65535"
 
 let validate_port_not_int () =
-  match Setup_irc.validate_port "abc" with
+  match Setup_common.validate_port "abc" with
   | Error _ -> ()
   | Ok _ -> Alcotest.fail "expected error for non-integer port"
 

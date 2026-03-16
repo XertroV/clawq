@@ -170,13 +170,7 @@ let run () =
       ~default:d.socket_mode ()
   in
   let live_instructions () =
-    let rcfg = try Config_loader.load () with _ -> Runtime_config.default in
-    let gateway_port = rcfg.gateway.port in
-    let tunnel_url =
-      if rcfg.tunnel.enabled && String.trim rcfg.tunnel.url <> "" then
-        Some rcfg.tunnel.url
-      else None
-    in
+    let gateway_port, tunnel_url = Setup_common.get_gateway_and_tunnel_url () in
     post_setup_instructions
       ~events_path:(Setup_tui.get_str events_path)
       ~socket_mode:(Setup_tui.get_bool socket_mode)
@@ -184,7 +178,7 @@ let run () =
   in
   let spec : Setup_tui.wizard_spec =
     {
-      title = "Slack Configuration";
+      title = " Slack Configuration ";
       docs_url = "https://clawq.org/channels/#slack";
       fields =
         [

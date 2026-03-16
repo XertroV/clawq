@@ -2,23 +2,6 @@
 
 (* ── Pure validation / builder functions (tested) ────────────────── *)
 
-let validate_port s =
-  let trimmed = String.trim s in
-  match int_of_string_opt trimmed with
-  | None ->
-      Error
-        (Printf.sprintf
-           "Port must be a valid integer, got: %s. Use 6697 for TLS or 6667 \
-            for plaintext."
-           trimmed)
-  | Some n when n < 1 || n > 65535 ->
-      Error
-        (Printf.sprintf
-           "Port must be between 1 and 65535, got %d. Use 6697 for TLS or 6667 \
-            for plaintext."
-           n)
-  | Some _ -> Ok trimmed
-
 let validate_nick s =
   let trimmed = String.trim s in
   if trimmed = "" then
@@ -124,7 +107,7 @@ let run () =
     Setup_tui.make_int_field ~key:"p" ~label:"Port" ~menu_label:"Set IRC port"
       ~description:
         "IRC server port. 6697 for TLS (recommended), 6667 for plaintext."
-      ~validate:validate_port
+      ~validate:Setup_common.validate_port
       ~default:
         (match existing with Some c -> c.Runtime_config.port | None -> 6697)
       ()
@@ -220,7 +203,7 @@ let run () =
   in
   let spec =
     {
-      Setup_tui.title = "IRC Channel Configuration";
+      Setup_tui.title = " IRC Channel Configuration ";
       docs_url = "https://clawq.org/channels/#irc";
       fields;
       extra_actions = [];

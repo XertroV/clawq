@@ -140,6 +140,28 @@ let prompt_add_provider () =
   in
   (name, api_key, base_url, default_model)
 
+(* ── Save helper ─────────────────────────────────────────────────── *)
+
+let save_providers providers =
+  let json =
+    List.fold_left
+      (fun acc (name, (pc : Runtime_config.provider_config)) ->
+        let j =
+          build_provider_json ~name ~api_key:pc.api_key
+            ~base_url:(Option.value ~default:"" pc.base_url)
+            ~default_model:(Option.value ~default:"" pc.default_model)
+        in
+        Setup_common.deep_merge_json acc j)
+      (`Assoc []) providers
+  in
+  match Setup_common.merge_and_write_config json with
+  | Ok path ->
+      Setup_common.print_success (Printf.sprintf "Saved to %s" path);
+      true
+  | Error e ->
+      Setup_common.print_error (Printf.sprintf "Failed to write config: %s" e);
+      false
+
 (* ── Main menu loop ──────────────────────────────────────────────── *)
 
 let run () =
@@ -172,25 +194,7 @@ let run () =
                   ~default:true ()
               in
               if save then begin
-                let json =
-                  List.fold_left
-                    (fun acc (name, (pc : Runtime_config.provider_config)) ->
-                      let j =
-                        build_provider_json ~name ~api_key:pc.api_key
-                          ~base_url:(Option.value ~default:"" pc.base_url)
-                          ~default_model:
-                            (Option.value ~default:"" pc.default_model)
-                      in
-                      Setup_common.deep_merge_json acc j)
-                    (`Assoc []) !providers
-                in
-                (match Setup_common.merge_and_write_config json with
-                | Ok path ->
-                    Setup_common.print_success
-                      (Printf.sprintf "Saved to %s" path)
-                | Error e ->
-                    Setup_common.print_error
-                      (Printf.sprintf "Failed to write config: %s" e));
+                ignore (save_providers !providers);
                 quit := true
               end
               else quit := true
@@ -261,24 +265,7 @@ let run () =
             Printf.printf "%s" post_setup_instructions;
             Setup_common.press_enter_to_continue ()
         | "s" when !dirty ->
-            let json =
-              List.fold_left
-                (fun acc (name, (pc : Runtime_config.provider_config)) ->
-                  let j =
-                    build_provider_json ~name ~api_key:pc.api_key
-                      ~base_url:(Option.value ~default:"" pc.base_url)
-                      ~default_model:(Option.value ~default:"" pc.default_model)
-                  in
-                  Setup_common.deep_merge_json acc j)
-                (`Assoc []) !providers
-            in
-            (match Setup_common.merge_and_write_config json with
-            | Ok path ->
-                Setup_common.print_success (Printf.sprintf "Saved to %s" path);
-                dirty := false
-            | Error e ->
-                Setup_common.print_error
-                  (Printf.sprintf "Failed to write config: %s" e));
+            if save_providers !providers then dirty := false;
             Setup_common.press_enter_to_continue ()
         | s ->
             Setup_common.print_warning (Printf.sprintf "Unknown option: %s" s);

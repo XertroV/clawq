@@ -84,11 +84,11 @@ let run () =
   (* Load existing values *)
   (match load_existing () with
   | Some ws -> (
-      provider_field.value := ws.search_provider;
-      api_key_field.value := ws.search_api_key;
-      num_results_field.value := string_of_int ws.num_results;
+      Setup_tui.set_str provider_field ws.search_provider;
+      Setup_tui.set_str api_key_field ws.search_api_key;
+      Setup_tui.set_int num_results_field ws.num_results;
       match ws.search_base_url with
-      | Some u -> base_url_field.value := u
+      | Some u -> Setup_tui.set_str base_url_field u
       | None -> ())
   | None -> ());
   let spec : Setup_tui.wizard_spec =

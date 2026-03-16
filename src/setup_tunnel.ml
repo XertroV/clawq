@@ -159,7 +159,7 @@ let run () =
   in
   let spec : Setup_tui.wizard_spec =
     {
-      title = "Cloudflare Tunnel Configuration";
+      title = " Cloudflare Tunnel Configuration ";
       docs_url = "https://clawq.org/configuration/#tunnel";
       fields = [ enabled; provider; url; managed; tunnel_name; config_dir ];
       extra_actions = [];

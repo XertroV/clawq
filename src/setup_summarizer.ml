@@ -40,22 +40,6 @@ let validate_threshold_chars s =
       in
       Ok (n, warning)
 
-let validate_p1_max_chars ~p2_max s =
-  match validate_positive_int s with
-  | Error _ as err -> err
-  | Ok n when n <= p2_max ->
-      Error
-        (Printf.sprintf "P1 max (%d) must be greater than P2 max (%d)." n p2_max)
-  | Ok n -> Ok n
-
-let validate_p2_max_chars ~p1_max s =
-  match validate_positive_int s with
-  | Error _ as err -> err
-  | Ok n when n >= p1_max ->
-      Error
-        (Printf.sprintf "P2 max (%d) must be less than P1 max (%d)." n p1_max)
-  | Ok n -> Ok n
-
 (* ── JSON builder ────────────────────────────────────────────────── *)
 
 let build_summarizer_json ~(sc : Runtime_config.summarizer_config) =
@@ -185,9 +169,7 @@ let run () =
       ~description:
         "Maximum characters for the primary (detailed) summary. Must be > P2 \
          max."
-      ~validate:(fun s ->
-        match validate_positive_int s with Ok _ -> Ok s | Error e -> Error e)
-      ~default:d.p1_max_chars ()
+      ~validate:Setup_common.validate_positive_int ~default:d.p1_max_chars ()
   in
   let p2_max_chars =
     Setup_tui.make_int_field ~key:"2" ~label:"P2 Max (chars)"
@@ -195,9 +177,7 @@ let run () =
       ~description:
         "Maximum characters for the secondary (compact) summary. Must be < P1 \
          max."
-      ~validate:(fun s ->
-        match validate_positive_int s with Ok _ -> Ok s | Error e -> Error e)
-      ~default:d.p2_max_chars ()
+      ~validate:Setup_common.validate_positive_int ~default:d.p2_max_chars ()
   in
   let context_window =
     Setup_tui.make_int_field ~key:"c" ~label:"Context Window (messages)"
@@ -214,9 +194,7 @@ let run () =
     Setup_tui.make_int_field ~key:"d" ~label:"Max Age (days)"
       ~menu_label:"Set max age days"
       ~description:"Maximum age in days for stored summaries."
-      ~validate:(fun s ->
-        match validate_positive_int s with Ok _ -> Ok s | Error e -> Error e)
-      ~default:d.max_age_days ()
+      ~validate:Setup_common.validate_positive_int ~default:d.max_age_days ()
   in
   let add_excluded_tool () =
     let rec get_tool () =
@@ -344,7 +322,7 @@ let run () =
   in
   let spec : Setup_tui.wizard_spec =
     {
-      title = "Autosummarizer Configuration";
+      title = " Autosummarizer Configuration ";
       docs_url = "https://clawq.org/configuration/#summarizer";
       fields =
         [

@@ -19,10 +19,6 @@ let validate_relay s =
           wss://relay.damus.io"
          trimmed)
 
-let validate_non_empty s =
-  let trimmed = String.trim s in
-  if trimmed = "" then Error "Value cannot be empty." else Ok trimmed
-
 let validate_private_key s =
   let trimmed = String.trim s in
   if trimmed = "" then
@@ -43,7 +39,6 @@ let validate_pubkey s =
   else Ok trimmed
 
 let validate_relays_list s =
-  (* Validate comma-separated relay URLs *)
   if String.trim s = "" then Error "At least one relay URL is required."
   else
     let relays =
@@ -52,10 +47,7 @@ let validate_relays_list s =
     in
     let invalid =
       List.filter
-        (fun r ->
-          not
-            ((String.length r >= 6 && String.sub r 0 6 = "wss://")
-            || (String.length r >= 5 && String.sub r 0 5 = "ws://")))
+        (fun r -> match validate_relay r with Error _ -> true | Ok _ -> false)
         relays
     in
     match invalid with
@@ -224,7 +216,7 @@ let run () =
   in
   let spec =
     {
-      Setup_tui.title = "Nostr Channel Configuration";
+      Setup_tui.title = " Nostr Channel Configuration ";
       docs_url = "https://clawq.org/channels/#nostr";
       fields;
       extra_actions = [];

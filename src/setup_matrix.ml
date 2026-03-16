@@ -216,7 +216,7 @@ let run () =
   in
   let spec =
     {
-      Setup_tui.title = "Matrix Channel Configuration";
+      Setup_tui.title = " Matrix Channel Configuration ";
       docs_url = "https://clawq.org/channels/#matrix";
       fields;
       extra_actions = [];

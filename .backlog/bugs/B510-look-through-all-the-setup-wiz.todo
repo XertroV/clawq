@@ -1,14 +1,15 @@
 ---
 claimed_at: "2026-03-16T07:08:12Z"
 claimed_by: cli-user
-completed_at: null
+completed_at: "2026-03-16T07:17:53Z"
 complexity: medium
 depends_on: []
+duration_minutes: 9.696217474483333
 estimate_hours: 1
 id: B510
 priority: high
 started_at: "2026-03-16T07:08:12Z"
-status: in_progress
+status: done
 tags: []
 title: 'Look through all the setup wizards and identify any opportunities for refactoring to reduce code duplication, find suboptimal patterns, identify opportunities for refactoring to improve elegance, maintainability, etc. Goal: do a pass over the code and clean it up to be as nice and maintainable as possible.'
 ---

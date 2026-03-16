@@ -110,12 +110,12 @@ let run () =
   (* Load existing values *)
   (match load_existing () with
   | Some v ->
-      stt_enabled_field.value := string_of_bool v.stt_enabled;
-      tts_enabled_field.value := string_of_bool v.tts_enabled;
-      tts_provider_field.value := v.tts_provider;
-      tts_model_field.value := v.tts_model;
-      tts_voice_field.value := v.tts_voice;
-      audio_dir_field.value := v.audio_dir
+      Setup_tui.set_bool stt_enabled_field v.stt_enabled;
+      Setup_tui.set_bool tts_enabled_field v.tts_enabled;
+      Setup_tui.set_str tts_provider_field v.tts_provider;
+      Setup_tui.set_str tts_model_field v.tts_model;
+      Setup_tui.set_str tts_voice_field v.tts_voice;
+      Setup_tui.set_str audio_dir_field v.audio_dir
   | None -> ());
   let spec : Setup_tui.wizard_spec =
     {

@@ -28,15 +28,15 @@ let validate_relay_no_scheme () =
 let validate_non_empty_valid () =
   Alcotest.(check (result string string))
     "non-empty valid" (Ok "somevalue")
-    (Setup_nostr.validate_non_empty "somevalue")
+    (Setup_common.validate_non_empty ~what:"Value" "somevalue")
 
 let validate_non_empty_empty () =
-  match Setup_nostr.validate_non_empty "" with
+  match Setup_common.validate_non_empty ~what:"Value" "" with
   | Error _ -> ()
   | Ok _ -> Alcotest.fail "expected error for empty value"
 
 let validate_non_empty_whitespace () =
-  match Setup_nostr.validate_non_empty "   " with
+  match Setup_common.validate_non_empty ~what:"Value" "   " with
   | Error _ -> ()
   | Ok _ -> Alcotest.fail "expected error for whitespace-only value"
 
