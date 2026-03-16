@@ -1,0 +1,39 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 3
+id: B515
+priority: medium
+status: pending
+tags: []
+title: Audit and implement menus for applicable slash commands
+---
+Problem
+Only /agent has a menu interface (/agent menu). Other slash commands that would benefit from interactive selection require typing subcommands manually, which is cumbersome on mobile and error-prone.
+
+Why this matters
+- Mobile UX: Menus are far easier than typing on phones/tablets
+- Discoverability: Menus expose available options without requiring memorization
+- Consistency: Once users learn one menu pattern, they expect it elsewhere
+- Reduced errors: Selection from known-valid options eliminates typos
+
+Acceptance criteria
+- Audit all slash commands and identify candidates where a menu makes sense
+- Implement menus for high-value candidates (at minimum: /model, /thinking, /config, /skills)
+- Menus use existing Teams Adaptive Card / Telegram keyboard infrastructure
+- Menu pagination follows B513 pattern once implemented
+- Document which commands have menus and how to invoke them
+
+Likely candidates for menu treatment:
+1. /model set - select from available models (esp. favorites)
+2. /thinking - select thinking level (off/low/medium/high)  
+3. /config show - select config section to display
+4. /skills - list and select skill to invoke
+5. /costs - select cost view (session/model/provider/summary)
+6. /bg - select background task to inspect/manage
+
+Notes
+- Related: B513 (agent template menu pagination)
+- Related: B479 (generalize /menu through shared formatter/DSL)
+- P2.M4.E3.T004 already implemented Teams /menu Adaptive Card
+- Reuse menu infrastructure from /agent menu where possible
