@@ -149,12 +149,7 @@ let save_slack_config ~(cfg : Runtime_config.slack_config) =
       ~allow_users:cfg.allow_users ~app_token:cfg.app_token
       ~socket_mode:cfg.socket_mode
   in
-  let full_json =
-    match load_config_json () with
-    | Some existing -> deep_merge_json existing json
-    | None -> json
-  in
-  match write_config_json full_json with
+  match merge_and_write_config json with
   | Ok path ->
       print_success (Printf.sprintf "Saved to %s" path);
       true
@@ -268,12 +263,7 @@ let run () =
                 ~prompt:"Allowed channels (* = all, comma-separated)"
                 ~default:current ()
             in
-            let channels =
-              String.split_on_char ',' input
-              |> List.map String.trim
-              |> List.filter (fun s -> s <> "")
-            in
-            let channels = if channels = [] then [ "*" ] else channels in
+            let channels = Setup_common.parse_csv_list input in
             cfg := { !cfg with allow_channels = channels };
             dirty := true
         | "u" ->
@@ -283,12 +273,7 @@ let run () =
                 ~prompt:"Allowed users (* = all, comma-separated)"
                 ~default:current ()
             in
-            let users =
-              String.split_on_char ',' input
-              |> List.map String.trim
-              |> List.filter (fun s -> s <> "")
-            in
-            let users = if users = [] then [ "*" ] else users in
+            let users = Setup_common.parse_csv_list input in
             cfg := { !cfg with allow_users = users };
             dirty := true
         | "a" -> (

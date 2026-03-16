@@ -3,27 +3,27 @@
 let validate_url_https () =
   Alcotest.(check (result string string))
     "https valid" (Ok "https://example.com")
-    (Setup_tunnel.validate_url "https://example.com")
+    (Setup_common.validate_url "https://example.com")
 
 let validate_url_http () =
   Alcotest.(check (result string string))
     "http valid" (Ok "http://localhost:8080")
-    (Setup_tunnel.validate_url "http://localhost:8080")
+    (Setup_common.validate_url "http://localhost:8080")
 
 let validate_url_empty () =
   Alcotest.(check (result string string))
     "empty valid" (Ok "")
-    (Setup_tunnel.validate_url "")
+    (Setup_common.validate_url "")
 
 let validate_url_no_scheme () =
-  match Setup_tunnel.validate_url "example.com" with
+  match Setup_common.validate_url "example.com" with
   | Error _ -> ()
   | Ok _ -> Alcotest.fail "expected error for missing scheme"
 
 let validate_url_spaces () =
   Alcotest.(check (result string string))
     "trimmed" (Ok "https://example.com")
-    (Setup_tunnel.validate_url "  https://example.com  ")
+    (Setup_common.validate_url "  https://example.com  ")
 
 let validate_provider_cloudflare () =
   Alcotest.(check (result string string))

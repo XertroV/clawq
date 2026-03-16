@@ -126,12 +126,7 @@ let save_discord_config ~bot_token ~allow_guilds ~allow_users ~intents =
   let json =
     build_discord_json ~bot_token ~allow_guilds ~allow_users ~intents
   in
-  let full_json =
-    match load_config_json () with
-    | Some existing -> deep_merge_json existing json
-    | None -> json
-  in
-  match write_config_json full_json with
+  match merge_and_write_config json with
   | Ok path ->
       print_success (Printf.sprintf "Saved to %s" path);
       true
@@ -281,12 +276,7 @@ let run () =
             let input =
               Setup_common.prompt_string ~prompt:"Allowed guilds" ~default ()
             in
-            let guilds =
-              String.split_on_char ',' input
-              |> List.map String.trim
-              |> List.filter (fun s -> s <> "")
-            in
-            allow_guilds := if guilds = [] then [ "*" ] else guilds;
+            allow_guilds := Setup_common.parse_csv_list input;
             dirty := true;
             Setup_common.press_enter_to_continue ()
         | "u" ->
@@ -297,12 +287,7 @@ let run () =
             let input =
               Setup_common.prompt_string ~prompt:"Allowed users" ~default ()
             in
-            let users =
-              String.split_on_char ',' input
-              |> List.map String.trim
-              |> List.filter (fun s -> s <> "")
-            in
-            allow_users := if users = [] then [ "*" ] else users;
+            allow_users := Setup_common.parse_csv_list input;
             dirty := true;
             Setup_common.press_enter_to_continue ()
         | "i" ->

@@ -14,16 +14,6 @@ let validate_provider s =
       (Printf.sprintf "Unknown provider %S. Supported: %s" trimmed
          (String.concat ", " valid_providers))
 
-let validate_url s =
-  let trimmed = String.trim s in
-  if trimmed = "" then Ok ""
-  else if
-    String.length trimmed >= 8
-    && (String.sub trimmed 0 8 = "https://"
-       || String.sub trimmed 0 7 = "http://")
-  then Ok trimmed
-  else Error "URL must start with http:// or https:// (or leave empty)."
-
 let validate_tunnel_name s =
   let trimmed = String.trim s in
   if trimmed = "" then Ok ""
@@ -145,12 +135,7 @@ let draw_dashboard ~(tc : Runtime_config.tunnel_config) =
 let save_tunnel_config ~(tc : Runtime_config.tunnel_config) =
   let open Setup_common in
   let json = build_tunnel_json ~tc in
-  let full_json =
-    match load_config_json () with
-    | Some existing -> deep_merge_json existing json
-    | None -> json
-  in
-  match write_config_json full_json with
+  match merge_and_write_config json with
   | Ok path ->
       print_success (Printf.sprintf "Saved to %s" path);
       true
@@ -231,7 +216,7 @@ let run () =
                 Setup_common.prompt_string ~prompt:"Static URL (empty to clear)"
                   ~default:!tc.url ()
               in
-              match validate_url u with
+              match Setup_common.validate_url u with
               | Ok url ->
                   tc := { !tc with url };
                   dirty := true

@@ -48,15 +48,15 @@ let validate_compaction_threshold_over_100 () =
 let validate_positive_int_valid () =
   Alcotest.(check (result string string))
     "valid positive int 500" (Ok "500")
-    (Setup_memory.validate_positive_int "500")
+    (Setup_common.validate_positive_int "500")
 
 let validate_positive_int_zero () =
-  match Setup_memory.validate_positive_int "0" with
+  match Setup_common.validate_positive_int "0" with
   | Error _ -> ()
   | Ok _ -> Alcotest.fail "expected error for zero"
 
 let validate_positive_int_negative () =
-  match Setup_memory.validate_positive_int "-5" with
+  match Setup_common.validate_positive_int "-5" with
   | Error _ -> ()
   | Ok _ -> Alcotest.fail "expected error for negative"
 

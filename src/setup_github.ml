@@ -261,10 +261,7 @@ let prompt_repo_fields ?(existing : Runtime_config.github_repo_config option) ()
   in
   let react_to =
     if react_to_input = "all" || react_to_input = "" then []
-    else
-      String.split_on_char ',' react_to_input
-      |> List.map String.trim
-      |> List.filter (fun s -> s <> "")
+    else Setup_common.parse_csv_list ~default_star:false react_to_input
   in
 
   (* Allowed users *)
@@ -275,12 +272,7 @@ let prompt_repo_fields ?(existing : Runtime_config.github_repo_config option) ()
   let users_input =
     prompt_string ~prompt:"Allowed users (* = all)" ~default:users_default ()
   in
-  let allow_users =
-    String.split_on_char ',' users_input
-    |> List.map String.trim
-    |> List.filter (fun s -> s <> "")
-  in
-  let allow_users = if allow_users = [] then [ "*" ] else allow_users in
+  let allow_users = Setup_common.parse_csv_list users_input in
 
   (* Include PR files *)
   let default_pr_files =
@@ -356,12 +348,7 @@ let prompt_pat_change ~current_pat =
 let save_github_config ~pat_token ~repos =
   let open Setup_common in
   let json = build_full_github_json ~pat_token ~repos in
-  let full_json =
-    match load_config_json () with
-    | Some existing -> deep_merge_json existing json
-    | None -> json
-  in
-  match write_config_json full_json with
+  match merge_and_write_config json with
   | Ok path ->
       print_success (Printf.sprintf "Saved to %s" path);
       true

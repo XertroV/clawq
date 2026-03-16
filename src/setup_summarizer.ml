@@ -175,12 +175,7 @@ let draw_dashboard ~(sc : Runtime_config.summarizer_config) =
 let save_summarizer_config ~(sc : Runtime_config.summarizer_config) =
   let open Setup_common in
   let json = build_summarizer_json ~sc in
-  let full_json =
-    match load_config_json () with
-    | Some existing -> deep_merge_json existing json
-    | None -> json
-  in
-  match write_config_json full_json with
+  match merge_and_write_config json with
   | Ok path ->
       print_success (Printf.sprintf "Saved to %s" path);
       true

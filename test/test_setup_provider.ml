@@ -66,25 +66,25 @@ let validate_api_key_trimmed () =
 let validate_base_url_empty () =
   Alcotest.(check (result string string))
     "empty ok" (Ok "")
-    (Setup_provider.validate_base_url "")
+    (Setup_common.validate_url "")
 
 let validate_base_url_https () =
   Alcotest.(check (result string string))
     "https ok" (Ok "https://api.example.com")
-    (Setup_provider.validate_base_url "https://api.example.com")
+    (Setup_common.validate_url "https://api.example.com")
 
 let validate_base_url_http () =
   Alcotest.(check (result string string))
     "http ok" (Ok "http://localhost:11434")
-    (Setup_provider.validate_base_url "http://localhost:11434")
+    (Setup_common.validate_url "http://localhost:11434")
 
 let validate_base_url_invalid () =
-  match Setup_provider.validate_base_url "ftp://example.com" with
+  match Setup_common.validate_url "ftp://example.com" with
   | Error _ -> ()
   | Ok _ -> Alcotest.fail "expected error for ftp:// url"
 
 let validate_base_url_no_scheme () =
-  match Setup_provider.validate_base_url "example.com" with
+  match Setup_common.validate_url "example.com" with
   | Error _ -> ()
   | Ok _ -> Alcotest.fail "expected error for url without scheme"
 

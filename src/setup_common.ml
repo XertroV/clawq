@@ -242,3 +242,34 @@ let print_docs_link url =
 let press_enter_to_continue () =
   let p = Printf.sprintf "\n  %s" (dim "Press Enter to continue...") in
   ignore (Tui_input.read_line_clean p)
+
+(* ── Shared validators ─────────────────────────────────────────── *)
+
+let validate_port s =
+  match int_of_string_opt s with
+  | Some v when v >= 1 && v <= 65535 -> Ok s
+  | Some _ -> Error "Port must be between 1 and 65535."
+  | None -> Error "Port must be a valid integer."
+
+let validate_positive_int s =
+  match int_of_string_opt s with
+  | Some v when v > 0 -> Ok s
+  | Some _ -> Error "Value must be a positive integer."
+  | None -> Error "Value must be a valid integer."
+
+let validate_url s =
+  let trimmed = String.trim s in
+  if trimmed = "" then Ok ""
+  else if
+    String.length trimmed >= 7
+    && (String.sub trimmed 0 7 = "http://"
+       || (String.length trimmed >= 8 && String.sub trimmed 0 8 = "https://"))
+  then Ok trimmed
+  else Error "URL must be empty or start with http:// or https://"
+
+let parse_csv_list ?(default_star = true) s =
+  let items =
+    String.split_on_char ',' s |> List.map String.trim
+    |> List.filter (fun s -> s <> "")
+  in
+  if items = [] && default_star then [ "*" ] else items

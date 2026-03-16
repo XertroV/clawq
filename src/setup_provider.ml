@@ -21,16 +21,6 @@ let validate_api_key s =
   let trimmed = String.trim s in
   if trimmed = "" then Error "API key cannot be empty." else Ok trimmed
 
-let validate_base_url s =
-  let trimmed = String.trim s in
-  if trimmed = "" then Ok ""
-  else if
-    String.length trimmed >= 7
-    && (String.sub trimmed 0 7 = "http://"
-       || (String.length trimmed >= 8 && String.sub trimmed 0 8 = "https://"))
-  then Ok trimmed
-  else Error "Base URL must be empty or start with http:// or https://"
-
 (* ── JSON builder ────────────────────────────────────────────────── *)
 
 let build_provider_json ~name ~api_key ~base_url ~default_model =
@@ -137,7 +127,7 @@ let prompt_add_provider () =
       let s =
         prompt_string ~prompt:"Base URL (empty for default)" ~default:"" ()
       in
-      match validate_base_url s with
+      match Setup_common.validate_url s with
       | Ok u -> u
       | Error e ->
           print_warning e;

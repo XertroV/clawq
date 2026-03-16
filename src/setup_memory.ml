@@ -14,12 +14,6 @@ let validate_compaction_threshold s =
   | Some _ -> Error "Compaction threshold must be between 1 and 100."
   | None -> Error "Compaction threshold must be a valid integer."
 
-let validate_positive_int s =
-  match int_of_string_opt s with
-  | Some v when v > 0 -> Ok s
-  | Some _ -> Error "Value must be a positive integer."
-  | None -> Error "Value must be a valid integer."
-
 let build_memory_json ~backend ~search_enabled ~vector_weight ~keyword_weight
     ~embedding_model ~embedding_provider ~compaction_threshold_percent
     ~max_messages_per_session ~max_message_age_days ~pre_compaction_flush
@@ -157,7 +151,7 @@ let run () =
       ~menu_label:"Set max messages per session"
       ~description:
         "Maximum messages kept per session before compaction triggers."
-      ~validate:validate_positive_int
+      ~validate:Setup_common.validate_positive_int
       ~default:(get_mem (fun c -> c.Runtime_config.max_messages_per_session))
       ()
   in
@@ -166,7 +160,7 @@ let run () =
       ~menu_label:"Set max message age in days"
       ~description:
         "Messages older than this many days are eligible for cleanup."
-      ~validate:validate_positive_int
+      ~validate:Setup_common.validate_positive_int
       ~default:(get_mem (fun c -> c.Runtime_config.max_message_age_days))
       ()
   in

@@ -2,21 +2,9 @@
 
 (* ── Pure validation functions (tested) ──────────────────────────── *)
 
-let validate_port s =
-  match int_of_string_opt s with
-  | Some v when v >= 1 && v <= 65535 -> Ok s
-  | Some _ -> Error "Port must be between 1 and 65535."
-  | None -> Error "Port must be a valid integer."
-
 let validate_host s =
   let trimmed = String.trim s in
   if trimmed = "" then Error "Host must not be empty." else Ok trimmed
-
-let validate_positive_int s =
-  match int_of_string_opt s with
-  | Some v when v > 0 -> Ok s
-  | Some _ -> Error "Value must be a positive integer."
-  | None -> Error "Value must be a valid integer."
 
 (* ── JSON builder (tested) ───────────────────────────────────────── *)
 
@@ -80,7 +68,7 @@ let run () =
   let port =
     Setup_tui.make_int_field ~key:"p" ~label:"Port" ~menu_label:"Set port"
       ~description:"TCP port for the HTTP gateway (1-65535)."
-      ~validate:validate_port ~default:d.port ()
+      ~validate:Setup_common.validate_port ~default:d.port ()
   in
   let require_pairing =
     Setup_tui.make_bool_field ~key:"rp" ~label:"Require pairing"
@@ -101,13 +89,15 @@ let run () =
     Setup_tui.make_int_field ~key:"ma" ~label:"Max pair attempts"
       ~menu_label:"Set max pair attempts"
       ~description:"Failed pairing attempts before lockout."
-      ~validate:validate_positive_int ~default:d.max_pair_attempts ()
+      ~validate:Setup_common.validate_positive_int ~default:d.max_pair_attempts
+      ()
   in
   let pair_lockout_seconds =
     Setup_tui.make_int_field ~key:"ls" ~label:"Pair lockout (seconds)"
       ~menu_label:"Set pair lockout duration (seconds)"
       ~description:"Lockout duration in seconds after too many failed attempts."
-      ~validate:validate_positive_int ~default:d.pair_lockout_seconds ()
+      ~validate:Setup_common.validate_positive_int
+      ~default:d.pair_lockout_seconds ()
   in
   let spec : Setup_tui.wizard_spec =
     {

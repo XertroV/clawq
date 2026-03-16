@@ -156,6 +156,21 @@ let prompt_account_fields
   let name = prompt_string ~prompt:"Account name" ?default:default_name () in
 
   (* Bot token *)
+  let prompt_new_token () =
+    let rec loop () =
+      match prompt_secret ~prompt:"Bot token" () with
+      | Ok tok -> (
+          match validate_bot_token tok with
+          | Ok t -> t
+          | Error e ->
+              print_warning e;
+              loop ())
+      | Error e ->
+          print_error e;
+          loop ()
+    in
+    loop ()
+  in
   let bot_token =
     match existing with
     | Some (_, acct) when acct.bot_token <> "" ->
@@ -166,35 +181,8 @@ let prompt_account_fields
                  (Tui_input.redact acct.bot_token))
             ~default:true ()
         in
-        if keep then acct.bot_token
-        else
-          let rec loop () =
-            match prompt_secret ~prompt:"Bot token" () with
-            | Ok tok -> (
-                match validate_bot_token tok with
-                | Ok t -> t
-                | Error e ->
-                    print_warning e;
-                    loop ())
-            | Error e ->
-                print_error e;
-                loop ()
-          in
-          loop ()
-    | _ ->
-        let rec loop () =
-          match prompt_secret ~prompt:"Bot token" () with
-          | Ok tok -> (
-              match validate_bot_token tok with
-              | Ok t -> t
-              | Error e ->
-                  print_warning e;
-                  loop ())
-          | Error e ->
-              print_error e;
-              loop ()
-        in
-        loop ()
+        if keep then acct.bot_token else prompt_new_token ()
+    | _ -> prompt_new_token ()
   in
 
   (* Allow from *)
@@ -206,12 +194,7 @@ let prompt_account_fields
     prompt_string ~prompt:"Allow from (* = everyone, comma-separated)"
       ~default:allow_default ()
   in
-  let allow_from =
-    String.split_on_char ',' allow_input
-    |> List.map String.trim
-    |> List.filter (fun s -> s <> "")
-  in
-  let allow_from = if allow_from = [] then [ "*" ] else allow_from in
+  let allow_from = Setup_common.parse_csv_list allow_input in
 
   ( name,
     ({ bot_token; allow_from; totp = None } : Runtime_config.telegram_account)
@@ -222,12 +205,7 @@ let prompt_account_fields
 let save_telegram_config ~accounts ~text_coalesce_ms =
   let open Setup_common in
   let json = build_full_telegram_json ~accounts ~text_coalesce_ms in
-  let full_json =
-    match load_config_json () with
-    | Some existing -> deep_merge_json existing json
-    | None -> json
-  in
-  match write_config_json full_json with
+  match merge_and_write_config json with
   | Ok path ->
       print_success (Printf.sprintf "Saved to %s" path);
       true

@@ -137,6 +137,23 @@ let draw_dashboard ~app_id ~app_secret ~tenant_id ~webhook_path ~service_url
   Printf.printf "\n";
   draw_separator ~width:w
 
+(* -- Save helper ------------------------------------------------------- *)
+
+let save_teams_config ~app_id ~app_secret ~tenant_id ~webhook_path ~service_url
+    ~allow_teams ~allow_users =
+  let open Setup_common in
+  let json =
+    build_teams_json ~app_id ~app_secret ~tenant_id ~webhook_path ~service_url
+      ~allow_teams ~allow_users
+  in
+  match merge_and_write_config json with
+  | Ok path ->
+      print_success (Printf.sprintf "Saved to %s" path);
+      true
+  | Error e ->
+      print_error (Printf.sprintf "Failed to write config: %s" e);
+      false
+
 (* -- Main menu loop ---------------------------------------------------- *)
 
 let run () =
@@ -211,28 +228,13 @@ let run () =
                     "App ID, App Secret, and Tenant ID are all required before \
                      saving.";
                   Setup_common.press_enter_to_continue ())
-                else
-                  let json =
-                    build_teams_json ~app_id:!app_id ~app_secret:!app_secret
-                      ~tenant_id:!tenant_id ~webhook_path:!webhook_path
-                      ~service_url:!service_url ~allow_teams:!allow_teams
-                      ~allow_users:!allow_users
-                  in
-                  let full_json =
-                    match Setup_common.load_config_json () with
-                    | Some existing ->
-                        Setup_common.deep_merge_json existing json
-                    | None -> json
-                  in
-                  match Setup_common.write_config_json full_json with
-                  | Ok path ->
-                      Setup_common.print_success
-                        (Printf.sprintf "Saved to %s" path);
-                      quit := true
-                  | Error e ->
-                      Setup_common.print_error
-                        (Printf.sprintf "Failed to write config: %s" e);
-                      Setup_common.press_enter_to_continue ()
+                else (
+                  ignore
+                    (save_teams_config ~app_id:!app_id ~app_secret:!app_secret
+                       ~tenant_id:!tenant_id ~webhook_path:!webhook_path
+                       ~service_url:!service_url ~allow_teams:!allow_teams
+                       ~allow_users:!allow_users);
+                  quit := true)
               end
               else quit := true
             end
@@ -321,11 +323,7 @@ let run () =
               Setup_common.prompt_string ~prompt:"Allowed teams"
                 ~default:current ()
             in
-            let teams =
-              String.split_on_char ',' v |> List.map String.trim
-              |> List.filter (fun s -> s <> "")
-            in
-            let teams = if teams = [] then [ "*" ] else teams in
+            let teams = Setup_common.parse_csv_list v in
             if teams <> !allow_teams then (
               allow_teams := teams;
               dirty := true)
@@ -338,11 +336,7 @@ let run () =
               Setup_common.prompt_string ~prompt:"Allowed users"
                 ~default:current ()
             in
-            let users =
-              String.split_on_char ',' v |> List.map String.trim
-              |> List.filter (fun s -> s <> "")
-            in
-            let users = if users = [] then [ "*" ] else users in
+            let users = Setup_common.parse_csv_list v in
             if users <> !allow_users then (
               allow_users := users;
               dirty := true)
@@ -362,33 +356,20 @@ let run () =
             in
             Printf.printf "%s" instructions;
             Setup_common.press_enter_to_continue ()
-        | "v" when !dirty -> (
+        | "v" when !dirty ->
             if !app_id = "" || !app_secret = "" || !tenant_id = "" then (
               Setup_common.print_warning
                 "App ID, App Secret, and Tenant ID are all required before \
                  saving.";
               Setup_common.press_enter_to_continue ())
-            else
-              let json =
-                build_teams_json ~app_id:!app_id ~app_secret:!app_secret
+            else (
+              if
+                save_teams_config ~app_id:!app_id ~app_secret:!app_secret
                   ~tenant_id:!tenant_id ~webhook_path:!webhook_path
                   ~service_url:!service_url ~allow_teams:!allow_teams
                   ~allow_users:!allow_users
-              in
-              let full_json =
-                match Setup_common.load_config_json () with
-                | Some existing -> Setup_common.deep_merge_json existing json
-                | None -> json
-              in
-              match Setup_common.write_config_json full_json with
-              | Ok path ->
-                  Setup_common.print_success (Printf.sprintf "Saved to %s" path);
-                  dirty := false;
-                  Setup_common.press_enter_to_continue ()
-              | Error e ->
-                  Setup_common.print_error
-                    (Printf.sprintf "Failed to write config: %s" e);
-                  Setup_common.press_enter_to_continue ())
+              then dirty := false;
+              Setup_common.press_enter_to_continue ())
         | other ->
             Setup_common.print_warning
               (Printf.sprintf "Unknown option: %s" other);

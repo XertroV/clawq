@@ -2,12 +2,6 @@
 
 (* ── Pure validation / builder functions (tested) ────────────────── *)
 
-let validate_interval s =
-  match int_of_string_opt s with
-  | Some v when v > 0 -> Ok s
-  | Some _ -> Error "Interval must be a positive integer."
-  | None -> Error "Interval must be a valid integer."
-
 let validate_hour s =
   match int_of_string_opt s with
   | Some v when v >= 0 && v <= 23 -> Ok s
@@ -75,7 +69,7 @@ let run () =
     Setup_tui.make_int_field ~key:"i" ~label:"Interval (seconds)"
       ~menu_label:"Set heartbeat interval (seconds)"
       ~description:"How often to send heartbeat messages. Must be > 0."
-      ~validate:validate_interval
+      ~validate:Setup_common.validate_positive_int
       ~default:(get_h (fun c -> c.Runtime_config.interval_seconds))
       ()
   in

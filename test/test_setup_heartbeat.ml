@@ -3,25 +3,25 @@
 let validate_interval_valid () =
   Alcotest.(check (result string string))
     "valid interval 250" (Ok "250")
-    (Setup_heartbeat.validate_interval "250")
+    (Setup_common.validate_positive_int "250")
 
 let validate_interval_one () =
   Alcotest.(check (result string string))
     "interval 1 ok" (Ok "1")
-    (Setup_heartbeat.validate_interval "1")
+    (Setup_common.validate_positive_int "1")
 
 let validate_interval_zero () =
-  match Setup_heartbeat.validate_interval "0" with
+  match Setup_common.validate_positive_int "0" with
   | Error _ -> ()
   | Ok _ -> Alcotest.fail "expected error for zero interval"
 
 let validate_interval_negative () =
-  match Setup_heartbeat.validate_interval "-10" with
+  match Setup_common.validate_positive_int "-10" with
   | Error _ -> ()
   | Ok _ -> Alcotest.fail "expected error for negative interval"
 
 let validate_interval_non_int () =
-  match Setup_heartbeat.validate_interval "abc" with
+  match Setup_common.validate_positive_int "abc" with
   | Error _ -> ()
   | Ok _ -> Alcotest.fail "expected error for non-integer"
 
