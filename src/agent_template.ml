@@ -322,6 +322,7 @@ type cache = {
 }
 
 let global_cache : cache option ref = ref None
+let is_cache_initialized () = !global_cache <> None
 
 let get_dir_mtime dir =
   try (Unix.stat dir).Unix.st_mtime with Unix.Unix_error _ -> 0.0

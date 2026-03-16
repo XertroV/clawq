@@ -144,6 +144,14 @@ let prompt_menu ~title ~options ~shortcut_exit () =
   let p = Printf.sprintf "  %s Choice: " (cyan ">") in
   String.trim (Tui_input.read_line_clean p)
 
+(* ── Editor helper ───────────────────────────────────────────────── *)
+
+let find_editor () =
+  match Sys.getenv_opt "VISUAL" with
+  | Some e when e <> "" -> e
+  | _ -> (
+      match Sys.getenv_opt "EDITOR" with Some e when e <> "" -> e | _ -> "vi")
+
 (* ── Data helpers ────────────────────────────────────────────────── *)
 
 let generate_random_hex n =

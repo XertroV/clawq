@@ -761,12 +761,8 @@ let cmd_skills args =
 let cmd_agents args =
   let cfg = get_config () in
   let workspace = Runtime_config.effective_workspace cfg in
-  let _ensure_cache =
-    match Agent_template.(!global_cache) with
-    | Some _ -> ()
-    | None -> ignore (Agent_template.init_cache ~workspace_dir:workspace ())
-  in
-  ignore _ensure_cache;
+  if not (Agent_template.is_cache_initialized ()) then
+    ignore (Agent_template.init_cache ~workspace_dir:workspace ());
   match args with
   | [] | [ "list" ] ->
       let all = Agent_template.available_templates () in
@@ -883,14 +879,7 @@ let cmd_agents args =
       | Some t -> (
           match t.source with
           | User_file path ->
-              let editor =
-                match Sys.getenv_opt "VISUAL" with
-                | Some e when e <> "" -> e
-                | _ -> (
-                    match Sys.getenv_opt "EDITOR" with
-                    | Some e when e <> "" -> e
-                    | _ -> "vi")
-              in
+              let editor = Setup_common.find_editor () in
               ignore
                 (Sys.command
                    (Printf.sprintf "%s %s" editor (Filename.quote path)));
@@ -903,14 +892,7 @@ let cmd_agents args =
               Fun.protect
                 (fun () -> output_string oc content)
                 ~finally:(fun () -> close_out oc);
-              let editor =
-                match Sys.getenv_opt "VISUAL" with
-                | Some e when e <> "" -> e
-                | _ -> (
-                    match Sys.getenv_opt "EDITOR" with
-                    | Some e when e <> "" -> e
-                    | _ -> "vi")
-              in
+              let editor = Setup_common.find_editor () in
               ignore
                 (Sys.command
                    (Printf.sprintf "%s %s" editor (Filename.quote path)));

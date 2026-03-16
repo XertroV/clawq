@@ -134,22 +134,13 @@ let copy_from_builtin () =
   | _ -> Setup_common.print_warning "Invalid selection."
 
 let offer_editor path =
-  let open_in_editor path =
-    let editor =
-      match Sys.getenv_opt "VISUAL" with
-      | Some e when e <> "" -> e
-      | _ -> (
-          match Sys.getenv_opt "EDITOR" with
-          | Some e when e <> "" -> e
-          | _ -> "vi")
-    in
-    ignore (Sys.command (Printf.sprintf "%s %s" editor (Filename.quote path)))
-  in
   let open_it =
     Setup_common.prompt_yn ~prompt:"Open system prompt in editor?" ~default:true
       ()
   in
-  if open_it then open_in_editor path
+  if open_it then
+    let editor = Setup_common.find_editor () in
+    ignore (Sys.command (Printf.sprintf "%s %s" editor (Filename.quote path)))
 
 let run () =
   let spec : Setup_tui.wizard_spec =
