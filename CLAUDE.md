@@ -117,6 +117,12 @@ Subdirectory-specific guidelines exist in `docs/CLAUDE.md`, `src/CLAUDE.md`, and
 - Build config: `dune-project`, `dune-workspace`, `src/dune`, `test/dune`
 - Tests: `test/test_main.ml` and `test/test_*.ml`
 
+## Agent Templates
+
+- Templates: `src/agent_template.ml` (types, parsing, discovery), `src/agent_template_builtins.ml` (11 built-in archetypes)
+- CLI: `clawq agents <list|show|create|edit|delete|bind|unbind|bindings|setup|path>`
+- When adding new built-in tools, review `src/agent_template_builtins.ml` and update each agent's `allowed_tools` / `disallowed_tools` lists as appropriate.
+
 ## Misc Notes
 
 - When implementing or updating features, have a background subagent check `docs/*` to see if anything requires updating. Claude code agents: Use haiku for the model when creating the agent task.

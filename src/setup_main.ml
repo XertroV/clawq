@@ -64,6 +64,17 @@ let all_categories : category list =
         ];
     };
     {
+      title = "Agents";
+      entries =
+        [
+          {
+            name = "agents";
+            label = "Agent templates (roles, tool restrictions)";
+            run = Setup_agents.run;
+          };
+        ];
+    };
+    {
       title = "Automation";
       entries =
         [

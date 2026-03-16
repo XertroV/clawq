@@ -5,6 +5,7 @@ type t = {
   mutable observed_active_workspace_files : (string * string option) list;
   mutable last_request_history_len : int option;
   tool_registry : Tool_registry.t option;
+  agent_template : Agent_template.t option;
   mutable compacted_mid_turn : bool;
 }
 
@@ -82,8 +83,10 @@ let capture_active_workspace_file_state_for_config (config : Runtime_config.t) =
       in
       (file, digest))
 
-let create ~config ?tool_registry () =
-  let system_prompt = Prompt_builder.build ~config ~tool_registry () in
+let create ~config ?tool_registry ?agent_template () =
+  let system_prompt =
+    Prompt_builder.build ~config ~tool_registry ?agent_template ()
+  in
   {
     history = [];
     config;
@@ -92,6 +95,7 @@ let create ~config ?tool_registry () =
       capture_active_workspace_file_state_for_config config;
     last_request_history_len = None;
     tool_registry;
+    agent_template;
     compacted_mid_turn = false;
   }
 
@@ -115,7 +119,7 @@ let inject_runtime_context messages runtime_context =
 let build_messages ?runtime_context agent =
   agent.system_prompt <-
     Prompt_builder.build ~config:agent.config ~tool_registry:agent.tool_registry
-      ();
+      ?agent_template:agent.agent_template ();
   let messages =
     Provider.make_message ~role:"system" ~content:agent.system_prompt
     :: List.rev (runtime_history_messages agent.history)

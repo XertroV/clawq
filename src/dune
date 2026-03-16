@@ -84,6 +84,8 @@
   model_discovery
   request_stats
   agent_router
+  agent_template
+  agent_template_builtins
   command_bridge_min
   sandbox
   pairing
@@ -216,6 +218,7 @@
   setup_web_search
   setup_voice
   setup_cron
+  setup_agents
   setup_main
   setup_imessage
   setup_security

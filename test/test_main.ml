@@ -83,6 +83,7 @@ let () =
        ("cost_tracker", Test_cost_tracker.suite);
        ("request_stats", Test_request_stats.suite);
        ("agent_router", Test_agent_router.suite);
+       ("agent_template", Test_agent_template.suite);
        ("signal", Test_signal.suite);
        ("http_client", Test_http_client.suite);
        ("http_debug", Test_http_debug.suite);

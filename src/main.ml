@@ -1085,6 +1085,25 @@ let debug_cmd =
           "Print the normalized logical messages for a single agent turn." );
     ]
 
+let agents_cmd =
+  with_args "agents"
+    "Manage agent templates (roles, tool restrictions, routing bindings)."
+    [
+      `S "SUBCOMMANDS";
+      `I ("list", "List all agent templates (builtins and user-defined).");
+      `I ("show NAME", "Show full details for an agent template.");
+      `I ("create NAME", "Create a new template in ~/.clawq/agents/.");
+      `I ("edit NAME", "Edit a template (copies builtin to user dir first).");
+      `I ("delete NAME", "Delete a user-defined template.");
+      `I
+        ( "bind PATTERN AGENT [--priority N]",
+          "Add/update a routing binding in config.json." );
+      `I ("unbind PATTERN", "Remove a routing binding.");
+      `I ("bindings", "List current agent bindings from config.");
+      `I ("setup", "Launch interactive agent template wizard.");
+      `I ("path", "Show template search directories.");
+    ]
+
 let reset_agent_cmd =
   simple "reset-agent"
     "Wipe all session history, cron jobs, and workspace files, then redeploy \
@@ -1304,6 +1323,7 @@ let () =
       plan_cmd;
       audit_cmd;
       skills_cmd;
+      agents_cmd;
       service_cmd;
       update_cmd;
       runtime_cmd;

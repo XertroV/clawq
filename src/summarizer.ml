@@ -184,9 +184,15 @@ let maybe_summarize ~(config : Runtime_config.t) ~(db : Sqlite3.db option)
             ~max_msgs:sc.context_window_messages
         in
         let workspace = Runtime_config.effective_workspace config in
-        let prompt_data =
-          Agent_prompt_loader.load ~workspace ~agent_name:"summarizer"
-            ~default:default_system_prompt
+        let system_prompt =
+          match Agent_template.resolve "summarizer" with
+          | Some tmpl when tmpl.system_prompt <> "" -> tmpl.system_prompt
+          | _ ->
+              let prompt_data =
+                Agent_prompt_loader.load ~workspace ~agent_name:"summarizer"
+                  ~default:default_system_prompt
+              in
+              prompt_data.system_prompt
         in
         let n_lines = Summary_store.count_lines p1_content in
         let n_bytes = String.length p1_content in
@@ -202,9 +208,7 @@ let maybe_summarize ~(config : Runtime_config.t) ~(db : Sqlite3.db option)
         in
         let try_summarize pm =
           Lwt.catch
-            (fun () ->
-              call_summarizer ~config ~pm
-                ~system_prompt:prompt_data.system_prompt ~user_content)
+            (fun () -> call_summarizer ~config ~pm ~system_prompt ~user_content)
             (fun exn ->
               Logs.warn (fun m ->
                   m "[summarizer] LLM call failed: %s" (Printexc.to_string exn));

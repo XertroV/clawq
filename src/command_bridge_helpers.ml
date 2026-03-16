@@ -314,7 +314,24 @@ let get_db () =
    with _ -> ());
   Memory.init ~db_path ~search_enabled:cfg.memory.search_enabled ()
 
-let build_tool_registry ?db (cfg : Runtime_config.t) =
+let apply_agent_template_restrictions registry (tmpl : Agent_template.t) =
+  let tools = Tool_registry.list registry in
+  let filtered =
+    match tmpl.allowed_tools with
+    | [] -> tools
+    | allowed -> List.filter (fun (t : Tool.t) -> List.mem t.name allowed) tools
+  in
+  let filtered =
+    match tmpl.disallowed_tools with
+    | [] -> filtered
+    | denied ->
+        List.filter (fun (t : Tool.t) -> not (List.mem t.name denied)) filtered
+  in
+  let new_reg = Tool_registry.create () in
+  List.iter (Tool_registry.register new_reg) filtered;
+  new_reg
+
+let build_tool_registry ?db ?agent_template (cfg : Runtime_config.t) =
   if not cfg.security.tools_enabled then None
   else begin
     let registry = Tool_registry.create () in
@@ -338,7 +355,9 @@ let build_tool_registry ?db (cfg : Runtime_config.t) =
          match Skills.find_skill_md name with
          | Some s -> Some (s.meta.md_description, s.instructions)
          | None -> None);
-    Some registry
+    match agent_template with
+    | Some tmpl -> Some (apply_agent_template_restrictions registry tmpl)
+    | None -> Some registry
   end
 
 let format_debug_messages messages =

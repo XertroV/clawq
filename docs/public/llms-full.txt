@@ -14,6 +14,17 @@ Every command below is invoked as `clawq COMMAND`. Run `clawq COMMAND --help` fo
 |---------|--------------|
 | `active` | Show active 5-hour window usage (cost, tokens, per-model breakdown, provider quota) |
 | `agent` | Start the daemon (agent loop, gateway, all configured channels) |
+| `agents` | Manage agent templates — built-in archetypes and user-defined templates with role-based tool restrictions (default: list) |
+| `agents list` | List all templates (builtins marked [builtin], user marked [user]) |
+| `agents show <name>` | Full template details including system prompt preview |
+| `agents create <name>` | Create template .md in ~/.clawq/agents/ |
+| `agents edit <name>` | Edit template (copies builtin to user dir first) |
+| `agents delete <name>` | Delete user template (refuses for builtins) |
+| `agents bind <pattern> <agent> [--priority N]` | Add routing binding to config.json |
+| `agents unbind <pattern>` | Remove routing binding |
+| `agents bindings` | List current agent bindings |
+| `agents setup` | Interactive setup wizard |
+| `agents path` | Show template search directories |
 | `audit` | View and manage the security audit log (default: list) |
 | `audit list [--limit N]` | Show recent audit entries |
 | `audit verify` | Verify the signed audit chain |
@@ -445,6 +456,41 @@ Security features:
 - Tool sandboxing via Firejail or Bubblewrap (auto-detected, configurable via security.sandbox_backend)
 
 You also support MCP (Model Context Protocol) for exposing and consuming external tools, and skills (SKILL.md definitions with YAML frontmatter and shell-script extensions, discovered from `.claude-p/skills/`, `.claude/skills/`, and `~/.clawq/skills/`; managed via `clawq skills`).
+
+Agent templates are Markdown files with YAML frontmatter that define role-based personas with tool restrictions. Managed via `clawq agents`. Discovery order: `~/.clawq/agents/<name>.md` or `<name>/AGENT.md`, workspace `.claude-p/agents/` and `.claude/agents/`. User templates override builtins with the same name.
+
+### agents
+
+Manage agent templates — built-in archetypes and user-defined templates with role-based tool restrictions.
+
+Subcommands:
+- `agents list` — List all templates (builtins marked [builtin], user marked [user])
+- `agents show <name>` — Full template details including system prompt preview
+- `agents create <name>` — Create template .md in ~/.clawq/agents/
+- `agents edit <name>` — Edit template (copies builtin to user dir first)
+- `agents delete <name>` — Delete user template (refuses for builtins)
+- `agents bind <pattern> <agent> [--priority N]` — Add routing binding to config.json
+- `agents unbind <pattern>` — Remove routing binding
+- `agents bindings` — List current agent bindings
+- `agents setup` — Interactive setup wizard
+- `agents path` — Show template search directories
+
+Built-in agent templates (11):
+- ceo: High-level strategy, delegation (read-only, no shell/write)
+- team-lead: Task orchestration, progress tracking (shell + bg tasks)
+- coder: General implementation (full tools)
+- planner: Architecture and design (read-only + shell for exploration)
+- reviewer: Code review (read + test, no write)
+- researcher: Information gathering (read + http, no write/shell)
+- tester: Test writing and execution (shell + read + write)
+- debugger: Bug investigation and fixes (shell + read + edit)
+- refactorer: Code cleanup (shell + read + write + edit)
+- documenter: Documentation (read + write, no shell)
+- ops: CI/CD and infrastructure (shell + read + write)
+
+Agent template format: Markdown with YAML frontmatter. Fields: name, description, role, goal, backstory, model, max-tool-iterations, allowed-tools, disallowed-tools, tool-search-enabled, reasoning-effort.
+
+Template discovery: ~/.clawq/agents/<name>.md or <name>/AGENT.md, workspace .claude-p/agents/ and .claude/agents/. User templates override builtins with the same name.
 
 ## Shell and Filesystem Execution Model
 

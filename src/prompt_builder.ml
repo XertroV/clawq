@@ -393,23 +393,44 @@ let attachment_syntax_block attachments =
          @ syntax_lines @ [ ""; "Attached:" ] @ refs))
 
 let build ~(config : Runtime_config.t) ~tool_registry ?(attachments = [])
-    ?(channel_type = "dm") ?(workspace = None) ?(scheduled_jobs = []) () =
+    ?(channel_type = "dm") ?(workspace = None) ?(scheduled_jobs = [])
+    ?agent_template () =
   if not config.prompt.dynamic_enabled then
-    if config.agent_defaults.system_prompt <> "" then
-      config.agent_defaults.system_prompt
-    else base_prompt
+    match agent_template with
+    | Some (tmpl : Agent_template.t) when tmpl.system_prompt <> "" ->
+        tmpl.system_prompt
+    | _ ->
+        if config.agent_defaults.system_prompt <> "" then
+          config.agent_defaults.system_prompt
+        else base_prompt
   else
     let lines = ref [] in
     let add s = lines := s :: !lines in
     let ws = Runtime_config.effective_workspace config in
-    if config.agent_defaults.system_prompt <> "" then begin
-      add config.agent_defaults.system_prompt;
-      add ""
-    end
-    else begin
-      add base_prompt;
-      add ""
-    end;
+    (* Agent template system prompt takes precedence *)
+    (match agent_template with
+    | Some (tmpl : Agent_template.t) when tmpl.system_prompt <> "" ->
+        add tmpl.system_prompt;
+        add "";
+        if tmpl.goal <> "" then begin
+          add "## Agent Goal";
+          add tmpl.goal;
+          add ""
+        end;
+        if tmpl.backstory <> "" then begin
+          add "## Agent Backstory";
+          add tmpl.backstory;
+          add ""
+        end
+    | _ ->
+        if config.agent_defaults.system_prompt <> "" then begin
+          add config.agent_defaults.system_prompt;
+          add ""
+        end
+        else begin
+          add base_prompt;
+          add ""
+        end);
     if config.prompt.include_autonomy_section then begin
       add "## Autonomous Operation";
       add
