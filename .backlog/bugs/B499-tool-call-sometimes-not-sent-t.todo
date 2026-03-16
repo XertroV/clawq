@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B499
+priority: high
+status: pending
+tags: []
+title: Tool call sometimes not sent to teams (possibly due to automated response from bg task finishing)
+---
+
+Tool call sometimes not sent to teams (possibly due to automated response from bg task finishing)
