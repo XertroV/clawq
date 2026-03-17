@@ -389,6 +389,7 @@ let handle ?(skill_names = []) text =
                 | schedule, message, ttl ->
                     Cron (CronEdit { name; schedule; message; ttl }))
             | [ "show"; name ] -> Cron (CronShow name)
+            | [ "trigger"; name ] | [ "run"; name ] -> Cron (CronTrigger name)
             | [ "history" ] | [ "runs" ] -> Cron (CronHistory None)
             | [ "history"; name ] | [ "runs"; name ] ->
                 Cron (CronHistory (Some name))

@@ -102,6 +102,8 @@ let rec result_to_string = function
   | Slash_commands.Cron (Slash_commands.CronHistory None) -> "Cron(History)"
   | Slash_commands.Cron (Slash_commands.CronHistory (Some name)) ->
       "Cron(History " ^ name ^ ")"
+  | Slash_commands.Cron (Slash_commands.CronTrigger name) ->
+      "Cron(Trigger " ^ name ^ ")"
   | Slash_commands.Bl Slash_commands.BlList -> "Bl(List)"
   | Slash_commands.Bl Slash_commands.BlBugs -> "Bl(Bugs)"
   | Slash_commands.Bl Slash_commands.BlIdeas -> "Bl(Ideas)"
@@ -1914,6 +1916,16 @@ let test_cron_show () =
     (Slash_commands.Cron (Slash_commands.CronShow "myjob"))
     (Slash_commands.handle "/cron show myjob")
 
+let test_cron_trigger () =
+  Alcotest.check result_testable "/cron trigger"
+    (Slash_commands.Cron (Slash_commands.CronTrigger "myjob"))
+    (Slash_commands.handle "/cron trigger myjob")
+
+let test_cron_run_alias () =
+  Alcotest.check result_testable "/cron run"
+    (Slash_commands.Cron (Slash_commands.CronTrigger "myjob"))
+    (Slash_commands.handle "/cron run myjob")
+
 let test_cron_help () =
   Alcotest.check result_testable "/cron help"
     (Slash_commands.Cron Slash_commands.CronHelp)
@@ -2523,6 +2535,8 @@ let suite =
     Alcotest.test_case "/cron history" `Quick test_cron_history;
     Alcotest.test_case "/cron history name" `Quick test_cron_history_name;
     Alcotest.test_case "/cron show" `Quick test_cron_show;
+    Alcotest.test_case "/cron trigger" `Quick test_cron_trigger;
+    Alcotest.test_case "/cron run alias" `Quick test_cron_run_alias;
     Alcotest.test_case "/cron help" `Quick test_cron_help;
     Alcotest.test_case "/cron unknown subcommand" `Quick
       test_cron_unknown_subcommand;

@@ -413,9 +413,22 @@ let cmd_cron args =
       if Scheduler.remove_job ~db ~name then
         Printf.sprintf "Removed job '%s'" name
       else Printf.sprintf "No job found with name '%s'" name
+  | [ "trigger"; name ] | [ "run"; name ] -> (
+      let db = get_db () in
+      Scheduler.init_schema db;
+      Background_task.init_schema db;
+      match Scheduler.trigger_job ~db ~name with
+      | Ok task_id ->
+          Printf.sprintf
+            "Triggered cron job '%s' — enqueued as background task %d.\n\
+             Use 'clawq background show %d' to check progress."
+            name task_id task_id
+      | Error e -> Printf.sprintf "Error: %s" e)
   | _ ->
-      "Usage: clawq-min cron <list|add|remove>\n\
+      "Usage: clawq-min cron <list|add|remove|trigger>\n\
       \  cron add <name> <session> <schedule> <msg> [--ttl <duration>]\n\
+      \  cron trigger <name>                          - Trigger a job \
+       immediately\n\
        Schedule format: \"every 5m\" (interval) or standard 5-field cron (e.g. \
        \"0 9 * * 1-5\" for weekdays at 9am)\n\
        TTL duration: e.g. 24h, 7d, 30m (job auto-disables after this time)"

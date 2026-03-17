@@ -507,6 +507,31 @@ let prune_runs ~db ~job_name ~keep =
   ignore (Sqlite3.step stmt);
   ignore (Sqlite3.finalize stmt)
 
+let trigger_job ~db ~name =
+  match get_job ~db ~name with
+  | None -> Error (Printf.sprintf "No cron job found with name '%s'." name)
+  | Some job -> (
+      let run_id = record_run_start ~db ~job_name:job.name in
+      let channel_info =
+        Memory.get_session_channel ~db ~session_key:job.session_key
+      in
+      let channel = Option.map fst channel_info in
+      let channel_id = Option.map snd channel_info in
+      match
+        Background_task.enqueue ~db ~runner:Local ~require_git:false
+          ~use_worktree:false ~repo_path:(Dot_dir.path ()) ~prompt:job.message
+          ~session_key:job.session_key ?channel ?channel_id ()
+      with
+      | Ok task_id ->
+          record_run_finish ~db ~run_id ~status:"triggered"
+            ~result_preview:(Printf.sprintf "bg task %d" task_id);
+          prune_runs ~db ~job_name:job.name ~keep:20;
+          Ok task_id
+      | Error err ->
+          record_run_finish ~db ~run_id ~status:"error" ~result_preview:err;
+          prune_runs ~db ~job_name:job.name ~keep:20;
+          Error err)
+
 let get_last_run_time ~db ~job_name =
   let sql =
     "SELECT CAST(strftime('%s', started_at) AS INTEGER) FROM cron_runs WHERE \

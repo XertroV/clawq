@@ -1240,6 +1240,54 @@ let test_handle_cron_show_existing () =
            true
          with Not_found -> false))
 
+let test_handle_cron_trigger_missing () =
+  with_temp_home (fun _home ->
+      let result = Command_bridge.handle [ "cron"; "trigger"; "no-such-job" ] in
+      Alcotest.(check bool)
+        "trigger missing returns error" true
+        (try
+           ignore
+             (Str.search_forward
+                (Str.regexp_string "No cron job found")
+                result 0);
+           true
+         with Not_found -> false))
+
+let test_handle_cron_trigger_existing () =
+  with_temp_home (fun _home ->
+      let _add =
+        Command_bridge.handle
+          [ "cron"; "add"; "trig-test"; "sess1"; "every 1h"; "say"; "hello" ]
+      in
+      let result = Command_bridge.handle [ "cron"; "trigger"; "trig-test" ] in
+      Alcotest.(check bool)
+        "trigger returns Triggered" true
+        (try
+           ignore (Str.search_forward (Str.regexp_string "Triggered") result 0);
+           true
+         with Not_found -> false);
+      Alcotest.(check bool)
+        "trigger mentions background task" true
+        (try
+           ignore
+             (Str.search_forward (Str.regexp_string "background task") result 0);
+           true
+         with Not_found -> false))
+
+let test_handle_cron_run_alias () =
+  with_temp_home (fun _home ->
+      let _add =
+        Command_bridge.handle
+          [ "cron"; "add"; "run-alias"; "sess1"; "every 2h"; "test"; "msg" ]
+      in
+      let result = Command_bridge.handle [ "cron"; "run"; "run-alias" ] in
+      Alcotest.(check bool)
+        "run alias returns Triggered" true
+        (try
+           ignore (Str.search_forward (Str.regexp_string "Triggered") result 0);
+           true
+         with Not_found -> false))
+
 let test_handle_background_list () =
   with_temp_home (fun _home ->
       let result = Command_bridge.handle [ "background"; "list" ] in
@@ -2895,6 +2943,11 @@ let suite =
       test_handle_cron_show_missing;
     Alcotest.test_case "handle cron show existing" `Quick
       test_handle_cron_show_existing;
+    Alcotest.test_case "handle cron trigger missing" `Quick
+      test_handle_cron_trigger_missing;
+    Alcotest.test_case "handle cron trigger existing" `Quick
+      test_handle_cron_trigger_existing;
+    Alcotest.test_case "handle cron run alias" `Quick test_handle_cron_run_alias;
     Alcotest.test_case "handle background list" `Quick
       test_handle_background_list;
     Alcotest.test_case "handle background bare shows commands" `Quick

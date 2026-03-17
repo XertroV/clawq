@@ -321,14 +321,27 @@ let cmd_cron args =
         ^ "\n\n"
         ^ Format_adapter.render_table Format_adapter.Plain ~max_width:80 columns
             rows
+  | [ "trigger"; name ] | [ "run"; name ] -> (
+      let db = get_db () in
+      Scheduler.init_schema db;
+      Background_task.init_schema db;
+      match Scheduler.trigger_job ~db ~name with
+      | Ok task_id ->
+          Printf.sprintf
+            "Triggered cron job '%s' — enqueued as background task %d.\n\
+             Use 'clawq background show %d' to check progress."
+            name task_id task_id
+      | Error e -> Printf.sprintf "Error: %s" e)
   | _ ->
-      "Usage: clawq cron <list|show|add|remove|history|runs>\n\
+      "Usage: clawq cron <list|show|add|remove|trigger|history|runs>\n\
       \  cron list [--prompt|-p]                      - List all jobs \
        (--prompt shows prompt text)\n\
       \  cron show <name>                             - Show job details\n\
       \  cron add <name> <session> <schedule> <msg> [--ephemeral] [--ttl \
        <duration>] - Add a job\n\
       \  cron remove <name>                           - Remove a job\n\
+      \  cron trigger <name>                          - Trigger a job \
+       immediately\n\
       \  cron history <name>                          - Show run history\n\
       \  cron runs [name]                             - Show all run history\n\
        Schedule format: \"every 5m\" (interval) or standard 5-field cron (e.g. \

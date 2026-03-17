@@ -58,6 +58,7 @@ type cron_action =
   | CronRemove of string
   | CronShow of string
   | CronHistory of string option
+  | CronTrigger of string
   | CronHelp
 
 type bl_action = BlList | BlShow of string | BlBugs | BlIdeas
@@ -720,6 +721,8 @@ let format_cron_usage ~connector =
   ^ "  \xe2\x80\x94 Edit message\n  "
   ^ Format_adapter.code connector "/cron remove <name>"
   ^ "                      \xe2\x80\x94 Remove a cron job\n  "
+  ^ Format_adapter.code connector "/cron trigger <name>"
+  ^ "                     \xe2\x80\x94 Trigger a job immediately\n  "
   ^ Format_adapter.code connector "/cron history [name]"
   ^ "                     \xe2\x80\x94 Show recent run history\n\n\
      Schedule formats: cron expression (e.g. "
@@ -2317,6 +2320,18 @@ let format_cron ~connector ~db ~session_key action =
           ^ ": "
           ^ Format_adapter.escape connector e
       | exception Invalid_argument e ->
+          Format_adapter.bold connector "Error"
+          ^ ": "
+          ^ Format_adapter.escape connector e)
+  | CronTrigger name -> (
+      Background_task.init_schema db;
+      match Scheduler.trigger_job ~db ~name with
+      | Ok task_id ->
+          format_cron_confirm ~connector "triggered" name
+          ^ " Enqueued as background task "
+          ^ Format_adapter.code connector (string_of_int task_id)
+          ^ "."
+      | Error e ->
           Format_adapter.bold connector "Error"
           ^ ": "
           ^ Format_adapter.escape connector e)
