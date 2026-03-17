@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B546
+priority: high
+status: pending
+tags: []
+title: Add a way to trigger a cron job adhoc so we can test it.
+---
+
+Add a way to trigger a cron job adhoc so we can test it.
