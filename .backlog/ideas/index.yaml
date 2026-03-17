@@ -246,3 +246,5 @@ ideas:
       title: 'Investigate how we can tie agents into existing systems: background tasks, slash commands (or @agent maybe), etc'
     - file: I029-verified-policy-engine.todo
       id: I029
+    - file: I030-cross-channel-thread-continuit.todo
+      id: I030

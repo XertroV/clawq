@@ -1,0 +1,14 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 10
+id: I030
+priority: high
+status: pending
+tags:
+    - channels
+    - sessions
+    - differentiator
+title: Cross-Channel Thread Continuity
+---
+A conversation started on Telegram can be continued on Discord, Slack, or the web UI with full context preserved. Sessions are channel-agnostic — the user's identity (not the channel) owns the session. 'clawq session continue --channel web' switches the active surface. This directly leverages clawq's unique 19-channel architecture in a way no competitor can match. OpenClaw, NanoClaw, and PicoClaw all bind sessions to channels. clawq can be the first assistant where YOU are the constant, not the app. [Planning Required]
