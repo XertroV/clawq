@@ -252,8 +252,15 @@ ideas:
       id: I031
     - file: I032-structured-output-pipelines.todo
       id: I032
-    - file: I033-completion-notifications-backg.todo
+    - complexity: medium
+      depends_on: []
+      estimate_hours: 10
+      file: I033-completion-notifications-backg.todo
       id: I033
+      priority: high
+      status: in_progress
+      tags: []
+      title: Completion Notifications (Background Task -> Channel)
     - file: I034-daily-briefing-pipeline.todo
       id: I034
     - file: I035-rss-feed-aggregator-with-ai-fi.todo

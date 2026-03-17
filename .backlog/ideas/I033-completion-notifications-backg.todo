@@ -1,14 +1,15 @@
 ---
+claimed_at: "2026-03-17T11:49:30Z"
+claimed_by: cli-user
+completed_at: null
 complexity: medium
 depends_on: []
 estimate_hours: 10
 id: I033
 priority: high
-status: pending
-tags:
-    - background-tasks
-    - channels
-    - notifications
+started_at: "2026-03-17T11:49:30Z"
+status: in_progress
+tags: []
 title: Completion Notifications (Background Task -> Channel)
 ---
 When a background task completes, route the result back to the originating channel (Telegram message, Discord reply, Slack thread) rather than requiring the user to poll with 'clawq background list'. This is a documented gap — background task outcomes are not reliably routed back. For a personal assistant that runs tasks while you're away, notification on completion is fundamental. Without it, background tasks are effectively fire-and-forget with manual checking.
