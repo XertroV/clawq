@@ -1,6 +1,6 @@
 let stream_turn_with_visibility mgr ~notify agent ~key ~effective_message
-    ~persisted_up_to ~interrupt_check ~inject_messages ~runtime_context
-    ~on_history_update ?on_stuck () =
+    ~persisted_up_to ~interrupt_check ~inject_messages ?on_tool_round_complete
+    ~runtime_context ~on_history_update ?on_stuck () =
   let open Lwt.Syntax in
   let agent_defaults = mgr.Session_core.config.agent_defaults in
   let capabilities = Session_core.find_connector_capabilities mgr ~key in
@@ -17,8 +17,8 @@ let stream_turn_with_visibility mgr ~notify agent ~key ~effective_message
   in
   let* response =
     Agent.turn_stream agent ~user_message:effective_message ?db:mgr.db
-      ~session_key:key ~interrupt_check ~inject_messages ?runtime_context
-      ~history_prepared:true ~on_history_update ?on_stuck
+      ~session_key:key ~interrupt_check ~inject_messages ?on_tool_round_complete
+      ?runtime_context ~history_prepared:true ~on_history_update ?on_stuck
       ~on_chunk:handler.on_chunk ()
   in
   let* () = handler.finalize () in
@@ -190,7 +190,8 @@ let handle_agent_mention mgr ?notify message =
 let run_locked_turn mgr ~key agent interrupt ~message ?(content_parts = [])
     ?(attachments = []) ?(skill_injections = [])
     ?(md_skills : (string * string) list = []) ?channel_name ?channel_type
-    ?sender_id ?sender_name ?user_group ?channel ?channel_id () =
+    ?sender_id ?sender_name ?user_group ?channel ?channel_id
+    ?on_tool_round_complete () =
   let open Lwt.Syntax in
   let interrupt_check () = !interrupt in
   interrupt := None;
@@ -346,13 +347,13 @@ let run_locked_turn mgr ~key agent interrupt ~message ?(content_parts = [])
                        || mgr.config.agent_defaults.show_tool_calls ->
                     stream_turn_with_visibility mgr ~notify:send agent ~key
                       ~effective_message ~persisted_up_to ~interrupt_check
-                      ~inject_messages ~runtime_context ~on_history_update
-                      ~on_stuck ()
+                      ~inject_messages ?on_tool_round_complete ~runtime_context
+                      ~on_history_update ~on_stuck ()
                 | _ ->
                     Agent.turn agent ~user_message:effective_message ?db:mgr.db
                       ~session_key:key ~interrupt_check ~inject_messages
-                      ?runtime_context ~history_prepared:true ~on_history_update
-                      ~on_stuck ()))
+                      ?on_tool_round_complete ?runtime_context
+                      ~history_prepared:true ~on_history_update ~on_stuck ()))
           (function
             | Agent.Restart_requested ->
                 if agent.Agent.compacted_mid_turn then begin
@@ -571,7 +572,8 @@ let rec turn mgr ~key ~message ?(content_parts = []) ?(attachments = [])
 
 let try_turn mgr ~key ~message ?(content_parts = []) ?(attachments = [])
     ?(skill_injections = []) ?channel_name ?channel_type ?sender_id ?sender_name
-    ?user_group ?channel ?channel_id ?message_id ?before_drain () =
+    ?user_group ?channel ?channel_id ?message_id ?on_tool_round_complete
+    ?before_drain () =
   Session_core.with_live_activity mgr ~key (fun () ->
       let open Lwt.Syntax in
       let* () = Session_core.mark_autonomous_activity_started mgr ~key in
@@ -591,7 +593,8 @@ let try_turn mgr ~key ~message ?(content_parts = []) ?(attachments = [])
                     run_locked_turn mgr ~key agent interrupt ~message
                       ~content_parts ~attachments ~skill_injections
                       ?channel_name ?channel_type ?sender_id ?sender_name
-                      ?user_group ?channel ?channel_id ()
+                      ?user_group ?channel ?channel_id ?on_tool_round_complete
+                      ()
                   in
                   let* () =
                     match before_drain with
@@ -821,8 +824,8 @@ let fork_and_run mgr ~parent_key ?agent_name ~prompt ~send_reply () =
 
 let turn_stream mgr ~key ~message ?(content_parts = []) ?(attachments = [])
     ?(skill_injections = []) ?channel_name ?channel_type ?sender_id ?sender_name
-    ?user_group ?channel ?channel_id ?message_id ?on_drain_progress
-    ?before_drain ~on_chunk () =
+    ?user_group ?channel ?channel_id ?message_id ?on_tool_round_complete
+    ?on_drain_progress ?before_drain ~on_chunk () =
   Session_core.with_live_activity mgr ~key (fun () ->
       let open Lwt.Syntax in
       let* () = Session_core.mark_autonomous_activity_started mgr ~key in
@@ -1028,9 +1031,9 @@ let turn_stream mgr ~key ~message ?(content_parts = []) ?(attachments = [])
                                   Agent.turn_stream agent
                                     ~user_message:effective_message ?db:mgr.db
                                     ~session_key:key ~interrupt_check
-                                    ~inject_messages ?runtime_context
-                                    ~history_prepared:true ~on_history_update
-                                    ~on_chunk ())
+                                    ~inject_messages ?on_tool_round_complete
+                                    ?runtime_context ~history_prepared:true
+                                    ~on_history_update ~on_chunk ())
                             (function
                               | Agent.Restart_requested ->
                                   if agent.Agent.compacted_mid_turn then begin

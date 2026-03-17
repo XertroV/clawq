@@ -1516,7 +1516,7 @@ let perform_cwd_history_wipe agent =
 (* Execute tool calls in order so workspace refresh events can attribute active
    prompt-file updates to the specific tool call that triggered them. *)
 let execute_tool_calls_stream agent ~db ~audit_enabled ~session_key
-    ?interrupt_check ~on_chunk calls =
+    ?interrupt_check ?on_tool_round_complete ~on_chunk calls =
   let open Lwt.Syntax in
   let sk_tag = match session_key with Some s -> "[" ^ s ^ "] " | None -> "" in
   let notification_promises = ref [] in
@@ -1758,10 +1758,21 @@ let execute_tool_calls_stream agent ~db ~audit_enabled ~session_key
       List.iter (fun msg -> agent.history <- msg :: agent.history) doc_events)
     results;
   let* () = Lwt.join !notification_promises in
+  let* () =
+    match on_tool_round_complete with
+    | Some cb ->
+        let pairs =
+          List.map
+            (fun (tc, (rm : Provider.message), _) -> (tc, rm.content))
+            results
+        in
+        cb pairs
+    | None -> Lwt.return_unit
+  in
   Lwt.return_unit
 
 let execute_tool_calls agent ~db ~audit_enabled ~session_key ?interrupt_check
-    calls =
+    ?on_tool_round_complete calls =
   let open Lwt.Syntax in
   let sk_tag = match session_key with Some s -> "[" ^ s ^ "] " | None -> "" in
   let pending_history_wipe = ref false in
@@ -1939,6 +1950,17 @@ let execute_tool_calls agent ~db ~audit_enabled ~session_key ?interrupt_check
       let doc_events = observe_project_docs agent tc in
       List.iter (fun msg -> agent.history <- msg :: agent.history) doc_events)
     results;
+  let* () =
+    match on_tool_round_complete with
+    | Some cb ->
+        let pairs =
+          List.map
+            (fun (tc, (rm : Provider.message), _) -> (tc, rm.content))
+            results
+        in
+        cb pairs
+    | None -> Lwt.return_unit
+  in
   Lwt.return_unit
 
 let inject_search_context agent ~db ~user_message =
@@ -2062,8 +2084,8 @@ let prepare_turn_history agent ~user_message ?(content_parts = [])
   Lwt.return compacted
 
 let turn agent ~user_message ?db ?session_key ?interrupt_check ?inject_messages
-    ?runtime_context ?(history_prepared = false) ?on_history_update ?on_stuck ()
-    =
+    ?on_tool_round_complete ?runtime_context ?(history_prepared = false)
+    ?on_history_update ?on_stuck () =
   let is_restart_interrupt = function
     | Some reason when reason = restart_interrupt_token -> true
     | _ -> false
@@ -2318,7 +2340,7 @@ let turn agent ~user_message ?db ?session_key ?interrupt_check ?inject_messages
         agent.history <- assistant_msg :: agent.history;
         let* () =
           execute_tool_calls agent ~db ~audit_enabled ~session_key
-            ?interrupt_check calls
+            ?interrupt_check ?on_tool_round_complete calls
         in
         (match inject_messages with
         | Some get_msgs ->
@@ -2372,8 +2394,8 @@ let turn agent ~user_message ?db ?session_key ?interrupt_check ?inject_messages
   loop 0
 
 let turn_stream agent ~user_message ?db ?session_key ?interrupt_check
-    ?inject_messages ?runtime_context ?(history_prepared = false)
-    ?on_history_update ?on_stuck ~on_chunk () =
+    ?inject_messages ?on_tool_round_complete ?runtime_context
+    ?(history_prepared = false) ?on_history_update ?on_stuck ~on_chunk () =
   let is_restart_interrupt = function
     | Some reason when reason = restart_interrupt_token -> true
     | _ -> false
@@ -2650,7 +2672,7 @@ let turn_stream agent ~user_message ?db ?session_key ?interrupt_check
             agent.history <- assistant_msg :: agent.history;
             let* () =
               execute_tool_calls_stream agent ~db ~audit_enabled ~session_key
-                ?interrupt_check ~on_chunk calls
+                ?interrupt_check ?on_tool_round_complete ~on_chunk calls
             in
             (match inject_messages with
             | Some get_msgs ->

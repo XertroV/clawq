@@ -126,7 +126,13 @@
   acp_terminals
   acp_history
   acp_client
-  admin)
+  admin
+  pair_coding_types
+  pair_coding_state
+  pair_coding_tools
+  pair_coding_prompts
+  pair_coding_session
+  pair_coding_report)
  (foreign_stubs
   (language c)
   (names landlock_stubs))
@@ -248,7 +254,8 @@
   setup_resilience
   setup_heartbeat
   ec_process
-  ec_diagnosis)
+  ec_diagnosis
+  command_bridge_pair)
  (wrapped false)
  (libraries
   clawq_runtime_core

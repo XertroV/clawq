@@ -2014,6 +2014,7 @@ let handle args =
   | "background" :: rest -> cmd_background rest
   | "delegate" :: rest -> cmd_delegate rest
   | "skills" :: rest -> cmd_skills rest
+  | "pair" :: rest -> Command_bridge_pair.cmd_pair rest
   | "agents" :: rest -> cmd_agents rest
   | "audit" :: rest -> cmd_audit rest
   | "runtime" :: rest -> cmd_runtime rest

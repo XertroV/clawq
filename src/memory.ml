@@ -1,4 +1,4 @@
-let schema_version = 25
+let schema_version = 26
 
 type session_activity = Active | Inactive | Any
 
@@ -701,6 +701,11 @@ let migrate_schema db current_version =
       set_schema_version db schema_version
   | 24 ->
       init_attachment_log_schema db;
+      set_schema_version db 25;
+      Pair_coding_state.init_schema db;
+      set_schema_version db schema_version
+  | 25 ->
+      Pair_coding_state.init_schema db;
       set_schema_version db schema_version
   | n when n = schema_version ->
       init_session_schema db;
@@ -717,7 +722,8 @@ let migrate_schema db current_version =
       init_session_archive_schema db;
       init_connector_history_schema db;
       init_attachment_log_schema db;
-      Admin.init_schema db
+      Admin.init_schema db;
+      Pair_coding_state.init_schema db
   | n ->
       failwith
         (Printf.sprintf "DB uses future schema version %d (current=%d)" n
@@ -803,6 +809,7 @@ let init ~db_path ?(search_enabled = false) () =
   init_session_archive_schema db;
   init_attachment_log_schema db;
   Admin.init_schema db;
+  Pair_coding_state.init_schema db;
   db
 
 let store_message ~db ~session_key (msg : Provider.message) =

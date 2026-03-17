@@ -156,7 +156,8 @@
   test_workspace_version
   test_acp
   test_admin
-  test_attachment_download)
+  test_attachment_download
+  test_pair_coding)
  (libraries
   clawq_extracted
   clawq_runtime_core

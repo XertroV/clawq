@@ -583,6 +583,7 @@ let handle args =
   | "runtime" :: _ -> unsupported "runtime"
   | "tunnel" :: _ -> unsupported "tunnel"
   | "service" :: _ -> unsupported "service"
+  | "pair" :: _ -> unsupported "pair"
   | "setup" :: _ -> unsupported "setup"
   | "watcher" :: _ -> unsupported "watcher"
   | "ec-run" :: _ -> unsupported "ec-run"
