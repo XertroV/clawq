@@ -10,3 +10,5 @@ title: in Teams, clawq should respond to /debug_dump_chat with a link and not th
 ---
 
 in Teams, clawq should respond to /debug_dump_chat with a link and not the file upload request (which is still broken)
+
+Note: we will eventually try to fix and re-enable the file upload thing in teams, but for now we just want to send the URL instead.
