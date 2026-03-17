@@ -355,6 +355,7 @@ let collect_tool_result_ids = Message_history.collect_tool_result_ids
    and strip dangling tool_calls from assistant messages (no matching tool
    result). Works on messages in any order. *)
 let ensure_tool_group_integrity = Message_history.ensure_tool_group_integrity
+let sanitize_messages_for_flush = Message_history.sanitize_messages_for_flush
 
 let trim_history agent =
   let effective_max = effective_max_messages agent in
@@ -742,68 +743,77 @@ let flush_memories_before_compaction ~config ~system_prompt ~db ~to_compact =
   Logs.info (fun m ->
       m "Pre-compaction memory flush: processing %d messages" n_msgs);
   let to_compact = ensure_tool_group_integrity to_compact in
-  (* Send the full history as context so memories from any part of the
+  let to_compact = sanitize_messages_for_flush to_compact in
+  if to_compact = [] then (
+    Logs.debug (fun m ->
+        m "Pre-compaction memory flush: no messages after sanitization");
+    Lwt.return_unit)
+  else
+    (* Send the full history as context so memories from any part of the
      conversation can be extracted.  The large stable prefix is automatically
      cached by OpenAI after the first call (~50% discount on subsequent
      iterations in the loop), keeping per-iteration cost reasonable. *)
-  let messages =
-    ref
-      ([ Provider.make_message ~role:"system" ~content:system_prompt ]
-      @ to_compact
-      @ [ Provider.make_message ~role:"user" ~content:flush_trigger_message ])
-  in
-  let stored = ref 0 in
-  let forgotten = ref 0 in
-  let max_iters = 10 in
-  let rec loop iter =
-    if iter >= max_iters then Lwt.return_unit
-    else
-      let* response =
-        Provider.complete ~config ~messages:!messages
-          ~tools:flush_memory_tool_schemas ()
-      in
-      match response with
-      | Provider.Text { content; _ } ->
-          (* Text response = done — log if non-empty *)
-          if String.trim content <> "" then
-            Logs.debug (fun m ->
-                m "Pre-compaction flush final text: %s"
-                  (if String.length content > 200 then
-                     String.sub content 0 200 ^ "..."
-                   else content));
-          Lwt.return_unit
-      | Provider.ToolCalls { calls; _ } ->
-          let assistant_msg =
-            {
-              (Provider.make_message ~role:"assistant" ~content:"") with
-              tool_calls = calls;
-            }
-          in
-          let results =
-            List.map
-              (fun (tc : Provider.tool_call) ->
-                let result = dispatch_flush_tool_call ~db tc in
-                (match tc.function_name with
-                | "memory_store" ->
-                    if not (String.starts_with ~prefix:"Error:" result.content)
-                    then incr stored
-                | "memory_forget" ->
-                    if
-                      (not (String.starts_with ~prefix:"Error:" result.content))
-                      && not (String.starts_with ~prefix:"No " result.content)
-                    then incr forgotten
-                | _ -> ());
-                result)
-              calls
-          in
-          messages := !messages @ [ assistant_msg ] @ results;
-          loop (iter + 1)
-  in
-  let* () = loop 0 in
-  Logs.info (fun m ->
-      m "Pre-compaction memory flush: stored %d, forgotten %d memories" !stored
-        !forgotten);
-  Lwt.return_unit
+    let messages =
+      ref
+        ([ Provider.make_message ~role:"system" ~content:system_prompt ]
+        @ to_compact
+        @ [ Provider.make_message ~role:"user" ~content:flush_trigger_message ]
+        )
+    in
+    let stored = ref 0 in
+    let forgotten = ref 0 in
+    let max_iters = 10 in
+    let rec loop iter =
+      if iter >= max_iters then Lwt.return_unit
+      else
+        let* response =
+          Provider.complete ~config ~messages:!messages
+            ~tools:flush_memory_tool_schemas ()
+        in
+        match response with
+        | Provider.Text { content; _ } ->
+            (* Text response = done — log if non-empty *)
+            if String.trim content <> "" then
+              Logs.debug (fun m ->
+                  m "Pre-compaction flush final text: %s"
+                    (if String.length content > 200 then
+                       String.sub content 0 200 ^ "..."
+                     else content));
+            Lwt.return_unit
+        | Provider.ToolCalls { calls; _ } ->
+            let assistant_msg =
+              {
+                (Provider.make_message ~role:"assistant" ~content:"") with
+                tool_calls = calls;
+              }
+            in
+            let results =
+              List.map
+                (fun (tc : Provider.tool_call) ->
+                  let result = dispatch_flush_tool_call ~db tc in
+                  (match tc.function_name with
+                  | "memory_store" ->
+                      if
+                        not (String.starts_with ~prefix:"Error:" result.content)
+                      then incr stored
+                  | "memory_forget" ->
+                      if
+                        (not
+                           (String.starts_with ~prefix:"Error:" result.content))
+                        && not (String.starts_with ~prefix:"No " result.content)
+                      then incr forgotten
+                  | _ -> ());
+                  result)
+                calls
+            in
+            messages := !messages @ [ assistant_msg ] @ results;
+            loop (iter + 1)
+    in
+    let* () = loop 0 in
+    Logs.info (fun m ->
+        m "Pre-compaction memory flush: stored %d, forgotten %d memories"
+          !stored !forgotten);
+    Lwt.return_unit
 
 let compact_history_if_needed agent ?db () =
   let open Lwt.Syntax in

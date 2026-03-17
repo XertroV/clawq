@@ -92,3 +92,62 @@ let expand_keep_for_tool_groups to_compact to_keep =
     | _ -> keep
   in
   loop to_compact to_keep
+
+let sanitize_messages_for_flush (msgs : Provider.message list) :
+    Provider.message list =
+  let truncate_content s max_len =
+    if String.length s <= max_len then s
+    else
+      let suffix = "... [truncated]" in
+      let cut = max_len - String.length suffix in
+      if cut <= 0 then String.sub s 0 max_len else String.sub s 0 cut ^ suffix
+  in
+  (* Phase 1: transform each message into system/user/assistant with no
+     tool_calls, or drop it. *)
+  let transformed =
+    List.filter_map
+      (fun (m : Provider.message) ->
+        if m.role = "event" then None
+        else
+          let role =
+            if m.role = "developer" || m.role = "tool" then "user" else m.role
+          in
+          let content =
+            if m.role = "tool" then
+              let prefix =
+                match m.name with
+                | Some n -> Printf.sprintf "[Tool result (%s)]: " n
+                | None -> "[Tool result]: "
+              in
+              truncate_content (prefix ^ m.content) 2000
+            else if m.role = "assistant" && m.content = "" && m.tool_calls <> []
+            then
+              let names =
+                List.map
+                  (fun (tc : Provider.tool_call) -> tc.function_name)
+                  m.tool_calls
+              in
+              "[Called tools: " ^ String.concat ", " names ^ "]"
+            else if m.content = "" && m.content_parts <> [] then
+              "[Multimedia content]"
+            else m.content
+          in
+          if content = "" || String.trim content = "" then None
+          else
+            Some
+              (Provider.make_message ~role
+                 ~content:(truncate_content content 2000)))
+      msgs
+  in
+  (* Phase 2: merge consecutive same-role messages. *)
+  let merged =
+    List.fold_left
+      (fun acc (m : Provider.message) ->
+        match acc with
+        | (prev : Provider.message) :: rest when prev.role = m.role ->
+            { prev with content = prev.content ^ "\n" ^ m.content } :: rest
+        | _ -> m :: acc)
+      [] transformed
+    |> List.rev
+  in
+  merged

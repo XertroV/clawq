@@ -553,6 +553,227 @@ let test_plan_returns_none_for_short_history () =
       Alcotest.(check bool)
         "no plan for short history" true (Option.is_none plan))
 
+(* ---- sanitize_messages_for_flush tests ---- *)
+
+let sanitize = Message_history.sanitize_messages_for_flush
+
+(* Test 12: sanitize drops event messages *)
+let test_sanitize_drops_event_messages () =
+  let msgs =
+    [
+      Provider.make_message ~role:"user" ~content:"hello";
+      Provider.make_message ~role:"event" ~content:"session_started";
+      Provider.make_message ~role:"assistant" ~content:"hi";
+      Provider.make_message ~role:"event" ~content:"tool_executed";
+    ]
+  in
+  let result = sanitize msgs in
+  Alcotest.(check int) "two messages remain" 2 (List.length result);
+  List.iter
+    (fun (m : Provider.message) ->
+      Alcotest.(check bool) "no event role" true (m.role <> "event"))
+    result
+
+(* Test 13: sanitize converts developer to user *)
+let test_sanitize_converts_developer_to_user () =
+  let msgs =
+    [
+      Provider.make_message ~role:"developer" ~content:"system instruction";
+      Provider.make_message ~role:"assistant" ~content:"ok";
+    ]
+  in
+  let result = sanitize msgs in
+  let first = List.hd result in
+  Alcotest.(check string) "role is user" "user" first.role;
+  Alcotest.(check string) "content preserved" "system instruction" first.content
+
+(* Test 14: sanitize strips tool_calls from assistant *)
+let test_sanitize_strips_tool_calls () =
+  let tc : Provider.tool_call =
+    { id = "tc1"; function_name = "file_read"; arguments = "{}" }
+  in
+  (* Assistant with content + tool_calls -> keep content only *)
+  let msg_with_content =
+    {
+      (Provider.make_message ~role:"assistant" ~content:"Let me check") with
+      tool_calls = [ tc ];
+    }
+  in
+  (* Assistant with empty content + tool_calls -> generate description *)
+  let msg_empty_content =
+    {
+      (Provider.make_message ~role:"assistant" ~content:"") with
+      tool_calls = [ tc ];
+    }
+  in
+  let separator = Provider.make_message ~role:"user" ~content:"ok" in
+  let result = sanitize [ msg_with_content; separator; msg_empty_content ] in
+  Alcotest.(check int) "three messages" 3 (List.length result);
+  let first = List.hd result in
+  Alcotest.(check string) "kept content" "Let me check" first.content;
+  Alcotest.(check (list string))
+    "no tool_calls" []
+    (List.map (fun (tc : Provider.tool_call) -> tc.id) first.tool_calls);
+  let third = List.nth result 2 in
+  Alcotest.(check string)
+    "generated tool description" "[Called tools: file_read]" third.content
+
+(* Test 15: sanitize drops ghost assistant messages *)
+let test_sanitize_drops_ghost_assistant () =
+  let msgs =
+    [
+      Provider.make_message ~role:"user" ~content:"hello";
+      {
+        (Provider.make_message ~role:"assistant" ~content:"") with
+        tool_calls = [];
+      };
+      Provider.make_message ~role:"assistant" ~content:"real response";
+    ]
+  in
+  let result = sanitize msgs in
+  Alcotest.(check int) "ghost removed" 2 (List.length result);
+  let second = List.nth result 1 in
+  Alcotest.(check string) "real response kept" "real response" second.content
+
+(* Test 16: sanitize converts tool to user with prefix *)
+let test_sanitize_converts_tool_to_user () =
+  let tool_msg =
+    {
+      (Provider.make_message ~role:"tool" ~content:"file contents here") with
+      name = Some "file_read";
+      tool_call_id = Some "tc1";
+    }
+  in
+  let result = sanitize [ tool_msg ] in
+  Alcotest.(check int) "one message" 1 (List.length result);
+  let m = List.hd result in
+  Alcotest.(check string) "role is user" "user" m.role;
+  Alcotest.(check string)
+    "content has prefix" "[Tool result (file_read)]: file contents here"
+    m.content;
+  (* Test truncation for long content *)
+  let long_content = String.make 3000 'x' in
+  let long_msg =
+    {
+      (Provider.make_message ~role:"tool" ~content:long_content) with
+      name = Some "shell_exec";
+      tool_call_id = Some "tc2";
+    }
+  in
+  let result2 = sanitize [ long_msg ] in
+  let m2 = List.hd result2 in
+  Alcotest.(check bool)
+    "truncated to 2000" true
+    (String.length m2.content <= 2000)
+
+(* Test 17: sanitize merges consecutive same-role *)
+let test_sanitize_merges_consecutive () =
+  let msgs =
+    [
+      Provider.make_message ~role:"user" ~content:"first";
+      Provider.make_message ~role:"user" ~content:"second";
+      Provider.make_message ~role:"assistant" ~content:"response";
+    ]
+  in
+  let result = sanitize msgs in
+  Alcotest.(check int) "merged to two" 2 (List.length result);
+  let first = List.hd result in
+  Alcotest.(check string) "merged content" "first\nsecond" first.content
+
+(* Test 18: sanitize handles realistic mixed conversation *)
+let test_sanitize_realistic_mixed () =
+  let tc : Provider.tool_call =
+    { id = "tc1"; function_name = "shell_exec"; arguments = "{}" }
+  in
+  let msgs =
+    [
+      Provider.make_message ~role:"user" ~content:"run tests";
+      {
+        (Provider.make_message ~role:"assistant" ~content:"") with
+        tool_calls = [ tc ];
+      };
+      {
+        (Provider.make_message ~role:"tool" ~content:"all tests passed") with
+        name = Some "shell_exec";
+        tool_call_id = Some "tc1";
+      };
+      Provider.make_message ~role:"event" ~content:"tool_completed";
+      Provider.make_message ~role:"user" ~content:"great thanks";
+      Provider.make_message ~role:"assistant" ~content:"You're welcome!";
+    ]
+  in
+  let result = sanitize msgs in
+  (* Expected: user("run tests") -> assistant("[Called tools: shell_exec]")
+     -> user("[Tool result (shell_exec)]: all tests passed\ngreat thanks")
+     -> assistant("You're welcome!") *)
+  Alcotest.(check int) "four messages after sanitize" 4 (List.length result);
+  List.iter
+    (fun (m : Provider.message) ->
+      Alcotest.(check bool)
+        "only system/user/assistant" true
+        (m.role = "system" || m.role = "user" || m.role = "assistant"))
+    result;
+  (* Check tool result + user message merged *)
+  let third = List.nth result 2 in
+  Alcotest.(check string) "merged role" "user" third.role;
+  Alcotest.(check bool)
+    "contains tool result" true
+    (String.length third.content > 0
+    &&
+    let s = third.content in
+    try
+      let _ = Str.search_forward (Str.regexp_string "Tool result") s 0 in
+      true
+    with Not_found -> false)
+
+(* Test 19: end-to-end flush with tool/event messages *)
+let test_flush_with_tool_event_messages () =
+  let request_log = ref [] in
+  with_tool_call_provider ~tool_calls_to_return:[] ~request_log (fun config ->
+      let db = Memory.init ~db_path:":memory:" () in
+      let tc : Provider.tool_call =
+        { id = "tc1"; function_name = "file_read"; arguments = "{}" }
+      in
+      let to_compact =
+        [
+          Provider.make_message ~role:"user" ~content:"read the file";
+          {
+            (Provider.make_message ~role:"assistant" ~content:"") with
+            tool_calls = [ tc ];
+          };
+          {
+            (Provider.make_message ~role:"tool" ~content:"file data here") with
+            name = Some "file_read";
+            tool_call_id = Some "tc1";
+          };
+          Provider.make_message ~role:"event" ~content:"tool_done";
+          Provider.make_message ~role:"assistant" ~content:"Here's the file.";
+        ]
+      in
+      Lwt_main.run
+        (Agent.flush_memories_before_compaction ~config
+           ~system_prompt:"You are helpful." ~db ~to_compact);
+      (* Verify no event or tool roles in the request *)
+      List.iter
+        (fun body ->
+          try
+            let json = Yojson.Safe.from_string body in
+            let msgs =
+              Yojson.Safe.Util.(json |> member "messages" |> to_list)
+            in
+            List.iter
+              (fun msg ->
+                let role =
+                  Yojson.Safe.Util.(msg |> member "role" |> to_string)
+                in
+                Alcotest.(check bool)
+                  (Printf.sprintf "no %s role in request" role)
+                  true
+                  (role = "system" || role = "user" || role = "assistant"))
+              msgs
+          with _ -> ())
+        !request_log)
+
 let suite =
   [
     Alcotest.test_case "flush stores memories via tool calls" `Quick
@@ -576,4 +797,20 @@ let suite =
       test_apply_handles_reset;
     Alcotest.test_case "plan returns None for short history" `Quick
       test_plan_returns_none_for_short_history;
+    Alcotest.test_case "sanitize drops event messages" `Quick
+      test_sanitize_drops_event_messages;
+    Alcotest.test_case "sanitize converts developer to user" `Quick
+      test_sanitize_converts_developer_to_user;
+    Alcotest.test_case "sanitize strips tool_calls" `Quick
+      test_sanitize_strips_tool_calls;
+    Alcotest.test_case "sanitize drops ghost assistant" `Quick
+      test_sanitize_drops_ghost_assistant;
+    Alcotest.test_case "sanitize converts tool to user" `Quick
+      test_sanitize_converts_tool_to_user;
+    Alcotest.test_case "sanitize merges consecutive same-role" `Quick
+      test_sanitize_merges_consecutive;
+    Alcotest.test_case "sanitize realistic mixed conversation" `Quick
+      test_sanitize_realistic_mixed;
+    Alcotest.test_case "flush with tool/event messages" `Quick
+      test_flush_with_tool_event_messages;
   ]
