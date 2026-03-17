@@ -1,0 +1,30 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B541
+priority: high
+status: pending
+tags: []
+title: Pre-compaction memory flush fails with 'Incorrect role information' on zai_coding/glm-5
+---
+When the agent's primary model is zai_coding:glm-5, the pre-compaction memory flush sends
+137 messages (system + full conversation history + flush trigger) to the LLM. The provider
+returns HTTP 400: {"error":{"code":"1214","message":"Incorrect role information"}}.
+
+This suggests glm-5 has stricter message role requirements than OpenAI-compatible providers
+(e.g. it may not accept tool/tool_call roles, or requires strict user/assistant alternation).
+
+The flush fails, compaction proceeds, and context is lost without memory extraction.
+
+Possible fixes:
+- Sanitize/convert message roles for non-OpenAI providers before the flush call
+- Strip tool_call/tool messages from the flush context (not needed for memory extraction)
+- Use a simpler summarization prompt instead of replaying full history with tool roles
+- Fall back to a known-compatible model for the flush call
+
+Log:
+  [02:37:37.373] INFO  Pre-compaction memory flush: processing 135 messages
+  [02:37:37.375] INFO  -> LLM provider=zai_coding model=glm-5 msgs=137 ~46k tok
+  [02:37:38.081] WARN  Pre-compaction memory flush failed: Failure("LLM API error (HTTP 400): {"error":{"code":"1214","message":"Incorrect role information"}}")
+  [02:37:40.976] INFO  -> LLM provider=zai_coding model=glm-5 msgs=2 ~8k tok
