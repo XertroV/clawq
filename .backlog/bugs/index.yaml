@@ -514,3 +514,4 @@ bugs:
     - file: B515-audit-and-implement-menus-for.todo
     - file: B516-run-task-skill-should-prefer-l.todo
     - file: B517-add-dow-to-local-timestamp-in.todo
+    - file: B518-skills-not-in-help-anymore.todo
