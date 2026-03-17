@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B536
+priority: high
+status: pending
+tags: []
+title: 'Sending a voice message in any channel should use transcription. Limits should be: not music, not over 1hr, under 25mb file. When transcribing starts a message ''Transcribing...'' should be sent to the channel, and then updated to ''Transcribing... Done!'' when done'
+---
+
+Sending a voice message in any channel should use transcription. Limits should be: not music, not over 1hr, under 25mb file. When transcribing starts a message 'Transcribing...' should be sent to the channel, and then updated to 'Transcribing... Done!' when done
