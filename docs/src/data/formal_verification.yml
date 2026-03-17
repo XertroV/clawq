@@ -64,7 +64,7 @@
   module: "RateLimiter.v"
   title: "Token Bucket Rate Limiter"
   status: "verified"
-  theorems: 6
+  theorems: 10
   extracted: false
   security_roi: "medium"
   difficulty: "medium"
@@ -73,6 +73,9 @@
     - "Bounded refill"
     - "Monotone refill"
     - "Consume semantics (P1-P6)"
+    - "Refill idempotence at same timestamp"
+    - "Consume tokens bounded by max"
+    - "Refill chain monotonicity"
 
 - phase: "F5"
   module: "Config.v + ConfigProofs.v"
@@ -110,7 +113,7 @@
   module: "SecretStore.v"
   title: "Encryption Correctness"
   status: "verified"
-  theorems: 12
+  theorems: 25
   extracted: false
   security_roi: "high"
   difficulty: "medium"
@@ -199,22 +202,26 @@
 - phase: "F13"
   module: "ToolSafety.v"
   title: "Tool Invocation Safety"
-  status: "planned"
-  theorems: 0
+  status: "verified"
+  theorems: 24
   extracted: false
   security_roi: "very_high"
   difficulty: "medium"
   coq_file: "coq/theories/Clawq/ToolSafety.v"
   key_properties:
-    - "Registry name uniqueness (no shadowing)"
-    - "Risk-level monotonicity (deferred discovery cannot elevate risk)"
-    - "Invocation dispatch correctness"
+    - "Low-risk tools need no authorization"
+    - "High/medium-risk tools require authorization"
+    - "Allowlist and authorization monotonicity"
+    - "Invocation safety requires both allowlist and auth"
+    - "Risk level ordering: reflexive, transitive, antisymmetric, total"
+    - "Chain safety implies element safety"
+    - "Risk levels are mutually exclusive"
 
 - phase: "F14"
   module: "ConfigMerge.v"
   title: "Config Merge Semantics"
-  status: "planned"
-  theorems: 0
+  status: "verified"
+  theorems: 12
   extracted: false
   security_roi: "high"
   difficulty: "medium"
@@ -227,9 +234,10 @@
 - phase: "F15"
   module: "McpFraming.v"
   title: "MCP Protocol Framing"
-  status: "planned"
-  theorems: 0
+  status: "verified"
+  theorems: 30
   extracted: false
+  note: "1 Admitted (parse_content_length_roundtrip — needs concrete string_sub axioms)"
   security_roi: "medium"
   difficulty: "medium"
   coq_file: "coq/theories/Clawq/McpFraming.v"
@@ -252,14 +260,99 @@
     - "Key-scoped search correctness"
 
 - phase: "F17"
-  module: "SandboxSafety.v"
-  title: "Sandbox Containment"
-  status: "planned"
-  theorems: 0
+  module: "SandboxPolicy.v"
+  title: "Sandbox Policy"
+  status: "verified"
+  theorems: 16
   extracted: false
   security_roi: "medium"
-  difficulty: "high"
-  coq_file: "coq/theories/Clawq/SandboxSafety.v"
+  difficulty: "low"
+  coq_file: "coq/theories/Clawq/SandboxPolicy.v"
   key_properties:
-    - "Workspace containment of wrapped commands"
-    - "Backend selection correctness"
+    - "Detection fallback ordering (Firejail > Bubblewrap > NoSandbox)"
+    - "Command wrapping requires isolation + real backend"
+    - "Workspace excluded from filtered extra paths"
+    - "Filtered paths bounded subset of originals"
+
+- phase: "F18"
+  module: "PairCoding.v"
+  title: "Pair Coding State Machine"
+  status: "verified"
+  theorems: 34
+  extracted: false
+  security_roi: "low"
+  difficulty: "medium"
+  coq_file: "coq/theories/Clawq/PairCoding.v"
+  key_properties:
+    - "Phase level monotonicity"
+    - "Review round monotonicity"
+    - "Completion requires approval or max rounds"
+    - "Done is terminal (no phase change)"
+    - "Abort/timeout always succeed (produce Done)"
+    - "Review entry clears approvals"
+
+- phase: "F19"
+  module: "PmodelParsing.v"
+  title: "Model Format Parsing"
+  status: "verified"
+  theorems: 13
+  extracted: false
+  security_roi: "low"
+  difficulty: "low"
+  coq_file: "coq/theories/Clawq/PmodelParsing.v"
+  key_properties:
+    - "Canonical format always converts"
+    - "Bare format requires default provider"
+    - "Deprecation warning iff non-canonical"
+    - "Conversion preserves model field"
+
+- phase: "F20"
+  module: "TaskTree.v"
+  title: "Task Tree Status Machine"
+  status: "verified"
+  theorems: 20
+  extracted: false
+  security_roi: "low"
+  difficulty: "low"
+  coq_file: "coq/theories/Clawq/TaskTree.v"
+  key_properties:
+    - "Terminal states have no outgoing transitions"
+    - "Actionable states can always be cancelled"
+    - "Task_error is stuck (absorbing error state)"
+    - "Transitions always advance status order"
+    - "No self-transitions"
+    - "Pending reaches terminal in at most 2 steps"
+
+- phase: "F21"
+  module: "SchedulerCron.v"
+  title: "Cron Field Matching"
+  status: "verified"
+  theorems: 20
+  extracted: false
+  security_roi: "low"
+  difficulty: "low"
+  coq_file: "coq/theories/Clawq/SchedulerCron.v"
+  key_properties:
+    - "Wildcard matches all values"
+    - "Non-wildcard field_matches iff membership"
+    - "Valid field values within range"
+    - "All-wildcard cron matches any time"
+    - "Minute/hour/month/dow range bounds"
+    - "Field matching monotonicity"
+
+- phase: "F22"
+  module: "DiscordGateway.v"
+  title: "Discord Gateway Protocol"
+  status: "verified"
+  theorems: 20
+  extracted: false
+  security_roi: "medium"
+  difficulty: "medium"
+  coq_file: "coq/theories/Clawq/DiscordGateway.v"
+  key_properties:
+    - "Hello starts heartbeat and sets ACK"
+    - "READY establishes session"
+    - "Reconnect preserves session for resumption"
+    - "Invalid session (fresh) clears state"
+    - "Heartbeat timeout disconnects"
+    - "Full connect and reconnect lifecycle proofs"

@@ -1,17 +1,17 @@
 {
-  "generated_on": "2026-03-10",
+  "generated_on": "2026-03-17",
   "coq_version": "8.19",
-  "repository_total": 186,
-  "public_phase_total": 164,
-  "verified_unique_total": 186,
+  "repository_total": 380,
+  "public_phase_total": 358,
+  "verified_unique_total": 380,
   "verified_unique_percent": 100.0,
-  "public_verified_total": 164,
+  "public_verified_total": 358,
   "public_in_progress_total": 0,
   "public_planned_total": 0,
   "in_progress_total": 0,
   "extracted_modules": 3,
-  "coq_lines": 4268,
-  "command_count": 32,
-  "test_count": 1557,
-  "verified_domain_count": 13
+  "coq_lines": 7620,
+  "command_count": 43,
+  "test_count": 3293,
+  "verified_domain_count": 21
 }

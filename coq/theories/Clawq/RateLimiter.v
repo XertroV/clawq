@@ -149,4 +149,78 @@ Proof.
   lia.
 Qed.
 
+(* P7: Refilling at the same time is idempotent *)
+Theorem refill_same_time_idempotent : forall cfg b now,
+  refill cfg (refill cfg b now) now = refill cfg b now.
+Proof.
+  intros cfg b now.
+  unfold refill at 1 3. simpl.
+  destruct ((tokens b + (now - last_refill b) * rate_per_minute cfg)
+              <=? max_tokens cfg) eqn:Hinner; simpl.
+  - (* inner <= max: tokens are the sum *)
+    replace (now - now) with 0 by lia.
+    replace (0 * rate_per_minute cfg) with 0 by lia.
+    apply Z.leb_le in Hinner.
+    replace (tokens b + (now - last_refill b) * rate_per_minute cfg + 0)
+      with (tokens b + (now - last_refill b) * rate_per_minute cfg) by lia.
+    assert (Hle : (tokens b + (now - last_refill b) * rate_per_minute cfg
+                     <=? max_tokens cfg) = true) by (apply Z.leb_le; lia).
+    rewrite Hle. reflexivity.
+  - (* inner > max: capped to max_tokens *)
+    replace (now - now) with 0 by lia.
+    replace (0 * rate_per_minute cfg) with 0 by lia.
+    replace (max_tokens cfg + 0) with (max_tokens cfg) by lia.
+    assert (Hle : (max_tokens cfg <=? max_tokens cfg) = true)
+      by (apply Z.leb_le; lia).
+    rewrite Hle. reflexivity.
+Qed.
+
+(* P8: After consume, tokens are still bounded by max *)
+Theorem consume_tokens_bounded : forall cfg b now allowed b',
+  try_consume cfg b now = (allowed, b') ->
+  tokens b' <= max_tokens cfg.
+Proof.
+  intros cfg b now allowed b' H.
+  destruct allowed.
+  - (* allowed = true *)
+    assert (Hdec := consume_decreases_by_one cfg b now b' H).
+    assert (Hbound := refill_tokens_bounded cfg b now).
+    rewrite Hdec. unfold one_token, token_scale. lia.
+  - (* allowed = false *)
+    assert (Hunch := consume_denied_unchanged cfg b now b' H).
+    rewrite Hunch. apply refill_tokens_bounded.
+Qed.
+
+(* P9: Refill with zero elapsed time and non-negative rate preserves tokens
+   (assuming tokens <= max) *)
+Theorem refill_zero_elapsed : forall cfg b,
+  0 <= rate_per_minute cfg ->
+  tokens b <= max_tokens cfg ->
+  tokens (refill cfg b (last_refill b)) = tokens b.
+Proof.
+  intros cfg b Hrate Hmax.
+  unfold refill. simpl.
+  replace (last_refill b - last_refill b) with 0 by lia.
+  replace (0 * rate_per_minute cfg) with 0 by lia.
+  replace (tokens b + 0) with (tokens b) by lia.
+  case_eq (tokens b <=? max_tokens cfg); intro Hcap.
+  - reflexivity.
+  - apply Z.leb_gt in Hcap. lia.
+Qed.
+
+(* P10: Consecutive refills with non-negative rate are monotone *)
+Theorem refill_chain_monotone : forall cfg b t1 t2,
+  0 <= rate_per_minute cfg ->
+  tokens b <= max_tokens cfg ->
+  t1 <= t2 ->
+  last_refill b <= t1 ->
+  tokens (refill cfg b t1) <= tokens (refill cfg (refill cfg b t1) t2).
+Proof.
+  intros cfg b t1 t2 Hrate Hmax Ht12 Hbt1.
+  apply refill_monotone.
+  - unfold refill. simpl. lia.
+  - exact Hrate.
+  - apply refill_tokens_bounded.
+Qed.
+
 End RateLimiter.

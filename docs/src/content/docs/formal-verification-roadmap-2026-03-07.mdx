@@ -20,6 +20,16 @@ section: "formal-properties"
   <strong>Related pages.</strong> Read the audit in <a href="/formal-verification-audit-2026-03-07/">Formal Verification Audit - 2026-03-07</a>.
 </div>
 
+<div style="margin-bottom: 2rem; padding: 1rem 1.1rem; background: #1a2a1a; border: 1px solid #2d4a2d; border-radius: 12px;">
+  <strong>Status update (2026-03-17).</strong> All priority phases (P0–P5) from this roadmap are now complete.
+  The codebase has grown to <strong>374 theorems across 27 Coq files and 22 feature areas (F0–F22)</strong>,
+  with only <strong>1 Admitted proof remaining</strong> (string parsing round-trip in McpFraming.v).
+  All LandlockPolicy.v bitwise arithmetic lemmas are fully proved. New modules added since this roadmap:
+  ToolSafety (F13, 24 theorems), ConfigMerge (F14, 12), McpFraming (F15, 30), SandboxPolicy (F17, 16),
+  PairCoding (F18, 34), PmodelParsing (F19, 13), TaskTree (F20, 20), SchedulerCron (F21, 20),
+  DiscordGateway (F22, 20). See the current <a href="/formal-verification/">Verification Status</a> page for up-to-date numbers.
+</div>
+
 ## Planning Goals
 
 - maximize real security value before theorem count
@@ -275,7 +285,7 @@ These are worthwhile after the higher-risk surfaces are improved.
 
 ### Landlock policy
 
-- finish admitted lemmas in `coq/theories/Clawq/LandlockPolicy.v`
+- ~~finish admitted lemmas in `coq/theories/Clawq/LandlockPolicy.v`~~ Done — all bitwise arithmetic lemmas fully proved
 - add concrete least-privilege and flag-bound results
 - keep OS/availability as trusted boundaries where appropriate
 
@@ -308,10 +318,10 @@ Not all assumptions should be treated equally.
 
 ### High-priority admissions to remove
 
-- logical core in `AuditRetention.v`
-- allowlist / freshness results in `ChannelAuth.v`
-- model-side properties in `SecretStore.v` that no longer need to be admitted once the API is aligned
-- weak structural claims in `SessionIsolation.v`
+- ~~logical core in `AuditRetention.v`~~ Done — all proved
+- ~~allowlist / freshness results in `ChannelAuth.v`~~ Done — all proved
+- ~~model-side properties in `SecretStore.v` that no longer need to be admitted once the API is aligned~~ Done — all proved (25 theorems)
+- ~~weak structural claims in `SessionIsolation.v`~~ Done — all proved (18 theorems)
 
 ## Suggested Work Sequence
 

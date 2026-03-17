@@ -20,6 +20,17 @@ section: "formal-properties"
   <strong>Related pages.</strong> See the execution plan in <a href="/formal-verification-roadmap-2026-03-07/">Formal Verification Roadmap - 2026-03-07</a>.
 </div>
 
+<div style="margin-bottom: 2rem; padding: 1rem 1.1rem; background: #1a2a1a; border: 1px solid #2d4a2d; border-radius: 12px;">
+  <strong>Status update (2026-03-17).</strong> Most issues identified in this audit have been addressed.
+  The codebase now has <strong>374 theorems across 27 Coq files (22 feature areas, F0–F22)</strong> with
+  only <strong>1 Admitted proof remaining</strong>. LandlockPolicy.v is fully proved. SecretStore.v (25 theorems),
+  ChannelAuth.v (20 theorems), and SessionIsolation.v (18 theorems) all have zero admissions. Nine new
+  modules have been added since this audit: ToolSafety, ConfigMerge, McpFraming, SandboxPolicy, PairCoding,
+  PmodelParsing, TaskTree, SchedulerCron, and DiscordGateway. See the
+  <a href="/formal-verification/">current Verification Status</a> page and the
+  <a href="/formal-verification-roadmap-2026-03-07/">Roadmap</a> (with completion annotations) for details.
+</div>
+
 ## Executive View
 
 - The strongest current proofs are the pure, extracted safety kernels: `PathSafety`, `QuoteParsing`, and `ShellSafety`.
@@ -221,13 +232,22 @@ Best next theorems:
 | `ConfigProofs.v` | Locally solid | Small model, limited runtime coverage |
 | `CliProofs.v` | Locally solid | Mostly about fallback behavior |
 | `AuditChain.v` | Good structural base | Valuable, but retention story is where the real work starts |
-| `RateLimiter.v` | Good spec kernel | Could use stronger temporal properties |
-| `SecretStore.v` | Important but misaligned | Needs model cleanup before it becomes high-trust |
-| `ChannelAuth.v` | Important but unfinished | Multiple admitted proofs, not well wired to runtime |
-| `AuditRetention.v` | Highest leverage | Contains the most actionable open problem |
-| `SessionIsolation.v` | Useful start, too weak | Atomicity axiom + vacuous disjointness limit confidence |
-| `AgentLoop.v` | Too abstract today | Needs to move closer to `src/agent.ml` |
-| `LandlockPolicy.v` | Promising spec | Core lemmas still admitted |
+| `RateLimiter.v` | Good spec kernel (10 theorems) | Could use stronger temporal properties |
+| `SecretStore.v` | Strong (25 theorems, 0 admitted) | *Updated*: model aligned with runtime, all admissions resolved |
+| `ChannelAuth.v` | Strong (20 theorems, 0 admitted) | *Updated*: allowlist, freshness, Telegram pairing all proved |
+| `AuditRetention.v` | Solid (12 theorems) | *Updated*: anchored-suffix story complete |
+| `SessionIsolation.v` | Solid (18 theorems, 0 admitted) | *Updated*: non-vacuous isolation, compaction round-trip proved |
+| `AgentLoop.v` | Solid (22 theorems) | *Updated*: history shape, compaction, tool-group integrity proved |
+| `LandlockPolicy.v` | Solid (12 theorems, 0 admitted) | *Updated*: all bitwise arithmetic lemmas fully proved |
+| `ToolSafety.v` | Strong (24 theorems) | *New*: risk levels, authorization, allowlist policy |
+| `ConfigMerge.v` | Solid (12 theorems) | *New*: security floor, default preservation |
+| `McpFraming.v` | Good (30 theorems, 1 admitted) | *New*: JSON-RPC framing, dispatch, ID pairing |
+| `SandboxPolicy.v` | Good (16 theorems) | *New*: detection fallback, command wrapping |
+| `PairCoding.v` | Good (34 theorems) | *New*: phase transitions, approval protocol |
+| `PmodelParsing.v` | Good (13 theorems) | *New*: format parsing, deprecation warnings |
+| `TaskTree.v` | Good (20 theorems) | *New*: status transitions, terminal/stuck states |
+| `SchedulerCron.v` | Good (20 theorems) | *New*: cron field matching, validity ranges |
+| `DiscordGateway.v` | Good (20 theorems) | *New*: gateway protocol state machine, lifecycle proofs |
 
 ## Recommended Near-Term Plan
 

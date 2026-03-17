@@ -18,9 +18,10 @@ Related documents:
 
 ## Executive Summary
 
-The project has 17 Coq modules with 160+ verified theorems across 12 feature
-areas (F1–F12). Only 4 admitted statements exist (3 bitwise arithmetic in
-LandlockPolicy.v, 1 crypto axiom in SecretStore.v).
+The project has 27 Coq modules with 374 verified theorems/lemmas across 22
+feature areas (F0–F22). Only 1 admitted statement remains (string parsing
+round-trip in McpFraming.v). All LandlockPolicy.v bitwise arithmetic lemmas
+are now fully proved.
 
 However, **only 4 of 16 extracted functions are called at runtime**. The
 remaining 8 spec-only modules prove properties about abstract models that the
@@ -64,12 +65,20 @@ Note: `is_allowed` and `is_allowed0` are extracted from different modules
 | Module | Coq Theorems | Runtime Equivalent | Gap Type |
 |---|---|---|---|
 | AuditChain.v | 7 | src/audit.ml | Parameterized over abstract hash/hmac; runtime uses Digestif directly |
-| AuditRetention.v | 14 | src/audit.ml (purge_old) | Depends on AuditChain parameters |
-| RateLimiter.v | 6 | src/rate_limiter.ml | Uses Q (rationals); runtime uses floats |
-| AgentLoop.v | 16 | src/agent.ml | Fuel-based model; runtime uses Lwt async |
-| SessionIsolation.v | 16 | src/session.ml | FMapAVL model; runtime uses Hashtbl + Lwt_mutex |
-| SecretStore.v | 13 | src/secret_store.ml | Crypto axiomatized; runtime uses mirage-crypto C FFI |
-| LandlockPolicy.v | 11 | src/landlock.ml + landlock_stubs.c | Policy spec; runtime uses C FFI |
+| AuditRetention.v | 12 | src/audit.ml (purge_old) | Depends on AuditChain parameters |
+| RateLimiter.v | 10 | src/rate_limiter.ml | Uses Z (integers); runtime uses floats |
+| AgentLoop.v | 22 | src/agent.ml | Fuel-based model; runtime uses Lwt async |
+| SessionIsolation.v | 18 | src/session.ml | FMapAVL model; runtime uses Hashtbl + Lwt_mutex |
+| SecretStore.v | 25 | src/secret_store.ml | Crypto axiomatized; runtime uses mirage-crypto C FFI |
+| LandlockPolicy.v | 12 | src/landlock.ml + landlock_stubs.c | Policy spec; runtime uses C FFI |
+| ToolSafety.v | 24 | src/tools_builtin.ml | Risk levels, authorization, allowlist policy |
+| McpFraming.v | 30 | src/mcp_server.ml | JSON-RPC framing, dispatch, ID pairing |
+| SandboxPolicy.v | 16 | src/sandbox.ml | Backend detection, command wrapping policy |
+| PairCoding.v | 34 | src/pair_coding_types.ml | Phase transitions, approval protocol |
+| PmodelParsing.v | 13 | src/pmodel.ml | Format classification, conversion, deprecation |
+| TaskTree.v | 20 | src/task_tree_core.ml | Status transitions, terminal/stuck states |
+| SchedulerCron.v | 20 | src/scheduler.ml | Cron field matching, validity ranges |
+| DiscordGateway.v | 20 | src/discord_gateway.ml | Gateway protocol state machine |
 
 ---
 
@@ -108,12 +117,14 @@ No Coq spec exists for any of this.
 ### Protocol State Machines
 
 - `src/discord_gateway.ml` — Hello/Identify/Resume/Heartbeat/Dispatch state machine
+  **Now covered by DiscordGateway.v** (20 theorems: heartbeat lifecycle, session
+  persistence, reconnect/resume safety, phase transitions)
 - `src/slack.ml` — HMAC-SHA256 signature verification
 - `src/slack_socket.ml` — Envelope parsing and ACK protocol
 - `src/telegram.ml` — Long-polling and rate limiting
 
 The ChannelAuth.v proofs cover allowlist and freshness abstractions but not
-the actual protocol handling.
+the actual protocol handling for Slack/Telegram.
 
 ### Database/Persistence (src/memory.ml, src/audit.ml)
 
@@ -123,9 +134,11 @@ the actual protocol handling.
 
 ### Tool System (src/tool.ml, src/tool_registry.ml, src/mcp_*.ml)
 
-- Risk level semantics
+- Risk level semantics — **Now covered by ToolSafety.v** (24 theorems:
+  authorization requirements, allowlist/auth monotonicity, risk ordering)
 - Tool search correctness
-- MCP JSON-RPC framing and dispatch
+- MCP JSON-RPC framing and dispatch — **Now covered by McpFraming.v** (30 theorems:
+  framing length, ID pairing, dispatch correctness)
 
 ---
 
@@ -190,27 +203,40 @@ the actual protocol handling.
 
 | Feature | Coq File(s) | Theorems | Admitted | Extracted | Runtime Use |
 |---|---|---|---|---|---|
-| F1 Config | ConfigProofs.v | 13 | 0 | Yes | Not called |
-| F1 CLI | CliProofs.v | 21 | 0 | Yes | dispatch only |
-| F2 PathSafety | PathSafety.v | 20+ | 0 | Yes | Called |
+| F0 CLI | CliProofs.v | 22 | 0 | Yes | dispatch only |
+| F1 Config | ConfigProofs.v | 15 | 0 | Yes | Not called |
+| F2 PathSafety | PathSafety.v | 19 | 0 | Yes | Called |
 | F3 AuditChain | AuditChain.v | 7 | 0 | No | Spec-only |
-| F4 RateLimiter | RateLimiter.v | 6 | 0 | No | Spec-only |
-| F5 ConfigExt | Config.v + ConfigProofs.v | 13 | 0 | Yes | Not called |
-| F6 ShellSafety | QuoteParsing.v + ShellSafety.v | 20+ | 0 | Yes | Called |
-| F7 SecretStore | SecretStore.v | 13 | 1 axiom | No | Spec-only |
-| F8 ChannelAuth | ChannelAuth.v | 22+ | 0 | Yes | Partially called |
-| F9 AuditRetention | AuditRetention.v | 14 | 0 | No | Spec-only |
-| F10 AgentLoop | AgentLoop.v | 16 | 0 | No | Spec-only |
-| F11 SessionIsolation | SessionIsolation.v | 16 | 0 | No | Spec-only |
-| F12 LandlockPolicy | LandlockPolicy.v | 11 | 3 | No | Spec-only |
-| **Total** | | **160+** | **4** | | |
+| F4 RateLimiter | RateLimiter.v | 10 | 0 | No | Spec-only |
+| F5 ConfigExt | Config.v + ConfigProofs.v | 15 | 0 | Yes | Not called |
+| F6 ShellSafety | QuoteParsing.v + ShellSafety.v | 9 | 0 | Yes | Called |
+| F7 SecretStore | SecretStore.v | 25 | 0 | No | Spec-only |
+| F8 ChannelAuth | ChannelAuth.v | 20 | 0 | Yes | Partially called |
+| F9 AuditRetention | AuditRetention.v | 12 | 0 | No | Spec-only |
+| F10 AgentLoop | AgentLoop.v | 22 | 0 | No | Spec-only |
+| F11 SessionIsolation | SessionIsolation.v | 18 | 0 | No | Spec-only |
+| F12 LandlockPolicy | LandlockPolicy.v | 12 | 0 | No | Spec-only |
+| F13 ToolSafety | ToolSafety.v | 24 | 0 | No | Spec-only |
+| F14 ConfigMerge | ConfigMerge.v | 12 | 0 | No | Spec-only |
+| F15 McpFraming | McpFraming.v | 30 | 1 | No | Spec-only |
+| F17 SandboxPolicy | SandboxPolicy.v | 16 | 0 | No | Spec-only |
+| F18 PairCoding | PairCoding.v | 34 | 0 | No | Spec-only |
+| F19 PmodelParsing | PmodelParsing.v | 13 | 0 | No | Spec-only |
+| F20 TaskTree | TaskTree.v | 20 | 0 | No | Spec-only |
+| F21 SchedulerCron | SchedulerCron.v | 20 | 0 | No | Spec-only |
+| F22 DiscordGateway | DiscordGateway.v | 20 | 0 | No | Spec-only |
+| **Total** | **27 files** | **374** | **1** | | |
 
 ---
 
 ## Key Takeaway
 
-The formal verification foundation is strong. The highest-leverage next step is
-not writing more theorems — it's **closing the loop between proofs and runtime**.
-Calling extracted functions that already exist, adding conformance tests, and
-wiring spec-only models into runtime assertions would dramatically increase the
-real assurance level without any new Coq work.
+The formal verification foundation is strong and continues to expand (374
+theorems across 27 modules, up from 160+ across 17 at the time of this audit).
+New modules cover ToolSafety, ConfigMerge, McpFraming, SandboxPolicy,
+PairCoding, PmodelParsing, TaskTree, SchedulerCron, and DiscordGateway.
+Only 1 Admitted proof remains (down from 4).
+
+The highest-leverage next step remains **closing the loop between proofs and
+runtime**: calling extracted functions that already exist, adding conformance
+tests, and wiring spec-only models into runtime assertions.

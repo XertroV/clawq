@@ -1,14 +1,15 @@
 ---
 claimed_at: "2026-03-17T05:34:18Z"
 claimed_by: cli-user
-completed_at: null
+completed_at: "2026-03-17T06:04:42Z"
 complexity: medium
 depends_on: []
+duration_minutes: 30.413150346016668
 estimate_hours: 1
 id: B533
 priority: high
 started_at: "2026-03-17T05:34:18Z"
-status: in_progress
+status: done
 tags: []
 title: Formal verification of pair coding state machine (PairCoding.v)
 ---

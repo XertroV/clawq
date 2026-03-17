@@ -377,6 +377,82 @@ Qed.
    - all_tools_safe
    ================================================================ *)
 
+(* ================================================================
+   Risk level ordering: transitivity, antisymmetry, totality
+   ================================================================ *)
+
+(* Theorem 18: risk_gte is transitive *)
+Theorem risk_gte_trans : forall r1 r2 r3,
+  risk_gte r1 r2 = true ->
+  risk_gte r2 r3 = true ->
+  risk_gte r1 r3 = true.
+Proof.
+  intros r1 r2 r3 H12 H23.
+  destruct r1, r2, r3; simpl in *; try reflexivity; discriminate.
+Qed.
+
+(* Theorem 19: risk_gte is antisymmetric *)
+Theorem risk_gte_antisym : forall r1 r2,
+  risk_gte r1 r2 = true ->
+  risk_gte r2 r1 = true ->
+  r1 = r2.
+Proof.
+  intros r1 r2 H12 H21.
+  destruct r1, r2; simpl in *; try reflexivity; discriminate.
+Qed.
+
+(* Theorem 20: risk_gte is total *)
+Theorem risk_gte_total : forall r1 r2,
+  risk_gte r1 r2 = true \/ risk_gte r2 r1 = true.
+Proof.
+  intros r1 r2.
+  destruct r1, r2; simpl; auto.
+Qed.
+
+(* ================================================================
+   Invocation safety monotonicity
+   ================================================================ *)
+
+(* Theorem 21: Extending both allowlist and authorized preserves safety *)
+Theorem invocation_safe_monotone : forall t allowlist authorized extra_allow extra_auth,
+  invocation_safe t allowlist authorized = true ->
+  invocation_safe t (allowlist ++ extra_allow) (authorized ++ extra_auth) = true.
+Proof.
+  intros t allowlist authorized extra_allow extra_auth H.
+  unfold invocation_safe in *.
+  apply Bool.andb_true_iff in H.
+  destruct H as [Hallow Hauth].
+  rewrite allowlist_monotone by exact Hallow.
+  simpl.
+  destruct (requires_authorization t).
+  - apply auth_monotone. exact Hauth.
+  - reflexivity.
+Qed.
+
+(* Theorem 22: requires_authorization classification is complete *)
+Theorem requires_authorization_iff : forall t,
+  requires_authorization t = true <->
+  (is_high_risk (tool_risk t) = true \/ is_medium_risk (tool_risk t) = true).
+Proof.
+  intros t. split.
+  - intro H. unfold requires_authorization in H.
+    destruct (tool_risk t); try discriminate.
+    + right. reflexivity.
+    + left. reflexivity.
+  - intros [Hh | Hm].
+    + apply high_risk_requires_authorization. exact Hh.
+    + apply medium_risk_requires_authorization. exact Hm.
+Qed.
+
+(* Theorem 23: risk levels are mutually exclusive *)
+Theorem risk_levels_exclusive : forall r,
+  (is_low_risk r = true /\ is_medium_risk r = false /\ is_high_risk r = false) \/
+  (is_low_risk r = false /\ is_medium_risk r = true /\ is_high_risk r = false) \/
+  (is_low_risk r = false /\ is_medium_risk r = false /\ is_high_risk r = true).
+Proof.
+  intros r. destruct r; simpl; auto.
+Qed.
+
 (* Compile guard *)
 Theorem tool_safety_model_complete : True.
 Proof.

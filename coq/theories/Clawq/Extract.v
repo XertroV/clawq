@@ -14,6 +14,12 @@ Require Import Clawq.AuditChainConcrete.
 Require Import Clawq.AgentLoop.
 Require Import Clawq.RateLimiter.
 Require Import Clawq.ToolSafety.
+Require Import Clawq.PairCoding.
+Require Import Clawq.PmodelParsing.
+Require Import Clawq.TaskTree.
+Require Import Clawq.SchedulerCron.
+Require Import Clawq.DiscordGateway.
+Require Import Clawq.SandboxPolicy.
 
 Extraction Language OCaml.
 

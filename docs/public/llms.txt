@@ -26,6 +26,6 @@
 ## Optional
 
 - [Development Guide](https://clawq.org/development): Build, test, format, extraction workflow, code style, contributing
-- [Verification Status](https://clawq.org/formal-verification): Machine-checked Coq verification status across 12 phases
+- [Verification Status](https://clawq.org/formal-verification): Machine-checked Coq verification status across 22 phases (374 theorems)
 - [Verification Audit](https://clawq.org/formal-verification-audit-2026-03-07): Detailed audit of verified properties
 - [Verification Roadmap](https://clawq.org/formal-verification-roadmap-2026-03-07): Planned verification expansions

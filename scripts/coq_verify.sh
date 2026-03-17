@@ -29,6 +29,12 @@ ${COQC} -R coq/theories Clawq coq/theories/Clawq/AgentLoop.v
 ${COQC} -R coq/theories Clawq coq/theories/Clawq/SessionIsolation.v
 ${COQC} -R coq/theories Clawq coq/theories/Clawq/LandlockPolicy.v
 ${COQC} -R coq/theories Clawq coq/theories/Clawq/ToolSafety.v
+${COQC} -R coq/theories Clawq coq/theories/Clawq/PairCoding.v
+${COQC} -R coq/theories Clawq coq/theories/Clawq/PmodelParsing.v
+${COQC} -R coq/theories Clawq coq/theories/Clawq/TaskTree.v
+${COQC} -R coq/theories Clawq coq/theories/Clawq/SchedulerCron.v
+${COQC} -R coq/theories Clawq coq/theories/Clawq/DiscordGateway.v
+${COQC} -R coq/theories Clawq coq/theories/Clawq/SandboxPolicy.v
 
 echo "Compiling Coq proofs..."
 ${COQC} -R coq/theories Clawq coq/theories/Clawq/ConfigProofs.v
@@ -41,3 +47,51 @@ if rg -n '^Admitted\.$' coq/theories/Clawq/LandlockPolicy.v >/dev/null; then
 fi
 
 echo "Verified: coq/theories/Clawq/LandlockPolicy.v contains no Admitted proofs."
+
+if rg -n '^Admitted\.$' coq/theories/Clawq/PairCoding.v >/dev/null; then
+  echo "PairCoding.v still contains Admitted proofs."
+  rg -n '^Admitted\.$' coq/theories/Clawq/PairCoding.v
+  exit 1
+fi
+
+echo "Verified: coq/theories/Clawq/PairCoding.v contains no Admitted proofs."
+
+if rg -n '^Admitted\.$' coq/theories/Clawq/PmodelParsing.v >/dev/null; then
+  echo "PmodelParsing.v still contains Admitted proofs."
+  rg -n '^Admitted\.$' coq/theories/Clawq/PmodelParsing.v
+  exit 1
+fi
+
+echo "Verified: coq/theories/Clawq/PmodelParsing.v contains no Admitted proofs."
+
+if rg -n '^Admitted\.$' coq/theories/Clawq/TaskTree.v >/dev/null; then
+  echo "TaskTree.v still contains Admitted proofs."
+  rg -n '^Admitted\.$' coq/theories/Clawq/TaskTree.v
+  exit 1
+fi
+
+echo "Verified: coq/theories/Clawq/TaskTree.v contains no Admitted proofs."
+
+if rg -n '^Admitted\.$' coq/theories/Clawq/SchedulerCron.v >/dev/null; then
+  echo "SchedulerCron.v still contains Admitted proofs."
+  rg -n '^Admitted\.$' coq/theories/Clawq/SchedulerCron.v
+  exit 1
+fi
+
+echo "Verified: coq/theories/Clawq/SchedulerCron.v contains no Admitted proofs."
+
+if rg -n '^Admitted\.$' coq/theories/Clawq/DiscordGateway.v >/dev/null; then
+  echo "DiscordGateway.v still contains Admitted proofs."
+  rg -n '^Admitted\.$' coq/theories/Clawq/DiscordGateway.v
+  exit 1
+fi
+
+echo "Verified: coq/theories/Clawq/DiscordGateway.v contains no Admitted proofs."
+
+if rg -n '^Admitted\.$' coq/theories/Clawq/SandboxPolicy.v >/dev/null; then
+  echo "SandboxPolicy.v still contains Admitted proofs."
+  rg -n '^Admitted\.$' coq/theories/Clawq/SandboxPolicy.v
+  exit 1
+fi
+
+echo "Verified: coq/theories/Clawq/SandboxPolicy.v contains no Admitted proofs."
