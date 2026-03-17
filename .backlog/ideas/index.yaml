@@ -303,8 +303,15 @@ ideas:
       id: I046
     - file: I047-config-invariant-proofs.todo
       id: I047
-    - file: I048-memory-export-import-snapshots.todo
+    - complexity: medium
+      depends_on: []
+      estimate_hours: 10
+      file: I048-memory-export-import-snapshots.todo
       id: I048
+      priority: medium
+      status: in_progress
+      tags: []
+      title: Memory Export/Import Snapshots
     - file: I049-per-channel-config-overrides.todo
       id: I049
     - file: I050-tool-call-proof-certificates.todo
