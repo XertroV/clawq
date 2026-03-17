@@ -1,10 +1,14 @@
 ---
+claimed_at: "2026-03-17T19:33:42Z"
+claimed_by: cli-user
+completed_at: null
 complexity: medium
 depends_on: []
 estimate_hours: 1
 id: B548
 priority: high
-status: pending
+started_at: "2026-03-17T19:33:42Z"
+status: in_progress
 tags: []
 title: setting summarizer.false should update live and disable the autosummarizer
 ---
