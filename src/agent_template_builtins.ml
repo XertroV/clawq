@@ -924,6 +924,7 @@ For each failure:
         "memory_store";
         "memory_recall";
         "change_working_dir";
+        "browser";
       ]
     ~disallowed_tools:[]
 
@@ -1087,6 +1088,7 @@ When your work is complete, provide:
         "memory_recall";
         "http_get";
         "change_working_dir";
+        "browser";
       ]
     ~disallowed_tools:[]
 
@@ -1408,6 +1410,7 @@ Every debugging task must produce this structured output, whether or not a fix w
         "memory_store";
         "memory_recall";
         "change_working_dir";
+        "browser";
       ]
     ~disallowed_tools:[]
 
@@ -1927,6 +1930,7 @@ After completing any infrastructure change, provide this structured output:
         "memory_store";
         "memory_recall";
         "change_working_dir";
+        "browser";
       ]
     ~disallowed_tools:[]
 

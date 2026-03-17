@@ -1703,6 +1703,8 @@ let run ~(config : Runtime_config.t) =
         Lwt.catch (fun () -> Mcp_client.disconnect c) (fun _ -> Lwt.return_unit))
       !mcp_clients
   in
+  (* Close all browser sessions *)
+  let* () = Cdp_client.close_all () in
   (* PID file cleanup is handled by service.ml after Daemon.run returns *)
   Logs.info (fun m ->
       m "clawq daemon %s"

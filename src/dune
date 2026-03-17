@@ -50,6 +50,7 @@
   tools_bg_shell
   tools_builtin_io
   tools_builtin_net
+  tools_builtin_browser
   tools_builtin
   task_tree_core
   memory
@@ -88,6 +89,8 @@
   agent_template
   agent_template_builtins
   command_bridge_min
+  cdp_client
+  browser_agent
   sandbox
   pairing
   chat_ui_assets

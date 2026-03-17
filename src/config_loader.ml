@@ -1677,6 +1677,35 @@ let parse_config ?(resolve_secrets = true) json =
          ({ enabled; persist_to_db; max_messages; max_age_days }
            : Runtime_config.connector_history_config)
        with _ -> Runtime_config.default.connector_history);
+    browser =
+      (try
+         let b = json |> member "browser" in
+         let def = Runtime_config.default_browser_config in
+         let agent_model =
+           try Pmodel.parse_exn (b |> member "agent_model" |> to_string)
+           with _ -> def.agent_model
+         in
+         let chromium_path =
+           try
+             let v = b |> member "chromium_path" |> to_string in
+             if v = "" then None else Some v
+           with _ -> def.chromium_path
+         in
+         let default_timeout_s =
+           try b |> member "default_timeout" |> to_float
+           with _ -> (
+             try b |> member "default_timeout_s" |> to_float
+             with _ -> def.default_timeout_s)
+         in
+         let idle_timeout_s =
+           try b |> member "idle_timeout" |> to_float
+           with _ -> (
+             try b |> member "idle_timeout_s" |> to_float
+             with _ -> def.idle_timeout_s)
+         in
+         ({ agent_model; chromium_path; default_timeout_s; idle_timeout_s }
+           : Runtime_config.browser_config)
+       with _ -> Runtime_config.default_browser_config);
   }
 
 let rec merge_json (original : Yojson.Safe.t) (complete : Yojson.Safe.t) :

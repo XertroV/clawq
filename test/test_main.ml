@@ -188,6 +188,7 @@ let () =
     @ [ ("voice_transcription", Test_voice_transcription.suite) ]
     @ [ ("pair_coding", Test_pair_coding.suite) ]
     @ [ ("webhook_handler", Test_webhook_handler.suite) ]
+    @ [ ("browser", Test_browser.suite) ]
     @ Test_github.suites
     @ [
         ( "config_isolation",

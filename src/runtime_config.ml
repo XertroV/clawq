@@ -445,6 +445,13 @@ type connector_history_config = {
   max_age_days : int;
 }
 
+type browser_config = {
+  agent_model : Pmodel.t;
+  chromium_path : string option;
+  default_timeout_s : float;
+  idle_timeout_s : float;
+}
+
 type t = {
   workspace : string;
   default_temperature : float;
@@ -477,6 +484,7 @@ type t = {
   interactive : interactive_config;
   error_watcher : error_watcher_config;
   connector_history : connector_history_config;
+  browser : browser_config;
 }
 
 let default_log_config : log_config =
@@ -539,6 +547,14 @@ let default_workspace_files =
     "MEMORY.md";
     "memory.md";
   ]
+
+let default_browser_config : browser_config =
+  {
+    agent_model = Pmodel.parse_exn "groq:openai/gpt-oss-120b";
+    chromium_path = None;
+    default_timeout_s = 30.0;
+    idle_timeout_s = 300.0;
+  }
 
 let default_workspace () = Dot_dir.sub "workspace"
 
@@ -712,6 +728,7 @@ let default =
         max_messages = 50;
         max_age_days = 7;
       };
+    browser = default_browser_config;
   }
 
 let is_key_set key =

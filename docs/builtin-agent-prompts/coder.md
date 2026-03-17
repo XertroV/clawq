@@ -14,6 +14,8 @@ allowed_tools:
   - memory_store
   - memory_recall
   - http_get
+  - change_working_dir
+  - browser
 disallowed_tools: []
 ---
 

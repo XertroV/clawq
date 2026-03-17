@@ -13,6 +13,8 @@ allowed_tools:
   - file_append
   - memory_store
   - memory_recall
+  - change_working_dir
+  - browser
 disallowed_tools: []
 ---
 
