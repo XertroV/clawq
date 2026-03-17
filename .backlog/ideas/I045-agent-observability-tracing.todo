@@ -1,0 +1,15 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 10
+id: I045
+priority: high
+status: pending
+tags:
+    - observability
+    - tracing
+    - debugging
+    - self-building
+title: Agent Observability / Tracing
+---
+Capture every LLM call, tool invocation, retrieval step, and decision point as a structured trace with timing, token counts, and cost. 'clawq trace [session_id]' shows the execution tree. Export to OpenTelemetry format for integration with Grafana/Jaeger. 89% of production AI organizations have agent observability; without it, debugging agent failures is guesswork. Critical for improving the self-building loop — can't fix what you can't see. This is the difference between 'it didn't work' and 'here's exactly where and why it failed.'

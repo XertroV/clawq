@@ -297,3 +297,5 @@ ideas:
       id: I043
     - file: I044-named-autonomy-profiles.todo
       id: I044
+    - file: I045-agent-observability-tracing.todo
+      id: I045
