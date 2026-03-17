@@ -1,0 +1,11 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B545
+priority: high
+status: pending
+tags: []
+title: Tool error messages should show all required parameters
+---
+When a tool call fails due to missing required parameters, the error message should enumerate ALL required parameters, not just complain generically. Example: file_read returns 'missing required parameter' without listing that 'path' is required. Should show: 'Error: missing required parameter path for tool file_read. Example: file_read(path="/some/file")'
