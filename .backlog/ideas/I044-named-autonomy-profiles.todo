@@ -1,0 +1,15 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 10
+id: I044
+priority: high
+status: pending
+tags:
+    - autonomy
+    - agent
+    - self-building
+    - config
+title: Named Autonomy Profiles
+---
+Prepackaged autonomy presets: 'suggest' (propose actions, wait for approval), 'auto-edit' (auto-execute file edits, confirm destructive ops), 'full-auto' (execute everything within policy bounds). 'clawq config set autonomy auto-edit' or '--autonomy=full-auto' per session. Tool risk levels already exist in the codebase but there's no named profile abstraction. This is the knob that unlocks unattended operation — essential for overnight self-building runs and CI-style autonomous development.
