@@ -1,0 +1,14 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 10
+id: I034
+priority: medium
+status: pending
+tags:
+    - cron
+    - productivity
+    - personal-assistant
+title: Daily Briefing Pipeline
+---
+A configurable 'morning briefing' cron job: pulls calendar events (via iCal URL fetch), unread email summaries (via IMAP or feed), weather (via API), and news on user-defined topics (via RSS or web search). Composes a single structured briefing and sends it to the user's preferred channel at a configured time. High perceived value, low implementation cost given existing cron + web_fetch + channel infrastructure. This single feature makes clawq feel like a real personal assistant, not just a developer tool.
