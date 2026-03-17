@@ -834,6 +834,7 @@ let test_agent_tmpl =
     disallowed_tools = [];
     tool_search_enabled = None;
     reasoning_effort = None;
+    cwd = None;
     source = Agent_template.Builtin;
     metadata = [];
   }

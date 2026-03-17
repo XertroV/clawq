@@ -999,7 +999,12 @@ let run_keepalive_loop ~db ~(session_manager : Session.t) =
 
 let replay_durable_inbound_queue
     ?(replay_turn :
-       (Session.t -> key:string -> message:string -> unit -> string Lwt.t)
+       (Session.t ->
+       key:string ->
+       message:string ->
+       ?cwd:string ->
+       unit ->
+       string Lwt.t)
        option) ~(session_manager : Session.t) ~(config : Runtime_config.t) () =
   ignore config;
   match session_manager.Session.db with
@@ -1023,7 +1028,9 @@ let replay_durable_inbound_queue
       let turn_fn =
         match replay_turn with
         | Some f -> f
-        | None -> fun mgr ~key ~message () -> Session.turn mgr ~key ~message ()
+        | None ->
+            fun mgr ~key ~message ?cwd () ->
+              Session.turn mgr ~key ~message ?cwd ()
       in
       let reclaimed = Memory.queue_reclaim_stale ~db ~older_than_seconds:3600 in
       if reclaimed > 0 then
@@ -1071,7 +1078,7 @@ let replay_durable_inbound_queue
                           "Replay: claimed queue_id=%d session=%s source=%s \
                            attempt=%d"
                           row.queue_id session_key row.source row.attempt_count);
-                    let message, is_bang =
+                    let message, is_bang, replay_cwd =
                       try
                         let json = Yojson.Safe.from_string row.payload_json in
                         let open Yojson.Safe.Util in
@@ -1083,8 +1090,15 @@ let replay_durable_inbound_queue
                           json |> member "bang" |> to_bool_option
                           |> Option.value ~default:false
                         in
-                        (msg, bang)
-                      with _ -> (row.payload_json, false)
+                        let cwd =
+                          try
+                            match json |> member "cwd" with
+                            | `String s when String.trim s <> "" -> Some s
+                            | _ -> None
+                          with _ -> None
+                        in
+                        (msg, bang, cwd)
+                      with _ -> (row.payload_json, false, None)
                     in
                     if String.trim message = "" then begin
                       Logs.warn (fun m ->
@@ -1120,7 +1134,7 @@ let replay_durable_inbound_queue
                                 (String.length message));
                           let* _response =
                             turn_fn session_manager ~key:session_key
-                              ~message:replay_message ()
+                              ~message:replay_message ?cwd:replay_cwd ()
                           in
                           let deleted =
                             Memory.queue_delete ~db ~queue_id:row.queue_id

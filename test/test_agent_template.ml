@@ -44,6 +44,7 @@ let test_parse_valid_template () =
         "tool_search_enabled" (Some true) t.tool_search_enabled;
       Alcotest.(check (option string))
         "reasoning_effort" (Some "high") t.reasoning_effort;
+      Alcotest.(check (option string)) "cwd absent" None t.cwd;
       Alcotest.(check string)
         "system_prompt" "You are the test agent." t.system_prompt;
       let custom = List.assoc_opt "custom-key" t.metadata in
@@ -218,6 +219,7 @@ let test_tool_restriction_allowed () =
       disallowed_tools = [];
       tool_search_enabled = None;
       reasoning_effort = None;
+      cwd = None;
       source = Builtin;
       metadata = [];
     }
@@ -260,6 +262,7 @@ let test_tool_restriction_disallowed () =
       disallowed_tools = [ "file_write" ];
       tool_search_enabled = None;
       reasoning_effort = None;
+      cwd = None;
       source = Builtin;
       metadata = [];
     }
@@ -306,6 +309,7 @@ let test_tool_restriction_empty_allows_all () =
       disallowed_tools = [];
       tool_search_enabled = None;
       reasoning_effort = None;
+      cwd = None;
       source = Builtin;
       metadata = [];
     }
@@ -320,6 +324,43 @@ let test_resolve_unknown () =
   Alcotest.(check bool)
     "unknown returns None" true
     (Option.is_none (Agent_template.resolve "nonexistent-agent-xyz"))
+
+let test_parse_cwd_field () =
+  let md_with_cwd =
+    "---\n\
+     name: cwd-agent\n\
+     description: Agent with cwd\n\
+     cwd: /tmp/project\n\
+     ---\n\
+     System prompt"
+  in
+  (match Agent_template.parse_template ~source_path:"" md_with_cwd with
+  | Error e -> Alcotest.fail e
+  | Ok t ->
+      Alcotest.(check (option string)) "cwd present" (Some "/tmp/project") t.cwd);
+  let md_without_cwd = "---\nname: no-cwd\ndescription: No cwd\n---\nBody" in
+  match Agent_template.parse_template ~source_path:"" md_without_cwd with
+  | Error e -> Alcotest.fail e
+  | Ok t -> Alcotest.(check (option string)) "cwd absent" None t.cwd
+
+let test_cwd_frontmatter_roundtrip () =
+  let md =
+    "---\n\
+     name: cwd-rt\n\
+     description: roundtrip cwd\n\
+     cwd: /home/user/project\n\
+     ---\n\
+     Prompt"
+  in
+  match Agent_template.parse_template ~source_path:"" md with
+  | Error e -> Alcotest.fail e
+  | Ok t -> (
+      let serialized = Agent_template.to_frontmatter_string t in
+      match Agent_template.parse_template ~source_path:"" serialized with
+      | Error e -> Alcotest.fail (Printf.sprintf "roundtrip failed: %s" e)
+      | Ok t2 ->
+          Alcotest.(check (option string))
+            "cwd roundtrip" (Some "/home/user/project") t2.cwd)
 
 let test_available_templates_includes_builtins () =
   (* Builtins are registered via module init in agent_template_builtins.ml *)
@@ -356,4 +397,7 @@ let suite =
     Alcotest.test_case "resolve unknown" `Quick test_resolve_unknown;
     Alcotest.test_case "available includes builtins" `Quick
       test_available_templates_includes_builtins;
+    Alcotest.test_case "parse cwd field" `Quick test_parse_cwd_field;
+    Alcotest.test_case "cwd frontmatter roundtrip" `Quick
+      test_cwd_frontmatter_roundtrip;
   ]

@@ -366,81 +366,127 @@ let cmd_session args =
                                 ])
                             filtered_rows) );
                    ])))
-  | "inject" :: session_key :: message_parts -> (
-      let session_key = Session.sanitize_session_key session_key in
-      let message = String.concat " " message_parts in
-      if String.trim message = "" then
-        "Usage: clawq session inject SESSION MESSAGE..."
-      else
-        match read_live_daemon_gateway () with
-        | None ->
-            let is_bang = String.length message > 0 && message.[0] = '!' in
-            let payload_json =
-              Yojson.Safe.to_string
-                (`Assoc
-                   [ ("message", `String message); ("bang", `Bool is_bang) ])
+  | "inject" :: rest -> (
+      let cwd, remaining =
+        match rest with
+        | "--cwd" :: path :: tl -> (Some path, tl)
+        | _ -> (None, rest)
+      in
+      match remaining with
+      | session_key :: message_parts -> (
+          let session_key = Session.sanitize_session_key session_key in
+          let message = String.concat " " message_parts in
+          if String.trim message = "" then
+            "Usage: clawq session inject [--cwd PATH] SESSION MESSAGE..."
+          else
+            let cwd_error =
+              match cwd with
+              | Some path ->
+                  if not (Sys.file_exists path) then
+                    Some
+                      (Printf.sprintf "Error: --cwd path does not exist: %s"
+                         path)
+                  else if not (Sys.is_directory path) then
+                    Some
+                      (Printf.sprintf "Error: --cwd path is not a directory: %s"
+                         path)
+                  else None
+              | None -> None
             in
-            let queue_id =
-              Memory.queue_enqueue ~db ~session_key ~source:"cli" ~payload_json
-            in
-            Printf.sprintf
-              "Queued message for session %s (queue_id=%d). No live daemon \
-               detected; startup replay will process it on next daemon \
-               start.%s"
-              session_key queue_id
-              (if is_bang then " (bang interrupt requested)" else "")
-        | Some (host, port) -> (
-            let cfg = get_config () in
-            let body =
-              Yojson.Safe.to_string
-                (`Assoc
-                   [
-                     ("session_key", `String session_key);
-                     ("message", `String message);
-                   ])
-            in
-            let result =
-              post_live_gateway_json ~cfg ~host ~port ~path:"/session/inject"
-                ~body
-            in
-            match result with
-            | Error msg -> Printf.sprintf "Session inject failed: %s" msg
-            | Ok (status, resp_body) -> (
-                match status with
-                | 200 -> (
-                    try
-                      let json = Yojson.Safe.from_string resp_body in
-                      let open Yojson.Safe.Util in
-                      let queued = json |> member "queued" |> to_bool in
-                      let response = json |> member "response" |> to_string in
-                      if queued then
-                        Printf.sprintf
-                          "Queued injected message for busy session %s%s"
-                          session_key
-                          (if String.length message > 0 && message.[0] = '!'
-                           then " (bang interrupt requested)"
-                           else "")
-                      else
-                        Printf.sprintf
-                          "Processed injected message for session %s\n%s"
-                          session_key response
-                    with _ ->
-                      Printf.sprintf
-                        "Session inject succeeded for %s but returned an \
-                         unexpected response: %s"
-                        session_key resp_body)
-                | 401 | 403 ->
+            match cwd_error with
+            | Some err -> err
+            | None -> (
+                match read_live_daemon_gateway () with
+                | None ->
+                    let is_bang =
+                      String.length message > 0 && message.[0] = '!'
+                    in
+                    let payload_fields =
+                      [ ("message", `String message); ("bang", `Bool is_bang) ]
+                      @
+                      match cwd with
+                      | Some c -> [ ("cwd", `String c) ]
+                      | None -> []
+                    in
+                    let payload_json =
+                      Yojson.Safe.to_string (`Assoc payload_fields)
+                    in
+                    let queue_id =
+                      Memory.queue_enqueue ~db ~session_key ~source:"cli"
+                        ~payload_json
+                    in
                     Printf.sprintf
-                      "Session inject was rejected by the live gateway (%d): %s"
-                      status
-                      (match parse_json_error_body resp_body with
-                      | Some msg -> msg
-                      | None -> resp_body)
-                | _ ->
-                    Printf.sprintf "Session inject failed (%d): %s" status
-                      (match parse_json_error_body resp_body with
-                      | Some msg -> msg
-                      | None -> resp_body))))
+                      "Queued message for session %s (queue_id=%d). No live \
+                       daemon detected; startup replay will process it on next \
+                       daemon start.%s"
+                      session_key queue_id
+                      (if is_bang then " (bang interrupt requested)" else "")
+                | Some (host, port) -> (
+                    let cfg = get_config () in
+                    let body =
+                      Yojson.Safe.to_string
+                        (`Assoc
+                           ([
+                              ("session_key", `String session_key);
+                              ("message", `String message);
+                            ]
+                           @
+                           match cwd with
+                           | Some c -> [ ("cwd", `String c) ]
+                           | None -> []))
+                    in
+                    let result =
+                      post_live_gateway_json ~cfg ~host ~port
+                        ~path:"/session/inject" ~body
+                    in
+                    match result with
+                    | Error msg ->
+                        Printf.sprintf "Session inject failed: %s" msg
+                    | Ok (status, resp_body) -> (
+                        match status with
+                        | 200 -> (
+                            try
+                              let json = Yojson.Safe.from_string resp_body in
+                              let open Yojson.Safe.Util in
+                              let queued = json |> member "queued" |> to_bool in
+                              let response =
+                                json |> member "response" |> to_string
+                              in
+                              if queued then
+                                Printf.sprintf
+                                  "Queued injected message for busy session \
+                                   %s%s"
+                                  session_key
+                                  (if
+                                     String.length message > 0
+                                     && message.[0] = '!'
+                                   then " (bang interrupt requested)"
+                                   else "")
+                              else
+                                Printf.sprintf
+                                  "Processed injected message for session %s\n\
+                                   %s"
+                                  session_key response
+                            with _ ->
+                              Printf.sprintf
+                                "Session inject succeeded for %s but returned \
+                                 an unexpected response: %s"
+                                session_key resp_body)
+                        | 401 | 403 ->
+                            Printf.sprintf
+                              "Session inject was rejected by the live gateway \
+                               (%d): %s"
+                              status
+                              (match parse_json_error_body resp_body with
+                              | Some msg -> msg
+                              | None -> resp_body)
+                        | _ ->
+                            Printf.sprintf "Session inject failed (%d): %s"
+                              status
+                              (match parse_json_error_body resp_body with
+                              | Some msg -> msg
+                              | None -> resp_body)))))
+      | _ -> "Usage: clawq session inject [--cwd PATH] SESSION MESSAGE...")
   | [ "compact"; session_key ] -> (
       match read_live_daemon_gateway () with
       | None -> "Error: no live daemon detected. Start `clawq agent` first."
@@ -604,7 +650,7 @@ let cmd_session args =
       \  session show SESSION [--epoch current|ID] [--offset N] [--limit N]\n\
       \  session pending SESSION\n\
       \  session events SESSION [--epoch current|ID] [--type TYPE]\n\
-      \  session inject SESSION MESSAGE...\n\
+      \  session inject [--cwd PATH] SESSION MESSAGE...\n\
       \  session compact SESSION\n\
       \  session keepalive SESSION [on|off|status]\n\
       \  session heartbeat SESSION [on|off|status]\n\

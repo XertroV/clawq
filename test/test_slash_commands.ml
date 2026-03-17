@@ -1509,6 +1509,7 @@ let make_dummy_agent name description : Agent_template.t =
     disallowed_tools = [];
     tool_search_enabled = None;
     reasoning_effort = None;
+    cwd = None;
     source = Agent_template.Builtin;
     metadata = [];
   }

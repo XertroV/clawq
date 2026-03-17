@@ -90,7 +90,7 @@ let test_init_double_call () =
 let test_init_schema_version_is_20 () =
   let db = Memory.init ~db_path:":memory:" () in
   Alcotest.(check int)
-    "schema version is 26" 26
+    "schema version is 27" 27
     (query_single_int db "SELECT version FROM schema_version")
 
 let test_init_creates_session_persistence_tables () =
@@ -160,7 +160,7 @@ let test_migrates_v1_db_to_v4_without_data_loss () =
       ignore (Sqlite3.db_close db);
       let migrated = Memory.init ~db_path () in
       Alcotest.(check int)
-        "schema version migrated" 26
+        "schema version migrated" 27
         (query_single_int migrated "SELECT version FROM schema_version");
       Alcotest.(check bool)
         "session_state exists after migration" true
@@ -906,7 +906,7 @@ let test_queue_migrate_v4_to_v5 () =
       ignore (Sqlite3.db_close db);
       let migrated = Memory.init ~db_path () in
       Alcotest.(check int)
-        "schema version is 26" 26
+        "schema version is 27" 27
         (query_single_int migrated "SELECT version FROM schema_version");
       Alcotest.(check bool)
         "inbound_queue exists after v4->v5" true
@@ -926,7 +926,7 @@ let test_init_rejects_future_schema_version () =
   with_temp_db (fun db_path ->
       let db = Sqlite3.db_open db_path in
       exec_exn db "CREATE TABLE schema_version (version INTEGER NOT NULL)";
-      exec_exn db "INSERT INTO schema_version (version) VALUES (27)";
+      exec_exn db "INSERT INTO schema_version (version) VALUES (28)";
       exec_exn db
         {|CREATE TABLE messages (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -952,7 +952,7 @@ let test_init_rejects_future_schema_version () =
       | `Msg msg ->
           Alcotest.(check bool)
             "rejects future version" true
-            (String.starts_with ~prefix:"DB uses future schema version 27" msg))
+            (String.starts_with ~prefix:"DB uses future schema version 28" msg))
 
 (* --- session archive tests --- *)
 
@@ -1063,6 +1063,47 @@ let test_list_archive_sessions () =
   Alcotest.(check bool) "s1 present" true (List.mem "s1" keys);
   Alcotest.(check bool) "s2 present" true (List.mem "s2" keys)
 
+let test_session_cwd_get_set () =
+  let db = Memory.init ~db_path:":memory:" () in
+  let key = "test-cwd-session" in
+  Alcotest.(check (option string))
+    "initially None" None
+    (Memory.get_session_cwd ~db ~session_key:key);
+  Memory.set_session_cwd ~db ~session_key:key ~cwd:(Some "/tmp/project");
+  Alcotest.(check (option string))
+    "set to /tmp/project" (Some "/tmp/project")
+    (Memory.get_session_cwd ~db ~session_key:key);
+  Memory.set_session_cwd ~db ~session_key:key ~cwd:(Some "/home/user");
+  Alcotest.(check (option string))
+    "updated to /home/user" (Some "/home/user")
+    (Memory.get_session_cwd ~db ~session_key:key);
+  Memory.set_session_cwd ~db ~session_key:key ~cwd:None;
+  Alcotest.(check (option string))
+    "cleared to None" None
+    (Memory.get_session_cwd ~db ~session_key:key)
+
+let test_agent_create_with_cwd () =
+  let config = Runtime_config.default in
+  let agent = Agent.create ~config ~cwd:"/tmp" () in
+  Alcotest.(check (option string))
+    "cwd set" (Some "/tmp") agent.Agent.effective_cwd;
+  let agent2 = Agent.create ~config () in
+  Alcotest.(check (option string)) "no cwd" None agent2.Agent.effective_cwd
+
+let test_session_info_includes_cwd () =
+  let db = Memory.init ~db_path:":memory:" () in
+  let key = "cwd-info-session" in
+  Memory.set_session_cwd ~db ~session_key:key ~cwd:(Some "/tmp/test");
+  let infos = Memory.list_session_infos ~db () in
+  let row =
+    List.find_opt (fun (r : Memory.session_info) -> r.session_key = key) infos
+  in
+  match row with
+  | None -> Alcotest.fail "session not found in list"
+  | Some r ->
+      Alcotest.(check (option string))
+        "effective_cwd in list" (Some "/tmp/test") r.effective_cwd
+
 let suite =
   [
     Alcotest.test_case "init sets busy_timeout" `Quick
@@ -1071,7 +1112,7 @@ let suite =
     Alcotest.test_case "init search enabled" `Quick test_init_search_enabled;
     Alcotest.test_case "init search disabled" `Quick test_init_search_disabled;
     Alcotest.test_case "init double call" `Quick test_init_double_call;
-    Alcotest.test_case "init schema version is 26" `Quick
+    Alcotest.test_case "init schema version is 27" `Quick
       test_init_schema_version_is_20;
     Alcotest.test_case "init creates session persistence tables" `Quick
       test_init_creates_session_persistence_tables;
@@ -1177,4 +1218,8 @@ let suite =
     Alcotest.test_case "list archives for session" `Quick
       test_list_archives_for_session;
     Alcotest.test_case "list archive sessions" `Quick test_list_archive_sessions;
+    Alcotest.test_case "session cwd get set" `Quick test_session_cwd_get_set;
+    Alcotest.test_case "agent create with cwd" `Quick test_agent_create_with_cwd;
+    Alcotest.test_case "session info includes cwd" `Quick
+      test_session_info_includes_cwd;
   ]

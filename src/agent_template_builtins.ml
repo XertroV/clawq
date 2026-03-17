@@ -16,6 +16,7 @@ let mk ~name ~description ~role ~goal ~backstory ~system_prompt ~allowed_tools
     disallowed_tools;
     tool_search_enabled = None;
     reasoning_effort = None;
+    cwd = None;
     source = Builtin;
     metadata = [];
   }

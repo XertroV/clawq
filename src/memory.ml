@@ -1,4 +1,4 @@
-let schema_version = 26
+let schema_version = 27
 
 type session_activity = Active | Inactive | Any
 
@@ -13,6 +13,7 @@ type session_info = {
   archived_epoch_count : int;
   keepalive_enabled : bool;
   heartbeat_enabled : bool;
+  effective_cwd : string option;
 }
 
 type raw_message = {
@@ -128,6 +129,7 @@ let init_session_schema db =
     \     keepalive_enabled INTEGER NOT NULL DEFAULT 0,\n\
     \     heartbeat_enabled INTEGER NOT NULL DEFAULT 0,\n\
     \     model_override TEXT DEFAULT NULL,\n\
+    \     effective_cwd TEXT DEFAULT NULL,\n\
     \     CHECK ((channel IS NULL) = (channel_id IS NULL))\n\
     \   )";
   exec_exn db
@@ -706,6 +708,18 @@ let migrate_schema db current_version =
       set_schema_version db schema_version
   | 25 ->
       Pair_coding_state.init_schema db;
+      (try
+         exec_exn db
+           "ALTER TABLE session_state ADD COLUMN effective_cwd TEXT DEFAULT \
+            NULL"
+       with _ -> ());
+      set_schema_version db schema_version
+  | 26 ->
+      (try
+         exec_exn db
+           "ALTER TABLE session_state ADD COLUMN effective_cwd TEXT DEFAULT \
+            NULL"
+       with _ -> ());
       set_schema_version db schema_version
   | n when n = schema_version ->
       init_session_schema db;
@@ -1202,8 +1216,8 @@ let archive_session ~db ~session_key =
   let session_state_json =
     let sql =
       "SELECT turn, channel, channel_id, response_sent_at, last_active, \
-       keepalive_enabled, heartbeat_enabled, model_override FROM session_state \
-       WHERE session_key = ?"
+       keepalive_enabled, heartbeat_enabled, model_override, effective_cwd \
+       FROM session_state WHERE session_key = ?"
     in
     let stmt = Sqlite3.prepare db sql in
     ignore (Sqlite3.bind stmt 1 (Sqlite3.Data.TEXT session_key));
@@ -1238,6 +1252,7 @@ let archive_session ~db ~session_key =
                     ( "heartbeat_enabled",
                       `Int (Option.value ~default:0 (int_opt 6)) );
                     json_opt "model_override" (text_opt 7);
+                    json_opt "effective_cwd" (text_opt 8);
                   ]))
       | _ -> None
     in
@@ -1730,6 +1745,41 @@ let get_session_model_override ~db ~session_key =
   ignore (Sqlite3.finalize stmt);
   result
 
+let set_session_cwd ~db ~session_key ~cwd =
+  let sql =
+    "INSERT INTO session_state (session_key, effective_cwd) VALUES (?, ?) ON \
+     CONFLICT(session_key) DO UPDATE SET effective_cwd = \
+     excluded.effective_cwd"
+  in
+  let stmt = Sqlite3.prepare db sql in
+  ignore (Sqlite3.bind stmt 1 (Sqlite3.Data.TEXT session_key));
+  ignore
+    (Sqlite3.bind stmt 2
+       (match cwd with
+       | Some c -> Sqlite3.Data.TEXT c
+       | None -> Sqlite3.Data.NULL));
+  (match Sqlite3.step stmt with
+  | Sqlite3.Rc.DONE -> ()
+  | rc ->
+      Logs.warn (fun m ->
+          m "Failed to set session cwd: %s" (Sqlite3.Rc.to_string rc)));
+  ignore (Sqlite3.finalize stmt)
+
+let get_session_cwd ~db ~session_key =
+  let sql = "SELECT effective_cwd FROM session_state WHERE session_key = ?" in
+  let stmt = Sqlite3.prepare db sql in
+  ignore (Sqlite3.bind stmt 1 (Sqlite3.Data.TEXT session_key));
+  let result =
+    match Sqlite3.step stmt with
+    | Sqlite3.Rc.ROW -> (
+        match Sqlite3.column stmt 0 with
+        | Sqlite3.Data.TEXT s -> Some s
+        | _ -> None)
+    | _ -> None
+  in
+  ignore (Sqlite3.finalize stmt);
+  result
+
 let list_keepalive_session_keys ~db =
   let sql =
     "SELECT session_key FROM session_state WHERE keepalive_enabled = 1"
@@ -1821,10 +1871,10 @@ let list_session_infos ~db ?channel ?prefix ?(activity = Any) ?only_main () =
      s.response_sent_at, s.last_active, (SELECT COUNT(*) FROM messages m WHERE \
      m.session_key = k.session_key), (SELECT COUNT(*) FROM session_log_epochs \
      e WHERE e.session_key = k.session_key), COALESCE(s.keepalive_enabled, 0), \
-     COALESCE(s.heartbeat_enabled, 0) FROM (SELECT session_key FROM messages \
-     UNION SELECT session_key FROM session_state UNION SELECT session_key FROM \
-     session_log_epochs) k LEFT JOIN session_state s ON s.session_key = \
-     k.session_key ORDER BY k.session_key"
+     COALESCE(s.heartbeat_enabled, 0), s.effective_cwd FROM (SELECT \
+     session_key FROM messages UNION SELECT session_key FROM session_state \
+     UNION SELECT session_key FROM session_log_epochs) k LEFT JOIN \
+     session_state s ON s.session_key = k.session_key ORDER BY k.session_key"
   in
   let stmt = Sqlite3.prepare db sql in
   let rows = ref [] in
@@ -1853,6 +1903,7 @@ let list_session_infos ~db ?channel ?prefix ?(activity = Any) ?only_main () =
           archived_epoch_count = int_value 7;
           keepalive_enabled = int_value 8 <> 0;
           heartbeat_enabled = int_value 9 <> 0;
+          effective_cwd = text_opt 10;
         }
         :: !rows
   done;

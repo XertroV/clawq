@@ -374,7 +374,7 @@ let test_boot_startup_stage_sequence_without_full_daemon () =
         resumed := (session_key, channel, channel_id) :: !resumed;
         Lwt.return_unit
       in
-      let replay_turn _mgr ~key ~message () =
+      let replay_turn _mgr ~key ~message ?cwd:_ () =
         replayed := (key, message) :: !replayed;
         Lwt.return "ok"
       in
@@ -461,7 +461,7 @@ let test_boot_startup_stage_sequence_continues_after_mcp_failure () =
         resumed := (session_key, channel, channel_id) :: !resumed;
         Lwt.return_unit
       in
-      let replay_turn _mgr ~key ~message () =
+      let replay_turn _mgr ~key ~message ?cwd:_ () =
         replayed := (key, message) :: !replayed;
         Lwt.return "ok"
       in
@@ -1865,7 +1865,7 @@ let test_replay_durable_inbound_drains_and_deletes () =
     "1 pending before replay" 1
     (Memory.queue_count ~db ~session_key:key);
   let replayed = ref [] in
-  let replay_turn _mgr ~key ~message () =
+  let replay_turn _mgr ~key ~message ?cwd:_ () =
     replayed := (key, message) :: !replayed;
     Lwt.return "ok"
   in
@@ -1908,7 +1908,7 @@ let test_replay_durable_inbound_summary_counts () =
   let summary =
     Lwt_main.run
       (Daemon.replay_durable_inbound_queue
-         ~replay_turn:(fun _mgr ~key:_ ~message () ->
+         ~replay_turn:(fun _mgr ~key:_ ~message ?cwd:_ () ->
            if message = "boom" then Lwt.fail_with "boom" else Lwt.return "ok")
          ~session_manager ~config ())
   in
@@ -1937,7 +1937,7 @@ let test_replay_durable_inbound_fifo_ordering () =
   enq "second";
   enq "third";
   let replayed = ref [] in
-  let replay_turn _mgr ~key:_ ~message () =
+  let replay_turn _mgr ~key:_ ~message ?cwd:_ () =
     replayed := message :: !replayed;
     Lwt.return "ok"
   in
@@ -1961,7 +1961,9 @@ let test_replay_records_failure_on_error () =
        ~payload_json:
          (Yojson.Safe.to_string
             (`Assoc [ ("message", `String "fail me"); ("bang", `Bool false) ])));
-  let replay_turn _mgr ~key:_ ~message:_ () = Lwt.fail_with "test error" in
+  let replay_turn _mgr ~key:_ ~message:_ ?cwd:_ () =
+    Lwt.fail_with "test error"
+  in
   ignore
     (Lwt_main.run
        (Daemon.replay_durable_inbound_queue ~replay_turn ~session_manager
@@ -1984,7 +1986,7 @@ let test_replay_skips_empty_message () =
          (Yojson.Safe.to_string
             (`Assoc [ ("message", `String ""); ("bang", `Bool false) ])));
   let replayed = ref 0 in
-  let replay_turn _mgr ~key:_ ~message:_ () =
+  let replay_turn _mgr ~key:_ ~message:_ ?cwd:_ () =
     incr replayed;
     Lwt.return "ok"
   in
@@ -2009,7 +2011,7 @@ let test_replay_preserves_bang_prefix () =
          (Yojson.Safe.to_string
             (`Assoc [ ("message", `String "urgent"); ("bang", `Bool true) ])));
   let replayed = ref [] in
-  let replay_turn _mgr ~key:_ ~message () =
+  let replay_turn _mgr ~key:_ ~message ?cwd:_ () =
     replayed := message :: !replayed;
     Lwt.return "ok"
   in

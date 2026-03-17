@@ -273,14 +273,25 @@ let session_inject_cmd =
   let session_key =
     Arg.(required & pos 0 (some string) None & info [] ~docv:"SESSION")
   in
+  let cwd =
+    Arg.(
+      value
+      & opt (some string) None
+      & info [ "cwd" ]
+          ~doc:"Set the agent's working directory for this session."
+          ~docv:"PATH")
+  in
   Cmd.v
     (Cmd.info "inject"
        ~doc:"Inject a live inbound message through the daemon session manager.")
     Term.(
       ret
-        (const (fun sk msg_parts ->
-             run "session" ([ "inject"; sk ] @ msg_parts))
-        $ session_key $ args))
+        (const (fun cwd sk msg_parts ->
+             run "session"
+               ([ "inject" ]
+               @ (match cwd with Some c -> [ "--cwd"; c ] | None -> [])
+               @ [ sk ] @ msg_parts))
+        $ cwd $ session_key $ args))
 
 let session_events_cmd =
   let session_key =

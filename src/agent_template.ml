@@ -29,6 +29,7 @@ type t = {
   disallowed_tools : string list;
   tool_search_enabled : bool option;
   reasoning_effort : string option;
+  cwd : string option;
   source : source;
   metadata : (string * string) list;
 }
@@ -151,6 +152,7 @@ let parse_template ~source_path content =
             | _ -> None
           in
           let reasoning_effort = find "reasoning-effort" in
+          let cwd = find "cwd" in
           let known_keys =
             [
               "name";
@@ -164,6 +166,7 @@ let parse_template ~source_path content =
               "disallowed-tools";
               "tool-search-enabled";
               "reasoning-effort";
+              "cwd";
             ]
           in
           let metadata =
@@ -186,6 +189,7 @@ let parse_template ~source_path content =
               disallowed_tools;
               tool_search_enabled;
               reasoning_effort;
+              cwd;
               source;
               metadata;
             })
@@ -218,6 +222,7 @@ let to_frontmatter_string t =
   (match t.reasoning_effort with
   | Some e -> add (Printf.sprintf "reasoning-effort: %s" e)
   | None -> ());
+  (match t.cwd with Some c -> add (Printf.sprintf "cwd: %s" c) | None -> ());
   List.iter (fun (k, v) -> add (Printf.sprintf "%s: %s" k v)) t.metadata;
   add "---";
   add "";

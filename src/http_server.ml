@@ -770,50 +770,71 @@ let handler ~session_manager ~require_pairing ~auth_token
             let message =
               try json |> member "message" |> to_string with _ -> ""
             in
+            let cwd =
+              try
+                match json |> member "cwd" with
+                | `String s when String.trim s <> "" -> Some s
+                | _ -> None
+              with _ -> None
+            in
             if session_key = "" then bad_request "session_key is required"
             else if message = "" then bad_request "message is required"
             else
-              let* result =
-                Lwt.catch
-                  (fun () ->
-                    Session.with_registered_notifier session_manager
-                      ~key:session_key
-                      ~notify:(fun _text -> Lwt.return_unit)
-                      (fun () ->
-                        let* response =
-                          Session.turn session_manager ~key:session_key ~message
-                            ()
-                        in
-                        let queued =
-                          Session.should_suppress_response response
-                        in
-                        if
-                          (not queued)
-                          && not
-                               (Session.take_response_deferred session_manager
-                                  ~key:session_key)
-                        then
-                          Session.mark_response_sent session_manager
-                            ~key:session_key;
-                        Lwt.return (Ok (queued, response))))
-                  (fun exn -> Lwt.return (Error (Printexc.to_string exn)))
+              let cwd_valid =
+                match cwd with
+                | Some path ->
+                    if not (Sys.file_exists path) then
+                      Some (Printf.sprintf "cwd path does not exist: %s" path)
+                    else if not (Sys.is_directory path) then
+                      Some
+                        (Printf.sprintf "cwd path is not a directory: %s" path)
+                    else None
+                | None -> None
               in
-              match result with
-              | Ok (queued, response) ->
-                  json_string_response
-                    (Yojson.Safe.to_string
-                       (`Assoc
-                          [
-                            ("queued", `Bool queued);
-                            ("response", `String response);
-                          ]))
-              | Error err ->
-                  Cohttp_lwt_unix.Server.respond_string
-                    ~status:`Internal_server_error ~headers:json_headers
-                    ~body:
-                      (Yojson.Safe.to_string
-                         (`Assoc [ ("error", `String err) ]))
-                    ()))
+              match cwd_valid with
+              | Some err -> bad_request err
+              | None -> (
+                  let* result =
+                    Lwt.catch
+                      (fun () ->
+                        Session.with_registered_notifier session_manager
+                          ~key:session_key
+                          ~notify:(fun _text -> Lwt.return_unit)
+                          (fun () ->
+                            let* response =
+                              Session.turn session_manager ~key:session_key
+                                ~message ?cwd ()
+                            in
+                            let queued =
+                              Session.should_suppress_response response
+                            in
+                            if
+                              (not queued)
+                              && not
+                                   (Session.take_response_deferred
+                                      session_manager ~key:session_key)
+                            then
+                              Session.mark_response_sent session_manager
+                                ~key:session_key;
+                            Lwt.return (Ok (queued, response))))
+                      (fun exn -> Lwt.return (Error (Printexc.to_string exn)))
+                  in
+                  match result with
+                  | Ok (queued, response) ->
+                      json_string_response
+                        (Yojson.Safe.to_string
+                           (`Assoc
+                              [
+                                ("queued", `Bool queued);
+                                ("response", `String response);
+                              ]))
+                  | Error err ->
+                      Cohttp_lwt_unix.Server.respond_string
+                        ~status:`Internal_server_error ~headers:json_headers
+                        ~body:
+                          (Yojson.Safe.to_string
+                             (`Assoc [ ("error", `String err) ]))
+                        ())))
   | `POST, "/session/compact" -> (
       (* Apply rate limiting like other endpoints *)
       let* ip_ok =

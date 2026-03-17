@@ -753,6 +753,19 @@ let get_or_create_locked mgr ~key =
                 observed_active_workspace_files
           | None -> Agent.sync_observed_active_workspace_files agent)
       | None -> ());
+      (match agent_template with
+      | Some tmpl -> (
+          match tmpl.Agent_template.cwd with
+          | Some cwd when Sys.file_exists cwd && Sys.is_directory cwd ->
+              agent.Agent.effective_cwd <- Some cwd
+          | _ -> ())
+      | None -> ());
+      (match mgr.db with
+      | Some db -> (
+          match Memory.get_session_cwd ~db ~session_key:key with
+          | Some cwd -> agent.Agent.effective_cwd <- Some cwd
+          | None -> ())
+      | None -> ());
       (match mgr.db with
       | Some db -> (
           match Memory.get_session_model_override ~db ~session_key:key with

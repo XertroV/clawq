@@ -72,7 +72,7 @@ Every clawq command is listed below. Run `clawq COMMAND --help` for per-command 
 | `clawq session` | Inspect and control agent sessions |
 | `clawq session list` | List active sessions with state, channel, and pending queue counts |
 | `clawq session show KEY` | Show session details and message history |
-| `clawq session inject SESSION MSG` | Inject a message into a session's durable inbound queue |
+| `clawq session inject [--cwd PATH] SESSION MSG` | Inject a message into a session's durable inbound queue (optionally set agent working directory) |
 | `clawq session pending SESSION` | Show pending inbound queue entries for a session |
 | `clawq session keepalive SESSION on\|off` | Toggle session keepalive |
 | `clawq session heartbeat SESSION on\|off` | Toggle heartbeat routing for a session |

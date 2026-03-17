@@ -2951,6 +2951,15 @@ let delegate_tool_with_notify ?(check_available = true) ~db ~default_repo_path
                            bidirectional JSON-RPC communication. Default: \
                            false." );
                     ] );
+                ( "cwd",
+                  `Assoc
+                    [
+                      ("type", `String "string");
+                      ( "description",
+                        `String
+                          "Optional working directory for the delegated agent. \
+                           Only used when use_worktree is false." );
+                    ] );
               ] );
           ("required", `List [ `String "goal" ]);
           ("additionalProperties", `Bool false);
@@ -3013,14 +3022,26 @@ let delegate_tool_with_notify ?(check_available = true) ~db ~default_repo_path
             |> Option.value ~default:false
           with _ -> false
         in
+        let delegate_cwd =
+          try
+            match args |> member "cwd" with
+            | `String s when String.trim s <> "" -> Some (String.trim s)
+            | _ -> None
+          with _ -> None
+        in
         if String.trim goal = "" then Lwt.return "Error: goal is required"
         else if runner_error <> None then
           Lwt.return ("Error: " ^ Option.get runner_error)
         else
+          let effective_repo_path =
+            match (delegate_cwd, use_worktree) with
+            | Some c, false -> Some c
+            | _ -> repo_path
+          in
           match
             delegate_enqueue ?context ?notify_cfg ~check_available ~db
               ~automerge ~use_worktree ~acp ?preferred_runner:runner_pref ?model
-              ?repo_path ?branch ~default_repo_path ~goal ()
+              ?repo_path:effective_repo_path ?branch ~default_repo_path ~goal ()
           with
           | Ok (id, runner, repo) ->
               Lwt.return

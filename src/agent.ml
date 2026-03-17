@@ -90,7 +90,7 @@ let capture_active_workspace_file_state_for_config (config : Runtime_config.t) =
       in
       (file, digest))
 
-let create ~config ?tool_registry ?agent_template () =
+let create ~config ?tool_registry ?agent_template ?cwd () =
   let system_prompt =
     Prompt_builder.build ~config ~tool_registry ?agent_template ()
   in
@@ -116,7 +116,7 @@ let create ~config ?tool_registry ?agent_template () =
     tool_registry;
     agent_template;
     compacted_mid_turn = false;
-    effective_cwd = None;
+    effective_cwd = cwd;
     project_docs_content = pd.content;
     project_docs_digests = pd.digests;
     project_docs_subdir_digests = [];

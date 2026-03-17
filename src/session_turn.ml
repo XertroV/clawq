@@ -511,7 +511,7 @@ let drain_queued_messages mgr ~key agent interrupt ?on_drain_progress () =
 
 let rec turn mgr ~key ~message ?(content_parts = []) ?(attachments = [])
     ?(skill_injections = []) ?channel_name ?channel_type ?sender_id ?sender_name
-    ?user_group ?channel ?channel_id ?message_id ?before_drain () =
+    ?user_group ?channel ?channel_id ?message_id ?cwd ?before_drain () =
   Session_core.with_live_activity mgr ~key (fun () ->
       let open Lwt.Syntax in
       let* () = Session_core.mark_autonomous_activity_started mgr ~key in
@@ -554,12 +554,42 @@ let rec turn mgr ~key ~message ?(content_parts = []) ?(attachments = [])
                 | None -> Lwt.return Session_core.draining_message)
               (fun agent interrupt ->
                 Session_core.with_in_flight mgr (fun () ->
+                    (match cwd with
+                    | Some c -> (
+                        let old_cwd = agent.Agent.effective_cwd in
+                        agent.Agent.effective_cwd <- Some c;
+                        (match old_cwd with
+                        | Some prev when prev <> c ->
+                            let event_msg =
+                              Provider.make_message ~role:"event"
+                                ~content:
+                                  (Printf.sprintf
+                                     "[system] Working directory changed from \
+                                      %s to %s"
+                                     prev c)
+                            in
+                            agent.Agent.history <-
+                              agent.Agent.history @ [ event_msg ]
+                        | _ -> ());
+                        match mgr.Session_core.db with
+                        | Some db ->
+                            Memory.set_session_cwd ~db ~session_key:key
+                              ~cwd:(Some c)
+                        | None -> ())
+                    | None -> ());
                     let* response =
                       run_locked_turn mgr ~key agent interrupt ~message
                         ~content_parts ~attachments ~skill_injections
                         ?channel_name ?channel_type ?sender_id ?sender_name
                         ?user_group ?channel ?channel_id ()
                     in
+                    (* Persist effective_cwd after turn (may have changed via
+                       change_working_dir tool) *)
+                    (match mgr.Session_core.db with
+                    | Some db ->
+                        Memory.set_session_cwd ~db ~session_key:key
+                          ~cwd:agent.Agent.effective_cwd
+                    | None -> ());
                     let* () =
                       match before_drain with
                       | Some f -> f response
@@ -824,7 +854,7 @@ let fork_and_run mgr ~parent_key ?agent_name ~prompt ~send_reply () =
 
 let turn_stream mgr ~key ~message ?(content_parts = []) ?(attachments = [])
     ?(skill_injections = []) ?channel_name ?channel_type ?sender_id ?sender_name
-    ?user_group ?channel ?channel_id ?message_id ?on_tool_round_complete
+    ?user_group ?channel ?channel_id ?message_id ?cwd ?on_tool_round_complete
     ?on_drain_progress ?before_drain ~on_chunk () =
   Session_core.with_live_activity mgr ~key (fun () ->
       let open Lwt.Syntax in
@@ -873,6 +903,29 @@ let turn_stream mgr ~key ~message ?(content_parts = []) ?(attachments = [])
                 | None -> Lwt.return Session_core.draining_message)
               (fun agent interrupt ->
                 Session_core.with_in_flight mgr (fun () ->
+                    (match cwd with
+                    | Some c -> (
+                        let old_cwd = agent.Agent.effective_cwd in
+                        agent.Agent.effective_cwd <- Some c;
+                        (match old_cwd with
+                        | Some prev when prev <> c ->
+                            let event_msg =
+                              Provider.make_message ~role:"event"
+                                ~content:
+                                  (Printf.sprintf
+                                     "[system] Working directory changed from \
+                                      %s to %s"
+                                     prev c)
+                            in
+                            agent.Agent.history <-
+                              agent.Agent.history @ [ event_msg ]
+                        | _ -> ());
+                        match mgr.Session_core.db with
+                        | Some db ->
+                            Memory.set_session_cwd ~db ~session_key:key
+                              ~cwd:(Some c)
+                        | None -> ())
+                    | None -> ());
                     let interrupt_check () = !interrupt in
                     interrupt := None;
                     (* Check for @agent mention at start of message *)
@@ -1083,6 +1136,13 @@ let turn_stream mgr ~key ~message ?(content_parts = []) ?(attachments = [])
                                    })
                           | _ -> ()
                         end;
+                        (* Persist effective_cwd after turn (may have changed
+                           via change_working_dir tool) *)
+                        (match mgr.Session_core.db with
+                        | Some db ->
+                            Memory.set_session_cwd ~db ~session_key:key
+                              ~cwd:agent.Agent.effective_cwd
+                        | None -> ());
                         let* () =
                           match before_drain with
                           | Some f -> f response

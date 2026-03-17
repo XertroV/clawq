@@ -100,6 +100,7 @@ let build_template_from_fields () =
     disallowed_tools;
     tool_search_enabled;
     reasoning_effort;
+    cwd = None;
     source = User_file "";
     metadata = [];
   }
