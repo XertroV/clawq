@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B519
+priority: high
+status: pending
+tags: []
+title: Add way to access historical data from teams channel that has not been sent to the bot directly.
+---
+
+Add way to access historical data from teams channel that has not been sent to the bot directly.
