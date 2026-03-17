@@ -1,0 +1,29 @@
+---
+complexity: low
+depends_on: []
+estimate_hours: 1
+id: B534
+priority: high
+status: pending
+tags: []
+title: Audit tools and mark required arguments in descriptions
+---
+Problem
+Some tool descriptions do not clearly mark which arguments are required. For example, file_read produced an error \"missing required parameter 'path' for tool file_read\" when called without its path argument, but the tool description did not surface that 'path' is required upfront.
+
+Why this matters
+Clear required/optional distinction in tool descriptions improves agent reliability:
+- Reduces invalid tool call attempts
+- Helps the model understand constraints without trial-and-error
+- Improves self-knowledge documentation for future tool audits
+
+Acceptance criteria
+- All tools with required arguments have those arguments clearly marked as required in their description/help text
+- A systematic audit of all tool definitions is performed (not just file_read)
+- The pattern is consistent: required args are explicitly noted, optional args are implicitly optional or explicitly marked optional
+- Regression guard: a simple grep/code review confirms required-arg marking is present for at least the known required parameters (path for file_read, command for shell_exec, etc.)
+
+Notes
+- User observed this via: file_read call failed with \"missing required parameter 'path'\" but the tool description did not indicate path was required
+- Similar tools with required args should be audited: shell_exec (command), file_write (path, content), file_edit (path, old_text, new_text), http_get (url), etc.
+- This is a documentation/UX fix in tool definition files, not a runtime behavior change
