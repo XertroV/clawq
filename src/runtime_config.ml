@@ -483,7 +483,7 @@ let default_log_config : log_config =
   { max_size_mb = 10; max_files = 5; debug_http = false }
 
 let default_error_watcher_config : error_watcher_config =
-  let v = Build_info.version in
+  let v = Build_info.version_dev in
   let n = String.length v in
   {
     enabled = n >= 4 && String.sub v (n - 4) 4 = "-dev";

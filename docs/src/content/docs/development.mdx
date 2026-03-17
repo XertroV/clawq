@@ -400,6 +400,8 @@ docker run -it --rm -p 13451:13451 \
 | `make ui` | Build the web UI and regenerate embedded assets |
 | `make ui-dev` | Run the web UI watcher |
 | `make ui-check` | Verify embedded web UI assets are current |
+| `make sync-version` | Sync version from `VERSION` file to all non-OCaml files and re-extract |
+| `make sync-version-check` | Verify version consistency across files |
 | `make run` | Print CLI help |
 | `make clean` | Clean build artifacts |
 | `make docker-build` | Build Docker image |

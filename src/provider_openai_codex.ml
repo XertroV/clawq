@@ -709,7 +709,7 @@ let do_request ~provider_name ~provider ~model ~messages ?tools ?session_key
           ("Authorization", "Bearer " ^ access_token);
           ("originator", "clawq");
           ("session_id", Printf.sprintf "%d" (Openai_codex_oauth.now_ms ()));
-          ("User-Agent", "clawq/0.1.1-dev");
+          ("User-Agent", "clawq/" ^ Build_info.version_dev);
         ]
         @
         match account_id with

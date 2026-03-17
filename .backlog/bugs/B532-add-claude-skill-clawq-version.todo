@@ -1,10 +1,15 @@
 ---
+claimed_at: "2026-03-17T04:32:18Z"
+claimed_by: cli-user
+completed_at: "2026-03-17T05:43:11Z"
 complexity: medium
 depends_on: []
+duration_minutes: 70.89655580966667
 estimate_hours: 1
 id: B532
 priority: high
-status: pending
+started_at: "2026-03-17T04:32:18Z"
+status: done
 tags: []
 title: 'add ./.claude/skill/clawq-version-bump/SKILL.md skill that ensures the repo is clean, bumps the version as instructed, commits all results, tags the version number, pushes it up to github, and then creates a full changelog since the last version and creates a new release. We should also compile artifacts and have them be uploaded too. (Note: if we already produce artifacts via CI, or can produce them via CI, then we should do that instead -- then we can use the github webhook reaction feature to respond to the release CI job completing and update the description with the changelog)'
 ---

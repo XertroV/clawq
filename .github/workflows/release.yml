@@ -1,0 +1,55 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup OCaml + opam
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: 5.1.1
+          cache-prefix: deps-${{ hashFiles('clawq.opam', 'dune-project') }}
+
+      - name: Install system package for sqlite bindings
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
+
+      - name: Install opam deps
+        run: opam install -y . --deps-only
+
+      - name: Build optimized speed variant
+        run: |
+          eval "$(opam env)"
+          make build-opt-speed-stripped
+
+      - name: Build optimized size variant
+        run: |
+          eval "$(opam env)"
+          make build-opt-size-stripped
+
+      - name: Rename artifacts
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          ARCH="$(uname -m)"
+          mv dist/clawq-speed "dist/clawq-${VERSION}-linux-${ARCH}-speed"
+          mv dist/clawq-size "dist/clawq-${VERSION}-linux-${ARCH}-size"
+
+      - name: Upload to GitHub release
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          ARCH="$(uname -m)"
+          gh release upload "$GITHUB_REF_NAME" \
+            "dist/clawq-${VERSION}-linux-${ARCH}-speed" \
+            "dist/clawq-${VERSION}-linux-${ARCH}-size" \
+            --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

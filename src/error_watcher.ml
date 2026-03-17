@@ -88,7 +88,7 @@ let update_seen ~seen entry =
   (key, now) :: List.filter (fun (k, _) -> k <> key) seen
 
 let is_dev_build () =
-  let v = Build_info.version in
+  let v = Build_info.version_dev in
   let n = String.length v in
   n >= 4 && String.sub v (n - 4) 4 = "-dev"
 
