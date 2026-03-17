@@ -10,3 +10,4 @@ title: 'teams docs for installing in teams instance (last step): note that if in
 ---
 
 teams docs for installing in teams instance (last step): note that if installing to org then it's easiest to search for the bot by name.
+also link to this page: https://admin.teams.microsoft.com/policies/manage-apps/ (and https://dev.teams.microsoft.com/apps/ too if we don't already)
