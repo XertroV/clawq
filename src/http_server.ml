@@ -675,6 +675,20 @@ let handler ~session_manager ~require_pairing ~auth_token
                     in
                     Cohttp_lwt_unix.Server.respond_string ~status:`OK
                       ~headers:json_headers ~body:resp_json ()
+                | Slash_commands.InjectConnectorHistory _ ->
+                    let resp_json =
+                      `Assoc
+                        [
+                          ( "response",
+                            `String
+                              "Connector history is not applicable for the \
+                               gateway channel — use /inject_connector_history \
+                               in Teams or Discord group chats." );
+                        ]
+                      |> Yojson.Safe.to_string
+                    in
+                    Cohttp_lwt_unix.Server.respond_string ~status:`OK
+                      ~headers:json_headers ~body:resp_json ()
                 | _ -> (
                     let* result =
                       Lwt.catch
@@ -1598,6 +1612,11 @@ let handler ~session_manager ~require_pairing ~auth_token
                             ~connector:Format_adapter.Plain ~config:cfg results
                         in
                         sse_reply text)
+                | Slash_commands.InjectConnectorHistory _ ->
+                    sse_reply
+                      "Connector history is not applicable for the gateway \
+                       channel — use /inject_connector_history in Teams or \
+                       Discord group chats."
                 | Slash_commands.SkillInvoke _ ->
                     sse_reply "Error: unexpected SkillInvoke"
                 | Slash_commands.NotACommand ->

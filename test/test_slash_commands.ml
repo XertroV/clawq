@@ -107,6 +107,8 @@ let result_to_string = function
   | Slash_commands.SkillsMenu page -> "SkillsMenu(" ^ string_of_int page ^ ")"
   | Slash_commands.CostsMenu -> "CostsMenu"
   | Slash_commands.BgMenu -> "BgMenu"
+  | Slash_commands.InjectConnectorHistory n ->
+      "InjectConnectorHistory(" ^ string_of_int n ^ ")"
   | Slash_commands.SkillInvoke (name, args) ->
       "SkillInvoke(" ^ name ^ ", " ^ args ^ ")"
   | Slash_commands.NotACommand -> "NotACommand"
@@ -157,6 +159,9 @@ let result_eq a b =
   | Slash_commands.SkillsMenu a, Slash_commands.SkillsMenu b -> a = b
   | Slash_commands.CostsMenu, Slash_commands.CostsMenu -> true
   | Slash_commands.BgMenu, Slash_commands.BgMenu -> true
+  | ( Slash_commands.InjectConnectorHistory a,
+      Slash_commands.InjectConnectorHistory b ) ->
+      a = b
   | Slash_commands.NotACommand, Slash_commands.NotACommand -> true
   | _ -> false
 
@@ -2173,6 +2178,31 @@ let test_agent_in_commands_list () =
   in
   Alcotest.(check bool) "commands list includes /agent" true has_agent
 
+let test_inject_connector_history_default () =
+  Alcotest.(check result_testable)
+    "default count 20" (Slash_commands.InjectConnectorHistory 20)
+    (Slash_commands.handle "/inject_connector_history")
+
+let test_inject_connector_history_explicit () =
+  Alcotest.(check result_testable)
+    "explicit count 30" (Slash_commands.InjectConnectorHistory 30)
+    (Slash_commands.handle "/inject_connector_history 30")
+
+let test_inject_connector_history_hyphen () =
+  Alcotest.(check result_testable)
+    "hyphenated form" (Slash_commands.InjectConnectorHistory 10)
+    (Slash_commands.handle "/inject-connector-history 10")
+
+let test_inject_connector_history_clamp_low () =
+  Alcotest.(check result_testable)
+    "clamp 0 to 1" (Slash_commands.InjectConnectorHistory 1)
+    (Slash_commands.handle "/inject_connector_history 0")
+
+let test_inject_connector_history_clamp_high () =
+  Alcotest.(check result_testable)
+    "clamp 200 to 128" (Slash_commands.InjectConnectorHistory 128)
+    (Slash_commands.handle "/inject_connector_history 200")
+
 let suite =
   [
     Alcotest.test_case "handle /start" `Quick test_start;
@@ -2441,4 +2471,14 @@ let suite =
     Alcotest.test_case "format config menu" `Quick test_format_config_menu;
     Alcotest.test_case "format model menu" `Quick test_format_model_menu;
     Alcotest.test_case "format skills menu" `Quick test_format_skills_menu;
+    Alcotest.test_case "/inject_connector_history default" `Quick
+      test_inject_connector_history_default;
+    Alcotest.test_case "/inject_connector_history 30" `Quick
+      test_inject_connector_history_explicit;
+    Alcotest.test_case "/inject-connector-history hyphen" `Quick
+      test_inject_connector_history_hyphen;
+    Alcotest.test_case "/inject_connector_history clamp low" `Quick
+      test_inject_connector_history_clamp_low;
+    Alcotest.test_case "/inject_connector_history clamp high" `Quick
+      test_inject_connector_history_clamp_high;
   ]

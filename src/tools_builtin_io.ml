@@ -1641,4 +1641,73 @@ let change_working_dir ~(config : Runtime_config.t) ~workspace ~workspace_only
 
 let bg_shell_tools = Tools_bg_shell.tools
 
+let inject_connector_history ~(config : Runtime_config.t) ~db =
+  {
+    Tool.name = "inject_connector_history";
+    description =
+      "Retrieve recent messages from the group chat/channel that were not \
+       addressed to the bot. Only available when connector_history.enabled is \
+       true. Returns channel messages for context. Use this when the user asks \
+       about recent chat activity or you need context about what others said.";
+    parameters_schema =
+      `Assoc
+        [
+          ("type", `String "object");
+          ( "properties",
+            `Assoc
+              [
+                ( "count",
+                  `Assoc
+                    [
+                      ("type", `String "integer");
+                      ( "description",
+                        `String
+                          "Number of messages to retrieve (default 20, max 128)"
+                      );
+                    ] );
+              ] );
+        ];
+    invoke =
+      (fun ?context args ->
+        let open Yojson.Safe.Util in
+        let count =
+          try
+            let c = args |> member "count" |> to_int in
+            max 1 (min 128 c)
+          with _ -> 20
+        in
+        match context with
+        | Some { session_key = Some key; send_progress; _ } ->
+            if not config.connector_history.enabled then
+              Lwt.return
+                "Error: connector_history.enabled is false. Enable it in \
+                 config to capture unaddressed group messages."
+            else
+              let db_opt =
+                if config.connector_history.persist_to_db then Some db else None
+              in
+              let entries = Connector_history.get ?db:db_opt ~key ~count () in
+              if entries = [] then
+                Lwt.return "No connector history available for this session."
+              else begin
+                let n = List.length entries in
+                (match send_progress with
+                | Some send ->
+                    Lwt.async (fun () ->
+                        send
+                          (Printf.sprintf
+                             "Last %d chat msgs loaded into context" n))
+                | None -> ());
+                Lwt.return (Connector_history.format_for_context entries)
+              end
+        | _ ->
+            Lwt.return
+              "Error: inject_connector_history requires a session context \
+               (session_key). This tool is only available in connector \
+               sessions (Teams, Discord).");
+    invoke_stream = None;
+    risk_level = Low;
+    deferred = false;
+  }
+
 (* ───── HTTP tools ───── *)

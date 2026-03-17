@@ -1178,6 +1178,23 @@ let handle_webhook ~(config : Runtime_config.teams_config)
                       "Teams: ignoring unaddressed group message conv=%s \
                        user=%s"
                       conversation_id user_id);
+                let cfg = Session.get_config session_manager in
+                if cfg.connector_history.enabled then begin
+                  let eff_tid = if team_id = "" then "personal" else team_id in
+                  let hist_key =
+                    session_key ~team_id:eff_tid ~conversation_id
+                  in
+                  let db =
+                    if cfg.connector_history.persist_to_db then
+                      Session.get_db session_manager
+                    else None
+                  in
+                  Connector_history.record ?db
+                    ~persist:cfg.connector_history.persist_to_db ~key:hist_key
+                    ~channel_type:"teams"
+                    ~max:cfg.connector_history.max_messages
+                    ~sender_name:user_name ~sender_id:user_id ~text ()
+                end;
                 Lwt.return_unit
               end
               else
@@ -1263,6 +1280,52 @@ let handle_webhook ~(config : Runtime_config.teams_config)
                         | Error err_msg ->
                             Lwt.return
                               (Slash_commands.Reply err_msg, text, [], None))
+                    | Slash_commands.InjectConnectorHistory count ->
+                        let cfg = Session.get_config session_manager in
+                        let hist_key =
+                          session_key ~team_id:effective_team_id
+                            ~conversation_id
+                        in
+                        let db =
+                          if cfg.connector_history.persist_to_db then
+                            Session.get_db session_manager
+                          else None
+                        in
+                        let entries =
+                          Connector_history.get ?db ~key:hist_key ~count ()
+                        in
+                        if entries = [] then
+                          Lwt.return
+                            ( Slash_commands.Reply
+                                "No connector history available. Ensure \
+                                 connector_history.enabled is true in config. \
+                                 Buffer captures unaddressed group messages \
+                                 received since daemon started (or from DB if \
+                                 persist_to_db is on).",
+                              text,
+                              [],
+                              None )
+                        else begin
+                          let context =
+                            Connector_history.format_for_context entries
+                          in
+                          let n = List.length entries in
+                          let* _id =
+                            send_reply ~alert:false ~config
+                              ~service_url:effective_service_url
+                              ~conversation_id ~reply_to_id:activity_id
+                              ~text:
+                                (Printf.sprintf
+                                   "Last %d chat msgs loaded into context" n)
+                              ()
+                          in
+                          let msg =
+                            Printf.sprintf
+                              "[Loaded %d messages from channel history]" n
+                          in
+                          Lwt.return
+                            (Slash_commands.NotACommand, msg, [ context ], None)
+                        end
                     | other -> Lwt.return (other, text, [], None)
                   in
                   let* () =
@@ -1278,6 +1341,8 @@ let handle_webhook ~(config : Runtime_config.teams_config)
                     | None -> Lwt.return_unit
                   in
                   match cmd_result with
+                  | InjectConnectorHistory _ ->
+                      Lwt.return_unit (* unreachable: preprocessed above *)
                   | SkillInvoke _ ->
                       Lwt.return_unit (* unreachable: preprocessed above *)
                   | NotACommand -> (

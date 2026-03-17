@@ -110,6 +110,11 @@ let all_categories : category list =
             run = Setup_memory.run;
           };
           {
+            name = "connector-history";
+            label = "Connector history (Teams/Discord group chat)";
+            run = Setup_connector_history.run;
+          };
+          {
             name = "prompt";
             label = "System prompt sections";
             run = Setup_prompt.run;

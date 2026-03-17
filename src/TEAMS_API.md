@@ -365,6 +365,20 @@ Sessions are shared per-channel: all users in the same Teams channel share one s
 - For group chats without a team: team_id is `"personal"` (when `channelData.team` is absent).
 - For team channels: team_id is the channelData.team.id value.
 
+## Connector History (Group Chat Context)
+
+In group chats, the bot receives ALL messages via webhook but only processes those that @mention the bot. Unaddressed messages are normally dropped at the `Group_chat_filter.should_respond` check.
+
+When `connector_history.enabled` is `true` in config, these filtered-out messages are saved to an in-memory ring buffer (and optionally to the DB when `connector_history.persist_to_db` is `true`). This allows the agent to access recent channel discussion for context.
+
+**Config keys:** `connector_history.enabled` (bool), `connector_history.persist_to_db` (bool), `connector_history.max_messages` (int, 1..128, default 50), `connector_history.max_age_days` (int, >=1, default 7).
+
+**Access methods:**
+- `/inject_connector_history [N]` — slash command, loads last N messages (default 20, max 128) into conversation context
+- `inject_connector_history` — built-in tool callable by the agent, same effect
+
+Both methods send a visible channel notification: "Last N chat msgs loaded into context".
+
 ## Reference
 
 - Bot Framework Activity schema: https://learn.microsoft.com/en-us/azure/bot-service/rest-api/bot-framework-rest-connector-api-reference

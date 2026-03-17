@@ -829,6 +829,14 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
                        "Failed to send debug dump: %s\n\nDump length: %d bytes"
                        err (String.length content))
                   ())
+        | InjectConnectorHistory _ ->
+            send_message ~bot_token ~chat_id:update.chat_id
+              ~text:
+                "Connector history is not applicable for this channel — \
+                 Telegram delivers all messages to the bot, so the agent \
+                 already sees all channel activity. Use \
+                 /inject_connector_history in Teams or Discord group chats."
+              ()
         | SkillInvoke _ -> Lwt.return_unit (* unreachable: preprocessed above *)
         | NotACommand -> (
             let msg = user_text in

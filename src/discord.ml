@@ -492,6 +492,19 @@ let handle_message ~(discord_config : Runtime_config.discord_config)
            ~is_reply_to_bot:false ~bot_name:"clawq" msg.content)
     then begin
       Logs.debug (fun m -> m "Discord: ignoring unaddressed guild message");
+      let cfg = Session.get_config session_mgr in
+      if cfg.connector_history.enabled then begin
+        let hist_key = Printf.sprintf "discord-hist:%s" msg.channel_id in
+        let db =
+          if cfg.connector_history.persist_to_db then Session.get_db session_mgr
+          else None
+        in
+        Connector_history.record ?db
+          ~persist:cfg.connector_history.persist_to_db ~key:hist_key
+          ~channel_type:"discord" ~max:cfg.connector_history.max_messages
+          ~sender_name:msg.author_id ~sender_id:msg.author_id ~text:msg.content
+          ()
+      end;
       Lwt.return_unit
     end
     else
@@ -549,6 +562,45 @@ let handle_message ~(discord_config : Runtime_config.discord_config)
                       Some name )
               | Error err_msg ->
                   Lwt.return (Slash_commands.Reply err_msg, msg, [], None))
+          | Slash_commands.InjectConnectorHistory count ->
+              let cfg = Session.get_config session_mgr in
+              let hist_key = Printf.sprintf "discord-hist:%s" msg.channel_id in
+              let db =
+                if cfg.connector_history.persist_to_db then
+                  Session.get_db session_mgr
+                else None
+              in
+              let entries = Connector_history.get ?db ~key:hist_key ~count () in
+              if entries = [] then
+                Lwt.return
+                  ( Slash_commands.Reply
+                      "No connector history available. Ensure \
+                       connector_history.enabled is true in config. Buffer \
+                       captures unaddressed group messages received since \
+                       daemon started (or from DB if persist_to_db is on).",
+                    msg,
+                    [],
+                    None )
+              else begin
+                let context = Connector_history.format_for_context entries in
+                let n = List.length entries in
+                let* () =
+                  send_message_fn ~bot_token:discord_config.bot_token
+                    ~channel_id:msg.channel_id
+                    ~text:
+                      (Printf.sprintf "Last %d chat msgs loaded into context" n)
+                in
+                let new_msg =
+                  {
+                    msg with
+                    content =
+                      Printf.sprintf "[Loaded %d messages from channel history]"
+                        n;
+                  }
+                in
+                Lwt.return
+                  (Slash_commands.NotACommand, new_msg, [ context ], None)
+              end
           | other -> Lwt.return (other, msg, [], None)
         in
         let* () =
@@ -560,6 +612,8 @@ let handle_message ~(discord_config : Runtime_config.discord_config)
           | None -> Lwt.return_unit
         in
         match cmd_result with
+        | InjectConnectorHistory _ ->
+            Lwt.return_unit (* unreachable: preprocessed above *)
         | Reply text ->
             send_message_fn ~bot_token:discord_config.bot_token
               ~channel_id:msg.channel_id ~text

@@ -74,6 +74,7 @@
   rich_message
   channel
   channel_util
+  connector_history
   group_chat_filter
   typing_indicator
   slash_commands_fmt
@@ -240,6 +241,7 @@
   setup_observer
   setup_zai_mcp
   setup_memory
+  setup_connector_history
   setup_prompt
   setup_resilience
   setup_heartbeat

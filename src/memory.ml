@@ -1,4 +1,4 @@
-let schema_version = 22
+let schema_version = 23
 
 type session_activity = Active | Inactive | Any
 
@@ -370,6 +370,25 @@ let init_session_archive_schema db =
      DELETE CASCADE\n\
     \   )"
 
+let init_connector_history_schema db =
+  exec_exn db
+    "CREATE TABLE IF NOT EXISTS connector_history (\n\
+    \     id INTEGER PRIMARY KEY AUTOINCREMENT,\n\
+    \     session_key TEXT NOT NULL,\n\
+    \     channel_type TEXT NOT NULL,\n\
+    \     sender_name TEXT NOT NULL,\n\
+    \     sender_id TEXT NOT NULL,\n\
+    \     text TEXT,\n\
+    \     metadata_json TEXT,\n\
+    \     created_at TEXT NOT NULL DEFAULT (datetime('now'))\n\
+    \   )";
+  exec_exn db
+    "CREATE INDEX IF NOT EXISTS idx_connector_history_session ON \
+     connector_history (session_key, id ASC)";
+  exec_exn db
+    "CREATE INDEX IF NOT EXISTS idx_connector_history_created ON \
+     connector_history (created_at)"
+
 let add_thinking_content_columns db =
   (try exec_exn db "ALTER TABLE messages ADD COLUMN thinking_content TEXT"
    with _ -> ());
@@ -633,6 +652,10 @@ let migrate_schema db current_version =
       set_schema_version db schema_version
   | 21 ->
       init_session_archive_schema db;
+      init_connector_history_schema db;
+      set_schema_version db schema_version
+  | 22 ->
+      init_connector_history_schema db;
       set_schema_version db schema_version
   | n when n = schema_version ->
       init_session_schema db;
@@ -646,7 +669,8 @@ let migrate_schema db current_version =
       Summary_store.init_schema db;
       init_pending_questions_schema db;
       init_ec_reports_schema db;
-      init_session_archive_schema db
+      init_session_archive_schema db;
+      init_connector_history_schema db
   | n ->
       failwith
         (Printf.sprintf "DB uses future schema version %d (current=%d)" n
@@ -1979,6 +2003,45 @@ let cleanup_all ~db ~max_messages ~max_age_days =
     (fun session_key ->
       cleanup_session ~db ~session_key ~max_messages ~max_age_days)
     sessions
+
+let cleanup_connector_history ~db ~max_age_days ~max_messages =
+  exec_exn db
+    (Printf.sprintf
+       "DELETE FROM connector_history WHERE created_at < datetime('now', '-%d \
+        days')"
+       max_age_days);
+  let stmt =
+    Sqlite3.prepare db "SELECT DISTINCT session_key FROM connector_history"
+  in
+  let keys = ref [] in
+  Fun.protect
+    ~finally:(fun () -> ignore (Sqlite3.finalize stmt))
+    (fun () ->
+      while Sqlite3.step stmt = Sqlite3.Rc.ROW do
+        match Sqlite3.column stmt 0 with
+        | Sqlite3.Data.TEXT k -> keys := k :: !keys
+        | _ -> ()
+      done);
+  List.iter
+    (fun sk ->
+      let trim_sql =
+        Printf.sprintf
+          "DELETE FROM connector_history WHERE session_key = ? AND id NOT IN \
+           (SELECT id FROM connector_history WHERE session_key = ? ORDER BY id \
+           DESC LIMIT %d)"
+          max_messages
+      in
+      let trim_stmt = Sqlite3.prepare db trim_sql in
+      ignore (Sqlite3.bind trim_stmt 1 (Sqlite3.Data.TEXT sk));
+      ignore (Sqlite3.bind trim_stmt 2 (Sqlite3.Data.TEXT sk));
+      (match Sqlite3.step trim_stmt with
+      | Sqlite3.Rc.DONE -> ()
+      | rc ->
+          Logs.warn (fun m ->
+              m "cleanup_connector_history: trim failed for key=%s: %s" sk
+                (Sqlite3.Rc.to_string rc)));
+      ignore (Sqlite3.finalize trim_stmt))
+    !keys
 
 let store_core ~db ~key ~content ?(category = "general") () =
   let sql =

@@ -1036,5 +1036,6 @@ let register_all ~(config : Runtime_config.t) ~sandbox ?(db = None)
       Tool_registry.register registry (Plan_pipeline.status_tool ~db);
       Tool_registry.register registry (Plan_pipeline.list_tool ~db);
       Tool_registry.register registry (Plan_pipeline.logs_tool ~db);
-      Tool_registry.register registry (Plan_pipeline.cancel_tool ~db)
+      Tool_registry.register registry (Plan_pipeline.cancel_tool ~db);
+      Tool_registry.register registry (inject_connector_history ~config ~db)
   | None -> ()

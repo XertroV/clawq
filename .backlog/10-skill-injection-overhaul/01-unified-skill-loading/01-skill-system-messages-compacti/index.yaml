@@ -4,6 +4,12 @@ estimate_hours: 11
 id: P10.M1.E1
 locked: false
 name: Skill System Messages & Compaction
+stats:
+    blocked: 0
+    done: 5
+    in_progress: 0
+    pending: 0
+    total: 5
 status: done
 tasks:
     - complexity: high

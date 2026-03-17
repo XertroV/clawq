@@ -956,6 +956,17 @@ let handle_event ~(config : Runtime_config.slack_config)
                   send_message_fn ~bot_token:config.bot_token ~channel_id ~text
                 in
                 Lwt.return "ok"
+            | InjectConnectorHistory _ ->
+                let* () =
+                  send_message_fn ~bot_token:config.bot_token ~channel_id
+                    ~text:
+                      "Connector history is not applicable for this channel — \
+                       Slack delivers all messages to the bot, so the agent \
+                       already sees all channel activity. Use \
+                       /inject_connector_history in Teams or Discord group \
+                       chats."
+                in
+                Lwt.return "ok"
             | SkillInvoke _ ->
                 Lwt.return "ok" (* unreachable: preprocessed above *)
             | NotACommand -> (

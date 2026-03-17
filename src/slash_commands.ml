@@ -433,6 +433,17 @@ let handle ?(skill_names = []) text =
                 | Some page when page >= 1 -> SkillsMenu page
                 | _ -> SkillsMenu 1)
             | _ -> SkillsMenu 1)
+        | "inject_connector_history" | "inject-connector-history" -> (
+            match args with
+            | [] -> InjectConnectorHistory 20
+            | [ n ] ->
+                let count =
+                  match int_of_string_opt n with
+                  | Some c -> max 1 (min 128 c)
+                  | None -> 20
+                in
+                InjectConnectorHistory count
+            | _ -> InjectConnectorHistory 20)
         | "debug-dump-chat" | "debug_dump_chat" -> DebugDumpChat
         | "" -> NotACommand
         | _ -> (

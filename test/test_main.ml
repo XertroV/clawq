@@ -178,6 +178,7 @@ let () =
     @ [ ("markdown_util", Test_markdown_util.suite) ]
     @ [ ("error_watcher", Test_error_watcher.suite) ]
     @ [ ("connector_capabilities", Test_connector_capabilities.tests) ]
+    @ [ ("connector_history", Test_connector_history.tests) ]
     @ [ ("status_update", Test_status_update.tests) ]
     @ [ ("content_dsl", Test_content_dsl.tests) ]
     @ [ ("workspace_version", Test_workspace_version.suite) ]

@@ -1372,6 +1372,10 @@ let run ~(config : Runtime_config.t) =
                     ~max_messages:mem.max_messages_per_session
                     ~max_age_days:mem.max_message_age_days;
                   Task_tree.maybe_purge_deleted_tasks ~db ~config:cur_config;
+                  if cur_config.connector_history.enabled then
+                    Memory.cleanup_connector_history ~db
+                      ~max_age_days:cur_config.connector_history.max_age_days
+                      ~max_messages:cur_config.connector_history.max_messages;
                   let purged =
                     Summary_store.purge_older_than ~db
                       ~max_age_days:cur_config.summarizer.max_age_days

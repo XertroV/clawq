@@ -14,4 +14,10 @@ estimate_hours: 11
 id: P10.M1
 locked: false
 name: Unified Skill Loading
+stats:
+    blocked: 0
+    done: 5
+    in_progress: 0
+    pending: 0
+    total_tasks: 5
 status: done

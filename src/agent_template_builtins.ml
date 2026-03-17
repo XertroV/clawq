@@ -176,6 +176,7 @@ At the end of every engagement, before signing off:
         "file_read";
         "use_skill";
         "skill_list";
+        "inject_connector_history";
       ]
     ~disallowed_tools:
       [ "shell_exec"; "file_write"; "file_edit"; "file_edit_lines" ]
@@ -373,6 +374,7 @@ Context provided: [key files, decisions, or constraints passed to the agent]
         "background_task_send_message";
         "delegate";
         "change_working_dir";
+        "inject_connector_history";
       ]
     ~disallowed_tools:[]
 

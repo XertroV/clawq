@@ -189,6 +189,7 @@ let convert (json : Yojson.Safe.t) =
       log = default.log;
       interactive = default.interactive;
       error_watcher = default.error_watcher;
+      connector_history = default.connector_history;
     }
   in
   (config, List.rev !warnings)

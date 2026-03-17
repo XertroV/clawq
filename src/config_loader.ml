@@ -1635,6 +1635,28 @@ let parse_config ?(resolve_secrets = true) json =
           }
            : Runtime_config.error_watcher_config)
        with _ -> Runtime_config.default_error_watcher_config);
+    connector_history =
+      (try
+         let ch = json |> member "connector_history" in
+         let def = Runtime_config.default.connector_history in
+         let enabled =
+           try ch |> member "enabled" |> to_bool with _ -> def.enabled
+         in
+         let persist_to_db =
+           try ch |> member "persist_to_db" |> to_bool
+           with _ -> def.persist_to_db
+         in
+         let max_messages =
+           try ch |> member "max_messages" |> to_int
+           with _ -> def.max_messages
+         in
+         let max_age_days =
+           try ch |> member "max_age_days" |> to_int
+           with _ -> def.max_age_days
+         in
+         ({ enabled; persist_to_db; max_messages; max_age_days }
+           : Runtime_config.connector_history_config)
+       with _ -> Runtime_config.default.connector_history);
   }
 
 let rec merge_json (original : Yojson.Safe.t) (complete : Yojson.Safe.t) :

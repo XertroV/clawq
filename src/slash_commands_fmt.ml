@@ -90,6 +90,7 @@ type result =
   | SkillsMenu of int
   | CostsMenu
   | BgMenu
+  | InjectConnectorHistory of int
   | SkillInvoke of string * string
   | NotACommand
 

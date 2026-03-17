@@ -14,5 +14,11 @@ milestones:
       path: 01-unified-skill-loading
       status: done
 name: Skill Injection Overhaul
+stats:
+    blocked: 0
+    done: 5
+    in_progress: 0
+    pending: 0
+    total_tasks: 5
 status: done
 weeks: 2

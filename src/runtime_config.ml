@@ -434,6 +434,13 @@ type summarizer_config = {
   envelope_template : string option;
 }
 
+type connector_history_config = {
+  enabled : bool;
+  persist_to_db : bool;
+  max_messages : int;
+  max_age_days : int;
+}
+
 type t = {
   workspace : string;
   default_temperature : float;
@@ -465,6 +472,7 @@ type t = {
   log : log_config;
   interactive : interactive_config;
   error_watcher : error_watcher_config;
+  connector_history : connector_history_config;
 }
 
 let default_log_config : log_config =
@@ -689,6 +697,13 @@ let default =
     log = default_log_config;
     interactive = default_interactive_config;
     error_watcher = default_error_watcher_config;
+    connector_history =
+      {
+        enabled = false;
+        persist_to_db = false;
+        max_messages = 50;
+        max_age_days = 7;
+      };
   }
 
 let is_key_set key =
@@ -1808,6 +1823,7 @@ let to_json (cfg : t) : Yojson.Safe.t =
         ]
   in
   let ew = cfg.error_watcher in
+  let ch = cfg.connector_history in
   let fields =
     fields
     @ [
@@ -1826,6 +1842,14 @@ let to_json (cfg : t) : Yojson.Safe.t =
                 `List (List.map (fun s -> `String s) ew.ignore_patterns) );
               ("auto_fix_enabled", `Bool ew.auto_fix_enabled);
               ("commit_tag", `String ew.commit_tag);
+            ] );
+        ( "connector_history",
+          `Assoc
+            [
+              ("enabled", `Bool ch.enabled);
+              ("persist_to_db", `Bool ch.persist_to_db);
+              ("max_messages", `Int ch.max_messages);
+              ("max_age_days", `Int ch.max_age_days);
             ] );
       ]
   in

@@ -375,6 +375,14 @@ let config_schema =
           ] );
       ("log", O [ ("max_size_mb", L); ("max_files", L); ("debug_http", L) ]);
       ("interactive", O [ ("enable_question_notes", L) ]);
+      ( "connector_history",
+        O
+          [
+            ("enabled", L);
+            ("persist_to_db", L);
+            ("max_messages", L);
+            ("max_age_days", L);
+          ] );
       ( "error_watcher",
         O
           [
@@ -531,6 +539,28 @@ let write_json path json =
     Ok ()
   with exn -> Error (Printexc.to_string exn)
 
+let validate_set_value key json_val =
+  match key with
+  | "connector_history.max_messages" -> (
+      match json_val with
+      | `Int n when n >= 1 && n <= 128 -> Ok ()
+      | `Int n ->
+          Error
+            (Printf.sprintf
+               "Error: connector_history.max_messages must be between 1 and \
+                128 (got %d)."
+               n)
+      | _ -> Error "Error: connector_history.max_messages must be an integer.")
+  | "connector_history.max_age_days" -> (
+      match json_val with
+      | `Int n when n >= 1 -> Ok ()
+      | `Int n ->
+          Error
+            (Printf.sprintf
+               "Error: connector_history.max_age_days must be >= 1 (got %d)." n)
+      | _ -> Error "Error: connector_history.max_age_days must be an integer.")
+  | _ -> Ok ()
+
 let set_json_value key json_val =
   let path = config_path () in
   match load_json path with
@@ -543,10 +573,13 @@ let set_json_value key json_val =
       else if not (validate_set_path segments config_schema) then
         Error (section_not_settable_error key)
       else
-        let updated = json_set segments json_val json in
-        match write_json path updated with
-        | Ok () -> Ok ()
-        | Error e -> Error (Printf.sprintf "Error writing config: %s" e))
+        match validate_set_value key json_val with
+        | Error e -> Error e
+        | Ok () -> (
+            let updated = json_set segments json_val json in
+            match write_json path updated with
+            | Ok () -> Ok ()
+            | Error e -> Error (Printf.sprintf "Error writing config: %s" e)))
 
 let set_reasoning_effort value =
   let json_val =
