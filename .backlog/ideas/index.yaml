@@ -334,3 +334,5 @@ ideas:
       status: done
       tags: []
       title: 'Support sending files to the user generally (priority: teams and telegram). We should *always* send a link to the user as well.'
+    - file: I053-feature-skill-command-that-aut.todo
+      id: I053
