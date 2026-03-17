@@ -1,0 +1,15 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 10
+id: I047
+priority: medium
+status: pending
+tags:
+    - coq
+    - config
+    - formal-verification
+    - differentiator
+title: Config Invariant Proofs
+---
+'clawq config check' runs Coq-extracted invariant validators over the current config, surfacing impossible or dangerous combinations (e.g., rate_limit=0 with daemon enabled, overlapping cron schedules, invalid model format) with precise error messages. The validators are mechanically extracted from Coq proofs, not hand-written — so the error messages come with mathematical certainty. Makes the 6 unused Config.v functions (validate_config, validate_config_full, valid_weights, valid_port, valid_temperature, default_config) productive. Low effort, high signal, unique differentiator.
