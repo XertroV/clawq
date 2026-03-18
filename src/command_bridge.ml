@@ -2094,6 +2094,221 @@ let cmd_manifest = function
       \  telegram                             Generate Telegram setMyCommands \
        payload"
 
+let cmd_held_items args =
+  let db = get_db () in
+  Held_items.init_db db;
+  match args with
+  | "save" :: rest -> (
+      let rec parse name desc plan_file layer requestor channel acc =
+        match acc with
+        | "--name" :: v :: tl ->
+            parse (Some v) desc plan_file layer requestor channel tl
+        | "--desc" :: v :: tl ->
+            parse name (Some v) plan_file layer requestor channel tl
+        | "--plan-file" :: v :: tl ->
+            parse name desc (Some v) layer requestor channel tl
+        | "--layer" :: v :: tl ->
+            parse name desc plan_file (int_of_string_opt v) requestor channel tl
+        | "--requestor" :: v :: tl ->
+            parse name desc plan_file layer (Some v) channel tl
+        | "--channel" :: v :: tl ->
+            parse name desc plan_file layer requestor (Some v) tl
+        | _ :: tl -> parse name desc plan_file layer requestor channel tl
+        | [] -> (name, desc, plan_file, layer, requestor, channel)
+      in
+      let name, desc, plan_file, layer, requestor, channel =
+        parse None None None None None None rest
+      in
+      match (name, desc, plan_file, layer) with
+      | Some n, Some d, Some pf, Some l ->
+          let plan_json =
+            try
+              let ic = open_in pf in
+              Fun.protect
+                ~finally:(fun () -> close_in ic)
+                (fun () ->
+                  let len = in_channel_length ic in
+                  really_input_string ic len)
+            with exn ->
+              Printf.sprintf "{\"error\": \"Failed to read plan file: %s\"}"
+                (Printexc.to_string exn)
+          in
+          let id =
+            Held_items.save ~db ~feature_name:n ~description:d ~plan_json
+              ~layer:l ?requestor_id:requestor ?channel ()
+          in
+          Printf.sprintf "Saved held item #%d: %s (layer %d)" id n l
+      | _ ->
+          "Usage: clawq held-items save --name NAME --desc DESC --plan-file \
+           FILE --layer N [--requestor ID] [--channel CH]")
+  | [ "list" ] | [] ->
+      let items = Held_items.list_items ~db ~status:"pending" () in
+      if items = [] then "No pending held items."
+      else
+        let columns =
+          Table_format.
+            [
+              { header = "ID"; align = Right; min_width = 2; flex = false };
+              { header = "NAME"; align = Left; min_width = 8; flex = false };
+              { header = "LAYER"; align = Right; min_width = 3; flex = false };
+              { header = "STATUS"; align = Left; min_width = 6; flex = false };
+              { header = "CREATED"; align = Left; min_width = 10; flex = false };
+              {
+                header = "DESCRIPTION";
+                align = Left;
+                min_width = 10;
+                flex = true;
+              };
+            ]
+        in
+        let rows =
+          List.map
+            (fun (item : Held_items.held_item) ->
+              let desc_short =
+                if String.length item.description > 50 then
+                  String.sub item.description 0 50 ^ "..."
+                else item.description
+              in
+              [
+                string_of_int item.id;
+                item.feature_name;
+                string_of_int item.layer;
+                item.status;
+                item.created_at;
+                desc_short;
+              ])
+            items
+        in
+        "Held items (pending):\n" ^ Table_format.render columns rows
+  | [ "list"; "--status"; status ] ->
+      let items = Held_items.list_items ~db ~status () in
+      if items = [] then Printf.sprintf "No held items with status '%s'." status
+      else
+        let columns =
+          Table_format.
+            [
+              { header = "ID"; align = Right; min_width = 2; flex = false };
+              { header = "NAME"; align = Left; min_width = 8; flex = false };
+              { header = "LAYER"; align = Right; min_width = 3; flex = false };
+              { header = "STATUS"; align = Left; min_width = 6; flex = false };
+              { header = "CREATED"; align = Left; min_width = 10; flex = false };
+              {
+                header = "DESCRIPTION";
+                align = Left;
+                min_width = 10;
+                flex = true;
+              };
+            ]
+        in
+        let rows =
+          List.map
+            (fun (item : Held_items.held_item) ->
+              let desc_short =
+                if String.length item.description > 50 then
+                  String.sub item.description 0 50 ^ "..."
+                else item.description
+              in
+              [
+                string_of_int item.id;
+                item.feature_name;
+                string_of_int item.layer;
+                item.status;
+                item.created_at;
+                desc_short;
+              ])
+            items
+        in
+        Printf.sprintf "Held items (%s):\n" status
+        ^ Table_format.render columns rows
+  | [ "show"; id_str ] | [ "view"; id_str ] -> (
+      match int_of_string_opt id_str with
+      | None ->
+          Printf.sprintf
+            "Error: '%s' is not a valid ID. Provide a numeric held item ID."
+            id_str
+      | Some id -> (
+          match Held_items.get ~db ~id with
+          | None -> Printf.sprintf "No held item found with ID %d." id
+          | Some item ->
+              Printf.sprintf
+                "Held Item #%d\n\
+                 Name: %s\n\
+                 Layer: %d\n\
+                 Status: %s\n\
+                 Description: %s\n\
+                 Requestor: %s\n\
+                 Channel: %s\n\
+                 Created: %s\n\
+                 Reviewed by: %s\n\
+                 Reviewed at: %s\n\
+                 Notes: %s\n\n\
+                 Plan:\n\
+                 %s"
+                item.id item.feature_name item.layer item.status
+                item.description
+                (Option.value ~default:"-" item.requestor_id)
+                (Option.value ~default:"-" item.channel)
+                item.created_at
+                (Option.value ~default:"-" item.reviewed_by)
+                (Option.value ~default:"-" item.reviewed_at)
+                (Option.value ~default:"-" item.review_notes)
+                item.plan_json))
+  | "approve" :: id_str :: rest -> (
+      match int_of_string_opt id_str with
+      | None ->
+          Printf.sprintf
+            "Error: '%s' is not a valid ID. Provide a numeric held item ID."
+            id_str
+      | Some id ->
+          let rec parse_opts by notes = function
+            | "--by" :: v :: tl -> parse_opts (Some v) notes tl
+            | "--notes" :: v :: tl -> parse_opts by (Some v) tl
+            | _ :: tl -> parse_opts by notes tl
+            | [] -> (by, notes)
+          in
+          let by, notes = parse_opts None None rest in
+          if
+            Held_items.review ~db ~id ~action:"approved" ?reviewed_by:by ?notes
+              ()
+          then Printf.sprintf "Approved held item #%d." id
+          else
+            Printf.sprintf
+              "Failed to approve item #%d. It may not exist or may not be \
+               pending."
+              id)
+  | "reject" :: id_str :: rest -> (
+      match int_of_string_opt id_str with
+      | None ->
+          Printf.sprintf
+            "Error: '%s' is not a valid ID. Provide a numeric held item ID."
+            id_str
+      | Some id ->
+          let rec parse_opts by notes = function
+            | "--by" :: v :: tl -> parse_opts (Some v) notes tl
+            | "--notes" :: v :: tl -> parse_opts by (Some v) tl
+            | _ :: tl -> parse_opts by notes tl
+            | [] -> (by, notes)
+          in
+          let by, notes = parse_opts None None rest in
+          if
+            Held_items.review ~db ~id ~action:"rejected" ?reviewed_by:by ?notes
+              ()
+          then Printf.sprintf "Rejected held item #%d." id
+          else
+            Printf.sprintf
+              "Failed to reject item #%d. It may not exist or may not be \
+               pending."
+              id)
+  | _ ->
+      "Usage: clawq held-items <subcommand>\n\n\
+       Subcommands:\n\
+      \  save --name NAME --desc DESC --plan-file FILE --layer N [--requestor \
+       ID] [--channel CH]\n\
+      \  list [--status pending|approved|rejected|all]\n\
+      \  show ID\n\
+      \  approve ID [--by ADMIN] [--notes TEXT]\n\
+      \  reject ID [--by ADMIN] [--notes TEXT]"
+
 let handle args =
   match args with
   | "phase2" :: _ -> Phase2.render ()
@@ -2142,4 +2357,5 @@ let handle args =
   | "watcher" :: rest -> cmd_watcher rest
   | "ec-run" :: rest -> cmd_ec_run rest
   | "manifest" :: rest -> cmd_manifest rest
+  | "held-items" :: rest -> cmd_held_items rest
   | _ -> Clawq_core.dispatch args

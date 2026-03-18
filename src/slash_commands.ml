@@ -444,6 +444,37 @@ let handle ?(skill_names = []) text =
             | [] | [ "list" ] -> Rig RigList
             | _ ->
                 Reply "Usage: /rig install|adjust|remove <name>, or /rig list")
+        | "held-items" | "held_items" | "helditems" -> (
+            match args with
+            | [] | [ "list" ] -> HeldItems (HeldItemsList false)
+            | [ "list"; "--all" ] -> HeldItems (HeldItemsList true)
+            | [ "view"; id ] | [ "show"; id ] -> (
+                match int_of_string_opt id with
+                | Some n -> HeldItems (HeldItemsShow n)
+                | None ->
+                    Reply "Usage: /held-items view <id> — id must be numeric.")
+            | [ "approve"; id ] -> (
+                match int_of_string_opt id with
+                | Some n -> AdminRequired (HeldItems (HeldItemsApprove n))
+                | None ->
+                    Reply
+                      "Usage: /held-items approve <id> — id must be numeric.")
+            | "reject" :: id :: reason -> (
+                match int_of_string_opt id with
+                | Some n ->
+                    let notes =
+                      match reason with
+                      | [] -> None
+                      | _ -> Some (String.concat " " reason)
+                    in
+                    AdminRequired (HeldItems (HeldItemsReject (n, notes)))
+                | None ->
+                    Reply
+                      "Usage: /held-items reject <id> [reason] — id must be \
+                       numeric.")
+            | _ ->
+                FormattedReply
+                  (fun connector -> format_held_items_usage ~connector))
         | "menu" -> (
             match args with
             | [] -> Menu 1

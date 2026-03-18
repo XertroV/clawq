@@ -133,6 +133,18 @@ let rec result_to_string = function
       | Slash_commands.RigAdjust name -> "Rig(Adjust " ^ name ^ ")"
       | Slash_commands.RigRemove name -> "Rig(Remove " ^ name ^ ")"
       | Slash_commands.RigList -> "Rig(List)")
+  | Slash_commands.HeldItems action -> (
+      match action with
+      | Slash_commands.HeldItemsList all ->
+          "HeldItems(List " ^ string_of_bool all ^ ")"
+      | Slash_commands.HeldItemsShow id ->
+          "HeldItems(Show " ^ string_of_int id ^ ")"
+      | Slash_commands.HeldItemsApprove id ->
+          "HeldItems(Approve " ^ string_of_int id ^ ")"
+      | Slash_commands.HeldItemsReject (id, reason) ->
+          "HeldItems(Reject " ^ string_of_int id ^ " "
+          ^ Option.value ~default:"" reason
+          ^ ")")
   | Slash_commands.NotACommand -> "NotACommand"
 
 let rec result_eq a b =
@@ -189,6 +201,7 @@ let rec result_eq a b =
   | Slash_commands.RegisterAsAdminOtc a, Slash_commands.RegisterAsAdminOtc b ->
       a = b
   | Slash_commands.Rig a, Slash_commands.Rig b -> a = b
+  | Slash_commands.HeldItems a, Slash_commands.HeldItems b -> a = b
   | Slash_commands.NotACommand, Slash_commands.NotACommand -> true
   | _ -> false
 

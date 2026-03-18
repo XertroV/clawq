@@ -668,6 +668,7 @@ let init ~db_path ?(search_enabled = false) () =
   init_attachment_log_schema db;
   Admin.init_schema db;
   Pair_coding_state.init_schema db;
+  Held_items.init_db db;
   db
 
 let store_message ~db ~session_key (msg : Provider.message) =

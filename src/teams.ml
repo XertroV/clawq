@@ -2087,6 +2087,15 @@ let handle_webhook ~(config : Runtime_config.teams_config)
                           action
                       in
                       send_text text
+                  | HeldItems action ->
+                      let text =
+                        match Session.get_db session_manager with
+                        | Some db ->
+                            Slash_commands.format_held_items
+                              ~connector:Format_adapter.Teams ~db action
+                        | None -> "Held items are not available (no database)."
+                      in
+                      send_text text
                   | Rig action -> (
                       match action with
                       | RigList ->

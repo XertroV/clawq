@@ -69,6 +69,12 @@ type rig_action =
   | RigRemove of string
   | RigList
 
+type held_items_action =
+  | HeldItemsList of bool
+  | HeldItemsShow of int
+  | HeldItemsApprove of int
+  | HeldItemsReject of int * string option
+
 type result =
   | Reply of string
   | FormattedReply of (Format_adapter.connector -> string)
@@ -95,6 +101,7 @@ type result =
   | Cron of cron_action
   | Bl of bl_action
   | Rig of rig_action
+  | HeldItems of held_items_action
   | DebugDumpChat
   | AgentInvoke of string * string
   | AgentMenu of int
@@ -2017,6 +2024,129 @@ let format_bl ~connector action =
       | BlBugs -> format_bl_filtered ~connector ~filter_type:"bugs" json
       | BlIdeas -> format_bl_filtered ~connector ~filter_type:"ideas" json
       | BlShow id -> format_bl_show ~connector id json)
+
+(* ── Held items format ────────────────────────────────────────────────── *)
+
+let format_held_items ~connector ~(db : Sqlite3.db) action =
+  Held_items.init_db db;
+  match action with
+  | HeldItemsList show_all ->
+      let status = if show_all then "all" else "pending" in
+      let items = Held_items.list_items ~db ~status () in
+      if items = [] then
+        Format_adapter.bold connector "No"
+        ^ if show_all then " held items." else " pending held items."
+      else
+        let columns =
+          Table_format.
+            [
+              { header = "ID"; align = Right; min_width = 2; flex = false };
+              { header = "NAME"; align = Left; min_width = 8; flex = false };
+              { header = "L"; align = Right; min_width = 1; flex = false };
+              { header = "STATUS"; align = Left; min_width = 6; flex = false };
+              { header = "DESC"; align = Left; min_width = 10; flex = true };
+            ]
+        in
+        let rows =
+          List.map
+            (fun (item : Held_items.held_item) ->
+              let desc_short =
+                if String.length item.description > 40 then
+                  String.sub item.description 0 40 ^ "..."
+                else item.description
+              in
+              [
+                string_of_int item.id;
+                item.feature_name;
+                string_of_int item.layer;
+                item.status;
+                desc_short;
+              ])
+            items
+        in
+        let label =
+          if show_all then "Held Items (all)" else "Held Items (pending)"
+        in
+        Format_adapter.bold connector label
+        ^ "\n\n"
+        ^ Format_adapter.render_table connector ~max_width:80 columns rows
+  | HeldItemsShow id -> (
+      match Held_items.get ~db ~id with
+      | None -> Printf.sprintf "No held item found with ID %d." id
+      | Some item ->
+          let open Content_dsl in
+          let doc =
+            [
+              Paragraph
+                [ Bold "Held Item"; Text " #"; Text (string_of_int item.id) ];
+              Paragraph [ Text "Name: "; Code item.feature_name ];
+              Paragraph [ Text "Layer: "; Code (string_of_int item.layer) ];
+              Paragraph [ Text "Status: "; Code item.status ];
+              Paragraph [ Text "Description: "; Text item.description ];
+              Paragraph
+                [
+                  Text "Requestor: ";
+                  Text (Option.value ~default:"-" item.requestor_id);
+                ];
+              Paragraph
+                [
+                  Text "Channel: ";
+                  Text (Option.value ~default:"-" item.channel);
+                ];
+              Paragraph [ Text "Created: "; Text item.created_at ];
+            ]
+          in
+          let doc =
+            match item.reviewed_by with
+            | Some by ->
+                doc
+                @ [
+                    Paragraph [ Text "Reviewed by: "; Text by ];
+                    Paragraph
+                      [
+                        Text "Reviewed at: ";
+                        Text (Option.value ~default:"-" item.reviewed_at);
+                      ];
+                    Paragraph
+                      [
+                        Text "Notes: ";
+                        Text (Option.value ~default:"-" item.review_notes);
+                      ];
+                  ]
+            | None -> doc
+          in
+          Content_dsl.render_document connector doc)
+  | HeldItemsApprove id ->
+      if Held_items.review ~db ~id ~action:"approved" () then
+        Printf.sprintf "Approved held item #%d." id
+      else
+        Printf.sprintf
+          "Failed to approve item #%d. It may not exist or may not be pending."
+          id
+  | HeldItemsReject (id, reason) ->
+      if Held_items.review ~db ~id ~action:"rejected" ?notes:reason () then
+        Printf.sprintf "Rejected held item #%d." id
+      else
+        Printf.sprintf
+          "Failed to reject item #%d. It may not exist or may not be pending."
+          id
+
+let format_held_items_usage ~connector =
+  let open Content_dsl in
+  render_document connector
+    [
+      Paragraph [ Bold "/held-items"; Text " — manage held feature plans" ];
+      Paragraph [ Code "/held-items"; Text " — list pending items" ];
+      Paragraph [ Code "/held-items list"; Text " — list pending items" ];
+      Paragraph [ Code "/held-items list --all"; Text " — list all items" ];
+      Paragraph [ Code "/held-items view <id>"; Text " — show item details" ];
+      Paragraph
+        [ Code "/held-items approve <id>"; Text " — approve (admin only)" ];
+      Paragraph
+        [
+          Code "/held-items reject <id> [reason]"; Text " — reject (admin only)";
+        ];
+    ]
 
 (* ── Existing format: status ───────────────────────────────────────────── *)
 

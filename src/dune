@@ -140,7 +140,8 @@
   pair_coding_report
   webhook_handler
   rig
-  rig_builtins)
+  rig_builtins
+  held_items)
  (foreign_stubs
   (language c)
   (names landlock_stubs))

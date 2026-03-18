@@ -76,6 +76,12 @@ Every command below is invoked as `clawq COMMAND`. Run `clawq COMMAND --help` fo
 | `debug http {on\|off\|status\|clear\|tail [N]}` | Manage HTTP debug logging (HAR files in `~/.clawq/log-http-debug/`) |
 | `doctor` | Check config for common issues |
 | `hardware` | Hardware integration (deferred to Phase 2) |
+| `held-items` | Manage held feature plans awaiting admin review (default: list pending) |
+| `held-items save --name NAME --desc DESC --plan-file FILE --layer N [--requestor ID] [--channel CH]` | Save a feature plan to the held items queue (used by `/feature` skill) |
+| `held-items list [--status pending\|approved\|rejected\|all]` | List held items filtered by status (default: pending) |
+| `held-items show ID` | Show full details of a specific held item including plan JSON |
+| `held-items approve ID [--by ADMIN] [--notes TEXT]` | Approve a pending held item |
+| `held-items reject ID [--by ADMIN] [--notes TEXT]` | Reject a pending held item with optional reason |
 | `mcp` | Start the MCP server (JSON-RPC via stdio) |
 | `memory` | Show memory backend config |
 | `session` | Inspect persisted sessions and raw chat-log epochs |
@@ -207,6 +213,7 @@ Available in chat-integrated channels that support slash commands.
 - `/tasks` — show the agent's current task tree for this session
 - `/menu [page]` — show a paginated command menu; on Teams this sends an Adaptive Card with clickable command buttons, on other channels it falls back to the help list
 - `/rig [install|adjust|remove|list] [name]` — manage setup rigs; `/rig list` shows available rigs with install status; `/rig install <name>` delegates rig setup to the agent with tool access; alias `/rigging`
+- `/held-items [list|view|approve|reject]` — manage held feature plans; `/held-items` or `/held-items list` shows pending items; `/held-items list --all` shows all; `/held-items view <id>` shows full details; `/held-items approve <id>` (admin only) approves an item; `/held-items reject <id> [reason]` (admin only) rejects with optional reason; aliases `/held_items`, `/helditems`
 - `/update` — pull, rebuild, and gracefully restart clawq
 
 ## `!` Messages

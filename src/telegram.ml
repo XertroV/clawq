@@ -848,6 +848,16 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
             in
             send_chunked_html_with_fallback ~bot_token ~chat_id:update.chat_id
               ~text ()
+        | HeldItems action ->
+            let text =
+              match Session.get_db session_mgr with
+              | Some db ->
+                  Slash_commands.format_held_items
+                    ~connector:Format_adapter.Telegram_html ~db action
+              | None -> "Held items are not available (no database)."
+            in
+            send_chunked_html_with_fallback ~bot_token ~chat_id:update.chat_id
+              ~text ()
         | Rig action -> (
             match action with
             | RigList ->

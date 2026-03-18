@@ -191,6 +191,7 @@ let () =
     @ [ ("webhook_handler", Test_webhook_handler.suite) ]
     @ [ ("browser", Test_browser.suite) ]
     @ [ ("rig", Test_rig.suite) ]
+    @ [ ("held_items", Test_held_items.suite) ]
     @ Test_github.suites
     @ [
         ( "config_isolation",

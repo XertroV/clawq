@@ -1298,6 +1298,19 @@ let version_cmd =
              `Ok ())
         $ const ()))
 
+let held_items_cmd =
+  with_args "held-items" "Manage held feature plans awaiting admin review."
+    [
+      `S "SUBCOMMANDS";
+      `I
+        ( "save --name NAME --desc DESC --plan-file FILE --layer N",
+          "Save a feature plan to the held items queue." );
+      `I ("list [--status STATUS]", "List held items (default: pending).");
+      `I ("show ID", "Show details of a specific held item.");
+      `I ("approve ID [--by ADMIN] [--notes TEXT]", "Approve a pending item.");
+      `I ("reject ID [--by ADMIN] [--notes TEXT]", "Reject a pending item.");
+    ]
+
 let manifest_cmd =
   with_args "manifest" "Generate connector command manifests (Teams, Telegram)."
     [
@@ -1380,6 +1393,7 @@ let () =
       watcher_cmd;
       ec_run_cmd;
       manifest_cmd;
+      held_items_cmd;
     ]
   in
   exit (Cmd.eval ~argv ~env:help_env (Cmd.group main_info cmds))

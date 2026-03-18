@@ -594,6 +594,7 @@ let handle args =
   | "delegate" :: rest -> cmd_delegate rest
   | "skills" :: rest -> cmd_skills rest
   | "audit" :: rest -> cmd_audit rest
+  | "held-items" :: _ -> unsupported "held-items"
   | "rig" :: _ | "rigging" :: _ -> unsupported "rig"
   | "costs" :: _ -> unsupported "costs"
   | "session" :: _ -> unsupported "session"
