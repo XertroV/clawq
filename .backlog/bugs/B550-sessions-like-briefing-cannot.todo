@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B550
+priority: high
+status: pending
+tags: []
+title: Sessions like 'briefing' cannot be resumed because they have no channel information (which is expected)
+---
+
+Sessions like 'briefing' cannot be resumed because they have no channel information (which is expected)
