@@ -540,6 +540,13 @@ let write_json path json =
     Ok ()
   with exn -> Error (Printexc.to_string exn)
 
+let notify_daemon_config_change () =
+  try
+    match Daemon_status.read_current_daemon_pid () with
+    | None -> ()
+    | Some pid -> ( try Unix.kill pid Sys.sighup with Unix.Unix_error _ -> ())
+  with _ -> ()
+
 let validate_set_value key json_val =
   match key with
   | "connector_history.max_messages" -> (
@@ -579,7 +586,9 @@ let set_json_value key json_val =
         | Ok () -> (
             let updated = json_set segments json_val json in
             match write_json path updated with
-            | Ok () -> Ok ()
+            | Ok () ->
+                notify_daemon_config_change ();
+                Ok ()
             | Error e -> Error (Printf.sprintf "Error writing config: %s" e)))
 
 let set_reasoning_effort value =

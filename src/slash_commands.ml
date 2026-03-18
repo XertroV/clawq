@@ -168,10 +168,7 @@ let handle ?(skill_names = []) text =
                     let value = String.concat " " value_parts in
                     let result = Config_set.set_value key value in
                     FormattedReply
-                      (fun connector ->
-                        Format_adapter.escape connector result
-                        ^ "\n\
-                           Note: restart the daemon for changes to take effect.")
+                      (fun connector -> Format_adapter.escape connector result)
               | [ "set" ] | [ "set"; _ ] ->
                   FormattedReply
                     (fun connector ->

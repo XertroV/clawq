@@ -613,7 +613,7 @@ let format_config_set_confirm ~connector key value =
   ^ Format_adapter.bold connector key
   ^ " = "
   ^ Format_adapter.code connector value
-  ^ "\nNote: restart the daemon for changes to take effect."
+  ^ "\nChanges applied."
 
 let format_config_error ~connector msg =
   Format_adapter.bold connector "Error"

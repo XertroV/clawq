@@ -1801,10 +1801,10 @@ let cmd_debug_http args =
   match args with
   | [ "on" ] ->
       let _ = Config_set.set_value "log.debug_http" "true" in
-      "HTTP debug logging enabled in config. Daemon will pick up within 10s."
+      "HTTP debug logging enabled in config."
   | [ "off" ] ->
       let _ = Config_set.set_value "log.debug_http" "false" in
-      "HTTP debug logging disabled in config. Daemon will pick up within 10s."
+      "HTTP debug logging disabled in config."
   | [ "status" ] -> Http_debug.status_info ()
   | [ "clear" ] -> Http_debug.clear_logs ()
   | [ "tail" ] -> Http_debug.tail_logs 10
@@ -1985,12 +1985,8 @@ let cmd_watcher args =
         (String.concat ", " ew.fallback_models)
         (if ew.ignore_patterns = [] then "(none)"
          else String.concat ", " ew.ignore_patterns)
-  | [ "enable" ] ->
-      let result = Config_set.set_value "error_watcher.enabled" "true" in
-      result ^ "\nRestart the daemon for the change to take effect."
-  | [ "disable" ] ->
-      let result = Config_set.set_value "error_watcher.enabled" "false" in
-      result ^ "\nRestart the daemon for the change to take effect."
+  | [ "enable" ] -> Config_set.set_value "error_watcher.enabled" "true"
+  | [ "disable" ] -> Config_set.set_value "error_watcher.enabled" "false"
   | [ "reports" ] ->
       let db = get_db () in
       Ec_diagnosis.init_ec_reports_schema db;

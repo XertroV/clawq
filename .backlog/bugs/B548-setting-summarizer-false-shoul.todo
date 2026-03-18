@@ -1,14 +1,15 @@
 ---
 claimed_at: "2026-03-17T19:33:42Z"
 claimed_by: cli-user
-completed_at: null
+completed_at: "2026-03-17T20:06:06Z"
 complexity: medium
 depends_on: []
+duration_minutes: 32.40434968753333
 estimate_hours: 1
 id: B548
 priority: high
 started_at: "2026-03-17T19:33:42Z"
-status: in_progress
+status: done
 tags: []
 title: setting summarizer.false should update live and disable the autosummarizer
 ---

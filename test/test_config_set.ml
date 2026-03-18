@@ -318,6 +318,22 @@ let test_set_json_value_rejects_section_path () =
           check_json "config unchanged after rejected section write" original
             after)
 
+let test_notify_no_pid_file () =
+  with_temp_home (fun _home ->
+      (* No daemon.pid exists — should not raise *)
+      Config_set.notify_daemon_config_change ())
+
+let test_notify_stale_pid () =
+  with_temp_home (fun home ->
+      let clawq_dir = Filename.concat home ".clawq" in
+      Unix.mkdir clawq_dir 0o755;
+      let pid_path = Filename.concat clawq_dir "daemon.pid" in
+      let oc = open_out pid_path in
+      output_string oc "999999999\n";
+      close_out oc;
+      (* Stale PID — should not raise *)
+      Config_set.notify_daemon_config_change ())
+
 let test_set_value_rejects_section_path () =
   with_temp_home (fun _home ->
       let result = Config_set.set_value "providers.openai" "clobbered" in
@@ -352,4 +368,6 @@ let suite =
       test_set_value_rejects_section_path;
     Alcotest.test_case "set rejects section path" `Quick
       test_set_json_value_rejects_section_path;
+    Alcotest.test_case "notify no pid file" `Quick test_notify_no_pid_file;
+    Alcotest.test_case "notify stale pid" `Quick test_notify_stale_pid;
   ]
