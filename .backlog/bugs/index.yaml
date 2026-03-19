@@ -563,3 +563,4 @@ bugs:
     - file: B564-need-a-way-to-access-archived.todo
     - file: B565-clawq-session-list-should-hide.todo
     - file: B566-teams-skills-menu-lacks-pagina.todo
+    - file: B567-set-model-for-a-channel-via-cl.todo
