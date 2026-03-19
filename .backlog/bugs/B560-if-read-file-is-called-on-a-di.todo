@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B560
+priority: high
+status: pending
+tags: []
+title: 'if read_file is called on a directory, the error is not very useful: ''file_read -> Error: Unix.Unix_error(Unix.EISDIR, read, )''. should warn the agent + provide correct command + return as though list directory was called.'
+---
+
+if read_file is called on a directory, the error is not very useful: 'file_read -> Error: Unix.Unix_error(Unix.EISDIR, read, )'. should warn the agent + provide correct command + return as though list directory was called.

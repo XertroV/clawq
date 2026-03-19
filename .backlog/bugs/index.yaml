@@ -556,3 +556,4 @@ bugs:
     - file: B557-tool-token-accounting-excludes.todo
     - file: B558-local-coder-job-can-stall-or-f.todo
     - file: B559-teams-bg-cancel-gives-no-feedb.todo
+    - file: B560-if-read-file-is-called-on-a-di.todo
