@@ -572,3 +572,4 @@ bugs:
     - file: B573-port-clawq-version-bump-skill.todo
     - file: B574-with-skills-if-we-dont-already.todo
     - file: B575-when-merging-in-changes-from-a.todo
+    - file: B576-add-a-bash-slash-command-to-ru.todo
