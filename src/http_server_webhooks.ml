@@ -1,7 +1,7 @@
 let handle ~session_manager ~auth_token ?slack_config ?github_config
     ?github_api_limiter ?slack_event_limiter ?slack_run_update_command
     ?web_channel ?whatsapp_config ?line_config ?lark_config ?teams_config
-    ?pairing meth path req body =
+    ?pairing ?runner_tokens ?ask_fn meth path req body =
   let open Lwt.Syntax in
   match (meth, path) with
   | `POST, path
@@ -531,4 +531,263 @@ let handle ~session_manager ~auth_token ?slack_config ?github_config
               ~body:entry.content ()
           in
           Lwt.return (Some resp))
+  | `POST, "/mcp" -> (
+      let* body_str = Cohttp_lwt.Body.to_string body in
+      let ip = Http_server_0_util.client_ip req in
+      if not (Runner_relay.is_loopback ip) then
+        let* resp =
+          Cohttp_lwt_unix.Server.respond_string ~status:`Forbidden
+            ~headers:Http_server_0_util.json_headers
+            ~body:{|{"error":"localhost only"}|} ()
+        in
+        Lwt.return (Some resp)
+      else
+        match (runner_tokens, ask_fn) with
+        | None, _ | _, None ->
+            let* resp =
+              Cohttp_lwt_unix.Server.respond_string ~status:`Not_found
+                ~headers:Http_server_0_util.json_headers
+                ~body:{|{"error":"runner relay not enabled"}|} ()
+            in
+            Lwt.return (Some resp)
+        | Some tokens, Some ask_fn_val -> (
+            let bearer = Http_server_0_util.extract_bearer req in
+            match bearer with
+            | None ->
+                let* resp =
+                  Cohttp_lwt_unix.Server.respond_string ~status:`Unauthorized
+                    ~headers:Http_server_0_util.json_headers
+                    ~body:{|{"error":"bearer token required"}|} ()
+                in
+                Lwt.return (Some resp)
+            | Some tok -> (
+                match Runner_relay.validate_token tokens ~token:tok with
+                | None ->
+                    let* resp =
+                      Cohttp_lwt_unix.Server.respond_string
+                        ~status:`Unauthorized
+                        ~headers:Http_server_0_util.json_headers
+                        ~body:{|{"error":"invalid or expired token"}|} ()
+                    in
+                    Lwt.return (Some resp)
+                | Some entry ->
+                    let registry =
+                      Mcp_server_http.make_relay_registry ~ask_fn:ask_fn_val
+                        ~session_key:entry.session_key
+                    in
+                    let* status_code, resp_body =
+                      Mcp_server_http.handle ~registry ~body:body_str
+                    in
+                    let status = Cohttp.Code.status_of_code status_code in
+                    let* resp =
+                      Cohttp_lwt_unix.Server.respond_string ~status
+                        ~headers:Http_server_0_util.json_headers ~body:resp_body
+                        ()
+                    in
+                    Lwt.return (Some resp))))
+  | `POST, "/runner/ask" -> (
+      let* body_str = Cohttp_lwt.Body.to_string body in
+      let ip = Http_server_0_util.client_ip req in
+      if not (Runner_relay.is_loopback ip) then
+        let* resp =
+          Cohttp_lwt_unix.Server.respond_string ~status:`Forbidden
+            ~headers:Http_server_0_util.json_headers
+            ~body:{|{"error":"localhost only"}|} ()
+        in
+        Lwt.return (Some resp)
+      else
+        match (runner_tokens, ask_fn) with
+        | None, _ | _, None ->
+            let* resp =
+              Cohttp_lwt_unix.Server.respond_string ~status:`Not_found
+                ~headers:Http_server_0_util.json_headers
+                ~body:{|{"error":"runner relay not enabled"}|} ()
+            in
+            Lwt.return (Some resp)
+        | Some tokens, Some ask_fn_val -> (
+            let bearer = Http_server_0_util.extract_bearer req in
+            match bearer with
+            | None ->
+                let* resp =
+                  Cohttp_lwt_unix.Server.respond_string ~status:`Unauthorized
+                    ~headers:Http_server_0_util.json_headers
+                    ~body:{|{"error":"bearer token required"}|} ()
+                in
+                Lwt.return (Some resp)
+            | Some tok -> (
+                match Runner_relay.validate_token tokens ~token:tok with
+                | None ->
+                    let* resp =
+                      Cohttp_lwt_unix.Server.respond_string
+                        ~status:`Unauthorized
+                        ~headers:Http_server_0_util.json_headers
+                        ~body:{|{"error":"invalid or expired token"}|} ()
+                    in
+                    Lwt.return (Some resp)
+                | Some entry -> (
+                    let json =
+                      try Ok (Yojson.Safe.from_string body_str)
+                      with _ -> Error "invalid JSON"
+                    in
+                    match json with
+                    | Error msg ->
+                        let* resp =
+                          Cohttp_lwt_unix.Server.respond_string
+                            ~status:`Bad_request
+                            ~headers:Http_server_0_util.json_headers
+                            ~body:(Printf.sprintf {|{"error":"%s"}|} msg)
+                            ()
+                        in
+                        Lwt.return (Some resp)
+                    | Ok json_val ->
+                        let questions =
+                          Tools_builtin.parse_questions json_val
+                        in
+                        if questions = [] then
+                          let* resp =
+                            Cohttp_lwt_unix.Server.respond_string
+                              ~status:`Bad_request
+                              ~headers:Http_server_0_util.json_headers
+                              ~body:
+                                {|{"error":"questions array is empty or missing"}|}
+                              ()
+                          in
+                          Lwt.return (Some resp)
+                        else
+                          let timeout_s =
+                            try
+                              Yojson.Safe.Util.(
+                                json_val |> member "timeout_s" |> to_int)
+                            with _ -> 300
+                          in
+                          let* result =
+                            Runner_relay.relay_question ~ask_fn:ask_fn_val
+                              ~session_key:entry.session_key ~questions
+                              ~timeout_s
+                          in
+                          let* resp =
+                            match result with
+                            | Ok results ->
+                                let answers_json =
+                                  `List
+                                    (List.map
+                                       (fun (r : Tools_builtin.question_result)
+                                          ->
+                                         `Assoc
+                                           ([
+                                              ("question", `String r.question);
+                                              ("answer", `String r.answer);
+                                            ]
+                                           @
+                                           match r.notes with
+                                           | Some n -> [ ("notes", `String n) ]
+                                           | None -> []))
+                                       results)
+                                in
+                                let body =
+                                  `Assoc [ ("answers", answers_json) ]
+                                  |> Yojson.Safe.to_string
+                                in
+                                Cohttp_lwt_unix.Server.respond_string
+                                  ~status:`OK
+                                  ~headers:Http_server_0_util.json_headers ~body
+                                  ()
+                            | Error msg ->
+                                Cohttp_lwt_unix.Server.respond_string
+                                  ~status:`Internal_server_error
+                                  ~headers:Http_server_0_util.json_headers
+                                  ~body:
+                                    (`Assoc [ ("error", `String msg) ]
+                                    |> Yojson.Safe.to_string)
+                                  ()
+                          in
+                          Lwt.return (Some resp)))))
+  | `POST, "/runner/token" -> (
+      let* body_str = Cohttp_lwt.Body.to_string body in
+      let ip = Http_server_0_util.client_ip req in
+      if not (Runner_relay.is_loopback ip) then
+        let* resp =
+          Cohttp_lwt_unix.Server.respond_string ~status:`Forbidden
+            ~headers:Http_server_0_util.json_headers
+            ~body:{|{"error":"localhost only"}|} ()
+        in
+        Lwt.return (Some resp)
+      else if not (Http_server_0_util.auth_ok ~auth_token ?pairing req) then
+        let* resp =
+          Cohttp_lwt_unix.Server.respond_string ~status:`Unauthorized
+            ~headers:Http_server_0_util.json_headers
+            ~body:{|{"error":"unauthorized"}|} ()
+        in
+        Lwt.return (Some resp)
+      else
+        match runner_tokens with
+        | None ->
+            let* resp =
+              Cohttp_lwt_unix.Server.respond_string ~status:`Not_found
+                ~headers:Http_server_0_util.json_headers
+                ~body:{|{"error":"runner relay not enabled"}|} ()
+            in
+            Lwt.return (Some resp)
+        | Some tokens -> (
+            let json =
+              try Ok (Yojson.Safe.from_string body_str)
+              with _ -> Error "invalid JSON"
+            in
+            match json with
+            | Error msg ->
+                let* resp =
+                  Cohttp_lwt_unix.Server.respond_string ~status:`Bad_request
+                    ~headers:Http_server_0_util.json_headers
+                    ~body:(Printf.sprintf {|{"error":"%s"}|} msg)
+                    ()
+                in
+                Lwt.return (Some resp)
+            | Ok json_val ->
+                let session_key =
+                  try
+                    Yojson.Safe.Util.(
+                      json_val |> member "session_key" |> to_string)
+                  with _ -> ""
+                in
+                if session_key = "" then
+                  let* resp =
+                    Cohttp_lwt_unix.Server.respond_string ~status:`Bad_request
+                      ~headers:Http_server_0_util.json_headers
+                      ~body:{|{"error":"session_key is required"}|} ()
+                  in
+                  Lwt.return (Some resp)
+                else
+                  let task_id =
+                    try
+                      Some
+                        Yojson.Safe.Util.(
+                          json_val |> member "task_id" |> to_int)
+                    with _ -> None
+                  in
+                  let ttl_hours =
+                    try
+                      Yojson.Safe.Util.(
+                        json_val |> member "ttl_hours" |> to_int)
+                    with _ -> 24
+                  in
+                  let token =
+                    Runner_relay.generate_token tokens ~session_key ?task_id
+                      ~ttl_hours ()
+                  in
+                  let entry =
+                    Runner_relay.validate_token tokens ~token |> Option.get
+                  in
+                  let body =
+                    `Assoc
+                      [
+                        ("token", `String token);
+                        ("expires_at", `Float entry.expires_at);
+                      ]
+                    |> Yojson.Safe.to_string
+                  in
+                  let* resp =
+                    Cohttp_lwt_unix.Server.respond_string ~status:`OK
+                      ~headers:Http_server_0_util.json_headers ~body ()
+                  in
+                  Lwt.return (Some resp)))
   | _ -> Lwt.return None

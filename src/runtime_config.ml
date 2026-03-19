@@ -373,6 +373,9 @@ type mcp_config = {
   enabled : bool;
   exposed_tools : string list option;
       (** [None] = expose all registered tools; [Some names] = allowlist *)
+  runner_relay_enabled : bool;
+  runner_token_ttl_hours : int;
+  runner_question_timeout_s : int;
 }
 
 type voice_config = {
@@ -738,7 +741,14 @@ let default =
         attachment_downloads_enabled = true;
       };
     stt = None;
-    mcp = { enabled = true; exposed_tools = None };
+    mcp =
+      {
+        enabled = true;
+        exposed_tools = None;
+        runner_relay_enabled = true;
+        runner_token_ttl_hours = 24;
+        runner_question_timeout_s = 300;
+      };
     resilience =
       {
         timeout_s = 120.0;

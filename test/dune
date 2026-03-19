@@ -165,7 +165,8 @@
   test_browser
   test_rig
   test_held_items
-  test_repo_manager)
+  test_repo_manager
+  test_runner_relay)
  (libraries
   clawq_extracted
   clawq_runtime_core

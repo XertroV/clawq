@@ -1517,8 +1517,9 @@ let prepare_worktree ?(run_simple_command = run_simple_command) task =
 
 let spawn_task ?(on_task_started = fun _ -> Lwt.return_unit)
     ?(on_task_finished = fun _ -> Lwt.return_unit)
-    ?(run_simple_command = run_simple_command) ?command_override ~db
-    (task : task) =
+    ?(run_simple_command = run_simple_command) ?command_override
+    ?(augment_env = fun ~session_key:_ ~task_id:_ env -> env) ~db (task : task)
+    =
   Hashtbl.replace running task.id ();
   Lwt.async (fun () ->
       let open Lwt.Syntax in
@@ -1621,9 +1622,16 @@ let spawn_task ?(on_task_started = fun _ -> Lwt.return_unit)
                 | Some sid ->
                     set_runner_session_id ~db ~id:task.id ~runner_session_id:sid
                 | None -> ());
+                let base_env = Unix.environment () in
+                let env =
+                  match task.session_key with
+                  | Some sk ->
+                      augment_env ~session_key:sk ~task_id:task.id base_env
+                  | None -> base_env
+                in
                 let proc =
-                  Process_group.start_to_file ~cwd:worktree_path
-                    ~env:(Unix.environment ()) ~log_path command
+                  Process_group.start_to_file ~cwd:worktree_path ~env ~log_path
+                    command
                 in
                 let pid = proc.file_pid in
                 if
@@ -1693,8 +1701,9 @@ let spawn_task ?(on_task_started = fun _ -> Lwt.return_unit)
               end)
         finalize)
 
-let default_spawn_task ~on_task_started ~on_task_finished ~db task =
-  spawn_task ~on_task_started ~on_task_finished ~db task
+let default_spawn_task ?augment_env ~on_task_started ~on_task_finished ~db task
+    =
+  spawn_task ?augment_env ~on_task_started ~on_task_finished ~db task
 
 let local_task_timeout_seconds = 600.0
 
@@ -1814,23 +1823,26 @@ let start_queued_with_callback_impl ?max_running_tasks ~spawn_task
   in
   List.iter (spawn_task ~on_task_started ~on_task_finished ~db) queued
 
-let start_queued_with_callback ?max_running_tasks ~on_task_finished ~db
-    ?(on_task_started = fun _ -> Lwt.return_unit) () =
+let start_queued_with_callback ?max_running_tasks ?augment_env ~on_task_finished
+    ~db ?(on_task_started = fun _ -> Lwt.return_unit) () =
   start_queued_with_callback_impl ?max_running_tasks
-    ~spawn_task:default_spawn_task ~on_task_started ~on_task_finished ~db ()
+    ~spawn_task:(default_spawn_task ?augment_env)
+    ~on_task_started ~on_task_finished ~db ()
 
-let start_queued ?max_running_tasks ~db () =
-  start_queued_with_callback ?max_running_tasks
+let start_queued ?max_running_tasks ?augment_env ~db () =
+  start_queued_with_callback ?max_running_tasks ?augment_env
     ~on_task_finished:(fun _ -> Lwt.return_unit)
     ~db ()
 
 let start_queued_with_local_runner ~run_turn ?timeout_seconds ?max_running_tasks
-    ~on_task_finished ~on_task_started ~db () =
+    ?augment_env ~on_task_finished ~on_task_started ~db () =
   let spawn ~on_task_started ~on_task_finished ~db (task : task) =
     if task.runner = Local then
       spawn_local_task ?timeout_seconds ~run_turn ~on_task_started
         ~on_task_finished ~db task
-    else default_spawn_task ~on_task_started ~on_task_finished ~db task
+    else
+      default_spawn_task ?augment_env ~on_task_started ~on_task_finished ~db
+        task
   in
   start_queued_with_callback_impl ?max_running_tasks ~spawn_task:spawn
     ~on_task_started ~on_task_finished ~db ()

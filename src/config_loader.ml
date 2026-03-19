@@ -1355,7 +1355,26 @@ let parse_config ?(resolve_secrets = true) json =
           Some tools
         with _ -> None
       in
-      ({ enabled; exposed_tools } : Runtime_config.mcp_config)
+      let runner_relay_enabled =
+        try m |> member "runner_relay_enabled" |> to_bool
+        with _ -> default.mcp.runner_relay_enabled
+      in
+      let runner_token_ttl_hours =
+        try m |> member "runner_token_ttl_hours" |> to_int
+        with _ -> default.mcp.runner_token_ttl_hours
+      in
+      let runner_question_timeout_s =
+        try m |> member "runner_question_timeout_s" |> to_int
+        with _ -> default.mcp.runner_question_timeout_s
+      in
+      ({
+         enabled;
+         exposed_tools;
+         runner_relay_enabled;
+         runner_token_ttl_hours;
+         runner_question_timeout_s;
+       }
+        : Runtime_config.mcp_config)
     with _ -> default.mcp
   in
   let resilience =

@@ -94,6 +94,9 @@ Structural changes that affect startup (enabling/disabling channels, changing ga
 | `CLAWQ_TUNNEL_URL_REGEX` | Regex with a capture group used to extract the public URL from the custom tunnel command's output |
 | `CLAWQ_TUNNEL_URL` | Static URL override for Cloudflare quick tunnels when URL extraction is not needed |
 | `CLAWQ_DEBUG_HTTP` | Set to `1` to enable HTTP debug logging (saves all requests/responses to HAR files). Same effect as `log.debug_http: true` in config. |
+| `CLAWQ_RUNNER_TOKEN` | Bearer token for remote runner authentication against the gateway's `/mcp` and `/runner/ask` endpoints. Auto-set for background tasks. |
+| `CLAWQ_MCP_URL` | MCP-over-HTTP endpoint URL (e.g. `http://127.0.0.1:8080/mcp`). Auto-set for background tasks. |
+| `CLAWQ_RUNNER_ASK_URL` | Simple REST endpoint URL for non-MCP runners to ask questions (e.g. `http://127.0.0.1:8080/runner/ask`). Auto-set for background tasks. |
 
 When `security.encrypt_secrets` is `true` and `CLAWQ_MASTER_KEY` is set, API keys are automatically decrypted at runtime. Encrypted values are stored with a `$ENC:` prefix.
 
@@ -358,8 +361,11 @@ The gateway root `/` serves the embedded web UI. Supporting endpoints include `/
 
 | Field | Default | Description |
 |-------|---------|-------------|
-| `enabled` | `false` | Enable the MCP server (JSON-RPC via stdio) |
+| `enabled` | `true` | Enable the MCP server (JSON-RPC via stdio) |
 | `exposed_tools` | all | Array of tool names to expose (omit for all) |
+| `runner_relay_enabled` | `true` | Enable HTTP endpoints (`/mcp`, `/runner/ask`, `/runner/token`) for remote runner question relay |
+| `runner_token_ttl_hours` | `24` | TTL in hours for runner bearer tokens |
+| `runner_question_timeout_s` | `300` | Timeout in seconds for relayed questions before giving up |
 
 ### mcp_servers (MCP Client)
 

@@ -237,6 +237,8 @@
   attachment_download
   voice_transcription
   temp_downloads
+  runner_relay
+  mcp_server_http
   provider_anthropic
   provider_openai_codex
   provider_cohere

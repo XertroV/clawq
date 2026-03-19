@@ -129,6 +129,26 @@ To limit which tools are exposed, set `mcp.exposed_tools` in config to an array 
 
 When `exposed_tools` is set, only those tools appear in `tools/list` responses.
 
+### MCP-over-HTTP for Remote Runners
+
+When `mcp.runner_relay_enabled` is `true` (the default), the gateway exposes three additional HTTP endpoints that let remote coding runners (opencode, cursor, codex, etc.) relay questions back to the user:
+
+| Endpoint | Auth | Purpose |
+|----------|------|---------|
+| `POST /mcp` | Runner bearer token | Full MCP JSON-RPC over HTTP — runners that speak MCP can call `ask_user_question` via standard `tools/list` + `tools/call` |
+| `POST /runner/ask` | Runner bearer token | Simple REST endpoint — POST `{"questions": [...], "timeout_s": 300}` and get `{"answers": [...]}` |
+| `POST /runner/token` | Gateway auth token | Mint a new runner token for a session |
+
+All three endpoints are **localhost-only** and require bearer token authentication. Tokens are SHA256-hashed in memory with a configurable TTL (default 24h).
+
+**Automatic provisioning**: When the daemon spawns a background task, it automatically generates a runner token and sets `CLAWQ_RUNNER_TOKEN`, `CLAWQ_MCP_URL`, and `CLAWQ_RUNNER_ASK_URL` environment variables in the spawned process. Runners that read these env vars can immediately relay questions without manual setup.
+
+**Manual token generation**:
+
+```bash
+clawq runner token --session telegram:12345 --ttl-hours 12
+```
+
 ## MCP Client
 
 clawq can connect to external MCP servers to discover and use their tools. Configure external servers in `~/.clawq/mcp_servers.json`:

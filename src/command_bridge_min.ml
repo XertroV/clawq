@@ -649,6 +649,7 @@ let handle args =
   | "agent" :: _ -> unsupported "agent"
   | "transcribe" :: _ -> unsupported "transcribe"
   | "mcp" :: _ -> unsupported "mcp"
+  | "runner" :: _ -> unsupported "runner"
   | "runtime" :: _ -> unsupported "runtime"
   | "tunnel" :: _ -> unsupported "tunnel"
   | "service" :: _ -> unsupported "service"

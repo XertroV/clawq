@@ -429,6 +429,10 @@ let run ~(config : Runtime_config.t) =
                         compacted)")))
   | None -> ());
   (* Register ask_user_question with ask_fn closure *)
+  let runner_tokens =
+    if config.mcp.runner_relay_enabled then Some (Runner_relay.create_tokens ())
+    else None
+  in
   let ask_fn_ref = ref None in
   (match tool_registry with
   | Some registry ->
@@ -863,8 +867,8 @@ let run ~(config : Runtime_config.t) =
             (match config.channels.lark with
             | Some lc when lc.enabled && lc.mode = "webhook" -> Some lc
             | _ -> None)
-          ?teams_config:config.channels.teams ?pairing ~ui_server
-          ~stop:gateway_stop ())
+          ?teams_config:config.channels.teams ?pairing ?runner_tokens
+          ?ask_fn:!ask_fn_ref ~ui_server ~stop:gateway_stop ())
       (fun exn ->
         Logs.err (fun m ->
             m "Gateway server error: %s" (Printexc.to_string exn));
@@ -1445,6 +1449,9 @@ let run ~(config : Runtime_config.t) =
                 in
                 Temp_downloads.cleanup ();
                 Teams.cleanup_pending_consents ();
+                (match runner_tokens with
+                | Some rt -> Runner_relay.cleanup_expired rt
+                | None -> ());
                 let* () = Lwt_unix.sleep 60.0 in
                 loop ()
               in
@@ -1513,7 +1520,28 @@ let run ~(config : Runtime_config.t) =
                        (notify_background_task_finished ~session_manager ~config
                           ~db));
                 let () =
-                  Background_task.start_queued_with_local_runner
+                  let augment_env =
+                    match runner_tokens with
+                    | None -> None
+                    | Some tokens ->
+                        Some
+                          (fun ~session_key ~task_id env ->
+                            let token =
+                              Runner_relay.generate_token tokens ~session_key
+                                ~task_id ()
+                            in
+                            let port = config.gateway.port in
+                            Array.append env
+                              [|
+                                "CLAWQ_RUNNER_TOKEN=" ^ token;
+                                Printf.sprintf
+                                  "CLAWQ_MCP_URL=http://127.0.0.1:%d/mcp" port;
+                                Printf.sprintf
+                                  "CLAWQ_RUNNER_ASK_URL=http://127.0.0.1:%d/runner/ask"
+                                  port;
+                              |])
+                  in
+                  Background_task.start_queued_with_local_runner ?augment_env
                     ~run_turn:(fun ~key ~message ?agent_name ?cwd () ->
                       match agent_name with
                       | Some name -> (

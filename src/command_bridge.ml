@@ -47,6 +47,60 @@ let cmd_mcp () =
     ""
   end
 
+let cmd_runner args =
+  let cfg = get_config () in
+  match args with
+  | "token" :: rest -> (
+      let session_key =
+        match rest with
+        | "--session" :: sk :: _ -> sk
+        | sk :: _ when not (String.length sk > 0 && sk.[0] = '-') -> sk
+        | _ -> ""
+      in
+      if session_key = "" then
+        "Usage: clawq runner token --session <session_key> [--ttl-hours N]"
+      else
+        let ttl_hours =
+          let rec find = function
+            | "--ttl-hours" :: n :: _ -> ( try int_of_string n with _ -> 24)
+            | _ :: tl -> find tl
+            | [] -> cfg.mcp.runner_token_ttl_hours
+          in
+          find rest
+        in
+        let port = cfg.gateway.port in
+        let url = Printf.sprintf "http://127.0.0.1:%d/runner/token" port in
+        let body =
+          `Assoc
+            [
+              ("session_key", `String session_key); ("ttl_hours", `Int ttl_hours);
+            ]
+          |> Yojson.Safe.to_string
+        in
+        let headers =
+          match cfg.gateway.auth_token with
+          | Some tok -> [ ("Authorization", "Bearer " ^ tok) ]
+          | None -> []
+        in
+        let result =
+          Lwt_main.run
+            (Http_client.post_json_with_headers ~uri:url ~body ~headers)
+        in
+        let _status, _resp_headers, resp_body = result in
+        try
+          let json = Yojson.Safe.from_string resp_body in
+          let token = Yojson.Safe.Util.(json |> member "token" |> to_string) in
+          Printf.sprintf
+            "Runner token: %s\n\
+             MCP URL: http://127.0.0.1:%d/mcp\n\
+             REST URL: http://127.0.0.1:%d/runner/ask"
+            token port port
+        with _ -> Printf.sprintf "Error: unexpected response: %s" resp_body)
+  | _ ->
+      "Usage: clawq runner <command>\n\
+      \  runner token --session <session_key> [--ttl-hours N]  - Generate a \
+       runner auth token"
+
 let agent_argv ~executable = [| executable; "agent" |]
 
 let cmd_agent ?(run_daemon = fun ~config -> Lwt_main.run (Daemon.run ~config))
@@ -1331,6 +1385,7 @@ let handle args =
   | "auth" :: rest -> cmd_auth rest
   | "transcribe" :: rest -> cmd_transcribe rest
   | "mcp" :: _ -> cmd_mcp ()
+  | "runner" :: rest -> cmd_runner rest
   | "cron" :: rest -> cmd_cron rest
   | "background" :: rest -> cmd_background rest
   | "delegate" :: rest -> cmd_delegate rest

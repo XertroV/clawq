@@ -72,6 +72,29 @@ Each runner uses a different mechanism to capture its session ID for later resum
 
 The captured session ID is stored in the `background_tasks` table and used for resume operations.
 
+## Runner Question Relay
+
+Remote runners can ask the user clarifying questions during execution. When a background task is spawned, the daemon automatically sets three environment variables in the runner process:
+
+| Variable | Purpose |
+|----------|---------|
+| `CLAWQ_RUNNER_TOKEN` | Bearer token for authenticating to the gateway |
+| `CLAWQ_MCP_URL` | MCP-over-HTTP endpoint (e.g. `http://127.0.0.1:8080/mcp`) |
+| `CLAWQ_RUNNER_ASK_URL` | Simple REST endpoint (e.g. `http://127.0.0.1:8080/runner/ask`) |
+
+Runners that support MCP can discover and call `ask_user_question` via standard `tools/list` + `tools/call` on the MCP URL. Non-MCP runners can POST directly to the REST URL:
+
+```bash
+curl -X POST http://127.0.0.1:8080/runner/ask \
+  -H "Authorization: Bearer $CLAWQ_RUNNER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"questions": [{"type": "text", "question": "Which database should I use?"}]}'
+```
+
+The question is relayed to the user's active channel (Telegram, Discord, Slack, web) and the endpoint blocks until the user answers or the timeout expires (default 300s). Tokens are localhost-only and expire after 24 hours by default.
+
+See [Tools > MCP-over-HTTP for Remote Runners](/docs/tools/#mcp-over-http-for-remote-runners) for endpoint details and configuration.
+
 ## Resume and Message
 
 Once a task has started and a session ID is captured, you can send follow-up messages to the running agent:

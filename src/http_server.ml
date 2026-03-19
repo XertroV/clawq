@@ -4,7 +4,7 @@ let handler ~session_manager ~require_pairing ~auth_token
     ?daemon_run_update_command ?slack_config ?github_config ?github_api_limiter
     ?ip_limiter ?session_limiter ?slack_event_limiter ?slack_run_update_command
     ?web_channel ?whatsapp_config ?line_config ?lark_config ?teams_config
-    ?pairing ?ui_server _conn req body =
+    ?pairing ?runner_tokens ?ask_fn ?ui_server _conn req body =
   let open Lwt.Syntax in
   let uri = Cohttp.Request.uri req in
   let path = Uri.path uri in
@@ -1760,7 +1760,8 @@ let handler ~session_manager ~require_pairing ~auth_token
         Http_server_webhooks.handle ~session_manager ~auth_token ?slack_config
           ?github_config ?github_api_limiter ?slack_event_limiter
           ?slack_run_update_command ?web_channel ?whatsapp_config ?line_config
-          ?lark_config ?teams_config ?pairing meth path req body
+          ?lark_config ?teams_config ?pairing ?runner_tokens ?ask_fn meth path
+          req body
       in
       match webhook_result with
       | Some resp -> Lwt.return resp
@@ -1773,14 +1774,14 @@ let start ~port ~host ~require_pairing ~auth_token ~session_manager
     ?daemon_run_update_command ?slack_config ?github_config ?github_api_limiter
     ?ip_limiter ?session_limiter ?slack_event_limiter ?slack_run_update_command
     ?web_channel ?whatsapp_config ?line_config ?lark_config ?teams_config
-    ?pairing ?ui_server ?stop () =
+    ?pairing ?runner_tokens ?ask_fn ?ui_server ?stop () =
   let open Lwt.Syntax in
   let callback =
     handler ~session_manager ~require_pairing ~auth_token
       ?daemon_run_update_command ?slack_config ?github_config
       ?github_api_limiter ?ip_limiter ?session_limiter ?slack_event_limiter
       ?slack_run_update_command ?web_channel ?whatsapp_config ?line_config
-      ?lark_config ?teams_config ?pairing ?ui_server
+      ?lark_config ?teams_config ?pairing ?runner_tokens ?ask_fn ?ui_server
   in
   let* ctx = Conduit_lwt_unix.init ~src:host () in
   let ctx = Cohttp_lwt_unix.Net.init ~ctx () in
