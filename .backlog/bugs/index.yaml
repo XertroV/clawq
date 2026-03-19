@@ -564,3 +564,6 @@ bugs:
     - file: B565-clawq-session-list-should-hide.todo
     - file: B566-teams-skills-menu-lacks-pagina.todo
     - file: B567-set-model-for-a-channel-via-cl.todo
+    - file: B568-slash-command-model-help-shoul.todo
+    - file: B569-openai-codex-provider-not-expo.todo
+    - file: B570-set-model-for-session-via-cli.todo
