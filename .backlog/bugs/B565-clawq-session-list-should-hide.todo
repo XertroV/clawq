@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B565
+priority: high
+status: pending
+tags: []
+title: ./clawq session [list] should hide '__postmortem_*' sessions by default (need a flag to include them)
+---
+
+./clawq session [list] should hide '__postmortem_*' sessions by default (need a flag to include them)
