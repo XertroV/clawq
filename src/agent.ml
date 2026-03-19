@@ -180,8 +180,8 @@ let estimate_history_tokens history =
     0
     (runtime_history_messages history)
 
-let estimate_prev_assistant_tokens_from_history_delta ~history
-    ~previous_request_history_len ~current_request_history_len =
+let estimate_history_delta_tokens ~history ~previous_request_history_len
+    ~current_request_history_len =
   match previous_request_history_len with
   | None -> None
   | Some prev_len ->
@@ -193,11 +193,12 @@ let estimate_prev_assistant_tokens_from_history_delta ~history
           | [] -> List.rev acc
           | msg :: rest -> take (n - 1) (msg :: acc) rest
         in
-        history |> take added_messages []
-        |> List.filter (fun (msg : Provider.message) -> msg.role = "assistant")
-        |> List.rev
-        |> List.find_opt (fun _ -> true)
-        |> Option.map estimate_message_tokens
+        let total =
+          history |> take added_messages []
+          |> List.filter (fun (msg : Provider.message) -> msg.role <> "event")
+          |> List.fold_left (fun acc msg -> acc + estimate_message_tokens msg) 0
+        in
+        if total > 0 then Some total else None
 
 let context_window_for_agent agent =
   let model =
@@ -2200,15 +2201,14 @@ let turn agent ~user_message ?db ?session_key ?interrupt_check ?inject_messages
             let added =
               match prev with
               | Some (prev_pt, prev_ct, _) ->
-                  let prev_assistant_tokens =
-                    estimate_prev_assistant_tokens_from_history_delta
-                      ~history:agent.history
+                  let history_delta_tokens =
+                    estimate_history_delta_tokens ~history:agent.history
                       ~previous_request_history_len:
                         agent.last_request_history_len
                       ~current_request_history_len
                     |> Option.value ~default:prev_ct
                   in
-                  max 0 (pt - (prev_pt + prev_assistant_tokens))
+                  max 0 (pt - (prev_pt + history_delta_tokens))
               | None -> pt
             in
             let cache_hit =
@@ -2531,15 +2531,14 @@ let turn_stream agent ~user_message ?db ?session_key ?interrupt_check
             let added =
               match prev with
               | Some (prev_pt, prev_ct, _) ->
-                  let prev_assistant_tokens =
-                    estimate_prev_assistant_tokens_from_history_delta
-                      ~history:agent.history
+                  let history_delta_tokens =
+                    estimate_history_delta_tokens ~history:agent.history
                       ~previous_request_history_len:
                         agent.last_request_history_len
                       ~current_request_history_len
                     |> Option.value ~default:prev_ct
                   in
-                  max 0 (pt - (prev_pt + prev_assistant_tokens))
+                  max 0 (pt - (prev_pt + history_delta_tokens))
               | None -> pt
             in
             let cache_hit =

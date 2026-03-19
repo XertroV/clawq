@@ -3729,7 +3729,7 @@ let test_with_session_lock_warns_on_slow_mutex_acquisition () =
        true
      with Not_found -> false)
 
-let test_prev_assistant_tokens_from_history_delta_uses_workspace_tool_call () =
+let test_history_delta_tokens_includes_tool_results () =
   let large_content = String.make 2400 'x' in
   let assistant =
     {
@@ -3771,15 +3771,35 @@ let test_prev_assistant_tokens_from_history_delta_uses_workspace_tool_call () =
   in
   let history = [ refresh; tool_result; assistant; prior_user ] in
   let estimated =
-    Agent.estimate_prev_assistant_tokens_from_history_delta ~history
+    Agent.estimate_history_delta_tokens ~history
       ~previous_request_history_len:(Some 1) ~current_request_history_len:4
   in
-  let expected = Agent.estimate_message_tokens assistant in
+  let expected_assistant = Agent.estimate_message_tokens assistant in
+  let expected_tool = Agent.estimate_message_tokens tool_result in
+  let expected = expected_assistant + expected_tool in
   Alcotest.(check (option int))
-    "uses assistant tool-call payload, not tool result/event" (Some expected)
+    "sums assistant + tool result tokens (excludes event)" (Some expected)
     estimated;
   Alcotest.(check bool)
-    "assistant token estimate is meaningfully large" true (expected > 100)
+    "delta token estimate is meaningfully large" true (expected > 100)
+
+let test_history_delta_tokens_tool_only () =
+  let tool_result =
+    Provider.make_tool_result ~tool_call_id:"tc-read" ~name:"file_read"
+      ~content:"file contents here with enough text to be meaningful"
+  in
+  let prior_user =
+    Provider.make_message ~role:"user" ~content:"read the file"
+  in
+  let history = [ tool_result; prior_user ] in
+  let estimated =
+    Agent.estimate_history_delta_tokens ~history
+      ~previous_request_history_len:(Some 1) ~current_request_history_len:2
+  in
+  let expected = Agent.estimate_message_tokens tool_result in
+  Alcotest.(check (option int))
+    "counts tool-only delta" (Some expected) estimated;
+  Alcotest.(check bool) "tool result tokens > 0" true (expected > 0)
 
 let suite =
   [
@@ -3947,9 +3967,10 @@ let suite =
       test_non_active_doc_write_does_not_persist_workspace_refresh_event;
     Alcotest.test_case "workspace refresh event does not enter live prompt"
       `Quick test_workspace_refresh_event_does_not_enter_live_prompt;
-    Alcotest.test_case
-      "prev assistant token estimate uses workspace tool call payload" `Quick
-      test_prev_assistant_tokens_from_history_delta_uses_workspace_tool_call;
+    Alcotest.test_case "history delta tokens includes tool results" `Quick
+      test_history_delta_tokens_includes_tool_results;
+    Alcotest.test_case "history delta tokens tool only" `Quick
+      test_history_delta_tokens_tool_only;
     Alcotest.test_case "drain progress callbacks fire for queued messages"
       `Quick test_drain_progress_callbacks_fire_for_queued_messages;
     Alcotest.test_case "drain progress not called when no queued messages"

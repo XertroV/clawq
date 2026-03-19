@@ -1,5 +1,5 @@
-let estimate_prev_assistant_tokens_from_history_delta ~history
-    ~previous_request_history_len ~current_request_history_len =
+let estimate_history_delta_tokens ~history ~previous_request_history_len
+    ~current_request_history_len =
   let estimate_message_tokens (m : Provider.message) =
     let estimate_tokens content = (String.length content + 3) / 4 in
     let content_tokens = estimate_tokens m.content in
@@ -22,11 +22,12 @@ let estimate_prev_assistant_tokens_from_history_delta ~history
           | [] -> List.rev acc
           | msg :: rest -> take (n - 1) (msg :: acc) rest
         in
-        history |> take added_messages []
-        |> List.filter (fun (msg : Provider.message) -> msg.role = "assistant")
-        |> List.rev
-        |> List.find_opt (fun _ -> true)
-        |> Option.map estimate_message_tokens
+        let total =
+          history |> take added_messages []
+          |> List.filter (fun (msg : Provider.message) -> msg.role <> "event")
+          |> List.fold_left (fun acc msg -> acc + estimate_message_tokens msg) 0
+        in
+        if total > 0 then Some total else None
 
 let track_cost ~config ~(history : Provider.message list)
     ~last_request_history_len ~session_key ~db ~current_request_history_len
@@ -52,13 +53,13 @@ let track_cost ~config ~(history : Provider.message list)
           let added =
             match prev with
             | Some (prev_pt, prev_ct, _) ->
-                let prev_assistant_tokens =
-                  estimate_prev_assistant_tokens_from_history_delta ~history
+                let history_delta_tokens =
+                  estimate_history_delta_tokens ~history
                     ~previous_request_history_len:last_request_history_len
                     ~current_request_history_len
                   |> Option.value ~default:prev_ct
                 in
-                max 0 (pt - (prev_pt + prev_assistant_tokens))
+                max 0 (pt - (prev_pt + history_delta_tokens))
             | None -> pt
           in
           let cache_hit =
