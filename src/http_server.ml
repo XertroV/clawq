@@ -395,7 +395,7 @@ let handler ~session_manager ~require_pairing ~auth_token
                     in
                     let response =
                       Slash_commands.format_help ~connector:Format_adapter.Plain
-                        ~show_test ()
+                        ~show_test ~is_admin:true ()
                     in
                     let resp_json =
                       `Assoc [ ("response", `String response) ]
@@ -447,6 +447,20 @@ let handler ~session_manager ~require_pairing ~auth_token
                           Slash_commands.format_costs
                             ~connector:Format_adapter.Plain ~db action
                       | None -> "Costs are not available (no database)."
+                    in
+                    let resp_json =
+                      `Assoc [ ("response", `String response) ]
+                      |> Yojson.Safe.to_string
+                    in
+                    Cohttp_lwt_unix.Server.respond_string ~status:`OK
+                      ~headers:json_headers ~body:resp_json ()
+                | Slash_commands.Session action ->
+                    let response =
+                      match Session.get_db session_manager with
+                      | Some db ->
+                          Slash_commands_sessions.format_session
+                            ~connector:Format_adapter.Plain ~db action
+                      | None -> "Sessions not available (no database)."
                     in
                     let resp_json =
                       `Assoc [ ("response", `String response) ]
@@ -1211,7 +1225,8 @@ let handler ~session_manager ~require_pairing ~auth_token
                     in
                     sse_reply
                       (Slash_commands.format_help
-                         ~connector:Format_adapter.Plain ~show_test ())
+                         ~connector:Format_adapter.Plain ~show_test
+                         ~is_admin:true ())
                 | Slash_commands.Reset ->
                     let key = "web:" ^ session_id in
                     let* active_bg_tasks = Session.reset session_manager ~key in
@@ -1260,6 +1275,15 @@ let handler ~session_manager ~require_pairing ~auth_token
                           Slash_commands.format_costs
                             ~connector:Format_adapter.Plain ~db action
                       | None -> "Costs are not available (no database)."
+                    in
+                    sse_reply text
+                | Slash_commands.Session action ->
+                    let text =
+                      match Session.get_db session_manager with
+                      | Some db ->
+                          Slash_commands_sessions.format_session
+                            ~connector:Format_adapter.Plain ~db action
+                      | None -> "Sessions not available (no database)."
                     in
                     sse_reply text
                 | Slash_commands.Usage action ->

@@ -108,6 +108,9 @@ let rec result_to_string = function
   | Slash_commands.Bl Slash_commands.BlBugs -> "Bl(Bugs)"
   | Slash_commands.Bl Slash_commands.BlIdeas -> "Bl(Ideas)"
   | Slash_commands.Bl (Slash_commands.BlShow id) -> "Bl(Show " ^ id ^ ")"
+  | Slash_commands.Session Slash_commands.SessionList -> "Session(List)"
+  | Slash_commands.Session (Slash_commands.SessionShow key) ->
+      "Session(Show " ^ key ^ ")"
   | Slash_commands.DebugDumpChat -> "DebugDumpChat"
   | Slash_commands.AgentInvoke (name, prompt) ->
       "AgentInvoke(" ^ name ^ ", " ^ prompt ^ ")"
@@ -182,6 +185,7 @@ let rec result_eq a b =
   | Slash_commands.Bg a, Slash_commands.Bg b -> a = b
   | Slash_commands.Cron a, Slash_commands.Cron b -> a = b
   | Slash_commands.Bl a, Slash_commands.Bl b -> a = b
+  | Slash_commands.Session a, Slash_commands.Session b -> a = b
   | Slash_commands.DebugDumpChat, Slash_commands.DebugDumpChat -> true
   | Slash_commands.SkillInvoke (a1, a2), Slash_commands.SkillInvoke (b1, b2) ->
       a1 = b1 && a2 = b2
@@ -231,7 +235,10 @@ let test_start () =
 let test_help () =
   match Slash_commands.handle "/help" with
   | Slash_commands.Help ->
-      let s = Slash_commands.format_help ~connector:Format_adapter.Plain () in
+      let s =
+        Slash_commands.format_help ~connector:Format_adapter.Plain
+          ~is_admin:true ()
+      in
       let contains =
         try
           ignore (Str.search_forward (Str.regexp_string "/help") s 0);
@@ -421,7 +428,8 @@ let test_command_with_args () =
 
 let test_format_help_telegram () =
   let output =
-    Slash_commands.format_help ~connector:Format_adapter.Telegram_html ()
+    Slash_commands.format_help ~connector:Format_adapter.Telegram_html
+      ~is_admin:true ()
   in
   let contains needle =
     try
@@ -1229,7 +1237,8 @@ let test_format_usage_plain_and_telegram () =
 
 let test_format_help_discord_code_block () =
   let output =
-    Slash_commands.format_help ~connector:Format_adapter.Discord ()
+    Slash_commands.format_help ~connector:Format_adapter.Discord ~is_admin:true
+      ()
   in
   Alcotest.(check bool)
     "discord help wrapped in code block" true
@@ -1241,7 +1250,9 @@ let test_format_help_discord_code_block () =
     (contains_str output "/help")
 
 let test_format_help_slack_code_block () =
-  let output = Slash_commands.format_help ~connector:Format_adapter.Slack () in
+  let output =
+    Slash_commands.format_help ~connector:Format_adapter.Slack ~is_admin:true ()
+  in
   Alcotest.(check bool)
     "slack help wrapped in code block" true
     (String.length output > 6 && String.sub output 0 3 = "```");
@@ -1432,7 +1443,9 @@ let test_render_markdown_escape () =
   Alcotest.(check bool) "pipe escaped" true (contains_str output "a\\|b")
 
 let test_format_help_teams_markdown_table () =
-  let output = Slash_commands.format_help ~connector:Format_adapter.Teams () in
+  let output =
+    Slash_commands.format_help ~connector:Format_adapter.Teams ~is_admin:true ()
+  in
   Alcotest.(check bool)
     "teams help has markdown table header" true
     (contains_str output "| Command | Description |");
@@ -1557,8 +1570,8 @@ let test_format_help_with_skills () =
     ]
   in
   let output =
-    Slash_commands.format_help_with ~connector:Format_adapter.Plain ~skills
-      ~agents:[]
+    Slash_commands.format_help_with ~connector:Format_adapter.Plain
+      ~commands:Slash_commands.commands ~skills ~agents:[]
   in
   Alcotest.(check bool)
     "has Skills section" true
@@ -1571,8 +1584,8 @@ let test_format_help_with_skills () =
 let test_format_help_with_agents () =
   let agents = [ make_dummy_agent "reviewer" "Code review specialist" ] in
   let output =
-    Slash_commands.format_help_with ~connector:Format_adapter.Plain ~skills:[]
-      ~agents
+    Slash_commands.format_help_with ~connector:Format_adapter.Plain
+      ~commands:Slash_commands.commands ~skills:[] ~agents
   in
   Alcotest.(check bool)
     "has Agents section" true
@@ -1771,6 +1784,69 @@ let test_sorted_by_priority () =
     "same count"
     (List.length Slash_commands.commands)
     (List.length sorted)
+
+let test_is_admin_command_auto_detects () =
+  Alcotest.(check bool)
+    "config is admin" true
+    (Slash_commands.is_admin_command "config");
+  Alcotest.(check bool)
+    "debug_dump_chat is admin" true
+    (Slash_commands.is_admin_command "debug_dump_chat");
+  Alcotest.(check bool)
+    "help is not admin" false
+    (Slash_commands.is_admin_command "help");
+  Alcotest.(check bool)
+    "new is not admin" false
+    (Slash_commands.is_admin_command "new")
+
+let test_sorted_by_priority_filters_admin () =
+  let guest = Slash_commands.sorted_by_priority ~is_admin:false () in
+  let guest_names =
+    List.map (fun (c : Slash_commands.command) -> c.name) guest
+  in
+  Alcotest.(check bool)
+    "config hidden for guest" false
+    (List.mem "config" guest_names);
+  Alcotest.(check bool)
+    "debug_dump_chat hidden for guest" false
+    (List.mem "debug_dump_chat" guest_names);
+  Alcotest.(check bool)
+    "help visible for guest" true
+    (List.mem "help" guest_names);
+  let admin = Slash_commands.sorted_by_priority ~is_admin:true () in
+  let admin_names =
+    List.map (fun (c : Slash_commands.command) -> c.name) admin
+  in
+  Alcotest.(check bool)
+    "config visible for admin" true
+    (List.mem "config" admin_names)
+
+let test_format_help_hides_admin_commands_for_guest () =
+  let output =
+    Slash_commands.format_help ~connector:Format_adapter.Plain ~is_admin:false
+      ()
+  in
+  Alcotest.(check bool)
+    "config hidden in guest help" false
+    (contains_str output "/config");
+  Alcotest.(check bool)
+    "debug_dump_chat hidden in guest help" false
+    (contains_str output "/debug_dump_chat");
+  Alcotest.(check bool)
+    "help visible in guest help" true
+    (contains_str output "/help")
+
+let test_format_help_shows_admin_commands_for_admin () =
+  let output =
+    Slash_commands.format_help ~connector:Format_adapter.Plain ~is_admin:true ()
+  in
+  Alcotest.(check bool)
+    "config in admin help" true
+    (contains_str output "/config");
+  Alcotest.(check bool)
+    "debug_dump_chat in admin help" true
+    (contains_str output "/debug_dump_chat");
+  Alcotest.(check bool) "help in admin help" true (contains_str output "/help")
 
 let test_commands_has_menu () =
   let names =
@@ -2411,6 +2487,46 @@ let test_debug_dump_chat_is_admin_required () =
         (Printf.sprintf "expected AdminRequired(DebugDumpChat), got %s"
            (result_to_string other))
 
+let test_session_list () =
+  Alcotest.check result_testable "/session"
+    (Slash_commands.AdminRequired
+       (Slash_commands.Session Slash_commands.SessionList))
+    (Slash_commands.handle "/session")
+
+let test_session_list_explicit () =
+  Alcotest.check result_testable "/session list"
+    (Slash_commands.AdminRequired
+       (Slash_commands.Session Slash_commands.SessionList))
+    (Slash_commands.handle "/session list")
+
+let test_sessions_alias () =
+  Alcotest.check result_testable "/sessions"
+    (Slash_commands.AdminRequired
+       (Slash_commands.Session Slash_commands.SessionList))
+    (Slash_commands.handle "/sessions")
+
+let test_session_show () =
+  Alcotest.check result_testable "/session show mykey"
+    (Slash_commands.AdminRequired
+       (Slash_commands.Session (Slash_commands.SessionShow "mykey")))
+    (Slash_commands.handle "/session show mykey")
+
+let test_session_bad_args () =
+  match Slash_commands.handle "/session bad args" with
+  | Slash_commands.AdminRequired (Slash_commands.FormattedReply _) -> ()
+  | other ->
+      Alcotest.fail
+        (Printf.sprintf "expected AdminRequired(FormattedReply), got %s"
+           (result_to_string other))
+
+let test_session_in_commands_list () =
+  let names =
+    List.map
+      (fun (cmd : Slash_commands.command) -> cmd.name)
+      Slash_commands.commands
+  in
+  Alcotest.(check bool) "session in commands" true (List.mem "session" names)
+
 let suite =
   [
     Alcotest.test_case "handle /start" `Quick test_start;
@@ -2593,6 +2709,14 @@ let suite =
     Alcotest.test_case "/menu 0 rejected" `Quick test_menu_zero_page;
     Alcotest.test_case "priority positive" `Quick test_priority_positive;
     Alcotest.test_case "sorted by priority" `Quick test_sorted_by_priority;
+    Alcotest.test_case "is_admin_command auto detects" `Quick
+      test_is_admin_command_auto_detects;
+    Alcotest.test_case "sorted by priority filters admin" `Quick
+      test_sorted_by_priority_filters_admin;
+    Alcotest.test_case "format help hides admin commands for guest" `Quick
+      test_format_help_hides_admin_commands_for_guest;
+    Alcotest.test_case "format help shows admin commands for admin" `Quick
+      test_format_help_shows_admin_commands_for_admin;
     Alcotest.test_case "commands has menu" `Quick test_commands_has_menu;
     Alcotest.test_case "manifest teams json" `Quick test_manifest_teams_json;
     Alcotest.test_case "manifest teams custom n" `Quick
@@ -2711,4 +2835,12 @@ let suite =
       test_config_is_admin_required;
     Alcotest.test_case "/debug_dump_chat is AdminRequired" `Quick
       test_debug_dump_chat_is_admin_required;
+    Alcotest.test_case "/session list" `Quick test_session_list;
+    Alcotest.test_case "/session list explicit" `Quick
+      test_session_list_explicit;
+    Alcotest.test_case "/sessions alias" `Quick test_sessions_alias;
+    Alcotest.test_case "/session show" `Quick test_session_show;
+    Alcotest.test_case "/session bad args" `Quick test_session_bad_args;
+    Alcotest.test_case "/session in commands list" `Quick
+      test_session_in_commands_list;
   ]

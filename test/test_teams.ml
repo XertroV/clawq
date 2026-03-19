@@ -323,7 +323,8 @@ let test_slash_command_recognized_after_mention_strip () =
   match Slash_commands.handle stripped with
   | Slash_commands.Help ->
       let text =
-        Slash_commands.format_help ~connector:Format_adapter.Teams ()
+        Slash_commands.format_help ~connector:Format_adapter.Teams
+          ~is_admin:true ()
       in
       Alcotest.(check bool)
         "help stays multiline" true
@@ -332,7 +333,7 @@ let test_slash_command_recognized_after_mention_strip () =
 
 let test_help_reply_body_uses_markdown_table () =
   let help_text =
-    Slash_commands.format_help ~connector:Format_adapter.Teams ()
+    Slash_commands.format_help ~connector:Format_adapter.Teams ~is_admin:true ()
   in
   let body =
     Teams.build_reply_body ~alert:false ~text:help_text ~mention:None

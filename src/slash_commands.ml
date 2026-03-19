@@ -436,6 +436,14 @@ let handle ?(skill_names = []) text =
             | [ "show"; id ] -> Bl (BlShow id)
             | [ id ] -> Bl (BlShow id)
             | _ -> FormattedReply (fun connector -> format_bl_usage ~connector))
+        | "session" | "sessions" ->
+            AdminRequired
+              (match args with
+              | [] | [ "list" ] -> Session SessionList
+              | [ "show"; key ] -> Session (SessionShow key)
+              | _ ->
+                  FormattedReply
+                    (fun connector -> format_session_usage ~connector))
         | "rig" | "rigging" -> (
             match args with
             | [ "install"; name ] | [ "add"; name ] -> Rig (RigInstall name)
@@ -533,3 +541,23 @@ let handle ?(skill_names = []) text =
             | Some original_name ->
                 SkillInvoke (original_name, String.concat " " args)
             | None -> NotACommand))
+
+let is_admin_command name =
+  match handle ("/" ^ name) with AdminRequired _ -> true | _ -> false
+
+let visible_commands ~is_admin =
+  if is_admin then commands
+  else List.filter (fun c -> not (is_admin_command c.name)) commands
+
+let sorted_by_priority ?(is_admin = true) () =
+  List.sort
+    (fun a b -> compare b.priority a.priority)
+    (visible_commands ~is_admin)
+
+let format_help ~connector ?(show_test = false) ~is_admin () =
+  let cmds = visible_commands ~is_admin in
+  let skills =
+    Skills.filter_visible_skills ~show_test (Skills.available_skills ())
+  in
+  let agents = Agent_template.available_templates () in
+  format_help_with ~connector ~commands:cmds ~skills ~agents

@@ -464,7 +464,7 @@ let handle_event ~(config : Runtime_config.slack_config)
                 in
                 let text =
                   Slash_commands.format_help ~connector:Format_adapter.Slack
-                    ~show_test ()
+                    ~show_test ~is_admin ()
                 in
                 let* () =
                   send_message_fn ~bot_token:config.bot_token ~channel_id ~text
@@ -754,6 +754,18 @@ let handle_event ~(config : Runtime_config.slack_config)
                       Slash_commands.format_costs
                         ~connector:Format_adapter.Slack ~db action
                   | None -> "Costs are not available (no database)."
+                in
+                let* () =
+                  send_message_fn ~bot_token:config.bot_token ~channel_id ~text
+                in
+                Lwt.return "ok"
+            | Session action ->
+                let text =
+                  match Session.get_db session_manager with
+                  | Some db ->
+                      Slash_commands_sessions.format_session
+                        ~connector:Format_adapter.Slack ~db action
+                  | None -> "Sessions not available (no database)."
                 in
                 let* () =
                   send_message_fn ~bot_token:config.bot_token ~channel_id ~text

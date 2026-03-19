@@ -13,8 +13,10 @@ let skill_commands ?(show_test = false) () =
       })
     skills
 
-let teams_json ?(n = 10) () =
-  let all_cmds = Slash_commands.sorted_by_priority () @ skill_commands () in
+let teams_json ?(n = 10) ?(is_admin = true) () =
+  let all_cmds =
+    Slash_commands.sorted_by_priority ~is_admin () @ skill_commands ()
+  in
   let cmds = List.filteri (fun i _ -> i < n) all_cmds in
   let commands_json =
     List.map
@@ -43,8 +45,10 @@ let teams_json ?(n = 10) () =
   in
   Yojson.Safe.pretty_to_string ~std:true manifest
 
-let telegram_json () =
-  let cmds = Slash_commands.sorted_by_priority () @ skill_commands () in
+let telegram_json ?(is_admin = true) () =
+  let cmds =
+    Slash_commands.sorted_by_priority ~is_admin () @ skill_commands ()
+  in
   let commands_json =
     List.map
       (fun (c : Slash_commands.command) ->
@@ -57,8 +61,10 @@ let telegram_json () =
   let payload = `Assoc [ ("commands", `List commands_json) ] in
   Yojson.Safe.pretty_to_string ~std:true payload
 
-let menu_adaptive_card_json ?(page = 1) () =
-  let all_cmds = Slash_commands.sorted_by_priority () @ skill_commands () in
+let menu_adaptive_card_json ?(page = 1) ?(is_admin = true) () =
+  let all_cmds =
+    Slash_commands.sorted_by_priority ~is_admin () @ skill_commands ()
+  in
   let total = List.length all_cmds in
   let total_pages =
     max 1 ((total + commands_per_page - 1) / commands_per_page)

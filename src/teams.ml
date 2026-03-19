@@ -1704,12 +1704,14 @@ let handle_webhook ~(config : Runtime_config.teams_config)
                       in
                       let text =
                         Slash_commands.format_help
-                          ~connector:Format_adapter.Teams ~show_test ()
+                          ~connector:Format_adapter.Teams ~show_test ~is_admin
+                          ()
                       in
                       send_text text
                   | Menu page ->
                       let card_json =
-                        Slash_commands_manifest.menu_adaptive_card_json ~page ()
+                        Slash_commands_manifest.menu_adaptive_card_json ~page
+                          ~is_admin ()
                       in
                       send_adaptive_card ~config
                         ~service_url:effective_service_url ~conversation_id
@@ -2049,6 +2051,15 @@ let handle_webhook ~(config : Runtime_config.teams_config)
                             Slash_commands.format_costs
                               ~connector:Format_adapter.Teams ~db action
                         | None -> "Costs are not available (no database)."
+                      in
+                      send_text text
+                  | Session action ->
+                      let text =
+                        match Session.get_db session_manager with
+                        | Some db ->
+                            Slash_commands_sessions.format_session
+                              ~connector:Format_adapter.Teams ~db action
+                        | None -> "Sessions not available (no database)."
                       in
                       send_text text
                   | Usage action ->

@@ -554,7 +554,7 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
             in
             let text =
               Slash_commands.format_help ~connector:Format_adapter.Telegram_html
-                ~show_test ()
+                ~show_test ~is_admin ()
             in
             send_chunked_html_with_fallback ~bot_token ~chat_id:update.chat_id
               ~text ()
@@ -796,6 +796,16 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
                   Slash_commands.format_costs
                     ~connector:Format_adapter.Telegram_html ~db action
               | None -> "Costs are not available (no database)."
+            in
+            send_chunked_html_with_fallback ~bot_token ~chat_id:update.chat_id
+              ~text ()
+        | Session action ->
+            let text =
+              match Session.get_db session_mgr with
+              | Some db ->
+                  Slash_commands_sessions.format_session
+                    ~connector:Format_adapter.Telegram_html ~db action
+              | None -> "Sessions not available (no database)."
             in
             send_chunked_html_with_fallback ~bot_token ~chat_id:update.chat_id
               ~text ()

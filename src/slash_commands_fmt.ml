@@ -62,6 +62,7 @@ type cron_action =
   | CronHelp
 
 type bl_action = BlList | BlShow of string | BlBugs | BlIdeas
+type session_action = SessionList | SessionShow of string
 
 type rig_action =
   | RigInstall of string
@@ -100,6 +101,7 @@ type result =
   | Bg of bg_action
   | Cron of cron_action
   | Bl of bl_action
+  | Session of session_action
   | Rig of rig_action
   | HeldItems of held_items_action
   | DebugDumpChat
@@ -244,6 +246,11 @@ let commands =
       name = "config";
       description = "View or modify config: /config [show/get/set/keys]";
       priority = 25;
+    };
+    {
+      name = "session";
+      description = "List/inspect sessions (admin): /session [list/show] [key]";
+      priority = 23;
     };
     {
       name = "uptime";
@@ -761,6 +768,17 @@ let format_bl_usage ~connector =
   ^ Format_adapter.code connector "/bl <id>"
   ^ "        - Show task details"
 
+let format_session_usage ~connector =
+  "Usage: "
+  ^ Format_adapter.code connector "/session"
+  ^ " [subcommand]\n  "
+  ^ Format_adapter.code connector "/session"
+  ^ "            - List all sessions\n  "
+  ^ Format_adapter.code connector "/session list"
+  ^ "       - List all sessions\n  "
+  ^ Format_adapter.code connector "/session show <key>"
+  ^ " - Show session details"
+
 let format_reset ~connector ~active_bg_tasks =
   Format_adapter.bold connector "Session reset."
   ^ " Send a new message to start fresh."
@@ -866,7 +884,7 @@ let format_help_agents_section ~connector (agents : Agent_template.t list) =
         (Printf.sprintf "Agents (%d):" (List.length agents))
     ^ "\n" ^ String.concat "\n" lines
 
-let format_help_with ~connector ~skills ~agents =
+let format_help_with ~connector ~commands ~skills ~agents =
   let skills_section = format_help_skills_section ~connector skills in
   let agents_section = format_help_agents_section ~connector agents in
   match connector with
@@ -968,7 +986,7 @@ let format_help ~connector ?(show_test = false) () =
     Skills.filter_visible_skills ~show_test (Skills.available_skills ())
   in
   let agents = Agent_template.available_templates () in
-  format_help_with ~connector ~skills ~agents
+  format_help_with ~connector ~commands ~skills ~agents
 
 (* ── Existing format: tools ────────────────────────────────────────────── *)
 
