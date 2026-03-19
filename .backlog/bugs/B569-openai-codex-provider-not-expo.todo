@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B569
+priority: high
+status: pending
+tags: []
+title: OpenAI Codex provider not exposed in model catalog
+---
+
+OpenAI Codex provider not exposed in model catalog
