@@ -97,7 +97,8 @@ let cmd_session args =
           let sessions =
             Memory.list_session_infos ~db ?channel:parsed.channel
               ?prefix:parsed.prefix ~activity:parsed.activity
-              ?only_main:parsed.only_main ()
+              ?only_main:parsed.only_main
+              ~include_postmortem:parsed.include_postmortem ()
           in
           if sessions = [] then "No sessions matched"
           else format_session_list_table ~db sessions)

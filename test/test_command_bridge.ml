@@ -327,6 +327,32 @@ let test_handle_session_list_filters () =
            true
          with Not_found -> false))
 
+let test_handle_session_list_hides_postmortem () =
+  with_temp_home (fun home ->
+      let db = session_db home in
+      Memory.store_message ~db ~session_key:"telegram:42:user1"
+        (Provider.make_message ~role:"user" ~content:"hi");
+      Memory.upsert_session_state ~db ~session_key:"telegram:42:user1"
+        ~turn:"user" ~channel:"telegram" ~channel_id:"42" ();
+      Memory.store_message ~db ~session_key:"__postmortem_telegram:42:user1"
+        (Provider.make_message ~role:"user" ~content:"postmortem");
+      Memory.upsert_session_state ~db
+        ~session_key:"__postmortem_telegram:42:user1" ~turn:"user"
+        ~channel:"telegram" ~channel_id:"42" ();
+      let result = Command_bridge.handle [ "session"; "list" ] in
+      Alcotest.(check bool)
+        "session list shows normal session" true
+        (contains result "telegram:42:user1");
+      Alcotest.(check bool)
+        "session list hides postmortem session" false
+        (contains result "__postmortem_");
+      let result_with =
+        Command_bridge.handle [ "session"; "list"; "--include-postmortem" ]
+      in
+      Alcotest.(check bool)
+        "session list --include-postmortem shows postmortem" true
+        (contains result_with "__postmortem_"))
+
 let test_handle_session_heartbeat_toggle () =
   with_temp_home (fun home ->
       let db = session_db home in
@@ -2961,6 +2987,8 @@ let suite =
       test_handle_workspace_uses_effective_workspace;
     Alcotest.test_case "handle session list filters" `Quick
       test_handle_session_list_filters;
+    Alcotest.test_case "handle session list hides postmortem" `Quick
+      test_handle_session_list_hides_postmortem;
     Alcotest.test_case "handle session heartbeat toggle" `Quick
       test_handle_session_heartbeat_toggle;
     Alcotest.test_case "handle session heartbeat rejects unsupported session"

@@ -1,14 +1,15 @@
 ---
 claimed_at: "2026-03-19T16:53:53Z"
 claimed_by: cli-user
-completed_at: null
+completed_at: "2026-03-19T17:29:06Z"
 complexity: medium
 depends_on: []
+duration_minutes: 35.22221019425
 estimate_hours: 1
 id: B565
 priority: high
 started_at: "2026-03-19T16:53:53Z"
-status: in_progress
+status: done
 tags: []
 title: ./clawq session [list] should hide '__postmortem_*' sessions by default (need a flag to include them)
 ---

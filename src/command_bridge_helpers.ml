@@ -1365,6 +1365,7 @@ type session_list_args = {
   prefix : string option;
   activity : Memory.session_activity;
   only_main : bool option;
+  include_postmortem : bool;
 }
 
 let parse_session_list_args args =
@@ -1379,15 +1380,23 @@ let parse_session_list_args args =
         loop { state with activity = Memory.Inactive } rest
     | "--main" :: rest -> loop { state with only_main = Some true } rest
     | "--non-main" :: rest -> loop { state with only_main = Some false } rest
+    | "--include-postmortem" :: rest ->
+        loop { state with include_postmortem = true } rest
     | flag :: _ when String.length flag > 0 && flag.[0] = '-' ->
         Error (Printf.sprintf "Unknown session list flag: %s" flag)
     | _ ->
         Error
           "Usage: clawq session list [--channel NAME] [--prefix PREFIX] \
-           [--active|--inactive] [--main|--non-main]"
+           [--active|--inactive] [--main|--non-main] [--include-postmortem]"
   in
   loop
-    { channel = None; prefix = None; activity = Memory.Any; only_main = None }
+    {
+      channel = None;
+      prefix = None;
+      activity = Memory.Any;
+      only_main = None;
+      include_postmortem = false;
+    }
     args
 
 type session_show_args = {

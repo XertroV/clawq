@@ -1811,7 +1811,8 @@ let parse_channel_from_session_key key =
   | channel :: _ when channel <> "" -> Some channel
   | _ -> None
 
-let list_session_infos ~db ?channel ?prefix ?(activity = Any) ?only_main () =
+let list_session_infos ~db ?channel ?prefix ?(activity = Any) ?only_main
+    ?(include_postmortem = false) () =
   let sql =
     "SELECT k.session_key, s.channel, s.channel_id, s.turn, \
      s.response_sent_at, s.last_active, (SELECT COUNT(*) FROM messages m WHERE \
@@ -1885,7 +1886,15 @@ let list_session_infos ~db ?channel ?prefix ?(activity = Any) ?only_main () =
         | Active -> row.turn = Some "agent"
         | Inactive -> row.turn <> Some "agent"
       in
-      channel_ok && prefix_ok && main_ok && activity_ok)
+      let postmortem_ok =
+        include_postmortem
+        || not
+             (let pfx = "__postmortem_" in
+              let plen = String.length pfx in
+              String.length row.session_key >= plen
+              && String.sub row.session_key 0 plen = pfx)
+      in
+      channel_ok && prefix_ok && main_ok && activity_ok && postmortem_ok)
 
 let list_session_epochs ~db ~session_key =
   let current_rows = load_raw_history ~db ~session_key in
