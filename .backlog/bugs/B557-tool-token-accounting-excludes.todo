@@ -1,0 +1,11 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B557
+priority: high
+status: pending
+tags: []
+title: Tool token accounting excludes tool responses
+---
+Running a skill currently reports token counts for the tool call itself, but not for the tool response. Counts should include both sides of the exchange. This should apply consistently to all tool calls; some other tool metrics appear to have the same omission.
