@@ -1201,6 +1201,29 @@ let test_compaction_reload_empty () =
   Alcotest.(check int) "empty result" 0 (List.length result);
   Agent.find_skill_for_reload_fn := fun _ -> None
 
+let test_builtin_idea_skill () =
+  let found = Builtin_skills.find_builtin "idea" in
+  Alcotest.(check bool) "idea skill found" true (Option.is_some found);
+  let name, desc, instructions = Option.get found in
+  Alcotest.(check string) "name" "idea" name;
+  Alcotest.(check bool) "description non-empty" true (String.length desc > 0);
+  Alcotest.(check bool)
+    "instructions contain $ARGUMENTS" true
+    (try
+       ignore
+         (Str.search_forward (Str.regexp_string "$ARGUMENTS") instructions 0);
+       true
+     with Not_found -> false);
+  Alcotest.(check bool)
+    "instructions contain bl idea" true
+    (try
+       ignore (Str.search_forward (Str.regexp_string "bl idea") instructions 0);
+       true
+     with Not_found -> false);
+  let skill_md = Skills.find_skill_md "idea" in
+  Alcotest.(check bool)
+    "find_skill_md finds idea" true (Option.is_some skill_md)
+
 let suite =
   [
     Alcotest.test_case "template substitution" `Quick test_substitute_template;
@@ -1279,4 +1302,6 @@ let suite =
       test_compaction_reload_overflow;
     Alcotest.test_case "compaction reload empty" `Quick
       test_compaction_reload_empty;
+    Alcotest.test_case "builtin idea skill discoverable" `Quick
+      test_builtin_idea_skill;
   ]

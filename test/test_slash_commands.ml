@@ -1904,10 +1904,13 @@ let test_manifest_telegram_json () =
   let json = Yojson.Safe.from_string output in
   let open Yojson.Safe.Util in
   let cmds = json |> member "commands" |> to_list in
-  Alcotest.(check int)
-    "all commands"
-    (List.length Slash_commands.commands)
-    (List.length cmds);
+  let expected =
+    List.length Slash_commands.commands
+    + List.length
+        (Skills.filter_visible_skills ~show_test:false
+           (Skills.available_skills ()))
+  in
+  Alcotest.(check int) "all commands" expected (List.length cmds);
   let first = List.hd cmds in
   let _ = first |> member "command" |> to_string in
   let _ = first |> member "description" |> to_string in
