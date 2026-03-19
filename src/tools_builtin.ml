@@ -1455,5 +1455,97 @@ let register_all ~(config : Runtime_config.t) ~sandbox ?(db = None)
       Tool_registry.register registry (Plan_pipeline.list_tool ~db);
       Tool_registry.register registry (Plan_pipeline.logs_tool ~db);
       Tool_registry.register registry (Plan_pipeline.cancel_tool ~db);
-      Tool_registry.register registry (inject_connector_history ~config ~db)
+      Tool_registry.register registry (inject_connector_history ~config ~db);
+      Debate.init_schema db;
+      Tool_registry.register registry
+        {
+          Tool.name = "debate";
+          description =
+            "Route a prompt to multiple AI models in parallel, then synthesize \
+             a consensus with a judge model. Returns synthesis, confidence \
+             score, agreements, and disagreements.";
+          parameters_schema =
+            `Assoc
+              [
+                ("type", `String "object");
+                ( "properties",
+                  `Assoc
+                    [
+                      ( "prompt",
+                        `Assoc
+                          [
+                            ("type", `String "string");
+                            ( "description",
+                              `String "The prompt to route to multiple models"
+                            );
+                          ] );
+                      ( "models",
+                        `Assoc
+                          [
+                            ("type", `String "string");
+                            ( "description",
+                              `String
+                                "Comma-separated list of models to query \
+                                 (optional, uses config defaults)" );
+                          ] );
+                      ( "judge_model",
+                        `Assoc
+                          [
+                            ("type", `String "string");
+                            ( "description",
+                              `String
+                                "Model to use as judge (optional, uses config \
+                                 default)" );
+                          ] );
+                      ( "no_judge",
+                        `Assoc
+                          [
+                            ("type", `String "boolean");
+                            ( "description",
+                              `String
+                                "Skip judge synthesis, return raw responses" );
+                          ] );
+                    ] );
+                ("required", `List [ `String "prompt" ]);
+              ];
+          invoke =
+            (fun ?context:_ args ->
+              let open Yojson.Safe.Util in
+              if not config.debate.enabled then
+                Lwt.return
+                  "Error: debate feature is disabled. Enable it with: config \
+                   set debate.enabled true"
+              else
+                let prompt =
+                  try args |> member "prompt" |> to_string with _ -> ""
+                in
+                if prompt = "" then
+                  Lwt.return
+                    "Error: parameter \"prompt\" is required and must be a \
+                     non-empty string."
+                else
+                  let models =
+                    try
+                      let m = args |> member "models" |> to_string in
+                      String.split_on_char ',' m |> List.map String.trim
+                    with _ -> config.debate.default_models
+                  in
+                  let judge_model =
+                    try args |> member "judge_model" |> to_string
+                    with _ -> config.debate.judge_model
+                  in
+                  let no_judge =
+                    try args |> member "no_judge" |> to_bool with _ -> false
+                  in
+                  let open Lwt.Syntax in
+                  let* result, _warning =
+                    Debate.run ~config ~db:(Some db) ~prompt ~models
+                      ~judge_model ~skip_judge:no_judge
+                  in
+                  Debate.insert_debate_round ~db ~result;
+                  Lwt.return (Debate.format_json result));
+          invoke_stream = None;
+          risk_level = Tool.Low;
+          deferred = false;
+        }
   | None -> ()

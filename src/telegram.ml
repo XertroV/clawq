@@ -1084,6 +1084,16 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
                   ~bot_token ~chat_id:update.chat_id ~text ())
               ();
             Lwt.return_unit
+        | Debate prompt -> (
+            match Session.get_db session_mgr with
+            | Some db ->
+                let config = Session.get_config session_mgr in
+                let* text = Debate.run_for_prompt ~config ~db ~prompt in
+                send_chunked_html_with_fallback ~bot_token
+                  ~chat_id:update.chat_id ~text ()
+            | None ->
+                send_message ~bot_token ~chat_id:update.chat_id
+                  ~text:"Debate requires a database." ())
         | DebugDumpChat -> (
             let content = Session.dump_json session_mgr ~key in
             let timestamp =

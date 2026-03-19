@@ -192,6 +192,7 @@ let convert (json : Yojson.Safe.t) =
       connector_history = default.connector_history;
       browser = default.browser;
       test = default.test;
+      debate = default.debate;
     }
   in
   (config, List.rev !warnings)

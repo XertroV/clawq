@@ -397,6 +397,14 @@ let config_schema =
             ("auto_fix_enabled", L);
             ("commit_tag", L);
           ] );
+      ( "debate",
+        O
+          [
+            ("enabled", L);
+            ("default_models", L);
+            ("judge_model", L);
+            ("max_parallel", L);
+          ] );
     ]
 
 let rec validate_path segments schema =

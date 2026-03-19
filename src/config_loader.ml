@@ -1715,6 +1715,28 @@ let parse_config ?(resolve_secrets = true) json =
          in
          { show_skills }
        with _ -> Runtime_config.default.test);
+    debate =
+      (try
+         let db_ = json |> member "debate" in
+         let def = Runtime_config.default_debate_config in
+         let enabled =
+           try db_ |> member "enabled" |> to_bool with _ -> def.enabled
+         in
+         let default_models =
+           try db_ |> member "default_models" |> to_list |> List.map to_string
+           with _ -> def.default_models
+         in
+         let judge_model =
+           try db_ |> member "judge_model" |> to_string
+           with _ -> def.judge_model
+         in
+         let max_parallel =
+           try db_ |> member "max_parallel" |> to_int
+           with _ -> def.max_parallel
+         in
+         ({ enabled; default_models; judge_model; max_parallel }
+           : Runtime_config.debate_config)
+       with _ -> Runtime_config.default_debate_config);
   }
 
 let rec merge_json (original : Yojson.Safe.t) (complete : Yojson.Safe.t) :

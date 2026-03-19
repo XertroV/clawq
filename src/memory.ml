@@ -1,4 +1,4 @@
-let schema_version = 27
+let schema_version = 28
 
 type session_activity = Active | Inactive | Any
 
@@ -433,6 +433,21 @@ let add_thinking_content_columns db =
       "ALTER TABLE session_log_epoch_messages ADD COLUMN thinking_content TEXT"
   with _ -> ()
 
+let init_debate_rounds_schema db =
+  exec_exn db
+    "CREATE TABLE IF NOT EXISTS debate_rounds (\n\
+    \  id INTEGER PRIMARY KEY AUTOINCREMENT,\n\
+    \  prompt TEXT NOT NULL,\n\
+    \  models_json TEXT NOT NULL,\n\
+    \  responses_json TEXT NOT NULL,\n\
+    \  judge_model TEXT,\n\
+    \  judge_result_json TEXT,\n\
+    \  confidence INTEGER,\n\
+    \  total_cost_usd REAL,\n\
+    \  elapsed_s REAL,\n\
+    \  created_at TEXT NOT NULL DEFAULT (datetime('now'))\n\
+    \  )"
+
 (* Ensure all tables that are only created inside migrate_schema exist.
    Uses CREATE TABLE IF NOT EXISTS throughout, so safe to call at any point. *)
 let ensure_all_tables db =
@@ -451,7 +466,8 @@ let ensure_all_tables db =
   init_connector_history_schema db;
   init_attachment_log_schema db;
   Admin.init_schema db;
-  Pair_coding_state.init_schema db
+  Pair_coding_state.init_schema db;
+  init_debate_rounds_schema db
 
 (* Each step migrates from version [v] to [v + 1].
    All ALTER TABLE operations use try/catch for idempotency.
@@ -535,6 +551,7 @@ let migrate_step db v =
         exec_exn db
           "ALTER TABLE session_state ADD COLUMN effective_cwd TEXT DEFAULT NULL"
       with _ -> ())
+  | 27 -> init_debate_rounds_schema db
   | n -> failwith (Printf.sprintf "Unknown migration step from version %d" n)
 
 (* Idempotent column repair for databases that reached the current schema

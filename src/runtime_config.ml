@@ -454,6 +454,13 @@ type browser_config = {
 
 type test_config = { show_skills : bool }
 
+type debate_config = {
+  enabled : bool;
+  default_models : string list;
+  judge_model : string;
+  max_parallel : int;
+}
+
 type t = {
   workspace : string;
   default_temperature : float;
@@ -488,6 +495,7 @@ type t = {
   connector_history : connector_history_config;
   browser : browser_config;
   test : test_config;
+  debate : debate_config;
 }
 
 let default_log_config : log_config =
@@ -510,6 +518,17 @@ let default_error_watcher_config : error_watcher_config =
 
 let default_interactive_config : interactive_config =
   { enable_question_notes = true }
+
+let default_debate_config : debate_config =
+  {
+    enabled = true;
+    default_models =
+      [
+        "openai-codex:gpt-5.4"; "zai_coding:glm-5"; "kimi_coding:kimi-for-code";
+      ];
+    judge_model = "anthropic:claude-opus-4-6";
+    max_parallel = 5;
+  }
 
 let default_observer_config : observer_config =
   {
@@ -733,6 +752,7 @@ let default =
       };
     browser = default_browser_config;
     test = { show_skills = false };
+    debate = default_debate_config;
   }
 
 let is_key_set key =
@@ -1855,6 +1875,7 @@ let to_json (cfg : t) : Yojson.Safe.t =
   in
   let ew = cfg.error_watcher in
   let ch = cfg.connector_history in
+  let db_ = cfg.debate in
   let fields =
     fields
     @ [
@@ -1883,6 +1904,15 @@ let to_json (cfg : t) : Yojson.Safe.t =
               ("max_age_days", `Int ch.max_age_days);
             ] );
         ("test", `Assoc [ ("show_skills", `Bool cfg.test.show_skills) ]);
+        ( "debate",
+          `Assoc
+            [
+              ("enabled", `Bool db_.enabled);
+              ( "default_models",
+                `List (List.map (fun s -> `String s) db_.default_models) );
+              ("judge_model", `String db_.judge_model);
+              ("max_parallel", `Int db_.max_parallel);
+            ] );
       ]
   in
   `Assoc fields

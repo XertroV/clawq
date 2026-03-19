@@ -113,6 +113,7 @@ type result =
   | BgMenu
   | InjectConnectorHistory of int
   | SkillInvoke of string * string
+  | Debate of string
   | AdminRequired of result
   | RegisterAsAdminOtc of string option
   | NotACommand
@@ -279,6 +280,11 @@ let commands =
       name = "register_as_admin_otc";
       description = "Register as admin via one-time code";
       priority = 2;
+    };
+    {
+      name = "debate";
+      description = "Multi-model debate: /debate <prompt>";
+      priority = 5;
     };
   ]
 

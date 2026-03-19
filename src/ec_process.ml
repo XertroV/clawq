@@ -84,7 +84,8 @@ let scan_daemon_log ~(config : Runtime_config.t) ~scan_state ~seen =
           (List.rev !entries, !seen))
 
 (* --- Session DB scanner --- *)
-let excluded_session_prefixes = [ "__error_correction__"; "__postmortem_" ]
+let excluded_session_prefixes =
+  [ "__error_correction__"; "__postmortem_"; "__debate__" ]
 
 let is_excluded_session key =
   List.exists

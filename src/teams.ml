@@ -1911,6 +1911,15 @@ let handle_webhook ~(config : Runtime_config.teams_config)
                       Session.fork_and_run session_manager ~parent_key:key
                         ?agent_name ~prompt ~send_reply:send_text ();
                       Lwt.return_unit
+                  | Debate prompt -> (
+                      match Session.get_db session_manager with
+                      | Some db ->
+                          let config = Session.get_config session_manager in
+                          let* text =
+                            Debate.run_for_prompt ~config ~db ~prompt
+                          in
+                          send_text text
+                      | None -> send_text "Debate requires a database.")
                   | DebugDumpChat -> (
                       let content = Session.dump_json session_manager ~key in
                       let timestamp =

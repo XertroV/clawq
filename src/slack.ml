@@ -1100,6 +1100,22 @@ let handle_event ~(config : Runtime_config.slack_config)
                       ~text)
                   ();
                 Lwt.return "ok"
+            | Debate prompt -> (
+                match Session.get_db session_manager with
+                | Some db ->
+                    let cfg = Session.get_config session_manager in
+                    let* text = Debate.run_for_prompt ~config:cfg ~db ~prompt in
+                    let* () =
+                      send_message_fn ~bot_token:config.bot_token ~channel_id
+                        ~text
+                    in
+                    Lwt.return "ok"
+                | None ->
+                    let* () =
+                      send_message_fn ~bot_token:config.bot_token ~channel_id
+                        ~text:"Debate requires a database."
+                    in
+                    Lwt.return "ok")
             | DebugDumpChat ->
                 let content = Session.dump_json session_manager ~key in
                 let max_len = 1800 in

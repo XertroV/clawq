@@ -630,6 +630,27 @@ let handler ~session_manager ~require_pairing ~auth_token
                     in
                     Cohttp_lwt_unix.Server.respond_string ~status:`OK
                       ~headers:json_headers ~body:resp_json ()
+                | Slash_commands.Debate prompt -> (
+                    match Session.get_db session_manager with
+                    | Some db ->
+                        let config = Session.get_config session_manager in
+                        let* text = Debate.run_for_prompt ~config ~db ~prompt in
+                        let resp_json =
+                          `Assoc [ ("response", `String text) ]
+                          |> Yojson.Safe.to_string
+                        in
+                        Cohttp_lwt_unix.Server.respond_string ~status:`OK
+                          ~headers:json_headers ~body:resp_json ()
+                    | None ->
+                        let resp_json =
+                          `Assoc
+                            [
+                              ("response", `String "Debate requires a database.");
+                            ]
+                          |> Yojson.Safe.to_string
+                        in
+                        Cohttp_lwt_unix.Server.respond_string ~status:`OK
+                          ~headers:json_headers ~body:resp_json ())
                 | Slash_commands.DebugDumpChat ->
                     let response = Session.dump_json session_manager ~key in
                     let resp_json =
@@ -1534,6 +1555,29 @@ let handler ~session_manager ~require_pairing ~auth_token
                     Cohttp_lwt_unix.Server.respond ~status:`OK ~headers
                       ~body:(Cohttp_lwt.Body.of_stream stream)
                       ()
+                | Slash_commands.Debate prompt -> (
+                    let key = "web:" ^ session_id in
+                    ignore key;
+                    match Session.get_db session_manager with
+                    | Some db ->
+                        let config = Session.get_config session_manager in
+                        let* text = Debate.run_for_prompt ~config ~db ~prompt in
+                        let resp_json =
+                          `Assoc [ ("response", `String text) ]
+                          |> Yojson.Safe.to_string
+                        in
+                        Cohttp_lwt_unix.Server.respond_string ~status:`OK
+                          ~headers:json_headers ~body:resp_json ()
+                    | None ->
+                        let resp_json =
+                          `Assoc
+                            [
+                              ("response", `String "Debate requires a database.");
+                            ]
+                          |> Yojson.Safe.to_string
+                        in
+                        Cohttp_lwt_unix.Server.respond_string ~status:`OK
+                          ~headers:json_headers ~body:resp_json ())
                 | Slash_commands.DebugDumpChat ->
                     let key = "web:" ^ session_id in
                     let response = Session.dump_json session_manager ~key in

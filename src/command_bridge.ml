@@ -2358,4 +2358,5 @@ let handle args =
   | "ec-run" :: rest -> cmd_ec_run rest
   | "manifest" :: rest -> cmd_manifest rest
   | "held-items" :: rest -> cmd_held_items rest
+  | "debate" :: rest -> Debate.cmd_debate ~get_config ~get_db rest
   | _ -> Clawq_core.dispatch args

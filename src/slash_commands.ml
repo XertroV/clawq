@@ -505,6 +505,13 @@ let handle ?(skill_names = []) text =
                 in
                 InjectConnectorHistory count
             | _ -> InjectConnectorHistory 20)
+        | "debate" ->
+            let prompt = String.concat " " args in
+            if prompt = "" then
+              FormattedReply
+                (fun connector ->
+                  "Usage: " ^ Format_adapter.code connector "/debate <prompt>")
+            else Debate prompt
         | "debug-dump-chat" | "debug_dump_chat" -> AdminRequired DebugDumpChat
         | "register_as_admin_otc" | "register-as-admin-otc" -> (
             match args with

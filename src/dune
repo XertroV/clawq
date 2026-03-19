@@ -111,6 +111,7 @@
   restart_notify
   daemon_status
   benchmark
+  debate
   models_catalog
   model_preferences
   completions

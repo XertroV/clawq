@@ -1311,6 +1311,19 @@ let held_items_cmd =
       `I ("reject ID [--by ADMIN] [--notes TEXT]", "Reject a pending item.");
     ]
 
+let debate_cmd =
+  with_args "debate"
+    "Route a prompt to multiple models and synthesize a consensus."
+    [
+      `S "SUBCOMMANDS";
+      `I ("--models m1,m2,m3", "Override default debate models.");
+      `I ("--judge model", "Override the judge model.");
+      `I ("--no-judge", "Skip synthesis, show raw responses.");
+      `I ("--format json|text", "Output format (default: text).");
+      `I ("--history", "List past debate rounds.");
+      `I ("--show ID", "Show a specific past debate round.");
+    ]
+
 let manifest_cmd =
   with_args "manifest" "Generate connector command manifests (Teams, Telegram)."
     [
@@ -1394,6 +1407,7 @@ let () =
       ec_run_cmd;
       manifest_cmd;
       held_items_cmd;
+      debate_cmd;
     ]
   in
   exit (Cmd.eval ~argv ~env:help_env (Cmd.group main_info cmds))

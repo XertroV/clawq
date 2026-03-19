@@ -610,6 +610,7 @@ let handle args =
   | "setup" :: _ -> unsupported "setup"
   | "watcher" :: _ -> unsupported "watcher"
   | "ec-run" :: _ -> unsupported "ec-run"
+  | "debate" :: _ -> unsupported "debate"
   | "manifest" :: rest -> cmd_manifest rest
   | "hardware" :: _ -> "hardware: deferred to Phase 2"
   | "benchmark" :: rest -> Benchmark.run rest

@@ -1236,6 +1236,17 @@ let handle_message ~(discord_config : Runtime_config.discord_config)
                   ~channel_id:msg.channel_id ~text)
               ();
             Lwt.return_unit
+        | Debate prompt -> (
+            match Session.get_db session_mgr with
+            | Some db ->
+                let config = Session.get_config session_mgr in
+                let* text = Debate.run_for_prompt ~config ~db ~prompt in
+                send_message_fn ~bot_token:discord_config.bot_token
+                  ~channel_id:msg.channel_id ~text
+            | None ->
+                send_message_fn ~bot_token:discord_config.bot_token
+                  ~channel_id:msg.channel_id ~text:"Debate requires a database."
+            )
         | DebugDumpChat ->
             let content = Session.dump_json session_mgr ~key in
             let max_len = 1800 in

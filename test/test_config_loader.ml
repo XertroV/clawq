@@ -821,6 +821,14 @@ let test_full_config_roundtrip () =
           check_every_n_messages = 10;
         };
       interactive = { Runtime_config.enable_question_notes = false };
+      debate =
+        {
+          enabled = false;
+          default_models =
+            [ "openai-codex:gpt-5.4"; "anthropic:claude-sonnet-4-6" ];
+          judge_model = "anthropic:claude-sonnet-4-6";
+          max_parallel = 3;
+        };
     }
   in
   let json = Runtime_config.to_json cfg in
@@ -877,7 +885,16 @@ let test_full_config_roundtrip () =
     cfg2.observer.check_every_n_messages;
   Alcotest.(check bool)
     "interactive.enable_question_notes" cfg.interactive.enable_question_notes
-    cfg2.interactive.enable_question_notes
+    cfg2.interactive.enable_question_notes;
+  Alcotest.(check bool) "debate.enabled" cfg.debate.enabled cfg2.debate.enabled;
+  Alcotest.(check int)
+    "debate.default_models count"
+    (List.length cfg.debate.default_models)
+    (List.length cfg2.debate.default_models);
+  Alcotest.(check string)
+    "debate.judge_model" cfg.debate.judge_model cfg2.debate.judge_model;
+  Alcotest.(check int)
+    "debate.max_parallel" cfg.debate.max_parallel cfg2.debate.max_parallel
 
 let suite =
   [

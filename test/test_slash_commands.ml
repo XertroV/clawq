@@ -145,6 +145,7 @@ let rec result_to_string = function
           "HeldItems(Reject " ^ string_of_int id ^ " "
           ^ Option.value ~default:"" reason
           ^ ")")
+  | Slash_commands.Debate prompt -> "Debate(" ^ prompt ^ ")"
   | Slash_commands.NotACommand -> "NotACommand"
 
 let rec result_eq a b =
@@ -202,6 +203,7 @@ let rec result_eq a b =
       a = b
   | Slash_commands.Rig a, Slash_commands.Rig b -> a = b
   | Slash_commands.HeldItems a, Slash_commands.HeldItems b -> a = b
+  | Slash_commands.Debate a, Slash_commands.Debate b -> a = b
   | Slash_commands.NotACommand, Slash_commands.NotACommand -> true
   | _ -> false
 
