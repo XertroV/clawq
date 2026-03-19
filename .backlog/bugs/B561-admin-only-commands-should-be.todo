@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B561
+priority: high
+status: pending
+tags: []
+title: admin only commands should be hidden from guest (nonadmin) users
+---
+
+admin only commands should be hidden from guest (nonadmin) users
