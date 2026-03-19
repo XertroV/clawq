@@ -1,10 +1,14 @@
 ---
+claimed_at: "2026-03-19T18:27:36Z"
+claimed_by: cli-user
+completed_at: null
 complexity: medium
 depends_on: []
 estimate_hours: 1
 id: B574
 priority: high
-status: pending
+started_at: "2026-03-19T18:27:36Z"
+status: in_progress
 tags: []
 title: With skills, if we dont already support `disable-model-invocation` in yaml frontmatter, we should
 ---
