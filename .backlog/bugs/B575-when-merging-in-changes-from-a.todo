@@ -1,10 +1,14 @@
 ---
+claimed_at: "2026-03-19T21:16:10Z"
+claimed_by: cli-user
+completed_at: null
 complexity: medium
 depends_on: []
 estimate_hours: 1
 id: B575
 priority: high
-status: pending
+started_at: "2026-03-19T21:16:10Z"
+status: in_progress
 tags: []
 title: when merging in changes from a background agent, we should rebase, not merge. We rebase against master first so the agent can fix conflicts, then rebase the branch into master to avoid merge commits.
 ---
