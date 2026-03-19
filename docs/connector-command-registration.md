@@ -4,7 +4,7 @@ Slash commands are defined centrally in `src/slash_commands.ml` with a `priority
 
 ## Command Priority
 
-Each command has a `priority : int` field. Higher values appear first in menus, manifests, and autocomplete. `Slash_commands.sorted_by_priority ()` returns commands in descending priority order.
+Each command has a `priority : int` field. Higher values appear first in menus, manifests, and autocomplete. `Slash_commands.sorted_by_priority ()` returns commands in descending priority order. An optional `~is_admin` parameter (default `true`) filters out admin-only commands when `false`, so guest users only see commands they can run.
 
 ## Connector Patterns
 

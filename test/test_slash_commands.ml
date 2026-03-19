@@ -1618,8 +1618,8 @@ let test_format_help_teams_skills_bulleted () =
     ]
   in
   let output =
-    Slash_commands.format_help_with ~connector:Format_adapter.Teams ~skills
-      ~agents:[]
+    Slash_commands.format_help_with ~connector:Format_adapter.Teams
+      ~commands:Slash_commands.commands ~skills ~agents:[]
   in
   Alcotest.(check bool)
     "deploy is bulleted" true
@@ -1636,8 +1636,8 @@ let test_format_help_teams_agents_bulleted () =
     ]
   in
   let output =
-    Slash_commands.format_help_with ~connector:Format_adapter.Teams ~skills:[]
-      ~agents
+    Slash_commands.format_help_with ~connector:Format_adapter.Teams
+      ~commands:Slash_commands.commands ~skills:[] ~agents
   in
   Alcotest.(check bool)
     "reviewer is bulleted" true
@@ -1659,8 +1659,8 @@ let test_format_help_plain_skills_no_bullets () =
     ]
   in
   let output =
-    Slash_commands.format_help_with ~connector:Format_adapter.Plain ~skills
-      ~agents:[]
+    Slash_commands.format_help_with ~connector:Format_adapter.Plain
+      ~commands:Slash_commands.commands ~skills ~agents:[]
   in
   Alcotest.(check bool)
     "no bullet prefix" true
@@ -2713,9 +2713,9 @@ let suite =
       test_is_admin_command_auto_detects;
     Alcotest.test_case "sorted by priority filters admin" `Quick
       test_sorted_by_priority_filters_admin;
-    Alcotest.test_case "format help hides admin commands for guest" `Quick
+    Alcotest.test_case "format help hides admin for guest" `Quick
       test_format_help_hides_admin_commands_for_guest;
-    Alcotest.test_case "format help shows admin commands for admin" `Quick
+    Alcotest.test_case "format help shows admin for admin" `Quick
       test_format_help_shows_admin_commands_for_admin;
     Alcotest.test_case "commands has menu" `Quick test_commands_has_menu;
     Alcotest.test_case "manifest teams json" `Quick test_manifest_teams_json;
