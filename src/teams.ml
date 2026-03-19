@@ -1635,7 +1635,7 @@ let handle_webhook ~(config : Runtime_config.teams_config)
                               in
                               send_text text
                           | _ ->
-                              let text =
+                              let* text =
                                 Slash_commands.format_bg
                                   ~connector:Format_adapter.Teams ~db action
                               in

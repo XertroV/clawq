@@ -80,6 +80,8 @@ let rec result_to_string = function
       "Bg(Cancel " ^ string_of_int id ^ ")"
   | Slash_commands.Bg (Slash_commands.BgRetry id) ->
       "Bg(Retry " ^ string_of_int id ^ ")"
+  | Slash_commands.Bg (Slash_commands.BgFinalize id) ->
+      "Bg(Finalize " ^ string_of_int id ^ ")"
   | Slash_commands.Bg (Slash_commands.BgCreate (agent_name, prompt)) ->
       let agent_str =
         match agent_name with Some n -> "@" ^ n ^ " " | None -> ""
@@ -613,6 +615,19 @@ let test_bg_retry () =
   Alcotest.check result_testable "/bg retry 1"
     (Slash_commands.Bg (Slash_commands.BgRetry 1))
     (Slash_commands.handle "/bg retry 1")
+
+let test_bg_finalize () =
+  Alcotest.check result_testable "/bg finalize 42"
+    (Slash_commands.Bg (Slash_commands.BgFinalize 42))
+    (Slash_commands.handle "/bg finalize 42")
+
+let test_bg_finalize_invalid_id () =
+  match extract_text (Slash_commands.handle "/bg finalize abc") with
+  | Some s ->
+      Alcotest.(check bool)
+        "mentions invalid" true
+        (String_util.contains s "Invalid task id")
+  | None -> Alcotest.fail "expected text reply for bg finalize invalid id"
 
 let test_bg_invalid_id () =
   match extract_text (Slash_commands.handle "/bg show abc") with
@@ -2675,6 +2690,9 @@ let suite =
     Alcotest.test_case "/bg cancel bare" `Quick test_bg_cancel_bare;
     Alcotest.test_case "/bg stop bare" `Quick test_bg_stop_bare;
     Alcotest.test_case "/bg retry <id>" `Quick test_bg_retry;
+    Alcotest.test_case "/bg finalize <id>" `Quick test_bg_finalize;
+    Alcotest.test_case "/bg finalize invalid id" `Quick
+      test_bg_finalize_invalid_id;
     Alcotest.test_case "/bg invalid id" `Quick test_bg_invalid_id;
     Alcotest.test_case "/bg unknown subcommand" `Quick
       test_bg_unknown_subcommand;

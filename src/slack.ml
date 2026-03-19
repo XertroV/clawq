@@ -797,12 +797,14 @@ let handle_event ~(config : Runtime_config.slack_config)
                 in
                 Lwt.return "ok"
             | Bg action ->
-                let text =
+                let* text =
                   match Session.get_db session_manager with
                   | Some db ->
                       Slash_commands.format_bg ~connector:Format_adapter.Slack
                         ~db action
-                  | None -> "Background tasks are not available (no database)."
+                  | None ->
+                      Lwt.return
+                        "Background tasks are not available (no database)."
                 in
                 let* () =
                   send_message_fn ~bot_token:config.bot_token ~channel_id ~text

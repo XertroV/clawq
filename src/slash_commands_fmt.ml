@@ -41,6 +41,7 @@ type bg_action =
   | BgCancel of int
   | BgRetry of int
   | BgCreate of string option * string
+  | BgFinalize of int
 
 type cron_action =
   | CronList
@@ -189,7 +190,7 @@ let commands =
     {
       name = "bg";
       description =
-        "Background tasks: /bg [list/show/logs/cancel/retry/create] \
+        "Background tasks: /bg [list/show/logs/cancel/retry/create/finalize] \
          [id/@agent/prompt]";
       priority = 57;
     };
@@ -568,6 +569,8 @@ let format_bg_menu ~connector =
     [
       ("/bg list", "List all background tasks");
       ("/bg create <prompt>", "Create a new background task");
+      ( "/bg finalize <id>",
+        "Finalize a worktree task (rebase + merge + cleanup)" );
     ]
   in
   let lines =
@@ -664,7 +667,9 @@ let format_bg_usage ~connector =
   ^ Format_adapter.code connector "/bg retry <id>"
   ^ "         - Retry a failed task\n  "
   ^ Format_adapter.code connector "/bg create [@agent] <prompt>"
-  ^ " - Create a new background task"
+  ^ " - Create a new background task\n  "
+  ^ Format_adapter.code connector "/bg finalize <id>"
+  ^ "       - Finalize a worktree task (rebase + merge + cleanup)"
 
 let format_bg_invalid_id ~connector id_str =
   "Invalid task id "

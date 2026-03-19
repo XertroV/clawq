@@ -278,6 +278,12 @@ let handle ?(skill_names = []) text =
                 | None ->
                     FormattedReply
                       (fun connector -> format_bg_invalid_id ~connector id_str))
+            | [ "finalize"; id_str ] -> (
+                match int_of_string_opt id_str with
+                | Some id -> Bg (BgFinalize id)
+                | None ->
+                    FormattedReply
+                      (fun connector -> format_bg_invalid_id ~connector id_str))
             | "create" :: rest | "start" :: rest | "new" :: rest -> (
                 match rest with
                 | first :: remaining

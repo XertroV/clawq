@@ -549,7 +549,7 @@ let format_bg ~connector ~db action =
   match action with
   | BgList ->
       let tasks, hidden = Background_task.list_tasks_for_display ~db in
-      if tasks = [] && hidden = 0 then "No background tasks."
+      if tasks = [] && hidden = 0 then Lwt.return "No background tasks."
       else
         let columns, rows = Background_task.task_list_table_data tasks in
         let footer =
@@ -562,72 +562,92 @@ let format_bg ~connector ~db action =
               (if hidden = 1 then "" else "s")
           else ""
         in
-        Format_adapter.bold connector "Background tasks:"
-        ^ "\n"
-        ^ Format_adapter.render_table connector ~max_width:80 columns rows
-        ^ footer
+        Lwt.return
+          (Format_adapter.bold connector "Background tasks:"
+          ^ "\n"
+          ^ Format_adapter.render_table connector ~max_width:80 columns rows
+          ^ footer)
   | BgShow id -> (
       match Background_task.get_task ~db ~id with
       | Some task ->
-          Format_adapter.code_block connector
-            (Background_task.format_task_summary ~full:true task)
-      | None -> Printf.sprintf "No background task found with id %d." id)
+          Lwt.return
+            (Format_adapter.code_block connector
+               (Background_task.format_task_summary ~full:true task))
+      | None ->
+          Lwt.return (Printf.sprintf "No background task found with id %d." id))
   | BgLogs id -> (
       match Background_task.get_task ~db ~id with
-      | None -> Printf.sprintf "No background task found with id %d." id
+      | None ->
+          Lwt.return (Printf.sprintf "No background task found with id %d." id)
       | Some task when task.acp && Acp_history.has_history ~db ~task_id:id ->
-          Acp_history.format_for_display_rich ~db ~task_id:id ~connector ()
+          Lwt.return
+            (Acp_history.format_for_display_rich ~db ~task_id:id ~connector ())
       | Some task -> (
           match task.log_path with
-          | None | Some "" -> Printf.sprintf "Task %d has no log file." id
-          | Some path -> (
+          | None | Some "" ->
+              Lwt.return (Printf.sprintf "Task %d has no log file." id)
+          | Some path ->
               if not (Sys.file_exists path) then
-                Printf.sprintf "Log file not found: %s" path
+                Lwt.return (Printf.sprintf "Log file not found: %s" path)
               else
-                try
-                  let ic = open_in path in
-                  Fun.protect
-                    ~finally:(fun () -> close_in_noerr ic)
-                    (fun () ->
-                      let len = in_channel_length ic in
-                      let max_bytes = 4000 in
-                      if len <= max_bytes then (
-                        let buf = Buffer.create len in
-                        (try
-                           while true do
-                             Buffer.add_char buf (input_char ic)
-                           done
-                         with End_of_file -> ());
-                        Printf.sprintf "Task %d logs (%s):\n%s" id path
-                          (Format_adapter.code_block connector
-                             (Buffer.contents buf)))
-                      else (
-                        seek_in ic (len - max_bytes);
-                        let buf = Buffer.create max_bytes in
-                        (try
-                           while true do
-                             Buffer.add_char buf (input_char ic)
-                           done
-                         with End_of_file -> ());
-                        Printf.sprintf
-                          "Task %d logs (last ~%d bytes of %s):\n...%s" id
-                          max_bytes path
-                          (Format_adapter.code_block connector
-                             (Buffer.contents buf))))
-                with exn ->
-                  Printf.sprintf "Error reading log for task %d: %s" id
-                    (Printexc.to_string exn))))
-  | BgCancel id -> (
-      match Background_task.cancel ~db ~id with
-      | Ok msg -> msg
-      | Error msg -> msg)
-  | BgRetry id -> (
-      match Background_task.retry ~db ~id with
-      | Ok msg -> msg
-      | Error msg -> msg)
+                Lwt.return
+                  (try
+                     let ic = open_in path in
+                     Fun.protect
+                       ~finally:(fun () -> close_in_noerr ic)
+                       (fun () ->
+                         let len = in_channel_length ic in
+                         let max_bytes = 4000 in
+                         if len <= max_bytes then (
+                           let buf = Buffer.create len in
+                           (try
+                              while true do
+                                Buffer.add_char buf (input_char ic)
+                              done
+                            with End_of_file -> ());
+                           Printf.sprintf "Task %d logs (%s):\n%s" id path
+                             (Format_adapter.code_block connector
+                                (Buffer.contents buf)))
+                         else (
+                           seek_in ic (len - max_bytes);
+                           let buf = Buffer.create max_bytes in
+                           (try
+                              while true do
+                                Buffer.add_char buf (input_char ic)
+                              done
+                            with End_of_file -> ());
+                           Printf.sprintf
+                             "Task %d logs (last ~%d bytes of %s):\n...%s" id
+                             max_bytes path
+                             (Format_adapter.code_block connector
+                                (Buffer.contents buf))))
+                   with exn ->
+                     Printf.sprintf "Error reading log for task %d: %s" id
+                       (Printexc.to_string exn))))
+  | BgCancel id ->
+      Lwt.return
+        (match Background_task.cancel ~db ~id with
+        | Ok msg -> msg
+        | Error msg -> msg)
+  | BgRetry id ->
+      Lwt.return
+        (match Background_task.retry ~db ~id with
+        | Ok msg -> msg
+        | Error msg -> msg)
+  | BgFinalize id -> (
+      match Background_task.get_task ~db ~id with
+      | None ->
+          Lwt.return (Printf.sprintf "No background task found with id %d." id)
+      | Some task when task.worktree_path = None ->
+          Lwt.return
+            (Printf.sprintf "Task %d has no worktree — nothing to finalize." id)
+      | Some task ->
+          let open Lwt.Syntax in
+          let* result = Worktree_merge.finalize_task ~db task in
+          Lwt.return (Worktree_merge.format_result result))
   | BgCreate (agent_name, prompt) -> (
       match Background_task.resolve_runner () with
-      | Error msg -> Printf.sprintf "Cannot create task: %s" msg
+      | Error msg -> Lwt.return (Printf.sprintf "Cannot create task: %s" msg)
       | Ok (runner, default_model) -> (
           let repo_path = Sys.getcwd () in
           let result =
@@ -641,10 +661,12 @@ let format_bg ~connector ~db action =
                 | Some name -> Printf.sprintf " [agent: %s]" name
                 | None -> ""
               in
-              Printf.sprintf "Background task #%d created (runner: %s)%s." id
-                (Background_task.string_of_runner runner)
-                agent_suffix
-          | Error msg -> Printf.sprintf "Failed to create task: %s" msg))
+              Lwt.return
+                (Printf.sprintf "Background task #%d created (runner: %s)%s." id
+                   (Background_task.string_of_runner runner)
+                   agent_suffix)
+          | Error msg ->
+              Lwt.return (Printf.sprintf "Failed to create task: %s" msg)))
 
 (* ── Status formatting ────────────────────────────────────────────────── *)
 
