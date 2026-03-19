@@ -956,14 +956,11 @@ let resume_pending_agent_sessions ?(senders = default_resume_senders)
                 !summary with
                 missing_channel_count = !summary.missing_channel_count + 1;
               };
-            Logs.warn (fun m ->
+            Logs.info (fun m ->
                 m
-                  "Cannot resume session %s: missing channel routing info \
-                   (channel=%s channel_id=%s); session may predate channel \
-                   tracking"
-                  session_key
-                  (Option.value ~default:"<none>" channel_opt)
-                  (Option.value ~default:"<none>" channel_id_opt));
+                  "Marking session %s as responded: no channel routing info \
+                   (expected for cron/CLI sessions)"
+                  session_key);
             Session.mark_response_sent session_manager ~key:session_key;
             Lwt.return_unit)
       pending

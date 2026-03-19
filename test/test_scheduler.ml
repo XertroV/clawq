@@ -528,6 +528,74 @@ let test_update_job_ttl () =
   | Some j ->
       Alcotest.(check bool) "no ttl after clear" true (j.expires_at = None)
 
+let query_single_text_option db sql =
+  let stmt = Sqlite3.prepare db sql in
+  Fun.protect
+    ~finally:(fun () -> ignore (Sqlite3.finalize stmt))
+    (fun () ->
+      match Sqlite3.step stmt with
+      | Sqlite3.Rc.ROW -> (
+          match Sqlite3.column stmt 0 with
+          | Sqlite3.Data.TEXT s -> Some s
+          | _ -> None)
+      | _ -> None)
+
+let test_tick_marks_response_sent_after_turn () =
+  Lwt_main.run
+    (let open Lwt.Syntax in
+     let db = Memory.init ~db_path:":memory:" () in
+     Scheduler.init_schema db;
+     ignore
+       (Scheduler.add_job ~db ~name:"briefing" ~session_key:"cron:briefing"
+          ~message:"daily briefing" ~schedule:"every 1s" ());
+     (* Create a channelless session row with turn='idle' *)
+     let sql =
+       "INSERT INTO session_state (session_key, turn) VALUES ('cron:briefing', \
+        'idle')"
+     in
+     ignore (Sqlite3.exec db sql);
+     (* Use a config with a provider that fails immediately (connection refused)
+        and minimal resilience settings so the turn errors out fast. *)
+     let config =
+       {
+         Runtime_config.default with
+         providers =
+           [
+             ( "openai-codex",
+               {
+                 Runtime_config.default_provider_config with
+                 api_key = "test-key";
+                 base_url = Some "http://127.0.0.1:1";
+               } );
+           ];
+         resilience =
+           {
+             Runtime_config.default.resilience with
+             timeout_s = 1.0;
+             max_retries = 0;
+           };
+       }
+     in
+     let session_mgr = Session.create ~config ~db () in
+     let* () = Scheduler.tick ~db ~session_mgr () in
+     (* tick uses Lwt.async; give it a chance to run (turn will fail — provider
+        connection refused — hitting the error handler which calls
+        mark_response_sent) *)
+     let* () = Lwt_unix.sleep 2.0 in
+     (* Verify turn is reset to 'user', not stuck at 'agent' *)
+     Alcotest.(check (option string))
+       "turn reset to user" (Some "user")
+       (query_single_text_option db
+          "SELECT turn FROM session_state WHERE session_key = 'cron:briefing'");
+     (* Verify response_sent_at is set *)
+     Alcotest.(check bool)
+       "response_sent_at set" true
+       (query_single_text_option db
+          "SELECT response_sent_at FROM session_state WHERE session_key = \
+           'cron:briefing'"
+       <> None);
+     Lwt.return_unit)
+
 let suite =
   [
     Alcotest.test_case "parse interval minutes" `Quick
@@ -583,4 +651,6 @@ let suite =
     Alcotest.test_case "list jobs includes expires_at" `Quick
       test_list_jobs_includes_expires_at;
     Alcotest.test_case "update job TTL" `Quick test_update_job_ttl;
+    Alcotest.test_case "tick marks response_sent after turn" `Quick
+      test_tick_marks_response_sent_after_turn;
   ]
