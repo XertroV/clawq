@@ -88,14 +88,23 @@ clawq background message 42 "Also update the test suite"
 
 `background message` appends the message to the runner's prompt and resumes, letting you steer an in-progress task without losing context.
 
+## Completion Pass
+
+When any worktree-backed task finishes (Succeeded or DirtyWorktree), the system sends a **completion pass** message to the agent before finalizing:
+
+1. The agent is resumed with its existing session context and a verification message
+2. The agent commits any remaining changes, rebases against `master`, runs checks, and outputs the sentinel `OK_TASK_DONE_CHECKED_REBASED_COMMITED`
+3. The system detects the sentinel and proceeds to finalization
+
+This ensures every worktree task goes through a verification step, regardless of whether automerge is enabled.
+
 ## Automerge
 
-When a task is queued with `--automerge` (or via `delegate` with automerge enabled in config), clawq automatically attempts to merge the worktree branch into the repo's main branch on task completion:
+When a task is queued with `--automerge` (or via `delegate` with automerge enabled in config), clawq automatically attempts to merge the worktree branch into the repo's main branch after the completion pass succeeds:
 
-1. The worktree is checked for uncommitted changes (dirty check)
-2. The branch is rebased onto the current HEAD of the target branch
-3. If rebase succeeds, the branch is merged and the worktree is removed
-4. If conflicts are detected, the task is marked `dirty_worktree` and the worktree is left intact
+1. The branch is rebased onto the current HEAD of the target branch
+2. If rebase succeeds, the branch is merged and the worktree is removed
+3. If conflicts are detected, the task is marked with a merge conflict status
 
 To manually finalize after automerge failure or when automerge was not enabled:
 

@@ -482,6 +482,182 @@ let test_format_result () =
     "dirty worktree mentions branch" true
     (contains_substring ~needle:"b3" s)
 
+let test_completion_pass_requeues_dirty_task () =
+  with_temp_git_repo (fun repo_path ->
+      let db = Memory.init ~db_path:":memory:" () in
+      Background_task.init_schema db;
+      let branch = "test-cp-dirty" in
+      let worktree_path = repo_path ^ "-wt" in
+      git_cmd repo_path
+        (Printf.sprintf "worktree add -b %s %s" branch
+           (Filename.quote worktree_path));
+      match
+        Background_task.enqueue ~db ~runner:Background_task.Codex
+          ~use_worktree:true ~automerge:true ~repo_path ~prompt:"test" ~branch
+          ()
+      with
+      | Error msg -> Alcotest.fail msg
+      | Ok id ->
+          ignore
+            (Background_task.set_running ~db ~id ~branch ~worktree_path
+               ~log_path:"/dev/null" ~pid:1);
+          Background_task.finish ~db ~id ~status:Background_task.DirtyWorktree
+            ~result_preview:"dirty";
+          Background_task.request_completion_pass ~db ~id;
+          let task =
+            match Background_task.get_task ~db ~id with
+            | Some t -> t
+            | None -> Alcotest.failf "task not found"
+          in
+          Alcotest.(check string)
+            "status is queued" "queued"
+            (Background_task.string_of_status task.status);
+          Alcotest.(check (option string))
+            "merge_status" (Some "completion_pass") task.merge_status;
+          let msgs = Background_task.list_queued_messages ~db ~task_id:id in
+          Alcotest.(check bool) "has queued message" true (List.length msgs > 0);
+          git_cmd repo_path
+            (Printf.sprintf "worktree remove --force %s"
+               (Filename.quote worktree_path)))
+
+let test_completion_pass_requeues_clean_task () =
+  with_temp_git_repo (fun repo_path ->
+      let db = Memory.init ~db_path:":memory:" () in
+      Background_task.init_schema db;
+      let branch = "test-cp-clean" in
+      let worktree_path = repo_path ^ "-wt" in
+      git_cmd repo_path
+        (Printf.sprintf "worktree add -b %s %s" branch
+           (Filename.quote worktree_path));
+      match
+        Background_task.enqueue ~db ~runner:Background_task.Codex
+          ~use_worktree:true ~automerge:true ~repo_path ~prompt:"test" ~branch
+          ()
+      with
+      | Error msg -> Alcotest.fail msg
+      | Ok id ->
+          ignore
+            (Background_task.set_running ~db ~id ~branch ~worktree_path
+               ~log_path:"/dev/null" ~pid:1);
+          Background_task.finish ~db ~id ~status:Background_task.Succeeded
+            ~result_preview:"ok";
+          Background_task.request_completion_pass ~db ~id;
+          let task =
+            match Background_task.get_task ~db ~id with
+            | Some t -> t
+            | None -> Alcotest.failf "task not found"
+          in
+          Alcotest.(check string)
+            "status is queued" "queued"
+            (Background_task.string_of_status task.status);
+          Alcotest.(check (option string))
+            "merge_status" (Some "completion_pass") task.merge_status;
+          git_cmd repo_path
+            (Printf.sprintf "worktree remove --force %s"
+               (Filename.quote worktree_path)))
+
+let test_completion_pass_non_automerge () =
+  with_temp_git_repo (fun repo_path ->
+      let db = Memory.init ~db_path:":memory:" () in
+      Background_task.init_schema db;
+      let branch = "test-cp-noam" in
+      let worktree_path = repo_path ^ "-wt" in
+      git_cmd repo_path
+        (Printf.sprintf "worktree add -b %s %s" branch
+           (Filename.quote worktree_path));
+      match
+        Background_task.enqueue ~db ~runner:Background_task.Codex
+          ~use_worktree:true ~automerge:false ~repo_path ~prompt:"test" ~branch
+          ()
+      with
+      | Error msg -> Alcotest.fail msg
+      | Ok id ->
+          ignore
+            (Background_task.set_running ~db ~id ~branch ~worktree_path
+               ~log_path:"/dev/null" ~pid:1);
+          Background_task.finish ~db ~id ~status:Background_task.Succeeded
+            ~result_preview:"ok";
+          Background_task.request_completion_pass ~db ~id;
+          let task =
+            match Background_task.get_task ~db ~id with
+            | Some t -> t
+            | None -> Alcotest.failf "task not found"
+          in
+          Alcotest.(check (option string))
+            "merge_status" (Some "completion_pass") task.merge_status;
+          git_cmd repo_path
+            (Printf.sprintf "worktree remove --force %s"
+               (Filename.quote worktree_path)))
+
+let test_completion_pass_skips_second_time () =
+  let task =
+    {
+      (fake_task ~id:42 ~automerge:true ~use_worktree:true
+         ~merge_status:(Some "completion_pass") ~repo_path:"/tmp/repo"
+         ~branch:"b1" ~worktree_path:"/tmp/wt" ())
+      with
+      status = Background_task.Succeeded;
+    }
+  in
+  Alcotest.(check (option string))
+    "merge_status is completion_pass" (Some "completion_pass") task.merge_status;
+  Alcotest.(check bool) "automerge is true" true task.automerge;
+  Alcotest.(check bool)
+    "status is Succeeded" true
+    (task.status = Background_task.Succeeded)
+
+let test_completion_pass_second_time_no_automerge () =
+  let task =
+    {
+      (fake_task ~id:43 ~automerge:false ~use_worktree:true
+         ~merge_status:(Some "completion_pass") ~repo_path:"/tmp/repo"
+         ~branch:"b1" ~worktree_path:"/tmp/wt" ())
+      with
+      status = Background_task.Succeeded;
+    }
+  in
+  Alcotest.(check (option string))
+    "merge_status is completion_pass" (Some "completion_pass") task.merge_status;
+  Alcotest.(check bool) "automerge is false" false task.automerge
+
+let test_completion_pass_dirty_second_time () =
+  let task =
+    {
+      (fake_task ~id:44 ~automerge:true ~use_worktree:true
+         ~merge_status:(Some "completion_pass") ~repo_path:"/tmp/repo"
+         ~branch:"b1" ~worktree_path:"/tmp/wt" ())
+      with
+      status = Background_task.DirtyWorktree;
+    }
+  in
+  Alcotest.(check (option string))
+    "merge_status is completion_pass" (Some "completion_pass") task.merge_status;
+  Alcotest.(check bool)
+    "status is DirtyWorktree" true
+    (task.status = Background_task.DirtyWorktree);
+  Alcotest.(check bool)
+    "automerge would not trigger (not Succeeded)" false
+    (task.automerge && task.status = Background_task.Succeeded)
+
+let test_completion_pass_message_content () =
+  let msg = Background_task.completion_pass_message () in
+  Alcotest.(check bool)
+    "contains sentinel" true
+    (contains_substring ~needle:Background_task.completion_sentinel msg);
+  Alcotest.(check bool)
+    "contains git rebase master" true
+    (contains_substring ~needle:"git rebase master" msg);
+  Alcotest.(check bool)
+    "contains git add" true
+    (contains_substring ~needle:"git add" msg)
+
+let test_completion_pass_skips_no_worktree () =
+  let task =
+    fake_task ~id:45 ~automerge:true ~use_worktree:false ~repo_path:"/tmp/repo"
+      ~branch:"b1" ~worktree_path:"/tmp/wt" ()
+  in
+  Alcotest.(check bool) "use_worktree is false" false task.use_worktree
+
 let suite =
   [
     Alcotest.test_case "schema migration" `Quick test_schema_migration;
@@ -510,4 +686,20 @@ let suite =
     Alcotest.test_case "unstaged changes block merge" `Quick
       test_dirty_worktree_unstaged_blocks_merge;
     Alcotest.test_case "format_result" `Quick test_format_result;
+    Alcotest.test_case "completion pass requeues dirty task" `Quick
+      test_completion_pass_requeues_dirty_task;
+    Alcotest.test_case "completion pass requeues clean task" `Quick
+      test_completion_pass_requeues_clean_task;
+    Alcotest.test_case "completion pass non-automerge" `Quick
+      test_completion_pass_non_automerge;
+    Alcotest.test_case "completion pass skips second time" `Quick
+      test_completion_pass_skips_second_time;
+    Alcotest.test_case "completion pass second time no automerge" `Quick
+      test_completion_pass_second_time_no_automerge;
+    Alcotest.test_case "completion pass dirty second time" `Quick
+      test_completion_pass_dirty_second_time;
+    Alcotest.test_case "completion pass message content" `Quick
+      test_completion_pass_message_content;
+    Alcotest.test_case "completion pass skips no worktree" `Quick
+      test_completion_pass_skips_no_worktree;
   ]

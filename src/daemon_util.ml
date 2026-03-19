@@ -591,107 +591,125 @@ let notify_background_task_finished ?continuation_delay
     ?(senders = default_resume_senders) ~(session_manager : Session.t) ~config
     ?db task =
   let open Lwt.Syntax in
-  let* task =
+  let* task, skip_notification =
     match db with
     | Some db
-      when task.Background_task.automerge && task.Background_task.use_worktree
-           && task.Background_task.status = Background_task.Succeeded ->
-        let* merge_result = Worktree_merge.try_automerge ~db task in
-        let updated_task =
-          match merge_result with
-          | Worktree_merge.Merged _ ->
-              { task with merge_status = Some "merged" }
-          | Worktree_merge.Conflict _ ->
-              { task with merge_status = Some "conflict" }
-          | Worktree_merge.Error _ -> { task with merge_status = Some "error" }
-          | Worktree_merge.No_worktree ->
-              { task with merge_status = Some "error" }
-          | Worktree_merge.Already_merged ->
-              { task with merge_status = Some "merged" }
-          | Worktree_merge.Dirty_worktree _ ->
-              { task with merge_status = Some "dirty" }
-        in
-        Logs.info (fun m ->
-            m "Automerge result for task %d: %s" task.id
-              (Worktree_merge.format_result merge_result));
-        Lwt.return updated_task
-    | _ -> Lwt.return task
-  in
-  let* summary = summarize_for_notification ~config task in
-  let git_info = Background_task.gather_git_status task in
-  let channel_text =
-    Background_task.channel_notification_message ?summary ?git_info task
-  in
-  let open Lwt.Syntax in
-  let* () =
-    match task.Background_task.session_key with
-    | Some key -> (
-        match Session.find_registered_notifier session_manager ~key with
-        | Some notify ->
-            Lwt.catch
-              (fun () ->
-                let* () = notify channel_text in
-                record_notification ~db ~task_id:task.Background_task.id
-                  ~status:"delivered" ();
-                Lwt.return_unit)
-              (fun exn ->
-                Logs.warn (fun m ->
-                    m "Background task notifier failed: %s"
-                      (Printexc.to_string exn));
-                record_notification ~db ~task_id:task.Background_task.id
-                  ~status:"failed" ~error:(Printexc.to_string exn) ();
-                Lwt.return_unit)
-        | None -> (
-            match (task.channel, task.channel_id) with
-            | Some channel, Some channel_id -> (
-                let* result =
-                  dispatch_resumed_message ~senders ~config ~channel ~channel_id
-                    ~text:channel_text ()
-                in
-                match result with
-                | Ok () ->
-                    record_notification ~db ~task_id:task.Background_task.id
-                      ~status:"delivered" ();
-                    Lwt.return_unit
-                | Error err ->
-                    Logs.warn (fun m ->
-                        m "Background task completion dispatch failed: %s" err);
-                    record_notification ~db ~task_id:task.Background_task.id
-                      ~status:"failed" ~error:err ();
-                    Lwt.return_unit)
-            | _ ->
-                record_notification ~db ~task_id:task.Background_task.id
-                  ~status:"skipped" ();
-                Lwt.return_unit))
-    | None -> (
-        match (task.channel, task.channel_id) with
-        | Some channel, Some channel_id -> (
-            let* result =
-              dispatch_resumed_message ~config ~channel ~channel_id
-                ~text:channel_text ()
-            in
-            match result with
-            | Ok () ->
-                record_notification ~db ~task_id:task.Background_task.id
-                  ~status:"delivered" ();
-                Lwt.return_unit
-            | Error err ->
-                Logs.warn (fun m ->
-                    m "Background task completion dispatch failed: %s" err);
-                record_notification ~db ~task_id:task.Background_task.id
-                  ~status:"failed" ~error:err ();
-                Lwt.return_unit)
+      when task.Background_task.use_worktree
+           && (task.Background_task.status = Background_task.Succeeded
+              || task.Background_task.status = Background_task.DirtyWorktree)
+           && Background_task.resume_supported task -> (
+        match task.Background_task.merge_status with
+        | Some "completion_pass" ->
+            (* Second pass complete. Automerge if applicable and clean. *)
+            if
+              task.Background_task.automerge
+              && task.Background_task.status = Background_task.Succeeded
+            then (
+              let* merge_result = Worktree_merge.try_automerge ~db task in
+              let updated_task =
+                match merge_result with
+                | Worktree_merge.Merged _ ->
+                    { task with merge_status = Some "merged" }
+                | Worktree_merge.Conflict _ ->
+                    { task with merge_status = Some "conflict" }
+                | Worktree_merge.Error _ ->
+                    { task with merge_status = Some "error" }
+                | Worktree_merge.No_worktree ->
+                    { task with merge_status = Some "error" }
+                | Worktree_merge.Already_merged ->
+                    { task with merge_status = Some "merged" }
+                | Worktree_merge.Dirty_worktree _ ->
+                    { task with merge_status = Some "dirty" }
+              in
+              Logs.info (fun m ->
+                  m "Automerge result for task %d: %s" task.id
+                    (Worktree_merge.format_result merge_result));
+              Lwt.return (updated_task, false))
+            else Lwt.return (task, false)
         | _ ->
-            record_notification ~db ~task_id:task.Background_task.id
-              ~status:"skipped" ();
-            Lwt.return_unit)
+            (* First pass: send completion message, requeue *)
+            Background_task.request_completion_pass ~db ~id:task.id;
+            Logs.info (fun m -> m "Queued completion pass for task %d" task.id);
+            Lwt.return (task, true))
+    | _ -> Lwt.return (task, false)
   in
-  match task.Background_task.session_key with
-  | Some session_key ->
-      inject_background_task_completion ?continuation_delay ~senders
-        ~session_manager ~config ~session_key ?channel:task.channel
-        ?channel_id:task.channel_id task
-  | None -> Lwt.return_unit
+  if skip_notification then Lwt.return_unit
+  else
+    let* summary = summarize_for_notification ~config task in
+    let git_info = Background_task.gather_git_status task in
+    let channel_text =
+      Background_task.channel_notification_message ?summary ?git_info task
+    in
+    let open Lwt.Syntax in
+    let* () =
+      match task.Background_task.session_key with
+      | Some key -> (
+          match Session.find_registered_notifier session_manager ~key with
+          | Some notify ->
+              Lwt.catch
+                (fun () ->
+                  let* () = notify channel_text in
+                  record_notification ~db ~task_id:task.Background_task.id
+                    ~status:"delivered" ();
+                  Lwt.return_unit)
+                (fun exn ->
+                  Logs.warn (fun m ->
+                      m "Background task notifier failed: %s"
+                        (Printexc.to_string exn));
+                  record_notification ~db ~task_id:task.Background_task.id
+                    ~status:"failed" ~error:(Printexc.to_string exn) ();
+                  Lwt.return_unit)
+          | None -> (
+              match (task.channel, task.channel_id) with
+              | Some channel, Some channel_id -> (
+                  let* result =
+                    dispatch_resumed_message ~senders ~config ~channel
+                      ~channel_id ~text:channel_text ()
+                  in
+                  match result with
+                  | Ok () ->
+                      record_notification ~db ~task_id:task.Background_task.id
+                        ~status:"delivered" ();
+                      Lwt.return_unit
+                  | Error err ->
+                      Logs.warn (fun m ->
+                          m "Background task completion dispatch failed: %s" err);
+                      record_notification ~db ~task_id:task.Background_task.id
+                        ~status:"failed" ~error:err ();
+                      Lwt.return_unit)
+              | _ ->
+                  record_notification ~db ~task_id:task.Background_task.id
+                    ~status:"skipped" ();
+                  Lwt.return_unit))
+      | None -> (
+          match (task.channel, task.channel_id) with
+          | Some channel, Some channel_id -> (
+              let* result =
+                dispatch_resumed_message ~config ~channel ~channel_id
+                  ~text:channel_text ()
+              in
+              match result with
+              | Ok () ->
+                  record_notification ~db ~task_id:task.Background_task.id
+                    ~status:"delivered" ();
+                  Lwt.return_unit
+              | Error err ->
+                  Logs.warn (fun m ->
+                      m "Background task completion dispatch failed: %s" err);
+                  record_notification ~db ~task_id:task.Background_task.id
+                    ~status:"failed" ~error:err ();
+                  Lwt.return_unit)
+          | _ ->
+              record_notification ~db ~task_id:task.Background_task.id
+                ~status:"skipped" ();
+              Lwt.return_unit)
+    in
+    match task.Background_task.session_key with
+    | Some session_key ->
+        inject_background_task_completion ?continuation_delay ~senders
+          ~session_manager ~config ~session_key ?channel:task.channel
+          ?channel_id:task.channel_id task
+    | None -> Lwt.return_unit
 
 let notify_background_task_started ~(session_manager : Session.t)
     ~config:(_config : Runtime_config.t) task =

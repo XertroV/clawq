@@ -1397,6 +1397,32 @@ let set_merge_status ~db ~id ~merge_status =
       ignore (Sqlite3.bind stmt 2 (Sqlite3.Data.INT (Int64.of_int id)));
       ignore (Sqlite3.step stmt))
 
+let completion_sentinel = "OK_TASK_DONE_CHECKED_REBASED_COMMITED"
+
+let completion_pass_message () =
+  String.concat "\n"
+    [
+      "COMPLETION VERIFICATION — Your background task has finished its primary \
+       work.";
+      "Before this task can be finalized, complete these steps:";
+      "";
+      "1. Stage and commit ALL remaining changes (if any):";
+      "   git add -A && git commit -m \"<appropriate commit msg here>\"";
+      "2. Rebase your branch against the master branch (not origin/master):";
+      "   git rebase master";
+      "3. Run any relevant tests/checks to verify your work, fix any issues";
+      "4. Verify the worktree is completely clean: git status";
+      "5. When ALL steps are done, output exactly as the only thing on the \
+       last line:";
+      "   " ^ completion_sentinel;
+    ]
+
+let request_completion_pass ~db ~id =
+  let message = completion_pass_message () in
+  ignore (queue_message ~db ~task_id:id ~message);
+  requeue_for_resume ~db ~id ~result_preview:"completion pass queued";
+  set_merge_status ~db ~id ~merge_status:"completion_pass"
+
 let mark_cancelled ~db ~id ~result_preview =
   let sql =
     "UPDATE background_tasks SET status = 'cancelled', result_preview = ?, pid \
@@ -1557,10 +1583,10 @@ let build_recovery_prompt ~original_id evidence =
       "";
       "Execution contract:";
       commit_line;
-      "- Before reporting completion, rebase your branch against the parent \
-       branch (e.g., `git fetch origin && git rebase origin/main`) to ensure \
-       your changes are up to date. If the rebase has conflicts, resolve \
-       straightforward ones and continue.";
+      "- Before reporting completion, rebase your branch against the master \
+       branch (e.g., `git rebase master`) to ensure your changes are up to \
+       date. If the rebase has conflicts, resolve straightforward ones and \
+       continue.";
       "- Work only inside this directory/worktree.";
       "- Do not inspect or modify the original source repo path directly; use \
        only the files available in the current worktree.";
@@ -1716,10 +1742,10 @@ let build_delegate_prompt ~automerge:_ ~goal =
       "";
       "Execution contract:";
       commit_line;
-      "- Before reporting completion, rebase your branch against the parent \
-       branch (e.g., `git fetch origin && git rebase origin/main`) to ensure \
-       your changes are up to date. If the rebase has conflicts, resolve \
-       straightforward ones and continue.";
+      "- Before reporting completion, rebase your branch against the master \
+       branch (e.g., `git rebase master`) to ensure your changes are up to \
+       date. If the rebase has conflicts, resolve straightforward ones and \
+       continue.";
       "- Work only inside this directory/worktree.";
       "- Do not inspect or modify the original source repo path directly; use \
        only the files available in the current worktree.";

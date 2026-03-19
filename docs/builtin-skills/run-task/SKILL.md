@@ -148,10 +148,10 @@ Verify the worker is making progress; don't assume success from a clean launch.
 
 ## Step 7: Close out
 
+- When a worktree-backed task finishes, the system automatically sends a **completion pass** message to the agent. The agent resumes with its session context, commits remaining changes, rebases against master, runs checks, and outputs the sentinel `OK_TASK_DONE_CHECKED_REBASED_COMMITED`.
+- For automerge tasks, the system then attempts a fast-forward merge. For non-automerge tasks, the user is notified normally.
 - Inspect changes and verify tests/review status.
-- Ensure the worktree is clean with all changes committed before any merge.
-- Prefer the coder agent to run `bl done TARGET` itself (the prompt instructs this).
-- Use `background_finalize(id=...)` only when merge is desired, safe, and the worktree is clean.
+- Use `background_finalize(id=...)` only when manual merge is desired after the completion pass.
 - If review reveals follow-up issues, defer done state until after review/fix is clean.
 
 ## Constraints
