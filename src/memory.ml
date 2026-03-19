@@ -1682,6 +1682,15 @@ let get_session_model_override ~db ~session_key =
   ignore (Sqlite3.finalize stmt);
   result
 
+let clear_session_model_override ~db ~session_key =
+  let sql =
+    "UPDATE session_state SET model_override = NULL WHERE session_key = ?"
+  in
+  let stmt = Sqlite3.prepare db sql in
+  ignore (Sqlite3.bind stmt 1 (Sqlite3.Data.TEXT session_key));
+  ignore (Sqlite3.step stmt);
+  ignore (Sqlite3.finalize stmt)
+
 let set_session_cwd ~db ~session_key ~cwd =
   let sql =
     "INSERT INTO session_state (session_key, effective_cwd) VALUES (?, ?) ON \

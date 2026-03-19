@@ -674,6 +674,40 @@ let cmd_session args =
           | Error err -> err)
       | _ -> "Usage: clawq session heartbeat SESSION [on|off|status]")
   | [ "heartbeat" ] -> "Usage: clawq session heartbeat SESSION [on|off|status]"
+  | "model" :: session_key :: rest -> (
+      match rest with
+      | [] | [ "get" ] | [ "status" ] -> (
+          let model = Memory.get_session_model_override ~db ~session_key in
+          match model with
+          | Some m ->
+              Printf.sprintf "Session %s: model override = %s" session_key m
+          | None ->
+              Printf.sprintf
+                "Session %s: no model override (using global default: %s)"
+                session_key config.agent_defaults.primary_model)
+      | [ "set"; model ] ->
+          let provider, model_id, fmt = Models_catalog.split_name model in
+          let canonical, hint =
+            match fmt with
+            | Models_catalog.Legacy ->
+                let c = provider ^ ":" ^ model_id in
+                ( c,
+                  Printf.sprintf
+                    "\nNote: normalized to canonical format \"%s\"." c )
+            | Models_catalog.Canonical -> (model, "")
+            | Models_catalog.Plain -> (model, "")
+          in
+          Memory.set_session_model_override ~db ~session_key ~model:canonical;
+          Printf.sprintf "Model override set for session %s: %s%s" session_key
+            canonical hint
+      | [ "clear" ] ->
+          Memory.clear_session_model_override ~db ~session_key;
+          Printf.sprintf
+            "Model override cleared for session %s (will use global default: \
+             %s)"
+            session_key config.agent_defaults.primary_model
+      | _ -> "Usage: clawq session model SESSION [get|set MODEL|clear]")
+  | [ "model" ] -> "Usage: clawq session model SESSION [get|set MODEL|clear]"
   | "postmortems" :: rest ->
       let session_key, limit =
         let rec parse_args args sk lim =
@@ -733,6 +767,7 @@ let cmd_session args =
       \  session compact SESSION\n\
       \  session keepalive SESSION [on|off|status]\n\
       \  session heartbeat SESSION [on|off|status]\n\
+      \  session model SESSION [get|set MODEL|clear]\n\
       \  session postmortems [SESSION] [--limit N]"
 
 type background_add_args = {

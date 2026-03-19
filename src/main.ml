@@ -352,6 +352,21 @@ let session_compact_cmd =
           context space.")
     Term.(ret (const (fun sk -> run "session" [ "compact"; sk ]) $ session_key))
 
+let session_model_cmd =
+  let session_key =
+    Arg.(required & pos 0 (some string) None & info [] ~docv:"SESSION")
+  in
+  let args = Arg.(value & pos_right 0 string [] & info [] ~docv:"ARGS") in
+  Cmd.v
+    (Cmd.info "model"
+       ~doc:
+         "Get, set, or clear the per-session model override (e.g. model \
+          SESSION set anthropic:claude-sonnet-4-6).")
+    Term.(
+      ret
+        (const (fun sk rest -> run "session" ([ "model"; sk ] @ rest))
+        $ session_key $ args))
+
 let session_cmd =
   Cmd.group
     ~default:Term.(ret (const (run "session") $ const []))
@@ -365,6 +380,7 @@ let session_cmd =
       session_events_cmd;
       session_pending_cmd;
       session_compact_cmd;
+      session_model_cmd;
     ]
 
 let workspace_cmd = simple "workspace" "Print the current workspace directory."

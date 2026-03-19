@@ -1267,6 +1267,22 @@ let get_session_effective_model mgr ~key =
           | None -> mgr.config.agent_defaults.primary_model)
       | None -> mgr.config.agent_defaults.primary_model)
 
+let clear_session_model mgr ~key =
+  (match Hashtbl.find_opt mgr.sessions key with
+  | Some (agent, _, _) ->
+      let cfg = agent.Agent.config in
+      let agent_defaults =
+        {
+          cfg.agent_defaults with
+          primary_model = mgr.config.agent_defaults.primary_model;
+        }
+      in
+      agent.Agent.config <- { cfg with agent_defaults }
+  | None -> ());
+  match mgr.db with
+  | Some db -> Memory.clear_session_model_override ~db ~session_key:key
+  | None -> ()
+
 let reset mgr ~key =
   let open Lwt.Syntax in
   (* Two-phase reset to avoid deadlock.  Phase 1 holds sessions_lock (quick,

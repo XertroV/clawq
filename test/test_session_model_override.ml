@@ -119,6 +119,44 @@ let test_model_override_persisted_to_db () =
   | Some m ->
       Alcotest.(check string) "DB has correct model override" "openai:gpt-4" m
 
+(* --- clear_session_model_override --- *)
+
+let test_clear_session_model_override () =
+  let db = make_db () in
+  Memory.set_session_model_override ~db ~session_key:"s1" ~model:"openai:gpt-4";
+  Memory.clear_session_model_override ~db ~session_key:"s1";
+  let result = Memory.get_session_model_override ~db ~session_key:"s1" in
+  Alcotest.(check (option string))
+    "override cleared after clear call" None result
+
+let test_clear_session_model_override_noop_when_no_override () =
+  let db = make_db () in
+  Memory.clear_session_model_override ~db ~session_key:"s1";
+  let result = Memory.get_session_model_override ~db ~session_key:"s1" in
+  Alcotest.(check (option string))
+    "still none after clear on absent" None result
+
+let test_clear_session_model_restores_global () =
+  let db = make_db () in
+  let config = make_config () in
+  let mgr = Session.create ~config ~db () in
+  let key = "telegram:123:456" in
+  Session.set_session_model mgr ~key ~model:"anthropic:claude-sonnet-4-6";
+  Session.clear_session_model mgr ~key;
+  let effective = Session.get_session_effective_model mgr ~key in
+  Alcotest.(check string)
+    "effective model returns to global after clear" "openai:gpt-5.4" effective
+
+let test_clear_session_model_clears_db () =
+  let db = make_db () in
+  let config = make_config () in
+  let mgr = Session.create ~config ~db () in
+  let key = "telegram:123:456" in
+  Session.set_session_model mgr ~key ~model:"openai:gpt-4";
+  Session.clear_session_model mgr ~key;
+  let result = Memory.get_session_model_override ~db ~session_key:key in
+  Alcotest.(check (option string)) "DB override cleared" None result
+
 (* Exercises the get_or_create_locked path: model override is written to DB
    before the session exists in memory, then runtime_context_block forces
    get_or_create_locked to run (loading the session into memory and applying
@@ -166,4 +204,12 @@ let suite =
       test_model_override_persisted_to_db;
     Alcotest.test_case "model override applied on session load" `Quick
       test_model_override_applied_on_session_load;
+    Alcotest.test_case "clear_session_model_override clears DB" `Quick
+      test_clear_session_model_override;
+    Alcotest.test_case "clear_session_model_override noop when absent" `Quick
+      test_clear_session_model_override_noop_when_no_override;
+    Alcotest.test_case "clear_session_model restores global default" `Quick
+      test_clear_session_model_restores_global;
+    Alcotest.test_case "clear_session_model clears DB" `Quick
+      test_clear_session_model_clears_db;
   ]
