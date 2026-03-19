@@ -347,5 +347,12 @@ ideas:
       id: I054
     - file: I055-mcp-plugins-for-remote-runners.todo
       id: I055
-    - file: I056-implement-rendering-for-acp-lo.todo
+    - complexity: medium
+      depends_on: []
+      estimate_hours: 10
+      file: I056-implement-rendering-for-acp-lo.todo
       id: I056
+      priority: medium
+      status: in_progress
+      tags: []
+      title: Implement rendering for ACP logs with nice formatting via connector -- use format_adapter and DSL
