@@ -122,6 +122,7 @@ let rec result_to_string = function
   | Slash_commands.Session (Slash_commands.SessionArchiveShow id) ->
       "Session(ArchiveShow " ^ string_of_int id ^ ")"
   | Slash_commands.DebugDumpChat -> "DebugDumpChat"
+  | Slash_commands.BashRun cmd -> "BashRun(" ^ cmd ^ ")"
   | Slash_commands.AgentInvoke (name, prompt) ->
       "AgentInvoke(" ^ name ^ ", " ^ prompt ^ ")"
   | Slash_commands.AgentMenu page -> "AgentMenu(" ^ string_of_int page ^ ")"
@@ -203,6 +204,7 @@ let rec result_eq a b =
   | Slash_commands.Bl a, Slash_commands.Bl b -> a = b
   | Slash_commands.Session a, Slash_commands.Session b -> a = b
   | Slash_commands.DebugDumpChat, Slash_commands.DebugDumpChat -> true
+  | Slash_commands.BashRun a, Slash_commands.BashRun b -> a = b
   | Slash_commands.SkillInvoke (a1, a2), Slash_commands.SkillInvoke (b1, b2) ->
       a1 = b1 && a2 = b2
   | Slash_commands.AgentInvoke (a1, a2), Slash_commands.AgentInvoke (b1, b2) ->
@@ -885,6 +887,46 @@ let test_debug_dump_chat_command () =
   Alcotest.check result_testable "/debug-dump-chat alias"
     (Slash_commands.AdminRequired Slash_commands.DebugDumpChat)
     (Slash_commands.handle "/debug-dump-chat")
+
+let test_bash_command () =
+  Alcotest.check result_testable "/bash ls -la"
+    (Slash_commands.AdminRequired (Slash_commands.BashRun "ls -la"))
+    (Slash_commands.handle "/bash ls -la")
+
+let test_bash_no_args () =
+  match Slash_commands.handle "/bash" with
+  | Slash_commands.AdminRequired (Slash_commands.FormattedReply _) -> ()
+  | other ->
+      Alcotest.fail
+        (Printf.sprintf "expected AdminRequired(FormattedReply _), got %s"
+           (result_to_string other))
+
+let test_bash_multiword_command () =
+  Alcotest.check result_testable "/bash echo hello world"
+    (Slash_commands.AdminRequired (Slash_commands.BashRun "echo hello world"))
+    (Slash_commands.handle "/bash echo hello world")
+
+let test_bash_is_admin_required () =
+  match Slash_commands.handle "/bash ls" with
+  | Slash_commands.AdminRequired (Slash_commands.BashRun "ls") -> ()
+  | other ->
+      Alcotest.fail
+        (Printf.sprintf "expected AdminRequired(BashRun \"ls\"), got %s"
+           (result_to_string other))
+
+let test_bash_pipes_and_chains () =
+  Alcotest.check result_testable "/bash with pipes and chains"
+    (Slash_commands.AdminRequired
+       (Slash_commands.BashRun "ls -alh && cd ../ && ls -alh | grep home"))
+    (Slash_commands.handle "/bash ls -alh && cd ../ && ls -alh | grep home")
+
+let test_bash_in_commands_list () =
+  let names =
+    List.map
+      (fun (c : Slash_commands.command) -> c.name)
+      Slash_commands.commands
+  in
+  Alcotest.(check bool) "bash in commands" true (List.mem "bash" names)
 
 let test_tools_command () =
   Alcotest.check result_testable "/tools returns Tools" Slash_commands.Tools
@@ -3006,6 +3048,16 @@ let suite =
       test_config_is_admin_required;
     Alcotest.test_case "/debug_dump_chat is AdminRequired" `Quick
       test_debug_dump_chat_is_admin_required;
+    Alcotest.test_case "/bash ls -la" `Quick test_bash_command;
+    Alcotest.test_case "/bash no args" `Quick test_bash_no_args;
+    Alcotest.test_case "/bash multiword command" `Quick
+      test_bash_multiword_command;
+    Alcotest.test_case "/bash is AdminRequired" `Quick
+      test_bash_is_admin_required;
+    Alcotest.test_case "/bash pipes and chains" `Quick
+      test_bash_pipes_and_chains;
+    Alcotest.test_case "/bash in commands list" `Quick
+      test_bash_in_commands_list;
     Alcotest.test_case "/session list" `Quick test_session_list;
     Alcotest.test_case "/session list explicit" `Quick
       test_session_list_explicit;

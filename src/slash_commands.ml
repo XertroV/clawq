@@ -564,6 +564,27 @@ let handle ?(skill_names = []) text =
                   "Usage: " ^ Format_adapter.code connector "/debate <prompt>")
             else Debate prompt
         | "debug-dump-chat" | "debug_dump_chat" -> AdminRequired DebugDumpChat
+        | "bash" ->
+            AdminRequired
+              (match args with
+              | [] ->
+                  FormattedReply
+                    (fun connector ->
+                      "Usage: "
+                      ^ Format_adapter.code connector "/bash <command>")
+              | _ ->
+                  let prefix_len =
+                    match String.index_opt trimmed ' ' with
+                    | Some i -> i + 1
+                    | None -> String.length trimmed
+                  in
+                  let cmd_text =
+                    if prefix_len < String.length trimmed then
+                      String.sub trimmed prefix_len
+                        (String.length trimmed - prefix_len)
+                    else String.concat " " args
+                  in
+                  BashRun cmd_text)
         | "register_as_admin_otc" | "register-as-admin-otc" -> (
             match args with
             | [] -> RegisterAsAdminOtc None

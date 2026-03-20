@@ -1156,6 +1156,18 @@ let handle_event ~(config : Runtime_config.slack_config)
                         ~text:"Debate requires a database."
                     in
                     Lwt.return "ok")
+            | BashRun cmd ->
+                let* result = Slash_commands_bash.run_bash_command cmd in
+                let full_text = Slash_commands_bash.format_result cmd result in
+                let max_len = 3000 in
+                let text =
+                  if String.length full_text <= max_len then full_text
+                  else String.sub full_text 0 max_len ^ "\n...[truncated]"
+                in
+                let* () =
+                  send_message_fn ~bot_token:config.bot_token ~channel_id ~text
+                in
+                Lwt.return "ok"
             | DebugDumpChat ->
                 let content = Session.dump_json session_manager ~key in
                 let max_len = 1800 in

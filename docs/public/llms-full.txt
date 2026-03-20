@@ -216,6 +216,7 @@ Available in chat-integrated channels that support slash commands. Admin-only co
 - `/bg menu` — interactive background task action menu
 - `/uptime` — show current daemon uptime
 - `/debug_dump_chat` (alias `/debug-dump-chat`) — (admin only) dump the current session state to a file and send as attachment
+- `/bash <command>` — (admin only) run an arbitrary bash command and return stdout, stderr, and exit code; 60-second timeout; output sent as file on Telegram if >4000 chars
 - `/show_thinking` (alias `/show-thinking`, `/toggle-show-thinking`) — toggle display of model thinking blocks in responses; `/show_thinking status` to check current state
 - `/compact` — compact session history by summarizing older messages to free up context space
 - `/pair <6-digit-code>` — pair with TOTP code from the browser pairing flow

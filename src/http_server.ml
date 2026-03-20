@@ -495,6 +495,17 @@ let handler ~session_manager ~require_pairing ~auth_token
                         in
                         Cohttp_lwt_unix.Server.respond_string ~status:`OK
                           ~headers:json_headers ~body:resp_json ())
+                | Slash_commands.BashRun cmd ->
+                    let* result = Slash_commands_bash.run_bash_command cmd in
+                    let response =
+                      Slash_commands_bash.format_result cmd result
+                    in
+                    let resp_json =
+                      `Assoc [ ("response", `String response) ]
+                      |> Yojson.Safe.to_string
+                    in
+                    Cohttp_lwt_unix.Server.respond_string ~status:`OK
+                      ~headers:json_headers ~body:resp_json ()
                 | Slash_commands.DebugDumpChat ->
                     let response = Session.dump_json session_manager ~key in
                     let resp_json =
@@ -1467,6 +1478,17 @@ let handler ~session_manager ~require_pairing ~auth_token
                         in
                         Cohttp_lwt_unix.Server.respond_string ~status:`OK
                           ~headers:json_headers ~body:resp_json ())
+                | Slash_commands.BashRun cmd ->
+                    let* result = Slash_commands_bash.run_bash_command cmd in
+                    let response =
+                      Slash_commands_bash.format_result cmd result
+                    in
+                    let resp_json =
+                      `Assoc [ ("response", `String response) ]
+                      |> Yojson.Safe.to_string
+                    in
+                    Cohttp_lwt_unix.Server.respond_string ~status:`OK
+                      ~headers:json_headers ~body:resp_json ()
                 | Slash_commands.DebugDumpChat ->
                     let key = "web:" ^ session_id in
                     let response = Session.dump_json session_manager ~key in

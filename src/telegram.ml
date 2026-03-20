@@ -1129,6 +1129,28 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
             | None ->
                 send_message ~bot_token ~chat_id:update.chat_id
                   ~text:"Debate requires a database." ())
+        | BashRun cmd ->
+            let* result = Slash_commands_bash.run_bash_command cmd in
+            let text = Slash_commands_bash.format_result cmd result in
+            if String.length text > 4000 then
+              let timestamp =
+                Int64.to_int (Int64.of_float (Unix.gettimeofday ()))
+              in
+              let filename = Printf.sprintf "bash_output_%d.txt" timestamp in
+              let* doc_result =
+                send_document ~bot_token ~chat_id:update.chat_id ~filename
+                  ~content:text ()
+              in
+              match doc_result with
+              | Ok _ -> Lwt.return_unit
+              | Error err ->
+                  let truncated =
+                    String.sub text 0 3900 ^ "\n...\n[truncated, send failed: "
+                    ^ err ^ "]"
+                  in
+                  send_message ~bot_token ~chat_id:update.chat_id
+                    ~text:truncated ()
+            else send_message ~bot_token ~chat_id:update.chat_id ~text ()
         | DebugDumpChat -> (
             let content = Session.dump_json session_mgr ~key in
             let timestamp =

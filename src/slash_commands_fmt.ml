@@ -113,6 +113,7 @@ type result =
   | Repo of repo_action
   | HeldItems of held_items_action
   | DebugDumpChat
+  | BashRun of string
   | AgentInvoke of string * string
   | AgentMenu of int
   | ModelMenu of int
@@ -305,6 +306,11 @@ let commands =
       name = "debate";
       description = "Multi-model debate: /debate <prompt>";
       priority = 5;
+    };
+    {
+      name = "bash";
+      description = "Run a bash command (admin): /bash <command>";
+      priority = 4;
     };
   ]
 

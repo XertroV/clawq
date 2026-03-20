@@ -1282,6 +1282,16 @@ let handle_message ~(discord_config : Runtime_config.discord_config)
                 send_message_fn ~bot_token:discord_config.bot_token
                   ~channel_id:msg.channel_id ~text:"Debate requires a database."
             )
+        | BashRun cmd ->
+            let* result = Slash_commands_bash.run_bash_command cmd in
+            let full_text = Slash_commands_bash.format_result cmd result in
+            let max_len = 1800 in
+            let text =
+              if String.length full_text <= max_len then full_text
+              else String.sub full_text 0 max_len ^ "\n...[truncated]"
+            in
+            send_message_fn ~bot_token:discord_config.bot_token
+              ~channel_id:msg.channel_id ~text
         | DebugDumpChat ->
             let content = Session.dump_json session_mgr ~key in
             let max_len = 1800 in
