@@ -577,3 +577,4 @@ bugs:
     - file: B578-the-badge-in-the-readme-doesn.todo
     - file: B579-look-through-the-last-60-commi.todo
     - file: B580-breifing-running-into-an-error.todo
+    - file: B581-release-not-updated-correctly.todo

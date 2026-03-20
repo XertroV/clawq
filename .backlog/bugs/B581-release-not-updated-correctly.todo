@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B581
+priority: high
+status: pending
+tags: []
+title: Release not updated correctly; binaries missing
+---
+
+Release not updated correctly; binaries missing
