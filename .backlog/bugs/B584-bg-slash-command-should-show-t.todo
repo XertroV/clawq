@@ -1,12 +1,3 @@
----
-complexity: medium
-depends_on: []
-estimate_hours: 1
-id: B584
-priority: high
-status: pending
-tags: []
-title: BG slash command should show task age
----
+the /bg slash command should show the age of each background task too, not just runtime
 
-BG slash command should show task age
+Also show automerge status in /bg output.
