@@ -51,6 +51,7 @@ Save this to `~/.clawq/skills/review-and-fix/SKILL.md` (or as `~/.clawq/skills/r
 | `description` | Yes | Short description shown to the agent when listing skills |
 | `allowed-tools` | No | Comma-separated list of tool names this skill may use |
 | `model` | No | Override the session model for this skill invocation |
+| `disable-model-invocation` | No | When `true`, the skill is excluded from model-accessible tool lists — only invocable by users via slash commands or @mention, not by the model during a turn (default: `false`) |
 
 ### The `$ARGUMENTS` Placeholder
 

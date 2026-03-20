@@ -50,6 +50,9 @@ Every clawq command is listed below. Run `clawq COMMAND --help` for per-command 
 | `clawq background recover ID [--runner R] [--model M]` | Recover a failed or stuck task by spawning a replacement with full context from the original |
 | `clawq background finalize ID` | Rebase, fast-forward merge, and clean up a completed task's worktree |
 | `clawq channel` | List configured channels |
+| `clawq channel set-model NAME MODEL` | Set a channel-specific default model (overrides global primary_model) |
+| `clawq channel show-model NAME` | Show the current model for a channel (channel override or global default) |
+| `clawq channel clear-model NAME` | Clear a channel's model override to inherit from global default |
 | `clawq config` | Manage configuration (wizard, get/set/show) |
 | `clawq cron` | Manage cron jobs for scheduled agent messages |
 | `clawq debug html-preview` | Preview HTML rendering |
@@ -83,14 +86,26 @@ Every clawq command is listed below. Run `clawq COMMAND --help` for per-command 
 | `clawq service` | Manage the clawq system service (start/stop/restart/systemd-unit) |
 | `clawq service systemd-unit` | Print a systemd unit file for user-level daemon management |
 | `clawq session` | Inspect and control agent sessions |
-| `clawq session list` | List active sessions with state, channel, and pending queue counts |
+| `clawq session list [--include-postmortem]` | List active sessions with state, channel, and pending queue counts. Postmortem sessions (`__postmortem_*`) are hidden by default; pass `--include-postmortem` to show them. |
 | `clawq session show KEY` | Show session details and message history |
+| `clawq session model SESSION get` | Get the current per-session model override (or global default) |
+| `clawq session model SESSION set MODEL` | Set a per-session model override (auto-normalizes legacy format) |
+| `clawq session model SESSION clear` | Clear the per-session model override, reverting to global default |
+| `clawq session archive show ID [--offset N] [--limit N]` | View archived session messages with pagination |
 | `clawq session inject [--cwd PATH] SESSION MSG` | Inject a message into a session's durable inbound queue (optionally set agent working directory) |
 | `clawq session pending SESSION` | Show pending inbound queue entries for a session |
 | `clawq session keepalive SESSION on\|off` | Toggle session keepalive |
 | `clawq session heartbeat SESSION on\|off` | Toggle heartbeat routing for a session |
 | `clawq session epochs SESSION` | Show session epoch boundaries |
 | `clawq session compact SESSION` | Compact session history by summarizing older messages |
+| `clawq pipeline list` | List available pipelines (builtin + user-defined from `~/.clawq/pipelines/`) |
+| `clawq pipeline show NAME` | Show a pipeline definition (inputs, steps, schemas) |
+| `clawq pipeline run NAME --input k=v ...` | Execute a pipeline with inputs |
+| `clawq pipeline validate NAME` | Validate a pipeline definition |
+| `clawq pipeline create NAME` | Scaffold a new pipeline YAML |
+| `clawq pipeline wizard` | Interactive pipeline builder |
+| `clawq pipeline history [--pipeline NAME]` | List past pipeline runs |
+| `clawq pipeline result RUN-ID` | Show detailed results for a pipeline run |
 | `clawq skills` | Manage agent skills (SKILL.md and shell-script definitions) |
 | `clawq setup` | Interactive setup wizards for channel integrations |
 | `clawq status` | Show runtime configuration and daemon status |
@@ -391,7 +406,9 @@ Slash commands are available in chat-integrated channels (Telegram, Discord, Sla
 | `/heartbeat [on\|off\|status]` | Toggle heartbeat routing for this session |
 | `/compact` | Compact session history by summarizing older messages |
 | `/model` | Show current model, favorites, and usage ranking |
-| `/model set <name>` | Set model for this session (supports `provider:model` format) |
+| `/model help` | Show model command usage text |
+| `/model set <name>` | Set model for this session (validates against known models) |
+| `/model set-force <name>` | Set model bypassing validation (for custom/local models) |
 | `/model set-default <name>` | Set default model in config (persistent, auto-normalizes format) |
 | `/model fav <name>` | Toggle a model as favorite |
 | `/model unfav <name>` | Remove from favorites |
@@ -403,6 +420,7 @@ Slash commands are available in chat-integrated channels (Telegram, Discord, Sla
 | `/usage [session [KEY]\|model\|provider]` | Show token usage breakdowns |
 | `/active` | Show active 5-hour window usage (cost, tokens, quota) |
 | `/bg [list\|show\|logs\|cancel\|retry\|create] [id\|prompt]` | Background task management |
+| `/bg finalize <id>` | Manually finalize a background task (rebase + fast-forward merge + cleanup) |
 | `/bg menu` | Interactive background task action menu |
 | `/cron [list\|show\|add\|edit\|remove\|history]` | Manage cron jobs: list, show details, create (with optional `--ttl`), edit schedule/message/TTL, remove, view run history |
 | `/uptime` | Show current daemon uptime |
@@ -417,6 +435,13 @@ Slash commands are available in chat-integrated channels (Telegram, Discord, Sla
 | `/config menu [page]` | Interactive config section browser (paginated) |
 | `/skills [page]` | List available skills with interactive selection (paginated) |
 | `/pair <code>` | Pair with TOTP code from browser |
+| `/repo` | Show current repository status for this session |
+| `/repo <url\|path>` | Clone or associate a repository with this session |
+| `/repo forget` | Remove repository association from session |
+| `/repo update` | Manually fetch/pull the associated repository |
+| `/idea <description>` | Log an idea to the backlog (invokes `bl idea`) |
+| `/session archives [KEY]` | List session archives (optionally filtered by session key) |
+| `/session archive show ID` | View archived session messages with pagination |
 | `/update` | Pull, rebuild, and gracefully restart clawq |
 | `/debug_dump_chat` | Dump session state to file and send as attachment |
 | `/bash <command>` | Run a bash command (admin only) |

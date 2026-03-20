@@ -251,6 +251,23 @@ GitHub hook files live under `~/.clawq/workspace/gh-hooks/`, and verified
 payload snapshots are written to `~/.clawq/workspace/tmp/github-deliveries/`.
 See the Channels page for a hook file example and event trust model details.
 
+**Channel-specific default model:**
+
+Each channel can have its own default model that overrides the global `primary_model`. This is useful when different channels should use different models (e.g. a cheaper model for high-traffic Telegram chats, a stronger model for Discord).
+
+```bash
+clawq channel set-model discord anthropic:claude-opus-4-6
+clawq channel show-model discord
+clawq channel clear-model discord
+```
+
+The model resolution hierarchy (highest to lowest priority):
+1. Per-session model override (`clawq session model SESSION set MODEL`)
+2. Channel-specific default model (`clawq channel set-model NAME MODEL`)
+3. Global `agent_defaults.primary_model`
+
+All 17 channel types are supported: `telegram`, `discord`, `slack`, `github`, `teams`, `matrix`, `mattermost`, `dingtalk`, `imessage`, `signal`, `irc`, `email`, `whatsapp`, `nostr`, `lark`, `line`, `onebot`.
+
 ### security
 
 ```json

@@ -38,6 +38,9 @@ Every command below is invoked as `clawq COMMAND`. Run `clawq COMMAND --help` fo
 | `auth codex-logout [PROVIDER]` | Remove saved Codex OAuth credentials |
 | `capabilities` | List all active runtime capabilities |
 | `channel` | List configured channels |
+| `channel set-model NAME MODEL` | Set a channel-specific default model that overrides the global primary_model for that channel |
+| `channel show-model NAME` | Show the current model for a channel (channel override or global default) |
+| `channel clear-model NAME` | Clear a channel's model override so it inherits the global default |
 | `config wizard` | Interactive TUI wizard for all settings |
 | `config set KEY VALUE` | Set a config value by dot-path |
 | `config get KEY` | Read a config value by dot-path |
@@ -97,7 +100,7 @@ Every command below is invoked as `clawq COMMAND`. Run `clawq COMMAND --help` fo
 | `runner token --session KEY [--ttl-hours N]` | Generate a runner bearer token for remote question relay via gateway endpoints |
 | `memory` | Show memory backend config |
 | `session` | Inspect persisted sessions and raw chat-log epochs |
-| `session list [--channel NAME] [--prefix PREFIX] [--active|--inactive] [--main|--non-main]` | List persisted sessions with optional filters; appends `pending_inbound=N` when durable queue rows exist and marks opted-in sessions with `[keepalive]` / `[heartbeat]` |
+| `session list [--channel NAME] [--prefix PREFIX] [--active|--inactive] [--main|--non-main] [--include-postmortem]` | List persisted sessions with optional filters; postmortem sessions (`__postmortem_*`) hidden by default, pass `--include-postmortem` to show them; appends `pending_inbound=N` when durable queue rows exist and marks opted-in sessions with `[keepalive]` / `[heartbeat]` |
 | `session epochs SESSION` | List the current and archived chat-log epochs for a session |
 | `session show SESSION [--epoch current|ID] [--offset N] [--limit N]` | Print raw persisted chat-log messages for the latest or a selected archived epoch; supports paging via offset/limit |
 | `session inject [--cwd PATH] SESSION MESSAGE...` | Inject a live inbound message through the daemon session manager; idle sessions process immediately, busy channel sessions queue, and bang messages request interruption. Optional `--cwd PATH` sets the agent's working directory for this session. When the daemon is offline, enqueues to the durable inbound queue for at-least-once replay on next startup |
@@ -152,6 +155,10 @@ Every command below is invoked as `clawq COMMAND`. Run `clawq COMMAND --help` fo
 | `setup signal` | Configure Signal via signal-cli REST API endpoint |
 | `setup tunnel` | Configure tunnel provider (Cloudflare, Tailscale, ngrok) |
 | `setup summarizer` | Configure autosummarizer settings |
+| `session model SESSION get` | Get the current per-session model override (or global default if none set) |
+| `session model SESSION set MODEL` | Set a per-session model override (auto-normalizes legacy provider/model format) |
+| `session model SESSION clear` | Clear the per-session model override, reverting to the channel or global default |
+| `session archive show ID [--offset N] [--limit N]` | View archived session messages with pagination |
 | `session compact SESSION` | Compact session history by summarizing older messages |
 | `session events SESSION [--epoch E] [--type TYPE]` | Show event/system/compaction messages for a session |
 | `status` | Show runtime configuration and daemon status |
@@ -201,7 +208,9 @@ Available in chat-integrated channels that support slash commands. Admin-only co
 - `/fork_and [@agent_name] <prompt>` — fork the current session's history into an ephemeral subagent and run the prompt there; optionally prefix with `@agent_name` to adopt that agent's tool restrictions (the parent's system prompt is kept for cache efficiency, with the agent profile injected as a user-message prefix); the result is sent back to the channel but the parent session is not modified
 - `/tasks` — display the agent's current task tree for this session (user-facing visibility into what the agent is tracking)
 - `/model` — show current model, favorites, and usage ranking
-- `/model set <name>` — set model for this session; supports `provider:model` (canonical) or `provider/model` (legacy, accepted with a format hint); e.g. `/model set anthropic:claude-sonnet-4-6`
+- `/model help` — show model command usage text
+- `/model set <name>` — set model for this session; validates against known models; supports `provider:model` (canonical) or `provider/model` (legacy, accepted with a format hint); e.g. `/model set anthropic:claude-sonnet-4-6`
+- `/model set-force <name>` — set model bypassing validation (for custom or local models not in the catalog)
 - `/model set-default <name>` — write model to `~/.clawq/config.json` as the new default; applies to new sessions (not the current one); auto-normalizes legacy `provider/model` format to canonical `provider:model`
 - `/model fav <name>` — toggle a model as favorite
 - `/model unfav <name>` — remove a model from favorites
@@ -213,6 +222,7 @@ Available in chat-integrated channels that support slash commands. Admin-only co
 - `/usage [session [KEY]|model|provider]` — show token usage breakdowns; no args shows a summary by time period
 - `/active` — show active 5-hour window usage: cost/tokens summary, per-model breakdown, and provider quota percentages
 - `/bg [list|show|logs|cancel|retry|create] [id|prompt]` — background task management; `/bg` or `/bg list` lists tasks, `/bg show <id>` shows details, `/bg logs <id>` shows recent log output, `/bg cancel <id>` cancels a task, `/bg retry <id>` retries a failed task, `/bg create [@agent_name] <prompt>` creates a new background task with optional agent template (aliases: `/bg start`, `/bg new`); alias `/background`
+- `/bg finalize <id>` — manually finalize a background task (rebase + fast-forward merge + cleanup)
 - `/bg menu` — interactive background task action menu
 - `/uptime` — show current daemon uptime
 - `/debug_dump_chat` (alias `/debug-dump-chat`) — (admin only) dump the current session state to a file and send as attachment
@@ -228,6 +238,13 @@ Available in chat-integrated channels that support slash commands. Admin-only co
 - `/menu [page]` — show a paginated command menu; on Teams this sends an Adaptive Card with clickable command buttons, on other channels it falls back to the help list
 - `/rig [install|adjust|remove|list] [name]` — manage setup rigs; `/rig list` shows available rigs with install status; `/rig install <name>` delegates rig setup to the agent with tool access; alias `/rigging`
 - `/held-items [list|view|approve|reject]` — manage held feature plans; `/held-items` or `/held-items list` shows pending items; `/held-items list --all` shows all; `/held-items view <id>` shows full details; `/held-items approve <id>` (admin only) approves an item; `/held-items reject <id> [reason]` (admin only) rejects with optional reason; aliases `/held_items`, `/helditems`
+- `/repo` — show current repository status for this session (branch, commit, dirty flag, ahead/behind)
+- `/repo <url|path>` — clone a remote repo or associate a local git repository with this session; managed repos auto-fetch every 15 min
+- `/repo forget` — remove the repository association from this session
+- `/repo update` — manually trigger a fetch/pull for the associated repo
+- `/idea <description>` — log an idea to the backlog (invokes `bl idea` tool)
+- `/session archives [KEY]` — list session archives (optionally filtered by session key)
+- `/session archive show ID` — view archived session messages with pagination
 - `/update` — pull, rebuild, and gracefully restart clawq
 
 ## `!` Messages
@@ -324,6 +341,16 @@ The legacy `provider/model` slash format is still accepted but deprecated. Depre
 - **`models set-default` / `/model set-default`**: auto-normalizes the legacy format to canonical before writing to config.
 
 Note: `providers.*.default_model` is the model identifier as understood by that provider's API (e.g. `openai/gpt-4o` on OpenRouter). This is a provider-specific model name, not a `provider:model` reference, and is not subject to the format deprecation.
+
+### Model resolution hierarchy
+
+When the agent selects a model for a turn, the following priority order applies (highest to lowest):
+
+1. **Per-session model override** — set via `clawq session model SESSION set MODEL` or `/model set NAME`
+2. **Channel-specific default model** — set via `clawq channel set-model CHANNEL MODEL`
+3. **Global primary_model** — set via `agent_defaults.primary_model` in config
+
+Use `/model set-force <name>` to bypass model name validation when setting custom or local models not in the catalog.
 
 ### Config sections reference
 
@@ -495,7 +522,7 @@ Security features:
 - Tool sandboxing via Firejail or Bubblewrap (auto-detected, configurable via security.sandbox_backend)
 - Working directory restrictions: `change_working_dir` is gated by `security.allowed_cwd_patterns` glob list with `$CLAWQ_WORKSPACE`/`$USER_HOME` expansion
 
-You also support MCP (Model Context Protocol) for exposing and consuming external tools, and skills (SKILL.md definitions with YAML frontmatter and shell-script extensions, discovered from `.claude-p/skills/`, `.claude/skills/`, and `~/.clawq/skills/`; managed via `clawq skills`).
+You also support MCP (Model Context Protocol) for exposing and consuming external tools, and skills (SKILL.md definitions with YAML frontmatter and shell-script extensions, discovered from `.claude-p/skills/`, `.claude/skills/`, and `~/.clawq/skills/`; managed via `clawq skills`). Skill frontmatter fields: `name`, `description`, `allowed-tools`, `model`, `disable-model-invocation` (when true, excludes skill from model-accessible tool lists — only invocable by users via slash commands or @mention).
 
 Agent templates are Markdown files with YAML frontmatter that define role-based personas with tool restrictions. Managed via `clawq agents`. Discovery order: `~/.clawq/agents/<name>.md` or `<name>/AGENT.md`, workspace `.claude-p/agents/` and `.claude/agents/`. User templates override builtins with the same name.
 
