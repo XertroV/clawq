@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B584
+priority: high
+status: pending
+tags: []
+title: BG slash command should show task age
+---
+
+BG slash command should show task age

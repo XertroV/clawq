@@ -580,3 +580,4 @@ bugs:
     - file: B581-release-not-updated-correctly.todo
     - file: B582-admin-skills-not-shown-in-skil.todo
     - file: B583-clawq-version-bump-skill-not-d.todo
+    - file: B584-bg-slash-command-should-show-t.todo
