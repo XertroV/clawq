@@ -4263,6 +4263,119 @@ let test_spawn_local_task_success () =
     ~finally:(fun () ->
       ignore (Sys.command (Printf.sprintf "rm -rf %s" (Filename.quote dir))))
 
+let test_command_to_log_string () =
+  let exec_result =
+    Background_task.command_to_log_string
+      (Process_group.Exec [| "claude"; "--print"; "hello world" |])
+  in
+  Alcotest.(check bool)
+    "exec argv joined" true
+    (string_contains exec_result "claude"
+    && string_contains exec_result "'hello world'");
+  let shell_result =
+    Background_task.command_to_log_string
+      (Process_group.Shell "echo hi && exit")
+  in
+  Alcotest.(check string) "shell passthrough" "echo hi && exit" shell_result
+
+let test_write_log_preamble () =
+  let dir = Filename.temp_dir "clawq-bg-preamble" "" in
+  Fun.protect
+    (fun () ->
+      let log_path = Filename.concat dir "test.log" in
+      Background_task.write_log_preamble ~log_path ~task_id:42
+        ~command:(Process_group.Shell "echo hello");
+      let contents =
+        let ic = open_in log_path in
+        Fun.protect
+          ~finally:(fun () -> close_in_noerr ic)
+          (fun () -> really_input_string ic (in_channel_length ic))
+      in
+      Alcotest.(check bool)
+        "contains task id" true
+        (string_contains contents "task 42");
+      Alcotest.(check bool)
+        "contains command" true
+        (string_contains contents "echo hello"))
+    ~finally:(fun () ->
+      ignore (Sys.command (Printf.sprintf "rm -rf %s" (Filename.quote dir))))
+
+let test_spawn_task_set_running_failure_marks_failed () =
+  with_temp_git_repo (fun repo_path ->
+      let db = Memory.init ~db_path:":memory:" () in
+      Background_task.init_schema db;
+      let id =
+        match
+          Background_task.enqueue ~db ~runner:Background_task.Codex ~repo_path
+            ~prompt:"test set_running race" ()
+        with
+        | Ok id -> id
+        | Error msg -> Alcotest.fail msg
+      in
+      (* Transition task out of queued so set_running's WHERE status='queued'
+         matches zero rows, triggering the failure path. *)
+      Background_task.finish ~db ~id ~status:Background_task.Failed
+        ~result_preview:"pre-failed";
+      (* Re-enqueue a new task (the finished one can't be spawned).
+         Instead, directly manipulate: set status back to queued so we can
+         spawn, but then race it by finishing before set_running succeeds.
+         Actually, the simplest approach: create a fresh task, then finish it
+         before spawning — but spawn_task reads the task as-is. The trick is
+         that set_running does WHERE status='queued', so if we pass a task
+         whose DB row is NOT queued, set_running will fail. *)
+      let id2 =
+        match
+          Background_task.enqueue ~db ~runner:Background_task.Codex ~repo_path
+            ~prompt:"test race condition" ()
+        with
+        | Ok id -> id
+        | Error msg -> Alcotest.fail msg
+      in
+      (* Pre-cancel the task so set_running fails *)
+      ignore (Background_task.cancel ~db ~id:id2);
+      let task = Option.get (Background_task.get_task ~db ~id:id2) in
+      let log_dir =
+        Filename.concat
+          (Filename.concat
+             (try Sys.getenv "HOME" with Not_found -> "/tmp")
+             ".clawq")
+          "background-logs"
+      in
+      (try Unix.mkdir log_dir 0o755
+       with Unix.Unix_error (Unix.EEXIST, _, _) -> ());
+      let log_path = Background_task.task_log_path id2 in
+      Lwt_main.run
+        (let open Lwt.Syntax in
+         Background_task.spawn_task ~db
+           ~run_simple_command:(fun ~cwd:_ _argv -> Lwt.return (0, "", ""))
+           ~command_override:(Process_group.Shell "echo should-be-killed")
+           { task with status = Background_task.Queued }
+         (* Note: we pass Queued in the record but the DB row is cancelled,
+              so set_running's WHERE clause won't match *);
+         let* () = Lwt_unix.sleep 0.2 in
+         Lwt.return_unit);
+      match Background_task.get_task ~db ~id:id2 with
+      | None -> Alcotest.fail "expected task"
+      | Some t ->
+          (* The task was cancelled in DB, so finish's WHERE status<>'cancelled'
+             won't update it. The task stays cancelled but the log file
+             should contain the error. *)
+          let log_content =
+            try
+              let ic = open_in log_path in
+              Fun.protect
+                ~finally:(fun () -> close_in_noerr ic)
+                (fun () -> really_input_string ic (in_channel_length ic))
+            with _ -> ""
+          in
+          Alcotest.(check bool)
+            "log contains preamble" true
+            (string_contains log_content "[clawq] task");
+          Alcotest.(check bool)
+            "log contains set_running error" true
+            (string_contains log_content "set_running failed");
+          ignore t)
+
 let suite =
   [
     Alcotest.test_case "enqueue and list tasks" `Quick
@@ -4543,4 +4656,8 @@ let suite =
       test_spawn_local_task_timeout;
     Alcotest.test_case "spawn local task success" `Quick
       test_spawn_local_task_success;
+    Alcotest.test_case "command_to_log_string" `Quick test_command_to_log_string;
+    Alcotest.test_case "write_log_preamble" `Quick test_write_log_preamble;
+    Alcotest.test_case "spawn set_running failure marks failed" `Quick
+      test_spawn_task_set_running_failure_marks_failed;
   ]

@@ -1395,23 +1395,6 @@ let read_into_buffer_and_log ic oc buf =
   in
   loop ()
 
-let exit_code_of_status = function
-  | Unix.WEXITED n -> n
-  | Unix.WSIGNALED n -> 128 + n
-  | Unix.WSTOPPED n -> 128 + n
-
-let read_log_tail path max_chars =
-  try
-    let ic = open_in path in
-    Fun.protect
-      ~finally:(fun () -> close_in_noerr ic)
-      (fun () ->
-        let len = in_channel_length ic in
-        let start = max 0 (len - max_chars) in
-        seek_in ic start;
-        String.trim (really_input_string ic (len - start)))
-  with _ -> ""
-
 let run_command_capture ~cwd ~argv ~log_path =
   let proc =
     Process_group.start ~cwd ~env:(Unix.environment ())
@@ -1629,6 +1612,8 @@ let spawn_task ?(on_task_started = fun _ -> Lwt.return_unit)
                       augment_env ~session_key:sk ~task_id:task.id base_env
                   | None -> base_env
                 in
+                write_log_preamble ~log_path ~task_id:task.id ~command;
+                let spawn_time = Unix.gettimeofday () in
                 let proc =
                   Process_group.start_to_file ~cwd:worktree_path ~env ~log_path
                     command
@@ -1638,10 +1623,22 @@ let spawn_task ?(on_task_started = fun _ -> Lwt.return_unit)
                   not
                     (set_running ~db ~id:task.id ~branch ~worktree_path
                        ~log_path ~pid)
-                then
+                then begin
+                  Logs.warn (fun m ->
+                      m "Background task %d: set_running failed; killing pid %d"
+                        task.id pid);
+                  let err_msg =
+                    Printf.sprintf
+                      "set_running failed: task %d was no longer queued (pid \
+                       %d killed)"
+                      task.id pid
+                  in
+                  append_log_error ~log_path err_msg;
                   let* () = Process_group.terminate_immediately pid in
                   let* _ = Process_group.wait pid in
+                  finish ~db ~id:task.id ~status:Failed ~result_preview:err_msg;
                   Lwt.return_unit
+                end
                 else
                   let* () =
                     match get_task ~db ~id:task.id with
@@ -1669,7 +1666,14 @@ let spawn_task ?(on_task_started = fun _ -> Lwt.return_unit)
                             task.id);
                       Process_group.signal_group pid Sys.sigkill;
                       Lwt.return_unit);
-                  let output = read_log_tail log_path preview_limit in
+                  let elapsed = Unix.gettimeofday () -. spawn_time in
+                  let output =
+                    let raw = read_log_tail log_path preview_limit in
+                    if elapsed < 5.0 then
+                      Printf.sprintf "%s\n[clawq] process exited in %.1fs" raw
+                        elapsed
+                    else raw
+                  in
                   (* Extract runner session ID from log if not set *)
                   (let current =
                      match get_task ~db ~id:task.id with

@@ -681,3 +681,47 @@ let channel_notification_message ?summary ?git_info (task : task) =
            task.id)
   | _ -> ());
   String.concat "\n" (List.rev !lines)
+
+let exit_code_of_status = function
+  | Unix.WEXITED n -> n
+  | Unix.WSIGNALED n -> 128 + n
+  | Unix.WSTOPPED n -> 128 + n
+
+let read_log_tail path max_chars =
+  try
+    let ic = open_in path in
+    Fun.protect
+      ~finally:(fun () -> close_in_noerr ic)
+      (fun () ->
+        let len = in_channel_length ic in
+        let start = max 0 (len - max_chars) in
+        seek_in ic start;
+        String.trim (really_input_string ic (len - start)))
+  with _ -> ""
+
+let command_to_log_string = function
+  | Process_group.Exec argv ->
+      String.concat " " (Array.to_list (Array.map Filename.quote argv))
+  | Process_group.Shell s -> s
+
+let write_log_preamble ~log_path ~task_id ~command =
+  try
+    let oc =
+      open_out_gen [ Open_wronly; Open_creat; Open_append ] 0o644 log_path
+    in
+    Fun.protect
+      ~finally:(fun () -> close_out_noerr oc)
+      (fun () ->
+        Printf.fprintf oc "[clawq] task %d starting: %s\n" task_id
+          (command_to_log_string command))
+  with _ -> ()
+
+let append_log_error ~log_path msg =
+  try
+    let oc =
+      open_out_gen [ Open_wronly; Open_creat; Open_append ] 0o644 log_path
+    in
+    Fun.protect
+      ~finally:(fun () -> close_out_noerr oc)
+      (fun () -> Printf.fprintf oc "\n[clawq] ERROR: %s\n" msg)
+  with _ -> ()
