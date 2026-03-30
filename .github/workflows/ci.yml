@@ -15,6 +15,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Version sync check
+        run: ./scripts/sync_version.sh --check
+
       - name: Setup OCaml + opam
         uses: ocaml/setup-ocaml@v3
         with:

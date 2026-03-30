@@ -20,7 +20,7 @@ let test_dispatch_empty () =
 
 let test_dispatch_version () =
   Alcotest.(check string)
-    "dispatch version" "clawq 0.2.0-dev"
+    "dispatch version" "clawq 0.2.1-dev"
     (Clawq_core.dispatch [ "version" ])
 
 let test_dispatch_help () =
