@@ -2921,7 +2921,7 @@ let test_health_running_stale_log () =
       let oc = open_out log_path in
       output_string oc "old output\n";
       close_out oc;
-      (* started 130s ago from fake_now, log written at real now *)
+      (* started 100s ago from fake_now, log written at real now *)
       let started_time = now -. 10.0 in
       (* Use gmtime for UTC since parse_sqlite_datetime now parses as UTC *)
       let tm = Unix.gmtime started_time in
@@ -2939,9 +2939,9 @@ let test_health_running_stale_log () =
           log_path = Some log_path;
         }
       in
-      (* elapsed = 130s (> log_stale_threshold 120s but < stalled_threshold 300s)
-         log mtime is at real now, fake_now is 120s+ ahead so log looks stale *)
-      let fake_now = now +. 130.0 in
+      (* elapsed = 100s (> log_stale_threshold 90s but < stalled_threshold 120s)
+         log mtime is at real now, fake_now is 100s ahead so log looks stale *)
+      let fake_now = now +. 100.0 in
       let health =
         Background_task.diagnose_health ~now:fake_now
           ~pid_alive:(fun _ -> true)
@@ -2977,7 +2977,7 @@ let test_health_running_stalled () =
           log_path = Some log_path;
         }
       in
-      let fake_now = now +. 400.0 in
+      let fake_now = now +. 200.0 in
       let health =
         Background_task.diagnose_health ~now:fake_now
           ~pid_alive:(fun _ -> true)

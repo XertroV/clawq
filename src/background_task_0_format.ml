@@ -246,8 +246,8 @@ let log_mtime path =
   try Some (Unix.stat path).Unix.st_mtime
   with Unix.Unix_error _ | Sys_error _ -> None
 
-let stalled_threshold_seconds = 300.0
-let log_stale_threshold_seconds = 120.0
+let stalled_threshold_seconds = 120.0
+let log_stale_threshold_seconds = 90.0
 let startup_timeout_seconds = 30.0
 
 let log_has_content path =
