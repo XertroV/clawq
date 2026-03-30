@@ -131,6 +131,9 @@ Every command below is invoked as `clawq COMMAND`. Run `clawq COMMAND --help` fo
 | `service signal-restart` | Send SIGUSR1 to running daemon for graceful restart |
 | `service status` | Show service status |
 | `service systemd-unit` | Print a systemd unit file for user-level daemon management |
+| `service launchd-plist` | Print a launchd plist for macOS daemon management |
+| `service install` | Install and enable autostart (systemd on Linux, launchd on macOS) |
+| `service uninstall` | Stop and remove autostart configuration |
 | `skills` | Manage agent skills — SKILL.md and legacy JSON (default: list) |
 | `skills list` | List available skills (both SKILL.md and JSON formats) |
 | `skills path` | Print skill search directories (workspace + personal) |
@@ -680,6 +683,16 @@ current queue state for a given session; `session list` appends
 - This is a handoff model, not a continuous same-turn monologue. The pre-restart turn ends after the restart request is prepared; confirmation arrives from the replacement process after startup.
 - Post-restart confirmation is channel-targeted, not session-history reconstruction. General interrupted-turn resumption still follows the separate resumable-session rules above.
 - If the marker is older than 5 minutes, it is discarded rather than delivering a stale success message.
+
+### Autostart on reboot
+
+- `clawq service install` writes a platform-specific service definition and enables autostart. On Linux this creates a systemd user unit at `~/.config/systemd/user/clawq.service` and runs `systemctl --user enable clawq`. On macOS it writes a launchd plist to `~/Library/LaunchAgents/org.clawq.daemon.plist` with `RunAtLoad` enabled.
+- The systemd unit uses `Type=forking` and defers process management to clawq's own double-fork. The launchd plist sets `CLAWQ_DAEMON_NOFORK=1` so launchd manages the process directly.
+- For the systemd user unit to survive logout, the user must also run `loginctl enable-linger $USER`.
+- To disable autostart without removing the service definition: on Linux run `systemctl --user disable clawq`; on macOS run `launchctl unload ~/Library/LaunchAgents/org.clawq.daemon.plist`.
+- `clawq service uninstall` removes the service definition entirely and stops the daemon.
+- `clawq service status` shows the current autostart state.
+- Installing the service does not interfere with an already-running daemon. The systemd unit or launchd plist will manage future starts; the current process continues until stopped.
 
 ### Runtime reload and tool registration caveats
 

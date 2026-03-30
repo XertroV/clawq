@@ -809,9 +809,12 @@ let cmd_service args =
       let cfg = get_config () in
       Service.cmd_restart ~config:cfg
   | [ "systemd-unit" ] -> Service.cmd_systemd_unit ()
+  | [ "launchd-plist" ] -> Service.cmd_launchd_plist ()
+  | [ "install" ] -> Service.cmd_install ()
+  | [ "uninstall" ] -> Service.cmd_uninstall ()
   | _ ->
       "Usage: clawq service \
-       <start|stop|status|signal-restart|restart|systemd-unit>"
+       <start|stop|status|signal-restart|restart|install|uninstall|systemd-unit|launchd-plist>"
 
 let parse_update_args args =
   match args with

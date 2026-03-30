@@ -367,7 +367,79 @@ let cmd_stop () =
         wait 10
       end
 
-let cmd_status () =
+type platform = Linux | Darwin | Other of string
+
+let detect_platform () =
+  try
+    let ic = Unix.open_process_in "uname -s" in
+    let line =
+      Fun.protect
+        (fun () -> input_line ic |> String.trim)
+        ~finally:(fun () -> ignore (Unix.close_process_in ic))
+    in
+    match String.lowercase_ascii line with
+    | "linux" -> Linux
+    | "darwin" -> Darwin
+    | s -> Other s
+  with _ -> (
+    match Sys.os_type with
+    | "Unix" -> Other "unix"
+    | s -> Other (String.lowercase_ascii s))
+
+let run_command_default cmd =
+  try
+    let ic = Unix.open_process_in cmd in
+    let buf = Buffer.create 256 in
+    (try
+       while true do
+         Buffer.add_char buf (input_char ic)
+       done
+     with End_of_file -> ());
+    ignore (Unix.close_process_in ic);
+    String.trim (Buffer.contents buf)
+  with _ -> ""
+
+let systemd_unit_path () =
+  let home = try Sys.getenv "HOME" with Not_found -> "~" in
+  Filename.concat home ".config/systemd/user/clawq.service"
+
+let launchd_plist_path () =
+  let home = try Sys.getenv "HOME" with Not_found -> "~" in
+  Filename.concat home "Library/LaunchAgents/org.clawq.daemon.plist"
+
+let autostart_status ?(detect_platform = detect_platform)
+    ?(run_command = run_command_default) () =
+  match detect_platform () with
+  | Linux ->
+      let unit_exists = Sys.file_exists (systemd_unit_path ()) in
+      if unit_exists then
+        let out = run_command "systemctl --user is-enabled clawq 2>/dev/null" in
+        match out with
+        | "enabled" ->
+            "  autostart: enabled (systemd user unit)\n\
+            \    disable with: systemctl --user disable clawq\n\
+            \    uninstall with: clawq service uninstall"
+        | "disabled" ->
+            "  autostart: installed but disabled\n\
+            \    enable with: systemctl --user enable clawq\n\
+            \    or reinstall with: clawq service install"
+        | _ ->
+            Printf.sprintf
+              "  autostart: installed (status: %s)\n\
+              \    enable with: systemctl --user enable clawq"
+              out
+      else "  autostart: not installed (run: clawq service install)"
+  | Darwin ->
+      if Sys.file_exists (launchd_plist_path ()) then
+        "  autostart: installed (launchd plist)\n\
+        \    unload with: launchctl unload \
+         ~/Library/LaunchAgents/org.clawq.daemon.plist\n\
+        \    uninstall with: clawq service uninstall"
+      else "  autostart: not installed (run: clawq service install)"
+  | Other _ -> "  autostart: not available on this platform"
+
+let cmd_status ?(detect_platform = detect_platform)
+    ?(run_command = run_command_default) () =
   let lines = ref [] in
   let add s = lines := s :: !lines in
   add "Service status:";
@@ -378,6 +450,7 @@ let cmd_status () =
       match Daemon_status.daemon_uptime_line pid with
       | Some line -> add line
       | None -> ()));
+  add (autostart_status ~detect_platform ~run_command ());
   let state_path = Filename.concat (clawq_dir ()) "daemon_state.json" in
   if Sys.file_exists state_path then begin
     try
@@ -448,3 +521,140 @@ WatchdogSec=120
 [Install]
 WantedBy=default.target|}
     pid_file executable executable executable
+
+let cmd_launchd_plist () =
+  let executable = Restart_exec.executable () in
+  let log_file = log_path () in
+  Printf.sprintf
+    {|<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- clawq launchd agent
+     Install: clawq service launchd-plist > ~/Library/LaunchAgents/org.clawq.daemon.plist
+     Load:    launchctl load ~/Library/LaunchAgents/org.clawq.daemon.plist
+     Unload:  launchctl unload ~/Library/LaunchAgents/org.clawq.daemon.plist
+     Or use:  clawq service install / clawq service uninstall -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>org.clawq.daemon</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>%s</string>
+    <string>service</string>
+    <string>start</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>CLAWQ_DAEMON_NOFORK</key>
+    <string>1</string>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>%s</string>
+  <key>StandardErrorPath</key>
+  <string>%s</string>
+</dict>
+</plist>|}
+    executable log_file log_file
+
+let ensure_parent_dir path =
+  let parent = Filename.dirname path in
+  let rec mkdir_p dir =
+    if Sys.file_exists dir then ()
+    else begin
+      mkdir_p (Filename.dirname dir);
+      try Sys.mkdir dir 0o755 with Sys_error _ -> ()
+    end
+  in
+  mkdir_p parent
+
+let write_file path contents =
+  ensure_parent_dir path;
+  let oc = open_out path in
+  Fun.protect
+    (fun () -> output_string oc contents)
+    ~finally:(fun () -> close_out oc)
+
+let cmd_install ?(detect_platform = detect_platform)
+    ?(run_command = run_command_default) () =
+  match detect_platform () with
+  | Linux ->
+      let unit_path = systemd_unit_path () in
+      let unit_contents = cmd_systemd_unit () in
+      write_file unit_path unit_contents;
+      ignore (run_command "systemctl --user daemon-reload");
+      ignore (run_command "systemctl --user enable clawq");
+      let already_running = read_pid () <> None in
+      let start_hint =
+        if already_running then
+          "Daemon is already running; the unit will manage future starts."
+        else "Start now with: systemctl --user start clawq"
+      in
+      Printf.sprintf
+        "Service installed and enabled.\n\
+         Unit file: %s\n\
+         The service will autostart on login.\n\
+         To also start on boot without login, run: loginctl enable-linger $USER\n\
+         Disable autostart with: systemctl --user disable clawq\n\
+         %s"
+        unit_path start_hint
+  | Darwin ->
+      let plist_path = launchd_plist_path () in
+      let plist_contents = cmd_launchd_plist () in
+      write_file plist_path plist_contents;
+      let already_running = read_pid () <> None in
+      if not already_running then
+        ignore (run_command (Printf.sprintf "launchctl load %s" plist_path));
+      let extra =
+        if already_running then
+          "\n\
+           Daemon is already running; plist will take effect on next \
+           boot/login."
+        else ""
+      in
+      Printf.sprintf
+        "Service installed and loaded.\n\
+         Plist file: %s\n\
+         The service will autostart on login (RunAtLoad).\n\
+         Disable autostart with: launchctl unload %s\n\
+         Or remove entirely with: clawq service uninstall%s"
+        plist_path plist_path extra
+  | Other platform ->
+      Printf.sprintf
+        "Service install is not supported on %s.\n\
+         Manual alternatives:\n\
+         - Generate a systemd unit: clawq service systemd-unit\n\
+         - Generate a launchd plist: clawq service launchd-plist\n\
+         - Use your platform's init system to run: clawq service start"
+        platform
+
+let cmd_uninstall ?(detect_platform = detect_platform)
+    ?(run_command = run_command_default) () =
+  match detect_platform () with
+  | Linux ->
+      let unit_path = systemd_unit_path () in
+      ignore (run_command "systemctl --user stop clawq");
+      ignore (run_command "systemctl --user disable clawq");
+      (if Sys.file_exists unit_path then try Sys.remove unit_path with _ -> ());
+      ignore (run_command "systemctl --user daemon-reload");
+      Printf.sprintf "Service stopped, disabled, and unit file removed.\n%s"
+        unit_path
+  | Darwin ->
+      let plist_path = launchd_plist_path () in
+      if Sys.file_exists plist_path then begin
+        ignore (run_command (Printf.sprintf "launchctl unload %s" plist_path));
+        try Sys.remove plist_path with _ -> ()
+      end;
+      Printf.sprintf "Service unloaded and plist file removed.\n%s" plist_path
+  | Other platform ->
+      Printf.sprintf
+        "Service uninstall is not supported on %s.\n\
+         Stop the daemon manually with: clawq service stop"
+        platform

@@ -553,6 +553,210 @@ let test_component_status_running_with_valid_credentials () =
         "slack_enabled true" true
         (get_bool_field json "slack_enabled"))
 
+let contains haystack needle =
+  let nlen = String.length needle in
+  let hlen = String.length haystack in
+  let rec loop i =
+    if i + nlen > hlen then false
+    else if String.sub haystack i nlen = needle then true
+    else loop (i + 1)
+  in
+  nlen > 0 && loop 0
+
+let test_launchd_plist_output () =
+  let output = Service.cmd_launchd_plist () in
+  Alcotest.(check bool) "contains plist tag" true (contains output "<plist");
+  Alcotest.(check bool)
+    "contains Label" true
+    (contains output "<key>Label</key>");
+  Alcotest.(check bool)
+    "contains org.clawq.daemon" true
+    (contains output "org.clawq.daemon");
+  Alcotest.(check bool)
+    "contains RunAtLoad" true
+    (contains output "<key>RunAtLoad</key>");
+  Alcotest.(check bool)
+    "contains CLAWQ_DAEMON_NOFORK" true
+    (contains output "CLAWQ_DAEMON_NOFORK");
+  Alcotest.(check bool)
+    "contains ProgramArguments" true
+    (contains output "<key>ProgramArguments</key>");
+  Alcotest.(check bool)
+    "contains service start" true
+    (contains output "<string>service</string>")
+
+let test_systemd_unit_path_under_home () =
+  let path = Service.systemd_unit_path () in
+  Alcotest.(check bool)
+    "ends with expected suffix" true
+    (contains path ".config/systemd/user/clawq.service")
+
+let test_launchd_plist_path_under_home () =
+  let path = Service.launchd_plist_path () in
+  Alcotest.(check bool)
+    "ends with expected suffix" true
+    (contains path "Library/LaunchAgents/org.clawq.daemon.plist")
+
+let test_cmd_install_unsupported_platform () =
+  let result =
+    Service.cmd_install
+      ~detect_platform:(fun () -> Service.Other "FreeBSD")
+      ~run_command:(fun _ -> "")
+      ()
+  in
+  Alcotest.(check bool)
+    "mentions not supported" true
+    (contains result "not supported");
+  Alcotest.(check bool) "mentions FreeBSD" true (contains result "FreeBSD")
+
+let test_cmd_install_linux () =
+  Test_helpers.with_temp_home (fun home ->
+      let commands = ref [] in
+      let mock_run cmd =
+        commands := cmd :: !commands;
+        ""
+      in
+      let result =
+        Service.cmd_install
+          ~detect_platform:(fun () -> Service.Linux)
+          ~run_command:mock_run ()
+      in
+      Alcotest.(check bool)
+        "mentions installed" true
+        (contains result "installed");
+      Alcotest.(check bool)
+        "mentions loginctl" true
+        (contains result "loginctl enable-linger");
+      let unit_path =
+        Filename.concat home ".config/systemd/user/clawq.service"
+      in
+      Alcotest.(check bool) "unit file created" true (Sys.file_exists unit_path);
+      Alcotest.(check bool)
+        "ran daemon-reload" true
+        (List.exists (fun c -> contains c "daemon-reload") !commands);
+      Alcotest.(check bool)
+        "ran enable" true
+        (List.exists (fun c -> contains c "enable clawq") !commands))
+
+let test_cmd_install_darwin () =
+  Test_helpers.with_temp_home (fun home ->
+      let commands = ref [] in
+      let mock_run cmd =
+        commands := cmd :: !commands;
+        ""
+      in
+      let result =
+        Service.cmd_install
+          ~detect_platform:(fun () -> Service.Darwin)
+          ~run_command:mock_run ()
+      in
+      Alcotest.(check bool)
+        "mentions installed" true
+        (contains result "installed");
+      Alcotest.(check bool)
+        "mentions RunAtLoad" true
+        (contains result "RunAtLoad");
+      let plist_path =
+        Filename.concat home "Library/LaunchAgents/org.clawq.daemon.plist"
+      in
+      Alcotest.(check bool)
+        "plist file created" true
+        (Sys.file_exists plist_path);
+      Alcotest.(check bool)
+        "ran launchctl load" true
+        (List.exists (fun c -> contains c "launchctl load") !commands))
+
+let test_cmd_uninstall_unsupported_platform () =
+  let result =
+    Service.cmd_uninstall
+      ~detect_platform:(fun () -> Service.Other "FreeBSD")
+      ~run_command:(fun _ -> "")
+      ()
+  in
+  Alcotest.(check bool)
+    "mentions not supported" true
+    (contains result "not supported")
+
+let test_cmd_uninstall_handles_missing_files () =
+  Test_helpers.with_temp_home (fun _home ->
+      let result =
+        Service.cmd_uninstall
+          ~detect_platform:(fun () -> Service.Linux)
+          ~run_command:(fun _ -> "")
+          ()
+      in
+      Alcotest.(check bool) "returns response" true (String.length result > 0))
+
+let test_cmd_status_includes_autostart_line () =
+  Test_helpers.with_temp_home (fun _home ->
+      let result =
+        Service.cmd_status
+          ~detect_platform:(fun () -> Service.Linux)
+          ~run_command:(fun _ -> "")
+          ()
+      in
+      Alcotest.(check bool)
+        "contains autostart" true
+        (contains result "autostart:"))
+
+let test_detect_platform_returns_value () =
+  let platform = Service.detect_platform () in
+  (match platform with
+  | Service.Linux -> ()
+  | Service.Darwin -> ()
+  | Service.Other _ -> ());
+  Alcotest.(check pass) "detect_platform returned" () ()
+
+let test_cmd_install_darwin_already_running () =
+  Test_helpers.with_temp_home (fun home ->
+      Service.write_pid (Unix.getpid ());
+      let commands = ref [] in
+      let mock_run cmd =
+        commands := cmd :: !commands;
+        ""
+      in
+      let result =
+        Service.cmd_install
+          ~detect_platform:(fun () -> Service.Darwin)
+          ~run_command:mock_run ()
+      in
+      Alcotest.(check bool)
+        "mentions already running" true
+        (contains result "already running");
+      Alcotest.(check bool)
+        "launchctl load not called" false
+        (List.exists (fun c -> contains c "launchctl load") !commands);
+      let plist_path =
+        Filename.concat home "Library/LaunchAgents/org.clawq.daemon.plist"
+      in
+      Alcotest.(check bool)
+        "plist file created" true
+        (Sys.file_exists plist_path))
+
+let test_cmd_install_linux_already_running () =
+  Test_helpers.with_temp_home (fun home ->
+      Service.write_pid (Unix.getpid ());
+      let commands = ref [] in
+      let mock_run cmd =
+        commands := cmd :: !commands;
+        ""
+      in
+      let result =
+        Service.cmd_install
+          ~detect_platform:(fun () -> Service.Linux)
+          ~run_command:mock_run ()
+      in
+      Alcotest.(check bool)
+        "mentions already running" true
+        (contains result "already running");
+      Alcotest.(check bool)
+        "does not suggest systemctl start" false
+        (contains result "systemctl --user start clawq");
+      let unit_path =
+        Filename.concat home ".config/systemd/user/clawq.service"
+      in
+      Alcotest.(check bool) "unit file created" true (Sys.file_exists unit_path))
+
 let suite =
   [
     Alcotest.test_case "handle daemon exit restart sets nofork and execs" `Quick
@@ -605,4 +809,25 @@ let suite =
       test_component_status_disabled_without_credentials;
     Alcotest.test_case "component status running with valid credentials" `Quick
       test_component_status_running_with_valid_credentials;
+    Alcotest.test_case "launchd plist output" `Quick test_launchd_plist_output;
+    Alcotest.test_case "systemd unit path under home" `Quick
+      test_systemd_unit_path_under_home;
+    Alcotest.test_case "launchd plist path under home" `Quick
+      test_launchd_plist_path_under_home;
+    Alcotest.test_case "cmd install unsupported platform" `Quick
+      test_cmd_install_unsupported_platform;
+    Alcotest.test_case "cmd install linux" `Quick test_cmd_install_linux;
+    Alcotest.test_case "cmd install darwin" `Quick test_cmd_install_darwin;
+    Alcotest.test_case "cmd uninstall unsupported platform" `Quick
+      test_cmd_uninstall_unsupported_platform;
+    Alcotest.test_case "cmd uninstall handles missing files" `Quick
+      test_cmd_uninstall_handles_missing_files;
+    Alcotest.test_case "cmd status includes autostart line" `Quick
+      test_cmd_status_includes_autostart_line;
+    Alcotest.test_case "detect platform returns value" `Quick
+      test_detect_platform_returns_value;
+    Alcotest.test_case "cmd install darwin already running" `Quick
+      test_cmd_install_darwin_already_running;
+    Alcotest.test_case "cmd install linux already running" `Quick
+      test_cmd_install_linux_already_running;
   ]

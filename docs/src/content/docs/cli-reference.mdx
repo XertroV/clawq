@@ -83,8 +83,11 @@ Every clawq command is listed below. Run `clawq COMMAND --help` for per-command 
 | `clawq rig list` | List available rigs and their install status |
 | `clawq reset-agent` | Wipe all session history, cron jobs, and workspace files |
 | `clawq runtime` | Manage native and Docker runtimes |
-| `clawq service` | Manage the clawq system service (start/stop/restart/systemd-unit) |
+| `clawq service` | Manage the clawq system service (start/stop/restart/install/uninstall/systemd-unit) |
 | `clawq service systemd-unit` | Print a systemd unit file for user-level daemon management |
+| `clawq service launchd-plist` | Print a launchd plist file for macOS daemon management |
+| `clawq service install` | Install and enable service autostart (systemd on Linux, launchd on macOS) |
+| `clawq service uninstall` | Stop and remove the autostart service configuration |
 | `clawq session` | Inspect and control agent sessions |
 | `clawq session list [--include-postmortem]` | List active sessions with state, channel, and pending queue counts. Postmortem sessions (`__postmortem_*`) are hidden by default; pass `--include-postmortem` to show them. |
 | `clawq session show KEY` | Show session details and message history |
