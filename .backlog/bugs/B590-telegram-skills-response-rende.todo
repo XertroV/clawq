@@ -1,10 +1,14 @@
 ---
+claimed_at: "2026-03-30T03:51:06Z"
+claimed_by: cli-user
+completed_at: null
 complexity: low
 depends_on: []
 estimate_hours: 1
 id: B590
 priority: medium
-status: pending
+started_at: "2026-03-30T03:51:06Z"
+status: in_progress
 tags: []
 title: Telegram /skills response renders raw HTML tags instead of rich formatted message
 ---
