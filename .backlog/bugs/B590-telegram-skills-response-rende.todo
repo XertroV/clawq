@@ -1,0 +1,15 @@
+---
+complexity: low
+depends_on: []
+estimate_hours: 1
+id: B590
+priority: medium
+status: pending
+tags: []
+title: Telegram /skills response renders raw HTML tags instead of rich formatted message
+---
+Running /skills from Telegram returns a plain-text message littered with <code> tags and raw HTML instead of a properly rendered rich-formatted message (monospace blocks, bold headings, collapsible sections, etc.).
+
+Expected: /skills output should render like /tools — using Telegram-supported Markdown/HTML formatting so it displays natively as a rich message.
+
+Observed: Raw tags visible in the message body, suggesting the skill-list output is being sent as plain text rather than through the Telegram HTML/Markdown formatter.
