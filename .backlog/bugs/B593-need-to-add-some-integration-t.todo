@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B593
+priority: high
+status: pending
+tags: []
+title: need to add some integration tests that aren't normally run (as part of tests) which verify that runners work (local, codex, kimi, claude, etc)
+---
+
+need to add some integration tests that aren't normally run (as part of tests) which verify that runners work (local, codex, kimi, claude, etc)
