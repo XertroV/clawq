@@ -1,10 +1,14 @@
 ---
+claimed_at: "2026-03-30T04:02:13Z"
+claimed_by: cli-user
+completed_at: null
 complexity: high
 depends_on: []
 estimate_hours: 1
 id: B591
 priority: high
-status: pending
+started_at: "2026-03-30T04:02:13Z"
+status: in_progress
 tags: []
 title: 'Local runner background tasks: no log file, no cancellation, premature stall detection'
 ---
