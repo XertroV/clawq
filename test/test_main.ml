@@ -65,6 +65,7 @@ let () =
        ("provider_openai_codex", Test_provider_openai_codex.suite);
        ("tools_security", Test_tools_security.suite);
        ("mcp", Test_mcp.suite);
+       ("runner_integration", Test_runner_integration.suite);
        ("runner_relay", Test_runner_relay.suite);
        ("resilience", Test_resilience.suite);
        ("perf", Test_perf.suite);

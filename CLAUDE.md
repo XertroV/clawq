@@ -33,6 +33,10 @@ Subdirectory-specific guidelines exist in `docs/CLAUDE.md`, `src/CLAUDE.md`, and
 
 - Run quick tests: `make test` (skips `Slow`-tagged integration tests)
 - Run all tests: `make test-all` (builds `main.exe` first)
+- Run runner integration tests: `make test-run ARGS="test runner_integration"`
+  - Requires runner binaries in PATH (codex, claude, kimi, gemini, opencode, cursor-agent)
+  - Tests skip gracefully if a runner binary is not available
+  - Fresh invocation tests (Tier 2) also need runner auth configured; skip on auth errors
 
 - Format: `make fmt` / `make fmt-check`
 

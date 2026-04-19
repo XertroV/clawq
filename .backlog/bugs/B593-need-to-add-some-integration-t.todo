@@ -1,14 +1,15 @@
 ---
 claimed_at: "2026-03-30T04:18:26Z"
 claimed_by: cli-user
-completed_at: null
+completed_at: "2026-03-30T04:46:23Z"
 complexity: medium
 depends_on: []
+duration_minutes: 27.954844724766666
 estimate_hours: 1
 id: B593
 priority: high
 started_at: "2026-03-30T04:18:26Z"
-status: in_progress
+status: done
 tags: []
 title: need to add some integration tests that aren't normally run (as part of tests) which verify that runners work (local, codex, kimi, claude, etc)
 ---

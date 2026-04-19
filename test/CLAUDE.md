@@ -67,3 +67,21 @@ Keep Lwt sleeps as short as functionally required:
 - **Log-follow tests**: Reduce intermediate sleep delays (e.g., `sleep 0.05` between appending a line and finishing the task) and use a faster `poll_seconds` (e.g., `0.02`) to reduce total follow time from ~300ms to ~100ms.
 - **Benchmark tests**: The `test_run_default` benchmark test should use `["-n"; "1"]` (1 iteration) not `[]` (10 iterations default) — the test only checks output format, not performance accuracy.
 - **Interrupt tests**: A 30ms `Lwt_unix.sleep` is enough to ensure the tested process has started before setting the interrupt flag. 100ms is wasteful.
+
+## Runner Integration Tests
+
+These tests live in `test/test_runner_integration.ml` and verify that runner binaries work end-to-end.
+
+- All tagged `Slow` — skipped by `make test`, included in `make test-all`
+- Run just runner tests: `make test-run ARGS="test runner_integration"`
+
+### Test Tiers
+
+- **Tier 1 (version check)**: No auth needed. Runs `<binary> --version` with 10s timeout. Skips if binary not in PATH.
+- **Tier 2 (fresh invocation)**: Needs auth. Builds real commands via `Runner_framework.build_command_for`, 90s timeout. Skips on missing binary or auth error.
+- **Tier 3 (local runner)**: Always runs. Uses mock `run_turn` with in-memory DB. Tests lifecycle, callbacks, and timeouts.
+
+### Skip and Auth Patterns
+
+- Binary skip: `if not (Background_task.runner_available X) then Alcotest.skip ()`
+- Auth error detection: `is_auth_error` checks for common auth failure strings ("unauthorized", "api key", "401", etc.) in combined stdout+stderr output

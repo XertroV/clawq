@@ -167,6 +167,7 @@
   test_rig
   test_held_items
   test_repo_manager
+  test_runner_integration
   test_runner_relay
   test_structured_pipeline)
  (libraries
