@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B594
+priority: high
+status: pending
+tags: []
+title: 'Teams ask_user_question: ''Add notes?'' prompt appears after every question, even when unnecessary'
+---
+
+Teams ask_user_question: 'Add notes?' prompt appears after every question, even when unnecessary
