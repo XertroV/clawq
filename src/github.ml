@@ -281,6 +281,7 @@ let handle_webhook ~(repo_config : Runtime_config.github_repo_config)
             | Github_webhook.Ignored ->
                 let* hook_count =
                   Github_hooks.run_matching_hooks ~session_manager ~prepared
+                    ~github_config:(Some github_config) ~api_limiter
                 in
                 if hook_count > 0 then
                   Lwt.return (Ok (Printf.sprintf "hooked:%d" hook_count))
@@ -307,6 +308,7 @@ let handle_webhook ~(repo_config : Runtime_config.github_repo_config)
                 | None ->
                     let* hook_count =
                       Github_hooks.run_matching_hooks ~session_manager ~prepared
+                        ~github_config:(Some github_config) ~api_limiter
                     in
                     if hook_count > 0 then
                       Lwt.return (Ok (Printf.sprintf "hooked:%d" hook_count))
@@ -314,6 +316,7 @@ let handle_webhook ~(repo_config : Runtime_config.github_repo_config)
       else
         let* hook_count =
           Github_hooks.run_matching_hooks ~session_manager ~prepared
+            ~github_config:(Some github_config) ~api_limiter
         in
         if hook_count > 0 then
           Lwt.return (Ok (Printf.sprintf "hooked:%d" hook_count))

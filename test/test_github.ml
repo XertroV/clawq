@@ -769,6 +769,288 @@ let format_suite =
       dedup_prevents_reprocessing;
   ]
 
+(* ---- post_back_to_github tests ---- *)
+
+(* We mock Github_api.post_comment by redirecting the API base to a local
+   HTTP server that records what it receives. *)
+
+let hook_post_back_to_github_posts_comment () =
+  let context =
+    Yojson.Safe.from_string {|{"repo":"acme/backend","pull_request_number":42}|}
+  in
+  let github_config : Runtime_config.github_config =
+    {
+      auth = Runtime_config.GithubPat "ghp_test";
+      repos = [];
+      default_model = None;
+    }
+  in
+  let api_limiter =
+    Rate_limiter.create ~rate_per_minute:600 ~burst_multiplier:1.0
+  in
+  let posted_body = ref None in
+  let previous_api_base = Sys.getenv_opt "CLAWQ_GITHUB_API_BASE" in
+  Lwt_main.run
+    (let open Lwt.Syntax in
+     let callback _conn _req req_body =
+       let* body_str = Cohttp_lwt.Body.to_string req_body in
+       posted_body := Some body_str;
+       Cohttp_lwt_unix.Server.respond_string ~status:`OK ~body:{|{"id":1234}|}
+         ()
+     in
+     let port = 19876 in
+     let server =
+       Cohttp_lwt_unix.Server.create
+         ~mode:(`TCP (`Port port))
+         (Cohttp_lwt_unix.Server.make ~callback ())
+     in
+     Lwt.async (fun () -> server);
+     Unix.putenv "CLAWQ_GITHUB_API_BASE"
+       (Printf.sprintf "http://127.0.0.1:%d" port);
+     let* () = Lwt_unix.sleep 0.05 in
+     let* () =
+       Github_hooks.post_hook_response_to_github ~github_config ~api_limiter
+         ~context_json:context ~response:"Review complete."
+     in
+     let* () = Lwt_unix.sleep 0.1 in
+     Lwt.return_unit);
+  (match previous_api_base with
+  | Some v -> Unix.putenv "CLAWQ_GITHUB_API_BASE" v
+  | None -> Unix.putenv "CLAWQ_GITHUB_API_BASE" "");
+  match !posted_body with
+  | Some body ->
+      Alcotest.(check bool)
+        "contains response text" true
+        (try
+           ignore
+             (Str.search_forward (Str.regexp_string "Review complete.") body 0);
+           true
+         with Not_found -> false);
+      Alcotest.(check bool)
+        "contains bot reply marker" true
+        (try
+           ignore
+             (Str.search_forward
+                (Str.regexp_string "<!-- clawq-reply -->")
+                body 0);
+           true
+         with Not_found -> false)
+  | None -> Alcotest.fail "expected a POST to the mock server"
+
+let hook_post_back_skips_without_issue_number () =
+  let context = Yojson.Safe.from_string {|{"repo":"acme/backend"}|} in
+  let github_config : Runtime_config.github_config =
+    {
+      auth = Runtime_config.GithubPat "ghp_test";
+      repos = [];
+      default_model = None;
+    }
+  in
+  let api_limiter =
+    Rate_limiter.create ~rate_per_minute:600 ~burst_multiplier:1.0
+  in
+  (* Should not throw or make HTTP calls — just log and return *)
+  let previous_api_base = Sys.getenv_opt "CLAWQ_GITHUB_API_BASE" in
+  Unix.putenv "CLAWQ_GITHUB_API_BASE" "http://127.0.0.1:1";
+  Fun.protect
+    ~finally:(fun () ->
+      match previous_api_base with
+      | Some v -> Unix.putenv "CLAWQ_GITHUB_API_BASE" v
+      | None -> Unix.putenv "CLAWQ_GITHUB_API_BASE" "")
+    (fun () ->
+      Lwt_main.run
+        (Github_hooks.post_hook_response_to_github ~github_config ~api_limiter
+           ~context_json:context ~response:"no PR number here");
+      Alcotest.(check bool) "completed without error" true true)
+
+let hook_post_back_skips_without_repo () =
+  let context = Yojson.Safe.from_string {|{}|} in
+  let github_config : Runtime_config.github_config =
+    {
+      auth = Runtime_config.GithubPat "ghp_test";
+      repos = [];
+      default_model = None;
+    }
+  in
+  let api_limiter =
+    Rate_limiter.create ~rate_per_minute:600 ~burst_multiplier:1.0
+  in
+  let previous_api_base = Sys.getenv_opt "CLAWQ_GITHUB_API_BASE" in
+  Unix.putenv "CLAWQ_GITHUB_API_BASE" "http://127.0.0.1:1";
+  Fun.protect
+    ~finally:(fun () ->
+      match previous_api_base with
+      | Some v -> Unix.putenv "CLAWQ_GITHUB_API_BASE" v
+      | None -> Unix.putenv "CLAWQ_GITHUB_API_BASE" "")
+    (fun () ->
+      Lwt_main.run
+        (Github_hooks.post_hook_response_to_github ~github_config ~api_limiter
+           ~context_json:context ~response:"no repo here");
+      Alcotest.(check bool) "completed without error" true true)
+
+(* Integration test: run_matching_hooks with post_back_to_github=true triggers
+   a POST to the mock server after the agent responds. *)
+let run_matching_hooks_post_back_integration () =
+  Test_helpers.with_temp_home (fun _home ->
+      let hooks_dir = Github_hooks.hooks_dir () in
+      Workspace_scaffold.ensure_dir hooks_dir;
+      let hook_path = Filename.concat hooks_dir "pr-review.md" in
+      let hook_body =
+        String.concat "\n"
+          [
+            "---";
+            "name: pr-auto-review";
+            "repo: acme/backend";
+            "event: pull_request";
+            "post_back_to_github: true";
+            "---";
+            "Review PR {{title}}";
+          ]
+      in
+      let oc = open_out hook_path in
+      output_string oc hook_body;
+      close_out oc;
+      let pr_payload =
+        {|{"action":"opened","pull_request":{"number":7,"title":"Fix thing","body":"desc"},"repository":{"name":"backend","owner":{"login":"acme"},"full_name":"acme/backend"},"sender":{"login":"alice"}}|}
+      in
+      let prepared =
+        Github_hooks.prepare_event ~event_name:"pull_request"
+          ~headers:
+            (Cohttp.Header.of_list [ ("X-GitHub-Delivery", "postback-test") ])
+          ~raw_body:pr_payload
+      in
+      let github_config : Runtime_config.github_config =
+        {
+          auth = Runtime_config.GithubPat "ghp_test";
+          repos = [];
+          default_model = None;
+        }
+      in
+      let session_manager = Session.create ~config:Runtime_config.default () in
+      let agent_response = ref "" in
+      session_manager.special_command_handler <-
+        Some
+          (fun ~key:_ ~message:_ ~send_progress:_ ~interrupt_check:_ ->
+            agent_response := "LGTM — looks good to merge.";
+            Lwt.return (Some !agent_response));
+      let api_limiter =
+        Rate_limiter.create ~rate_per_minute:600 ~burst_multiplier:1.0
+      in
+      let posted_body = ref None in
+      let previous_api_base = Sys.getenv_opt "CLAWQ_GITHUB_API_BASE" in
+      Lwt_main.run
+        (let open Lwt.Syntax in
+         let callback _conn _req req_body =
+           let* body_str = Cohttp_lwt.Body.to_string req_body in
+           posted_body := Some body_str;
+           Cohttp_lwt_unix.Server.respond_string ~status:`OK
+             ~body:{|{"id":5678}|} ()
+         in
+         let port = 19877 in
+         let server =
+           Cohttp_lwt_unix.Server.create
+             ~mode:(`TCP (`Port port))
+             (Cohttp_lwt_unix.Server.make ~callback ())
+         in
+         Lwt.async (fun () -> server);
+         Unix.putenv "CLAWQ_GITHUB_API_BASE"
+           (Printf.sprintf "http://127.0.0.1:%d" port);
+         let* () = Lwt_unix.sleep 0.05 in
+         let* count =
+           Github_hooks.run_matching_hooks ~session_manager
+             ~github_config:(Some github_config) ~api_limiter ~prepared
+         in
+         Alcotest.(check int) "one hook ran" 1 count;
+         let* () = Lwt_unix.sleep 0.1 in
+         Lwt.return_unit);
+      (match previous_api_base with
+      | Some v -> Unix.putenv "CLAWQ_GITHUB_API_BASE" v
+      | None -> Unix.putenv "CLAWQ_GITHUB_API_BASE" "");
+      match !posted_body with
+      | Some body ->
+          Alcotest.(check bool)
+            "posted body contains response" true
+            (try
+               ignore (Str.search_forward (Str.regexp_string "LGTM") body 0);
+               true
+             with Not_found -> false)
+      | None -> Alcotest.fail "expected post_back_to_github to POST a comment")
+
+let run_matching_hooks_no_post_back_when_false () =
+  Test_helpers.with_temp_home (fun _home ->
+      let hooks_dir = Github_hooks.hooks_dir () in
+      Workspace_scaffold.ensure_dir hooks_dir;
+      let hook_path = Filename.concat hooks_dir "no-postback.md" in
+      let hook_body =
+        String.concat "\n"
+          [
+            "---";
+            "name: silent-hook";
+            "repo: acme/backend";
+            "event: pull_request";
+            "---";
+            "Just review {{title}} silently.";
+          ]
+      in
+      let oc = open_out hook_path in
+      output_string oc hook_body;
+      close_out oc;
+      let pr_payload =
+        {|{"action":"opened","pull_request":{"number":8,"title":"Silent PR","body":"desc"},"repository":{"name":"backend","owner":{"login":"acme"},"full_name":"acme/backend"},"sender":{"login":"alice"}}|}
+      in
+      let prepared =
+        Github_hooks.prepare_event ~event_name:"pull_request"
+          ~headers:
+            (Cohttp.Header.of_list
+               [ ("X-GitHub-Delivery", "no-postback-test") ])
+          ~raw_body:pr_payload
+      in
+      let github_config : Runtime_config.github_config =
+        {
+          auth = Runtime_config.GithubPat "ghp_test";
+          repos = [];
+          default_model = None;
+        }
+      in
+      let session_manager = Session.create ~config:Runtime_config.default () in
+      session_manager.special_command_handler <-
+        Some
+          (fun ~key:_ ~message:_ ~send_progress:_ ~interrupt_check:_ ->
+            Lwt.return (Some "silent review done"));
+      let api_limiter =
+        Rate_limiter.create ~rate_per_minute:600 ~burst_multiplier:1.0
+      in
+      let any_request = ref false in
+      let previous_api_base = Sys.getenv_opt "CLAWQ_GITHUB_API_BASE" in
+      Lwt_main.run
+        (let open Lwt.Syntax in
+         let callback _conn _req _req_body =
+           any_request := true;
+           Cohttp_lwt_unix.Server.respond_string ~status:`OK ~body:"{}" ()
+         in
+         let port = 19878 in
+         let server =
+           Cohttp_lwt_unix.Server.create
+             ~mode:(`TCP (`Port port))
+             (Cohttp_lwt_unix.Server.make ~callback ())
+         in
+         Lwt.async (fun () -> server);
+         Unix.putenv "CLAWQ_GITHUB_API_BASE"
+           (Printf.sprintf "http://127.0.0.1:%d" port);
+         let* () = Lwt_unix.sleep 0.05 in
+         let* count =
+           Github_hooks.run_matching_hooks ~session_manager
+             ~github_config:(Some github_config) ~api_limiter ~prepared
+         in
+         Alcotest.(check int) "one hook ran" 1 count;
+         let* () = Lwt_unix.sleep 0.1 in
+         Lwt.return_unit);
+      (match previous_api_base with
+      | Some v -> Unix.putenv "CLAWQ_GITHUB_API_BASE" v
+      | None -> Unix.putenv "CLAWQ_GITHUB_API_BASE" "");
+      Alcotest.(check bool)
+        "no POST made when post_back_to_github is false" false !any_request)
+
 let hooks_suite =
   [
     Alcotest.test_case "load and render workflow hook" `Quick
@@ -783,6 +1065,16 @@ let hooks_suite =
       github_hook_workflow_events_are_not_user_generated;
     Alcotest.test_case "non-user-generated workflow failures run hooks" `Quick
       handle_webhook_non_user_generated_failure_runs_hooks;
+    Alcotest.test_case "post_back_to_github posts PR comment" `Quick
+      hook_post_back_to_github_posts_comment;
+    Alcotest.test_case "post_back_to_github skips without issue number" `Quick
+      hook_post_back_skips_without_issue_number;
+    Alcotest.test_case "post_back_to_github skips without repo" `Quick
+      hook_post_back_skips_without_repo;
+    Alcotest.test_case "run_matching_hooks passes post_back response" `Quick
+      run_matching_hooks_post_back_integration;
+    Alcotest.test_case "run_matching_hooks no post_back when false" `Quick
+      run_matching_hooks_no_post_back_when_false;
   ]
 
 let config_suite =

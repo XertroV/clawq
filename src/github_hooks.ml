@@ -402,7 +402,55 @@ let default_session_key prepared =
 
 (* ---- Hook execution ---- *)
 
-let run_matching_hooks ~(session_manager : Session.t) ~prepared =
+let post_hook_response_to_github ~(github_config : Runtime_config.github_config)
+    ~api_limiter ~context_json ~response =
+  let open Lwt.Syntax in
+  let owner, repo =
+    match Webhook_handler.first_string context_json [ "repo" ] with
+    | Some r -> (
+        match String.split_on_char '/' r with
+        | [ o; rp ] -> (o, rp)
+        | _ -> ("", ""))
+    | None -> ("", "")
+  in
+  let issue_number =
+    Webhook_handler.first_int context_json
+      [ "pull_request_number"; "issue_number" ]
+  in
+  if owner = "" || repo = "" then (
+    Logs.warn (fun m ->
+        m
+          "GitHub hooks: post_back_to_github skipped — could not extract \
+           owner/repo from context");
+    Lwt.return ())
+  else
+    match issue_number with
+    | None ->
+        Logs.info (fun m ->
+            m
+              "GitHub hooks: post_back_to_github skipped — no issue/PR number \
+               in context for %s/%s"
+              owner repo);
+        Lwt.return ()
+    | Some n ->
+        Lwt.catch
+          (fun () ->
+            let* _ok =
+              Rate_limiter.check_and_consume api_limiter
+                ~key:(Printf.sprintf "github:%s/%s" owner repo)
+            in
+            let body = response ^ "\n<!-- clawq-reply -->" in
+            Github_api.post_comment ~auth:github_config.auth ~owner ~repo
+              ~issue_number:n ~body)
+          (fun exn ->
+            Logs.err (fun m ->
+                m "GitHub hooks: post_back_to_github failed for %s/%s#%d: %s"
+                  owner repo n (Printexc.to_string exn));
+            Lwt.return ())
+
+let run_matching_hooks ~(session_manager : Session.t)
+    ~(github_config : Runtime_config.github_config option) ~api_limiter
+    ~prepared =
   let open Lwt.Syntax in
   match prepared.context_json with
   | None -> Lwt.return 0
@@ -424,12 +472,6 @@ let run_matching_hooks ~(session_manager : Session.t) ~prepared =
               if prepared.sender_login <> "" then prepared.sender_login
               else "github-webhook"
             in
-            if hook.post_back_to_github then
-              Logs.info (fun m ->
-                  m
-                    "GitHub hooks: hook %s requested post_back_to_github but \
-                     posting follow-up comments is not implemented yet"
-                    hook.name);
             Logs.info (fun m ->
                 m "GitHub hooks: invoking hook %s for %s %s key=%s sender=%s"
                   hook.name prepared.repo_full_name prepared.event_name key
@@ -446,7 +488,29 @@ let run_matching_hooks ~(session_manager : Session.t) ~prepared =
                       m "GitHub hooks: ran hook %s for %s %s response=%S"
                         hook.name prepared.repo_full_name prepared.event_name
                         response);
-                  Lwt.return 1)
+                  match github_config with
+                  | Some gc when hook.post_back_to_github ->
+                      let* () =
+                        post_hook_response_to_github ~github_config:gc
+                          ~api_limiter ~context_json ~response
+                      in
+                      Lwt.return 1
+                  | Some _ ->
+                      if hook.post_back_to_github then
+                        Logs.warn (fun m ->
+                            m
+                              "GitHub hooks: post_back_to_github requested for \
+                               hook %s but no github_config available"
+                              hook.name);
+                      Lwt.return 1
+                  | None ->
+                      if hook.post_back_to_github then
+                        Logs.warn (fun m ->
+                            m
+                              "GitHub hooks: post_back_to_github requested for \
+                               hook %s but no github_config available"
+                              hook.name);
+                      Lwt.return 1)
                 (fun exn ->
                   Logs.err (fun m ->
                       m "GitHub hooks: hook %s failed: %s" hook.name
