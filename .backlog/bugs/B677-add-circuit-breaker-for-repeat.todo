@@ -1,0 +1,16 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B677
+priority: high
+status: pending
+tags: []
+title: Add circuit breaker for repeated identical parameter-validation tool failures
+---
+The tool-invocation framework allows a model to emit the same failing tool call indefinitely. In this incident, `web_search` was called 3 times with `{}` (missing required `query`), and each time the tool returned a clear error. The model ignored both tool errors and stuck-detector STOP messages, continuing to loop. A circuit breaker is needed: after two consecutive identical parameter-validation failures on the same tool, the framework should abort the turn and surface a text error to the user instead of sending the call to the model again. The stuck-detector (`src/stuck_detector.ml`) already classifies this pattern (`SameErrorString`, `RepeatedToolCall`) but only observes; it does not enforce termination. Consider: (1) hard-circuit-breaker in `src/engine.ml` or the tool-invocation loop, or (2) strengthening `Tool.make_param_error` output with a "do NOT retry" imperative that the engine treats as a special halt signal. Also review whether the observer's injected `STOP`/`NOTE` warnings are prominent enough in the model's prompt context to actually break loops.
+
+--
+Auto-filed by clawq postmortem for session teams:personal:a:1JPVFngEx3FRRVWXUe5fb97HWjfsCdtDImgKuD3u_N6IpgOD0euB5bnQHI9RsDQuK3qOG_5Jyhq4wWGr0IczaxEXPN5vIGppdngtwZucpyhDNrW1_YJCrXnHrksQ5fCuT (pattern: SameErrorString: error repeated 3 times: Error: missing required parameter 'query' for tool web_search. Required parameters: query (string). Example: web_search(...
+RepeatedToolCall: "web_search" called 3 times with same args: {}).
+Postmortem doc: /home/xertrov/.clawq/postmortems/2026-05-22T090057-teams:personal:a:1JPVFngEx3FRRVWXUe5fb97HWjfsCdtDImgKuD3u_N6IpgOD0euB5bnQHI9RsDQuK3qOG_5Jyhq4wWGr0IczaxEXPN5vIGppdngtwZucpyhDNrW1_YJCrXnHrksQ5fCuT.md
