@@ -1,0 +1,19 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B621
+priority: high
+status: pending
+tags: []
+title: HTTP client 30s default timeout always fires before resilience retry budget
+---
+Daemon log scan (2026-05-21): 13 occurrences of HTTP timeouts hitting the inner 30s default_timeout_s in Http_client.post_json before the outer Resilience.with_timeout_retry (120s default) gets a chance to retry. Postmortem in session L1969 of daemon.log already analyzed root cause.
+
+Root cause: src/http_client.ml has a hardcoded default_timeout_s = 30.0 used by post_json. Higher-level callers using Resilience.with_timeout_retry expect HTTP calls to take up to ~115s before timing out (per their configured timeout_s). The inner 30s always wins.
+
+Fix: have callers use Http_client.post_json_with_timeout (which exists per the postmortem) passing a timeout aligned with the outer resilience budget. Or remove the 30s default and require callers to specify timeout explicitly.
+
+Affected lines/representative log: daemon.log L246, 338, 1929, 1972, 2022, 2033, 2045, 2047, 2088, 2100, 2161, 2173, 2175.
+
+Tag: http-client, resilience, timeout
