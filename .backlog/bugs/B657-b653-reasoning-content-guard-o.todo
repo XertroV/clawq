@@ -1,0 +1,11 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B657
+priority: high
+status: pending
+tags: []
+title: B653 reasoning_content guard only covers kimi — postmortem teams sessions still fail with thinking models
+---
+B653 introduced model_requires_reasoning_content in src/provider.ml:269 but only matches 'kimi-for-code' and 'kimi-for-coding'. Postmortem agent runs on teams:personal:a:* session at 01:00 and 02:00 produced: 'thinking is enabled but reasoning_content is missing in assistant tool call message at index 3' on 3 retries each, both aborted. Likely Z.ai glm-4.6-thinking or another thinking-enabled model (possibly via Anthropic Messages API path, not OpenAI-compat — needs verification). Action: (a) identify which model and provider path the postmortem agent uses, (b) extend model_requires_reasoning_content prefix list, AND/OR (c) add equivalent reasoning_content injection in provider_anthropic.ml / provider_zai_anthropic.ml paths if they handle thinking-mode-with-tool-calls separately.
