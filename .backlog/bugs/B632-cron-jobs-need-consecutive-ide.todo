@@ -1,0 +1,15 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B632
+priority: high
+status: pending
+tags: []
+title: Cron jobs need consecutive-identical-output detection — disable + alert after N identical responses
+---
+The briefing-hourly cron has produced "Nothing notable." without any tool calls in 9+ consecutive occurrences since 2026-03-30. The root cause (prompt offers literal idle shortcut alongside required web_search) has been correctly diagnosed every time, but the recommended structural fix — detecting when a cron job produces identical output N times in a row and automatically disabling it with a user notification — has never been implemented. Implement in scheduler.ml: after each cron run, compare the response to the last K responses for that cron job. If N consecutive responses are identical (exact string match or similarity above threshold), mark the cron as `enabled=false`, record the reason, and send a notification to the user via the session's channel. This single change would prevent this entire class of degenerate-cron-loop failure. Secondary fix: restructure the briefing cron prompt to gate any "Nothing notable." response behind evidence of completed web_search calls.
+
+--
+Auto-filed by clawq postmortem for session teams:personal:a:1JPVFngEx3FRRVWXUe5fb97HWjfsCdtDimgKuD3u_N6IpgOD0euB5bnQHI9RsDQuK3qOG_5Jyhq4wWGr0IczaxEXPN5vIGppdngtwZucpyhDNrW1_YJCrXnHrksQ5fCuT (pattern: repeating unproductive response without performing required web searches).
+Postmortem doc: /home/xertrov/.clawq/postmortems/2026-05-21T220018-teams:personal:a:1JPVFngEx3FRRVWXUe5fb97HWjfsCdtDimgKuD3u_N6IpgOD0euB5bnQHI9RsDQuK3qOG_5Jyhq4wWGr0IczaxEXPN5vIGppdngtwZucpyhDNrW1_YJCrXnHrksQ5fCuT.md
