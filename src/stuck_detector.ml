@@ -120,6 +120,22 @@ let check ~history ~iteration ~max_iters =
   | [], ss -> Suspicious ss
   | ds, _ -> Definite ds
 
+(* B612: compact key describing the signal's TYPE plus the tool involved (if
+   any). Used by the postmortem circuit-breaker so distinct stuck patterns in
+   the same session can each launch their own postmortem instead of being
+   suppressed by an earlier unrelated launch. *)
+let signal_pattern_key (s : signal) : string =
+  match s with
+  | ConsecutiveErrors { tool; _ } -> "ConsecutiveErrors:" ^ tool
+  | RepeatedToolCall { tool; _ } -> "RepeatedToolCall:" ^ tool
+  | SameErrorString _ -> "SameErrorString"
+  | NearMaxIters _ -> "NearMaxIters"
+
+let signals_pattern_key (signals : signal list) : string =
+  signals
+  |> List.map signal_pattern_key
+  |> List.sort_uniq compare |> String.concat "+"
+
 let signals_to_string signals =
   let buf = Buffer.create 128 in
   List.iter

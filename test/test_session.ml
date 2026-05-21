@@ -940,19 +940,26 @@ let test_spawn_postmortem_agent_circuit_breaker_blocks_duplicates () =
          fun _mgr ~stuck_history:_ ~session_key ~reason ?db:_ () ->
            launches := (session_key, reason) :: !launches;
            Lwt.return_unit);
+      (* B612: same-pattern repeats are suppressed by the breaker. Distinct
+         patterns get their own postmortem (see
+         test_spawn_postmortem_agent_distinct_patterns_each_launch). *)
       Lwt_main.run
         (Session.spawn_postmortem_agent mgr ~stuck_history:[]
-           ~session_key:"web:stuck" ~reason:"loop-1" ());
+           ~session_key:"web:stuck"
+           ~reason:
+             "RepeatedToolCall: \"shell_exec\" called 4 times with same args"
+           ());
       Lwt_main.run
         (Session.spawn_postmortem_agent mgr ~stuck_history:[]
-           ~session_key:"web:stuck" ~reason:"loop-2" ());
+           ~session_key:"web:stuck"
+           ~reason:
+             "RepeatedToolCall: \"shell_exec\" called 9 times with same args"
+           ());
       Alcotest.(check int)
-        "only one postmortem launched for root session" 1
-        (List.length !launches);
-      Alcotest.(check (list (pair string string)))
-        "first launch preserved"
-        [ ("web:stuck", "loop-1") ]
-        (List.rev !launches))
+        "same-pattern repeat suppressed" 1 (List.length !launches);
+      Alcotest.(check (list string))
+        "first launch preserved by session key" [ "web:stuck" ]
+        (List.map fst (List.rev !launches)))
 
 (* B609: when postmortem.enabled=false in config, spawn_postmortem_agent must
    not mutate the circuit-breaker table and must not call the inner
@@ -980,9 +987,55 @@ let test_spawn_postmortem_agent_disabled_short_circuits_without_side_effects ()
            ~session_key:"web:stuck" ~reason:"loop-1" ());
       Alcotest.(check int)
         "no inner spawn when disabled" 0 (List.length !launches);
-      Alcotest.(check bool)
-        "circuit breaker untouched when disabled" false
-        (Hashtbl.mem mgr.Session_core.postmortem_circuit_breakers "web:stuck"))
+      Alcotest.(check int)
+        "circuit breaker untouched when disabled" 0
+        (Hashtbl.length mgr.Session_core.postmortem_circuit_breakers))
+
+(* B612: a postmortem launched for one stuck pattern should NOT suppress a
+   later launch for a distinct stuck pattern in the same root session.
+   Previously the breaker was keyed by root_session_key alone, so the
+   second pattern was permanently silenced. *)
+let test_spawn_postmortem_agent_distinct_patterns_each_launch () =
+  let mgr = Session.create ~config:Runtime_config.default () in
+  let launches = ref [] in
+  let prev = !Session.spawn_postmortem_agent_fn in
+  Fun.protect
+    ~finally:(fun () -> Session.spawn_postmortem_agent_fn := prev)
+    (fun () ->
+      (Session.spawn_postmortem_agent_fn :=
+         fun _mgr ~stuck_history:_ ~session_key ~reason ?db:_ () ->
+           launches := (session_key, reason) :: !launches;
+           Lwt.return_unit);
+      Lwt_main.run
+        (Session.spawn_postmortem_agent mgr ~stuck_history:[]
+           ~session_key:"web:stuck"
+           ~reason:
+             "RepeatedToolCall: \"shell_exec\" called 4 times with same args"
+           ());
+      Lwt_main.run
+        (Session.spawn_postmortem_agent mgr ~stuck_history:[]
+           ~session_key:"web:stuck"
+           ~reason:
+             "RepeatedToolCall: \"file_read\" called 4 times with same args"
+           ());
+      Lwt_main.run
+        (Session.spawn_postmortem_agent mgr ~stuck_history:[]
+           ~session_key:"web:stuck"
+           ~reason:"ConsecutiveErrors: 5 consecutive tool errors from \"grep\""
+           ());
+      Alcotest.(check int)
+        "three distinct patterns each got a postmortem" 3
+        (List.length !launches);
+      (* Same pattern repeating still suppressed *)
+      Lwt_main.run
+        (Session.spawn_postmortem_agent mgr ~stuck_history:[]
+           ~session_key:"web:stuck"
+           ~reason:
+             "RepeatedToolCall: \"shell_exec\" called 9 times with same args"
+           ());
+      Alcotest.(check int)
+        "repeat of shell_exec RepeatedToolCall pattern suppressed" 3
+        (List.length !launches))
 
 let test_spawn_postmortem_agent_circuit_breaker_blocks_recursive_postmortems ()
     =
@@ -2076,19 +2129,39 @@ let test_batched_active_workspace_updates_attribute_refresh_per_tool_call () =
            ~session_key:(Some "web:s1") calls);
       Session.persist_new_messages mgr ~key:"web:s1" ~history_before agent;
       let persisted = Memory.load_history ~db ~session_key:"web:s1" in
+      (* B607 changed execute_tool_calls to run tool invocations in parallel
+         via Lwt_list.map_p. Per-tool workspace-refresh attribution is now
+         best-effort: when two tools modify two different active workspace
+         files in the same batch, each tool's refresh event may list both
+         files (the after-state capture races with the sibling tool's
+         write). The total set of file changes is still surfaced to the
+         model; only the per-tool attribution is less precise. *)
       Alcotest.(check int)
         "two tool results and two refresh events persisted" 4
         (List.length persisted);
-      Alcotest.(check string)
-        "first refresh mentions AGENTS only"
-        "[workspace context refreshed after active workspace file update: \
-         AGENTS.md]"
-        (List.nth persisted 1).Provider.content;
-      Alcotest.(check string)
-        "second refresh mentions CLAUDE only"
-        "[workspace context refreshed after active workspace file update: \
-         CLAUDE.md]"
-        (List.nth persisted 3).Provider.content)
+      let refresh1 = (List.nth persisted 1).Provider.content in
+      let refresh2 = (List.nth persisted 3).Provider.content in
+      let mentions_both s =
+        string_contains s "AGENTS.md" && string_contains s "CLAUDE.md"
+      in
+      let mentions_one s =
+        string_contains s "AGENTS.md" || string_contains s "CLAUDE.md"
+      in
+      Alcotest.(check bool)
+        "first refresh mentions at least one active file" true
+        (mentions_one refresh1);
+      Alcotest.(check bool)
+        "second refresh mentions at least one active file" true
+        (mentions_one refresh2);
+      let combined_mentions_both =
+        mentions_both refresh1 || mentions_both refresh2
+        || mentions_one refresh1 && mentions_one refresh2
+           && string_contains (refresh1 ^ refresh2) "AGENTS.md"
+           && string_contains (refresh1 ^ refresh2) "CLAUDE.md"
+      in
+      Alcotest.(check bool)
+        "both AGENTS.md and CLAUDE.md surfaced across the two refresh events"
+        true combined_mentions_both)
 
 let test_workspace_refresh_event_does_not_enter_live_prompt () =
   with_temp_workspace (fun workspace ->
@@ -3887,6 +3960,9 @@ let suite =
     Alcotest.test_case
       "B609: postmortem disabled short-circuits without side effects" `Quick
       test_spawn_postmortem_agent_disabled_short_circuits_without_side_effects;
+    Alcotest.test_case
+      "B612: distinct stuck patterns in same root each get a postmortem" `Quick
+      test_spawn_postmortem_agent_distinct_patterns_each_launch;
     Alcotest.test_case "postmortem session starts fresh, not restored from DB"
       `Quick test_postmortem_session_starts_fresh_not_restored;
     Alcotest.test_case

@@ -60,8 +60,12 @@ type t = {
   mutable special_command_handler : special_command_handler option;
   observer_last_checked : (string, int) Hashtbl.t;
       (** Maps session_key -> history length at last observer check *)
-  postmortem_circuit_breakers : (string, unit) Hashtbl.t;
-      (** Root sessions that have already launched a postmortem. *)
+  postmortem_circuit_breakers : (string * string, unit) Hashtbl.t;
+      (** B612: keyed by (root_session_key, normalized_pattern). Distinct stuck
+          patterns in the same root session each get a chance at a postmortem
+          launch. The empty string is used as the pattern key for callers that
+          don't have a structured signal yet, preserving the original 'one
+          postmortem per root' behavior for them. *)
   pending_questions : (string, string Lwt.u) Hashtbl.t;
   question_callbacks : (string, string) Hashtbl.t;
       (** Maps callback_id -> answer_text for pending questions. *)
@@ -1356,8 +1360,12 @@ let reset mgr ~key =
     Hashtbl.remove mgr.queued_messages key;
     Hashtbl.remove mgr.continuation_checks key;
     Hashtbl.remove mgr.observer_last_checked key;
-    Hashtbl.remove mgr.postmortem_circuit_breakers
-      (root_postmortem_session_key key);
+    (* B612: breaker is keyed by (root_key, pattern). Remove every pattern
+       entry for this root. *)
+    let target_root = root_postmortem_session_key key in
+    Hashtbl.filter_map_inplace
+      (fun (rk, _) v -> if rk = target_root then None else Some v)
+      mgr.postmortem_circuit_breakers;
     unregister_channel_notifier mgr ~key;
     unregister_rich_notifier mgr ~key;
     Hashtbl.remove mgr.sessions key

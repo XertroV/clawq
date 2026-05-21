@@ -77,6 +77,38 @@ let spawn_postmortem_agent_fn :
   ref (fun _mgr ~stuck_history:_ ~session_key:_ ~reason:_ ?db:_ () ->
       Lwt.return_unit)
 
+(* B612: derive a stable pattern fingerprint from the reason string so
+   distinct stuck patterns in the same root session each get a chance at a
+   postmortem launch. Falls back to a truncated reason when none of the
+   known Stuck_detector prefixes match. *)
+let pattern_key_for_reason (reason : string) : string =
+  let known_prefixes =
+    [
+      "ConsecutiveErrors"; "RepeatedToolCall"; "SameErrorString"; "NearMaxIters";
+    ]
+  in
+  let matched =
+    List.find_opt
+      (fun p ->
+        String.length reason >= String.length p
+        && String.sub reason 0 (String.length p) = p)
+      known_prefixes
+  in
+  match matched with
+  | Some p -> (
+      (* Pull the tool name from the first double-quoted token after the
+         prefix. Stuck_detector formats reasons as ConsecutiveErrors: N
+         consecutive tool errors from TOOL_NAME_QUOTED. ... *)
+      try
+        let start = String.index reason '"' + 1 in
+        let stop = String.index_from reason start '"' in
+        let tool = String.sub reason start (stop - start) in
+        if tool = "" then p else p ^ ":" ^ tool
+      with Not_found -> p)
+  | None ->
+      let n = min 60 (String.length reason) in
+      String.sub reason 0 n
+
 let spawn_postmortem_agent mgr ~stuck_history ~session_key ~reason ?db () =
   let pm_cfg = mgr.Session_core.config.postmortem in
   if not pm_cfg.enabled then begin
@@ -97,19 +129,24 @@ let spawn_postmortem_agent mgr ~stuck_history ~session_key ~reason ?db () =
             session_key root_key reason);
       Lwt.return_unit
     end
-    else if Hashtbl.mem mgr.Session_core.postmortem_circuit_breakers root_key
-    then begin
-      Logs.warn (fun m ->
-          m
-            "Postmortem circuit breaker open for session %s; suppressing \
-             additional launch (reason=%s)"
-            root_key reason);
-      Lwt.return_unit
-    end
-    else begin
-      Hashtbl.replace mgr.Session_core.postmortem_circuit_breakers root_key ();
-      !spawn_postmortem_agent_fn mgr ~stuck_history ~session_key ~reason ?db ()
-    end
+    else
+      let pattern = pattern_key_for_reason reason in
+      let breaker_key = (root_key, pattern) in
+      if Hashtbl.mem mgr.Session_core.postmortem_circuit_breakers breaker_key
+      then begin
+        Logs.warn (fun m ->
+            m
+              "Postmortem circuit breaker open for session %s pattern %s; \
+               suppressing additional launch (reason=%s)"
+              root_key pattern reason);
+        Lwt.return_unit
+      end
+      else begin
+        Hashtbl.replace mgr.Session_core.postmortem_circuit_breakers breaker_key
+          ();
+        !spawn_postmortem_agent_fn mgr ~stuck_history ~session_key ~reason ?db
+          ()
+      end
 
 let expand_skill_refs_fn :
     (string -> (string * string list * (string * string) list) Lwt.t) ref =
