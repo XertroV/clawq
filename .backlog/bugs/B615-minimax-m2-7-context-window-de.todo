@@ -1,0 +1,24 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B615
+priority: high
+status: pending
+tags: []
+title: MiniMax-M2.7 context window defaults to 128k; should be 192k or higher
+---
+Triggered observation: user's MiniMax session compacted at ~60k tokens, with the daemon reporting a 128k context limit, but MiniMax-M2.7 has a much larger window (200k+ per docs).
+
+Root cause: src/runtime_config.ml::context_window_table is missing all MiniMax entries. Agent compaction uses runtime_config.context_window_for_model, not models_catalog. With no entry, it falls back to 128000 in agent_0_compact.ml:100.
+
+Fix:
+- Add MiniMax entries (M2, M2.1, M2.5, M2.7 and *-highspeed variants) to context_window_table with the correct documented limit.
+- Verify against the MiniMax docs (https://www.minimax.io/) for each variant.
+- Consider whether the table in runtime_config.ml and the catalog in models_catalog.ml should be unified to a single source of truth — duplication is the real bug here.
+
+Also: revisit memory.compaction_threshold_percent default. User says compaction triggered at 60k of a 128k budget — that's reasonable for the default ~50%, but with a larger context window, this becomes very early. Consider bumping default threshold or making it context-aware.
+
+Add integration test (via MiniMax API): send a session up to 130k+ tokens and verify no compaction triggers under default config when the real limit is 200k.
+
+Tag: minimax, context-window, compaction
