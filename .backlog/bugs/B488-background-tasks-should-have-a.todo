@@ -1,14 +1,15 @@
 ---
 claimed_at: "2026-05-21T10:44:43Z"
 claimed_by: cli-user
-completed_at: null
+completed_at: "2026-05-21T10:52:06Z"
 complexity: medium
 depends_on: []
+duration_minutes: 7.387654603033333
 estimate_hours: 1
 id: B488
 priority: high
 started_at: "2026-05-21T10:44:43Z"
-status: in_progress
+status: done
 tags: []
 title: 'Background tasks should have a follow up prompt option that, when the job succeeds, will be sent to the runner (resumed session) to be run. eg we can send a checklist of things to do like: tests pass, have run review using review-and-fix and it passes, have committed all changes, have rebased against master'
 ---
