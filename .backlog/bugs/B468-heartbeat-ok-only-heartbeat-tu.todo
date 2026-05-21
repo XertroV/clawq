@@ -1,14 +1,15 @@
 ---
 claimed_at: "2026-03-15T09:04:42Z"
 claimed_by: cli-user
-completed_at: null
+completed_at: "2026-05-21T21:28:53Z"
 complexity: medium
 depends_on: []
+duration_minutes: 97224.18438907729
 estimate_hours: 1
 id: B468
 priority: high
 started_at: "2026-03-15T09:04:42Z"
-status: in_progress
+status: done
 tags: []
 title: HEARTBEAT_OK-only heartbeat turns should not bloat session context
 ---
