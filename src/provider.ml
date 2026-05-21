@@ -204,7 +204,7 @@ let content_json_of_message m =
   | [] -> `String (sanitize_utf8 m.content)
   | parts -> content_parts_to_openai_json parts
 
-let message_to_json m =
+let message_to_json ?(require_reasoning_content = false) m =
   let sc = sanitize_utf8 m.content in
   (* Map "developer" → "system" for OpenAI Chat Completions API compatibility.
      The Chat Completions API only accepts system/user/assistant/tool/function
@@ -242,12 +242,38 @@ let message_to_json m =
                    ])
                m.tool_calls)
         in
-        fields @ [ ("content", `String sc); ("tool_calls", tc_json) ]
+        let base =
+          fields @ [ ("content", `String sc); ("tool_calls", tc_json) ]
+        in
+        (* B653: kimi-for-code rejects assistant tool_call messages that lack
+           reasoning_content when thinking is enabled server-side. Inject the
+           field (from m.thinking if present, else empty string) so resumed
+           or cross-provider histories survive. Opt-in via call site to avoid
+           sending an unknown field to providers that don't expect it. *)
+        if require_reasoning_content then
+          let rc =
+            match m.thinking with Some s -> sanitize_utf8 s | None -> ""
+          in
+          base @ [ ("reasoning_content", `String rc) ]
+        else base
     | _ -> fields @ [ ("content", content_json_of_message m) ]
   in
   `Assoc fields
 
-let messages_to_json messages = `List (List.map message_to_json messages)
+let messages_to_json ?(require_reasoning_content = false) messages =
+  `List
+    (List.map (fun m -> message_to_json ~require_reasoning_content m) messages)
+
+(* B653: models that require `reasoning_content` on every assistant tool_call
+   message. Detected by name prefix (lowercase). *)
+let model_requires_reasoning_content model =
+  let norm = String.lowercase_ascii (String.trim model) in
+  let prefixes = [ "kimi-for-code"; "kimi-for-coding" ] in
+  List.exists
+    (fun p ->
+      String.length norm >= String.length p
+      && String.sub norm 0 (String.length p) = p)
+    prefixes
 
 (* Pull each tool message forward in the list so it sits adjacent to the
    assistant turn that issued its tool_use. Non-tool messages that happened to
@@ -1204,7 +1230,14 @@ let complete ~(config : Runtime_config.t) ~messages ?tools ?session_key
          (which itself imports Provider for the message type). *)
       let messages = inline_ensure_tool_group_integrity messages in
       let body_fields =
-        [ ("model", `String model); ("messages", messages_to_json messages) ]
+        [
+          ("model", `String model);
+          ( "messages",
+            messages_to_json
+              ~require_reasoning_content:
+                (model_requires_reasoning_content model)
+              messages );
+        ]
       in
       let body_fields =
         if temp_locked then body_fields
@@ -1649,7 +1682,11 @@ let complete_stream ~(config : Runtime_config.t) ~messages ?tools ?session_key
       let body_fields =
         [
           ("model", `String model);
-          ("messages", messages_to_json messages);
+          ( "messages",
+            messages_to_json
+              ~require_reasoning_content:
+                (model_requires_reasoning_content model)
+              messages );
           ("stream", `Bool true);
         ]
       in
