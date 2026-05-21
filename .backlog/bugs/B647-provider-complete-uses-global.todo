@@ -1,14 +1,15 @@
 ---
 claimed_at: "2026-05-21T18:34:21Z"
 claimed_by: cli-user
-completed_at: null
+completed_at: "2026-05-21T18:34:21Z"
 complexity: medium
 depends_on: []
+duration_minutes: 0.011944290583333333
 estimate_hours: 1
 id: B647
 priority: medium
 started_at: "2026-05-21T18:34:21Z"
-status: in_progress
+status: done
 tags: []
 title: Provider.complete uses global 30s HTTP timeout — resilience layer's 120s wrapper is dead, large-context calls die inside
 ---
