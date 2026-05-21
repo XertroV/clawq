@@ -1,0 +1,23 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B617
+priority: high
+status: pending
+tags: []
+title: Z.ai native Anthropic-compatible provider path missing
+---
+cx-reviewer audit (2026-05-21): src/provider.ml has zai/zai_coding default base URLs but no Anthropic-compatible native provider. There is no src/provider_zai.ml and no Zai kind in provider.ml::detect_kind. Z.ai/GLM requests route through OpenAI-compatible /chat/completions at provider.ml:941, not the official anthropic-compat /anthropic/v1/messages endpoint.
+
+Impact:
+- Tool serialization for GLM/Z.ai goes via OpenAI format (probably works since Z.ai accepts it).
+- But the bigger anthropic-compat surface (tool_use blocks, content blocks, etc.) is not exercised.
+- Likely fine for now; flag as architectural cleanup.
+
+Fix:
+- Create src/provider_zai.ml mirroring provider_minimax.ml with anthropic-compat endpoint, tools_to_anthropic_json, and message conversion.
+- Register native_complete for ZaiCoding/Zai kinds in provider_init.ml.
+- Or document explicitly that Z.ai uses OpenAI-compat path and remove the implication it's anthropic-compat in docs.
+
+Tag: zai, provider, architecture
