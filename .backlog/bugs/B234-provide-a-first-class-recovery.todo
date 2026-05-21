@@ -1,14 +1,15 @@
 ---
 claimed_at: "2026-03-13T14:34:59Z"
 claimed_by: cli-user
-completed_at: null
+completed_at: "2026-05-21T21:26:39Z"
 complexity: medium
 depends_on: []
+duration_minutes: 99771.66696210126
 estimate_hours: 1
 id: B234
 priority: medium
 started_at: "2026-03-13T14:34:59Z"
-status: in_progress
+status: done
 tags: []
 title: Provide a first-class recovery workflow for replacing a failed or stuck delegated/background task from its evidence
 ---
