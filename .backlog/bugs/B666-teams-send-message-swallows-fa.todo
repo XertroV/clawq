@@ -1,0 +1,34 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B666
+priority: high
+status: pending
+tags: []
+title: Teams send_message swallows failures — dispatch_resumed_message returns Ok() when send returned empty
+---
+When the cron scheduler delivers via teams, the path is:
+
+scheduler.ml:865 deliver_fn ~channel ~channel_id ~text
+  -> daemon_util.ml dispatch_resumed_message (line 251)
+  -> Teams.send_message
+  -> Teams.send_reply
+
+In teams.ml:227-233, when service_url is empty/invalid, send_reply logs an ERROR and returns Lwt.return "" (the activity_id channel — empty string == failure signal).
+
+But daemon_util.ml:251 just does:
+    let* _id = senders.send_teams ~config:tc ~channel_id ~text in
+    Lwt.return (Ok ())
+
+It discards _id unconditionally and returns Ok().
+
+Result: scheduler logs 'Cron job briefing-hourly: delivery succeeded' immediately after the teams ERROR.
+
+Observed at 2026-05-22T05:00:46:
+    ERROR Teams: service_url is empty or missing scheme (...); cannot send reply
+    INFO Cron job briefing-hourly: delivery succeeded
+
+Fix: in dispatch_resumed_message, treat empty activity_id as Error. Apply same check to other channels that also return strings (send_telegram/discord/slack appear to throw on failure, not return empty — verify each).
+
+Also worth: Teams.send_message should return result type (Ok activity_id | Error msg) instead of bare string for new callers, with a thin compat wrapper if needed.
