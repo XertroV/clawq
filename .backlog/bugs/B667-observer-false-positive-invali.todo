@@ -1,0 +1,26 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B667
+priority: high
+status: pending
+tags: []
+title: 'Observer false-positive: ''invalid_response_format'' fires on legitimate short responses (e.g., ''Nothing notable.'')'
+---
+Observed at 2026-05-22T05:00:47 after cron:briefing produced a valid short answer:
+
+  [observer] message-count check: stuck session=cron:briefing: invalid_response_format
+
+The response was 16 chars ('Nothing notable.') — a perfectly legitimate answer for a briefing turn that found no notable items.
+
+The session_observer logic flags this as 'invalid_response_format' (presumably because the response is short / lacks expected structure), which then triggers a costly postmortem agent chain (kimi_coding) that spends /usr/bin/zsh.5+ analyzing a non-problem.
+
+Source: src/session_turn.ml:527 warns 'message-count check: stuck session=%s: %s' with reason coming from Session_observer.check_stuck.
+
+Need: revise the observer rule so 'short legitimate response' is not classified as stuck/invalid. Options:
+1. If response is non-empty, contains no tool calls, and ends cleanly (terminal punctuation, e.g. '.' or '!'), do not flag.
+2. Require pattern recurrence across multiple turns within the same session before flagging.
+3. Look at structure of session history (postmortem-worthy = errors/loops in history), not single-response length.
+
+Cost impact: each false positive triggers a postmortem agent that runs kimi_coding (~/usr/bin/zsh.05-/usr/bin/zsh.50/run) on cron:briefing every hour. Over a day that is $1-$12 wasted, plus token-budget burn on premium quotas.
