@@ -1,14 +1,15 @@
 ---
 claimed_at: "2026-03-09T12:37:40Z"
 claimed_by: cli-user
-completed_at: null
+completed_at: "2026-05-21T21:22:02Z"
 complexity: medium
 depends_on: []
+duration_minutes: 105644.37356889226
 estimate_hours: 1
 id: B158
 priority: high
 started_at: "2026-03-09T12:37:40Z"
-status: in_progress
+status: done
 tags: []
 title: Research what cool things are possible for telegram bots (like question forms?), then Enhance send_message tool so the agent can use these more interesting ways of interacting with the user.
 ---
