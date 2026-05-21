@@ -658,3 +658,4 @@ bugs:
     - file: B661-zai-websearch-mcp-tool-schema.todo
     - file: B662-web-search-prime-mcp-returns-4.todo
     - file: B663-briefing-cron-hard-coded-brave.todo
+    - file: B664-web-search-prime-mcp-server-mi.todo

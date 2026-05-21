@@ -1,0 +1,22 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B664
+priority: high
+status: pending
+tags: []
+title: '`web_search_prime` MCP server missing API key — briefing cron cannot search any topics'
+---
+The `web_search_prime` MCP tool used by the briefing cron (and likely other crons) is failing with -401 "Api key not found" on every invocation. This is a structural defect, not a transient failure — it has failed on at least two consecutive runs (2026-05-22T043150 and 2026-05-22T043348). The DDG fallback (`web_search`) also returns "No results found" for all 11 monitored topics, suggesting DDG instant API coverage has degraded or is incompatible with the query format.
+
+To fix:
+1. Configure the API key for the `web_search_prime` MCP server, OR
+2. Replace `web_search_prime` with a functional search provider (e.g., Brave or a different search API), OR
+3. Remove the briefing cron until search infrastructure is restored.
+
+The briefing cron prompt at `cron:briefing` also needs a guard clause: if both primary and fallback search tools fail, it should abort with a diagnostic error instead of looping through topics and producing malformed responses.
+
+--
+Auto-filed by clawq postmortem for session cron:briefing (pattern: invalid response format).
+Postmortem doc: /home/xertrov/.clawq/postmortems/2026-05-22T043348-cron:briefing.md
