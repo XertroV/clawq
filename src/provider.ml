@@ -646,6 +646,12 @@ let detect_kind ?(name = "") (p : Runtime_config.provider_config) =
   match p.kind with
   | Some "openai-codex" | Some "codex" -> OpenAICodex
   | Some "anthropic" -> Anthropic
+  (* B617: Z.ai exposes a native anthropic-compat surface at
+     https://api.z.ai/api/anthropic/v1/messages. Treating kind="zai_anthropic"
+     as Anthropic routes through provider_anthropic with the base_url default
+     below (provider.ml::default_base_url) — users get full tool_use/content
+     block fidelity instead of the OpenAI-compat shim. *)
+  | Some "zai_anthropic" | Some "zai-anthropic" -> Anthropic
   | Some "gemini" -> Gemini
   | Some "ollama" -> Ollama
   | Some "vertex" -> Vertex
@@ -702,6 +708,7 @@ let default_base_url_for name =
   match name with
   | "zai_coding" -> "https://api.z.ai/api/coding/paas/v4"
   | "zai" -> "https://api.z.ai/api/paas/v4"
+  | "zai_anthropic" | "zai-anthropic" -> "https://api.z.ai/api/anthropic"
   | "mistral" -> "https://api.mistral.ai/v1"
   | "xai" | "x_ai" -> "https://api.x.ai/v1"
   | "deepseek" -> "https://api.deepseek.com/v1"

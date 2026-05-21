@@ -122,6 +122,24 @@ let make_codex_oauth ?(access_token = "access-token")
     email = None;
   }
 
+let test_detect_kind_zai_anthropic () =
+  (* B617: kind="zai_anthropic" routes through provider_anthropic so Z.ai
+     users get full anthropic-compat tool_use fidelity. *)
+  let cfg =
+    {
+      Runtime_config.default_provider_config with
+      api_key = "anykey";
+      kind = Some "zai_anthropic";
+    }
+  in
+  Alcotest.(check bool)
+    "zai_anthropic kind routes to Anthropic" true
+    (Provider.detect_kind cfg = Provider.Anthropic);
+  Alcotest.(check string)
+    "default base_url points at Z.ai's anthropic endpoint"
+    "https://api.z.ai/api/anthropic"
+    (Provider.default_base_url_for "zai_anthropic")
+
 let test_detect_kind_anthropic () =
   let cfg = make_provider "sk-ant-abc123" in
   Alcotest.(check bool)
@@ -934,6 +952,8 @@ let suite =
       test_context_window_uses_configured_override;
     Alcotest.test_case "context window unknown" `Quick
       test_context_window_unknown;
+    Alcotest.test_case "detect kind zai_anthropic" `Quick
+      test_detect_kind_zai_anthropic;
     Alcotest.test_case "detect kind anthropic" `Quick test_detect_kind_anthropic;
     Alcotest.test_case "detect kind gemini" `Quick test_detect_kind_gemini;
     Alcotest.test_case "detect kind ollama localhost" `Quick
