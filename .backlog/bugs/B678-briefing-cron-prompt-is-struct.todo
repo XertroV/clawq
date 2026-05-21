@@ -1,0 +1,34 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B678
+priority: high
+status: pending
+tags: []
+title: Briefing cron prompt is structurally fragile — replace with deterministic skill
+---
+The `briefing-hourly` cron job has failed in at least four distinct ways over the past month:
+1. `rig:briefing:config` missing entirely → "Nothing notable." loop
+2. `rig:briefing:config` has empty `topics: []` → same loop
+3. `web_search_prime` MCP auth failure → fallback to `web_search` also fails
+4. Model emits `web_search(args={})` with empty required `query` parameter → RepeatedToolCall stuck pattern (today)
+
+All four share a root cause: the cron prompt asks the LLM to perform a procedural chain (read JSON config → parse topic list → iterate → construct queries → call web_search) with no structural guardrails. LLMs are unreliable at this kind of deterministic orchestration, and the failure modes are silently unobservable until they pile up into stuck-session alerts.
+
+Fix: Replace the open-ended cron prompt with a deterministic skill (e.g. `briefing-hourly` under `~/.clawq/skills/`) or a shell script that:
+1. Reads `rig:briefing:config` via `memory_recall`
+2. Validates that `topics` is a non-empty array
+3. Constructs each `web_search` query string programmatically
+4. Invokes `web_search` sequentially with guaranteed non-empty `query` args
+5. Only then passes the raw results to the LLM for summarization
+
+The LLM's role should be reduced to "summarize these search results," not "orchestrate the search loop." This eliminates an entire class of failure modes.
+
+Also: Add a pre-flight step to the cron where the agent must emit the topic list and planned queries before any tool calls; abort if this step is empty or malformed.
+
+Files: `~/.clawq/cron_jobs` (briefing-hourly entry), create new `~/.clawq/skills/briefing-hourly/SKILL.md`.
+
+--
+Auto-filed by clawq postmortem for session teams:personal:a:1JPVFngEx3FRRVWXUe5fb97HWjfsCdtDImgKuD3u_N6IpgOD0euB5bnQHI9RsDQuK3qOG_5Jyhq4wWGr0IczaxEXPN5vIGppdngtwZucpyhDNrW1_YJCrXnHrksQ5fCuT (pattern: RepeatedToolCall: "web_search" called 3 times with same args: {}).
+Postmortem doc: /home/xertrov/.clawq/postmortems/2026-05-22T090054-teams:personal:a:1JPVFngEx3FRRVWXUe5fb97HWjfsCdtDImgKuD3u_N6IpgOD0euB5bnQHI9RsDQuK3qOG_5Jyhq4wWGr0IczaxEXPN5vIGppdngtwZucpyhDNrW1_YJCrXnHrksQ5fCuT.md
