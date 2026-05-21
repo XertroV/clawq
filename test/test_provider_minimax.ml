@@ -1153,6 +1153,160 @@ let test_b640_sse_empty_args_falls_back_to_curlies () =
   Alcotest.(check string)
     "empty args -> {}" "{}" (List.hd tcs).Provider.arguments
 
+(* User-requested integration test: send the same tool-call prompt to
+   MiniMax-M2.7-highspeed through two paths and compare:
+   (a) Provider_minimax.complete — POSTs to /anthropic/v1/messages
+   (b) Provider.complete with kind=openai — POSTs to /v1/chat/completions
+
+   Both should return ToolCalls with function_name="get_weather" and an
+   arguments JSON containing a non-empty "city" string. If only one path
+   returns ToolCalls (and the other returns Text), the test reports that as
+   a failure with a clear message naming which path bypassed the tool. *)
+let test_live_tool_call_anthropic_vs_openai_minimax_m27 () =
+  if minimax_api_key = None then Alcotest.skip ();
+  let api_key = Option.get minimax_api_key in
+  let weather_tool =
+    `Assoc
+      [
+        ("type", `String "function");
+        ( "function",
+          `Assoc
+            [
+              ("name", `String "get_weather");
+              ( "description",
+                `String
+                  "Get the current weather for a city. Always call this tool \
+                   when the user asks about weather." );
+              ( "parameters",
+                `Assoc
+                  [
+                    ("type", `String "object");
+                    ( "properties",
+                      `Assoc
+                        [
+                          ( "city",
+                            `Assoc
+                              [
+                                ("type", `String "string");
+                                ( "description",
+                                  `String
+                                    "City name to look up the weather for. \
+                                     Required." );
+                              ] );
+                        ] );
+                    ("required", `List [ `String "city" ]);
+                    ("additionalProperties", `Bool false);
+                  ] );
+            ] );
+      ]
+  in
+  let tools = `List [ weather_tool ] in
+  let msgs =
+    [
+      Provider.make_message ~role:"system"
+        ~content:
+          "You are a helpful assistant. Use the get_weather tool to answer \
+           weather questions.";
+      Provider.make_message ~role:"user"
+        ~content:"What is the weather in Tokyo right now?";
+    ]
+  in
+  let assert_tool_call ~label result =
+    match result with
+    | Provider.ToolCalls { calls; _ } ->
+        Alcotest.(check bool)
+          (label ^ ": at least one tool call")
+          true
+          (List.length calls > 0);
+        let call = List.hd calls in
+        Printf.eprintf "%s: got ToolCalls name=%s arguments=%s (n=%d)\n%!" label
+          call.Provider.function_name call.Provider.arguments
+          (List.length calls);
+        Alcotest.(check string)
+          (label ^ ": tool name is get_weather")
+          "get_weather" call.Provider.function_name;
+        let args =
+          try Yojson.Safe.from_string call.arguments with _ -> `Assoc []
+        in
+        let open Yojson.Safe.Util in
+        let city = try args |> member "city" |> to_string with _ -> "" in
+        Alcotest.(check bool)
+          (label ^ ": city arg present and non-empty")
+          true
+          (String.trim city <> "")
+    | Provider.Text { content; _ } ->
+        Printf.eprintf "%s: got Text (len=%d) first 200 chars: %s\n%!" label
+          (String.length content)
+          (if String.length content > 200 then String.sub content 0 200
+           else content);
+        Alcotest.fail
+          (Printf.sprintf
+             "%s bypassed tool call — returned Text instead of ToolCalls. \
+              First 200 chars: %s"
+             label
+             (if String.length content > 200 then String.sub content 0 200
+              else content))
+  in
+  Lwt_main.run
+    (let open Lwt.Syntax in
+     (* Path A: Anthropic endpoint via Provider_minimax. *)
+     let anthropic_provider : Runtime_config.provider_config =
+       {
+         Runtime_config.default_provider_config with
+         api_key;
+         base_url = Some "https://api.minimax.io";
+       }
+     in
+     let anthropic_config : Runtime_config.t =
+       {
+         Runtime_config.default with
+         providers = [ ("minimax", anthropic_provider) ];
+       }
+     in
+     let* anthropic_result =
+       Lwt.catch
+         (fun () ->
+           Provider_minimax.complete ~config:anthropic_config
+             ~provider:anthropic_provider ~model:"MiniMax-M2.7-highspeed"
+             ~messages:msgs ~tools ())
+         (fun exn ->
+           Alcotest.fail ("Anthropic path raised: " ^ Printexc.to_string exn))
+     in
+     assert_tool_call ~label:"Anthropic path" anthropic_result;
+     (* Path B: OpenAI-compat endpoint via the generic Provider.complete path.
+        Force kind="openai" so detect_kind picks OpenAICompat, and set the
+        base_url so /chat/completions resolves to /v1/chat/completions at
+        MiniMax. *)
+     let openai_provider : Runtime_config.provider_config =
+       {
+         Runtime_config.default_provider_config with
+         api_key;
+         base_url = Some "https://api.minimax.io/v1";
+         kind = Some "openai";
+       }
+     in
+     let openai_config : Runtime_config.t =
+       {
+         Runtime_config.default with
+         providers = [ ("minimax-openai", openai_provider) ];
+         default_provider = Some "minimax-openai";
+         agent_defaults =
+           {
+             Runtime_config.default.agent_defaults with
+             primary_model = "minimax-openai:MiniMax-M2.7-highspeed";
+           };
+       }
+     in
+     let* openai_result =
+       Lwt.catch
+         (fun () ->
+           Provider.complete ~config:openai_config ~messages:msgs ~tools ())
+         (fun exn ->
+           Alcotest.fail ("OpenAI path raised: " ^ Printexc.to_string exn))
+     in
+     assert_tool_call ~label:"OpenAI path" openai_result;
+     Lwt.return_unit)
+
 let suite =
   [
     Alcotest.test_case "user message" `Quick test_user_message;
@@ -1232,4 +1386,7 @@ let suite =
       test_b640_sse_text_delta_accumulates;
     Alcotest.test_case "B640: SSE empty args falls back to '{}'" `Quick
       test_b640_sse_empty_args_falls_back_to_curlies;
+    Alcotest.test_case
+      "live tool call anthropic vs openai (MiniMax-M2.7-highspeed)" `Slow
+      test_live_tool_call_anthropic_vs_openai_minimax_m27;
   ]
