@@ -748,6 +748,135 @@ let fetch_zai ~api_key () =
           (Printf.sprintf "fetch_failed:%s" (Printexc.to_string exn)))
 
 (* Kimi quota via coding usage API. *)
+(* Kimi /coding/v1/usages JSON sample (2026-05):
+   { "usage": {"limit":"100","remaining":"100","resetTime":"2026-05-25T..."},
+     "limits": [ {"window":{"duration":300,"timeUnit":"TIME_UNIT_MINUTE"},
+                  "detail":{"limit":"100","remaining":"100","resetTime":"..."}} ],
+     "totalQuota": {"limit":"100","remaining":"99"}, ... }
+   Numbers come as strings; window is an object, not a label like "5h". *)
+let lenient_to_float j =
+  match j with
+  | `Float f -> Some f
+  | `Int i -> Some (float_of_int i)
+  | `Intlit s | `String s -> ( try Some (float_of_string s) with _ -> None)
+  | _ -> None
+
+let lenient_float_member json key =
+  try lenient_to_float Yojson.Safe.Util.(json |> member key) with _ -> None
+
+let kimi_window_duration_s window_j =
+  match lenient_float_member window_j "duration" with
+  | None -> None
+  | Some d ->
+      let unit_mul =
+        match string_member window_j "timeUnit" with
+        | Some u -> (
+            match String.uppercase_ascii u with
+            | "TIME_UNIT_SECOND" -> 1.0
+            | "TIME_UNIT_MINUTE" -> 60.0
+            | "TIME_UNIT_HOUR" -> 3600.0
+            | "TIME_UNIT_DAY" -> 86400.0
+            | "TIME_UNIT_WEEK" -> 604800.0
+            | "TIME_UNIT_MONTH" -> 2592000.0
+            | _ -> 60.0)
+        | None -> 60.0
+      in
+      Some (d *. unit_mul)
+
+let kimi_window_of_detail detail_j window_duration_s =
+  let limit_opt = lenient_float_member detail_j "limit" in
+  let remaining_opt = lenient_float_member detail_j "remaining" in
+  let resets_at =
+    match string_member detail_j "resetTime" with
+    | Some s -> parse_iso8601 s
+    | None -> None
+  in
+  match (limit_opt, remaining_opt) with
+  | Some limit, Some remaining when limit > 0.0 ->
+      let used = limit -. remaining in
+      let used = if used < 0.0 then 0.0 else used in
+      Some { used_pct = used /. limit *. 100.0; resets_at; window_duration_s }
+  | _ -> None
+
+(* Pure parser exposed for unit tests. Given a raw JSON body string and a
+   reference `now` timestamp, returns the (session, weekly, monthly) triple
+   the Known state would carry. *)
+let parse_kimi_body ~now body =
+  let j = Yojson.Safe.from_string body in
+  let limits_entries =
+    try Yojson.Safe.Util.(j |> member "limits" |> to_list) with _ -> []
+  in
+  let parsed_limits : (float * window_state) list =
+    List.filter_map
+      (fun lim ->
+        let window_j = Yojson.Safe.Util.(lim |> member "window") in
+        let detail_j = Yojson.Safe.Util.(lim |> member "detail") in
+        match kimi_window_duration_s window_j with
+        | None -> None
+        | Some dur -> (
+            match kimi_window_of_detail detail_j (Some dur) with
+            | None -> None
+            | Some w -> Some (dur, w)))
+      limits_entries
+  in
+  let pick_smallest ws =
+    match ws with
+    | [] -> None
+    | _ ->
+        let sorted = List.sort (fun (a, _) (b, _) -> compare a b) ws in
+        Some (snd (List.hd sorted))
+  in
+  let pick_largest ws =
+    match ws with
+    | [] -> None
+    | _ ->
+        let sorted = List.sort (fun (a, _) (b, _) -> compare b a) ws in
+        Some (snd (List.hd sorted))
+  in
+  let session_candidates =
+    List.filter (fun (d, _) -> d < 86400.0) parsed_limits
+  in
+  let weekly_candidates =
+    List.filter (fun (d, _) -> d >= 86400.0 && d < 2592000.0) parsed_limits
+  in
+  let monthly_candidates =
+    List.filter (fun (d, _) -> d >= 2592000.0) parsed_limits
+  in
+  let top_usage =
+    let usage_j = Yojson.Safe.Util.(j |> member "usage") in
+    match kimi_window_of_detail usage_j None with
+    | None -> None
+    | Some w -> (
+        match w.resets_at with
+        | None -> Some (None, w)
+        | Some r ->
+            let gap = r -. now in
+            let dur =
+              if gap <= 0.0 then 86400.0
+              else if gap < 36.0 *. 3600.0 then 86400.0
+              else if gap < 8.0 *. 86400.0 then 604800.0
+              else 2592000.0
+            in
+            Some (Some dur, { w with window_duration_s = Some dur }))
+  in
+  let bucket_for_top dur =
+    if dur < 86400.0 then `Session
+    else if dur < 2592000.0 then `Weekly
+    else `Monthly
+  in
+  let session = pick_smallest session_candidates in
+  let weekly = pick_largest weekly_candidates in
+  let monthly = pick_largest monthly_candidates in
+  match top_usage with
+  | None -> (session, weekly, monthly)
+  | Some (dur_opt, w) -> (
+      let dur = match dur_opt with Some d -> d | None -> 604800.0 in
+      match bucket_for_top dur with
+      | `Session when session = None -> (Some w, weekly, monthly)
+      | `Weekly when weekly = None -> (session, Some w, monthly)
+      | `Monthly when monthly = None -> (session, weekly, Some w)
+      | _ -> (session, weekly, monthly))
+
 let fetch_kimi ~api_key () =
   let open Lwt.Syntax in
   let provider_name = "kimi" in
@@ -762,67 +891,20 @@ let fetch_kimi ~api_key () =
           make_unknown provider_name
             (Printf.sprintf "fetch_failed:HTTP %d" status)
         else
-          let j = Yojson.Safe.from_string body in
-          let window_from_limits window_str dur_s =
-            try
-              let limits = Yojson.Safe.Util.(j |> member "limits" |> to_list) in
-              let found =
-                List.find_opt
-                  (fun lim ->
-                    match string_member lim "window" with
-                    | Some w -> w = window_str
-                    | None -> false)
-                  limits
-              in
-              match found with
-              | None -> None
-              | Some lim ->
-                  let detail = Yojson.Safe.Util.(lim |> member "detail") in
-                  let used =
-                    Yojson.Safe.Util.(detail |> member "used" |> to_float)
-                  in
-                  let limit =
-                    Yojson.Safe.Util.(detail |> member "limit" |> to_float)
-                  in
-                  let resets_at = float_member lim "reset_at" in
-                  if limit > 0.0 then
-                    Some
-                      {
-                        used_pct = used /. limit *. 100.0;
-                        resets_at;
-                        window_duration_s = Some dur_s;
-                      }
-                  else None
-            with _ -> None
-          in
-          let session =
-            match window_from_limits "5h" 18000.0 with
-            | Some _ as s -> s
-            | None -> (
-                try
-                  let used =
-                    Yojson.Safe.Util.(
-                      j |> member "usage" |> member "used" |> to_float)
-                  in
-                  let limit =
-                    Yojson.Safe.Util.(
-                      j |> member "usage" |> member "limit" |> to_float)
-                  in
-                  if limit > 0.0 then
-                    Some
-                      {
-                        used_pct = used /. limit *. 100.0;
-                        resets_at = None;
-                        window_duration_s = Some 18000.0;
-                      }
-                  else None
-                with _ -> None)
-          in
-          let weekly = window_from_limits "7d" 604800.0 in
+          let now = Unix.gettimeofday () in
+          let session, weekly, monthly = parse_kimi_body ~now body in
+          let all_empty = session = None && weekly = None && monthly = None in
+          if all_empty then
+            Logs.warn (fun m ->
+                m
+                  "Kimi quota parser: result has no window data; raw body \
+                   (truncated): %s"
+                  (let len = String.length body in
+                   if len > 500 then String.sub body 0 500 ^ "..." else body));
           let pq =
             {
               provider_name;
-              state = Known { session; weekly; monthly = None };
+              state = Known { session; weekly; monthly };
               fetched_at = Unix.gettimeofday ();
             }
           in

@@ -409,8 +409,113 @@ let test_history_limit () =
   Alcotest.(check int) "limit caps to 3" 3 (List.length entries);
   Provider_quota.reset_for_test ()
 
+(* ── Kimi parser (B631) ──────────────────────────────────────────────────── *)
+
+(* Live shape observed 2026-05-21 from https://api.kimi.com/coding/v1/usages *)
+let kimi_real_body =
+  {|{"user":{"userId":"abc","region":"REGION_OVERSEA","membership":{"level":"LEVEL_INTERMEDIATE"},"businessId":""},"usage":{"limit":"100","remaining":"60","resetTime":"2026-05-25T09:59:07.479363Z"},"limits":[{"window":{"duration":300,"timeUnit":"TIME_UNIT_MINUTE"},"detail":{"limit":"100","remaining":"25","resetTime":"2026-05-21T12:59:07.479363Z"}}],"parallel":{"limit":"20"},"totalQuota":{"limit":"100","remaining":"99"},"authentication":{"method":"METHOD_API_KEY","scope":"FEATURE_CODING"},"subType":"TYPE_PURCHASE"}|}
+
+let test_kimi_parses_real_shape () =
+  (* 2026-05-21T22:36 UTC. Top-level usage.resetTime is ~3.5 days out → weekly. *)
+  let now = 1779403000.0 in
+  let session, weekly, monthly =
+    Provider_quota.parse_kimi_body ~now kimi_real_body
+  in
+  Alcotest.(check bool) "session populated from 5h limit" true (session <> None);
+  Alcotest.(check bool)
+    "weekly populated from top-level usage" true (weekly <> None);
+  Alcotest.(check bool) "monthly absent" true (monthly = None);
+  (match session with
+  | Some w ->
+      Alcotest.(check (float 0.5))
+        "session used_pct = (100-25)/100 = 75%" 75.0 w.used_pct;
+      Alcotest.(check bool)
+        "session window_duration_s = 5h" true
+        (w.window_duration_s = Some 18000.0)
+  | None -> Alcotest.fail "expected session window");
+  match weekly with
+  | Some w ->
+      Alcotest.(check (float 0.5))
+        "weekly used_pct = (100-60)/100 = 40%" 40.0 w.used_pct
+  | None -> Alcotest.fail "expected weekly window"
+
+let test_kimi_empty_body_returns_all_none () =
+  let now = 1779403000.0 in
+  let session, weekly, monthly = Provider_quota.parse_kimi_body ~now "{}" in
+  Alcotest.(check bool) "session None" true (session = None);
+  Alcotest.(check bool) "weekly None" true (weekly = None);
+  Alcotest.(check bool) "monthly None" true (monthly = None)
+
+let test_kimi_handles_string_numerics () =
+  (* Limits come back as JSON strings, not numbers. Ensure lenient parse. *)
+  let body =
+    {|{"limits":[{"window":{"duration":1,"timeUnit":"TIME_UNIT_HOUR"},"detail":{"limit":"50","remaining":"10","resetTime":"2026-05-21T23:00:00Z"}}]}|}
+  in
+  let now = 1779403000.0 in
+  let session, _, _ = Provider_quota.parse_kimi_body ~now body in
+  match session with
+  | Some w ->
+      Alcotest.(check (float 0.5)) "used_pct = (50-10)/50 = 80%" 80.0 w.used_pct
+  | None -> Alcotest.fail "expected session window"
+
+let test_kimi_buckets_by_duration () =
+  (* duration=2 day, timeUnit=DAY → weekly bucket. duration=30 day → monthly. *)
+  let body =
+    {|{"limits":[
+      {"window":{"duration":2,"timeUnit":"TIME_UNIT_DAY"},"detail":{"limit":"100","remaining":"10","resetTime":"2026-05-23T00:00:00Z"}},
+      {"window":{"duration":30,"timeUnit":"TIME_UNIT_DAY"},"detail":{"limit":"1000","remaining":"100","resetTime":"2026-06-20T00:00:00Z"}}
+    ]}|}
+  in
+  let now = 1779403000.0 in
+  let session, weekly, monthly = Provider_quota.parse_kimi_body ~now body in
+  Alcotest.(check bool) "session None" true (session = None);
+  Alcotest.(check bool) "weekly populated" true (weekly <> None);
+  Alcotest.(check bool) "monthly populated" true (monthly <> None)
+
+(* ── Postmortem follow-up dedup ──────────────────────────────────────────── *)
+
+let test_followup_titles_similar_positive () =
+  (* The two real-world auto-lodged duplicates from 2026-05-21. *)
+  let a =
+    "Cron consecutive-identical-output detection — disable and alert after N \
+     identical runs"
+  in
+  let b =
+    "Cron jobs need consecutive-identical-output detection — disable + alert \
+     after N identical responses"
+  in
+  Alcotest.(check bool)
+    "duplicate cron titles flagged as similar" true
+    (Postmortem_followup.titles_similar a b)
+
+let test_followup_titles_similar_negative () =
+  let a = "Cron consecutive-identical-output detection" in
+  let b = "MiniMax tool ordering on resume" in
+  Alcotest.(check bool)
+    "unrelated titles not flagged" false
+    (Postmortem_followup.titles_similar a b)
+
+let test_followup_normalize_title () =
+  let s = Postmortem_followup.normalize_title "Foo — Bar/Baz!!  Qux" in
+  Alcotest.(check string)
+    "lowercase + collapsed punctuation" "foo bar baz qux" s
+
 let suite =
   [
+    Alcotest.test_case "kimi parses real 2026-05 API shape" `Quick
+      test_kimi_parses_real_shape;
+    Alcotest.test_case "kimi empty body → all None" `Quick
+      test_kimi_empty_body_returns_all_none;
+    Alcotest.test_case "kimi handles string numerics" `Quick
+      test_kimi_handles_string_numerics;
+    Alcotest.test_case "kimi buckets by duration" `Quick
+      test_kimi_buckets_by_duration;
+    Alcotest.test_case "postmortem followup: similar titles flagged" `Quick
+      test_followup_titles_similar_positive;
+    Alcotest.test_case "postmortem followup: unrelated titles not flagged"
+      `Quick test_followup_titles_similar_negative;
+    Alcotest.test_case "postmortem followup: normalize_title" `Quick
+      test_followup_normalize_title;
     Alcotest.test_case "Unknown never constrained" `Quick
       test_unknown_never_constrained;
     Alcotest.test_case "threshold exceeded" `Quick test_threshold_exceeded;

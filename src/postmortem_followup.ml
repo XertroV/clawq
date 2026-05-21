@@ -61,6 +61,65 @@ let extract_file_bug (text : string) : (string * string) option =
 let bl_executable () =
   try Sys.getenv "BL_BIN" with Not_found -> "/home/xertrov/.local/bin/bl"
 
+(* Normalize a title for dedup: lowercase, collapse non-alnum to single space,
+   trim. Catches near-duplicates like "Cron jobs need ... — disable" vs
+   "Cron consecutive-identical-output detection — disable and alert". *)
+let normalize_title s =
+  let buf = Buffer.create (String.length s) in
+  let last_was_space = ref true in
+  String.iter
+    (fun c ->
+      let c = Char.lowercase_ascii c in
+      if (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') then begin
+        Buffer.add_char buf c;
+        last_was_space := false
+      end
+      else if not !last_was_space then begin
+        Buffer.add_char buf ' ';
+        last_was_space := true
+      end)
+    s;
+  String.trim (Buffer.contents buf)
+
+(* Compute shingled token sets and Jaccard similarity to flag near-duplicate
+   titles. Returns true when overlap >= 0.6. *)
+let titles_similar a b =
+  let toks s =
+    String.split_on_char ' ' (normalize_title s)
+    |> List.filter (fun t -> String.length t >= 3)
+  in
+  let ta = toks a and tb = toks b in
+  if ta = [] || tb = [] then false
+  else
+    let set_a = List.sort_uniq compare ta in
+    let set_b = List.sort_uniq compare tb in
+    let inter = List.filter (fun t -> List.mem t set_b) set_a |> List.length in
+    let union = List.length (List.sort_uniq compare (set_a @ set_b)) in
+    if union = 0 then false else float_of_int inter /. float_of_int union >= 0.6
+
+(* Look at recent backlog bug filenames for a similar title. The slug in the
+   filename is derived from the title, so a token-overlap check on slugs gives
+   a cheap, build-free dedup. *)
+let recent_similar_bug_exists ~title =
+  let candidates =
+    let dir = "/home/xertrov/src/clawq/.backlog/bugs" in
+    if Sys.file_exists dir && Sys.is_directory dir then
+      Sys.readdir dir |> Array.to_list
+      |> List.filter (fun f -> Filename.check_suffix f ".todo")
+    else []
+  in
+  (* Filenames look like `B632-cron-jobs-need-consecutive-ide.todo` — strip the
+     leading `Bnnn-` prefix and `.todo` suffix to recover an approximate slug. *)
+  let slug_of_filename f =
+    let base = Filename.chop_suffix f ".todo" in
+    match String.index_opt base '-' with
+    | Some i when i < String.length base - 1 ->
+        String.sub base (i + 1) (String.length base - i - 1)
+        |> String.map (fun c -> if c = '-' then ' ' else c)
+    | _ -> base
+  in
+  List.exists (fun f -> titles_similar title (slug_of_filename f)) candidates
+
 (* Run `bl bug --title ... --body ... --simple`. Returns Lwt.unit; logs the
    outcome. *)
 let lodge_bug ~title ~body ~session_key ~reason ~doc_path =
@@ -118,5 +177,14 @@ let try_lodge_bug ~doc_path ~response ~session_key ~reason =
       match extract_file_bug text with
       | None -> Lwt.return_unit
       | Some (title, body) ->
-          let* () = lodge_bug ~title ~body ~session_key ~reason ~doc_path in
-          Lwt.return_unit)
+          if recent_similar_bug_exists ~title then begin
+            Logs.info (fun m ->
+                m
+                  "postmortem: skipping bug lodge — similar backlog entry \
+                   already exists (title=%S session=%s)"
+                  title session_key);
+            Lwt.return_unit
+          end
+          else
+            let* () = lodge_bug ~title ~body ~session_key ~reason ~doc_path in
+            Lwt.return_unit)
