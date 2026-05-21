@@ -596,3 +596,4 @@ bugs:
     - file: B597-web-search-no-retry-or-fallbac.todo
     - file: B598-agent-tool-output-not-visible.todo
     - file: B599-pre-compaction-memory-checkpoi.todo
+    - file: B600-model-switch-has-no-safety-net.todo

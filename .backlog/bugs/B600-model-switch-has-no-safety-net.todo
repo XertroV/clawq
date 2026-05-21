@@ -1,0 +1,34 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B600
+priority: high
+status: pending
+tags: []
+title: Model switch has no safety net — bad selection bricks session
+---
+When changing the model (via models set tool or models set-default CLI), there is no validation beyond catalog lookup. If the selected model is unreachable, misconfigured, or incompatible, the session becomes unusable because every subsequent LLM call fails.
+
+Current behaviour:
+1. set_model checks Models_catalog.find_by_full_name — if found, immediately sets it
+2. set-default normalizes the name and writes to config — no connectivity test
+3. Neither path prints a rollback command
+4. Neither path sends a test prompt to verify the model actually works
+5. If the model is bad, the user is stuck — they cannot even ask the agent to switch back
+
+Desired behaviour:
+1. Before switching, print the rollback command (models set <previous_model> or clawq models set-default <previous_model>)
+2. Validate early: check provider is configured, API key exists, model name is recognized
+3. Send a lightweight test prompt (e.g. Respond with OK) to the new model with a short timeout
+4. Only commit the switch if the test succeeds
+5. If test fails, report the error and keep the current model
+6. For session-scoped changes via the tool: include the rollback command in the response so the agent can self-recover
+
+Acceptance criteria:
+- models set prints rollback command before switching
+- models set-default prints rollback command before switching
+- Both paths attempt a minimal test completion against the target model
+- If test fails, the switch is aborted with a clear error message
+- Previous model remains active after a failed switch
+- Session agent receives rollback instructions in the tool response
