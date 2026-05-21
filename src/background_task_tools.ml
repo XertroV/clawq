@@ -134,7 +134,7 @@ let enqueue_tool_with_notify ?config ~notify_cfg ~db () =
             | _ -> None
           with _ -> None
         in
-        let model =
+        let model_arg =
           try
             match args |> member "model" with
             | `String s when String.trim s <> "" -> Some (String.trim s)
@@ -166,12 +166,25 @@ let enqueue_tool_with_notify ?config ~notify_cfg ~db () =
             | _ -> None
           with _ -> None
         in
-        match Background_task.runner_of_string runner_s with
+        (* B487: accept either a bare runner name OR an alias like "opus",
+           "glm-5", "haiku". Aliases also supply a default model override
+           when the caller didn't explicitly set one. *)
+        let resolved_runner, alias_model =
+          match Background_task.runner_and_model_of_string runner_s with
+          | Some (r, m) -> (Some r, m)
+          | None -> (None, None)
+        in
+        let model =
+          match model_arg with Some _ -> model_arg | None -> alias_model
+        in
+        match resolved_runner with
         | None ->
             Lwt.return
               "Error: runner must be 'codex', 'claude', 'kimi', 'gemini', \
-               'opencode', 'cursor', or 'local'. Use 'local' with agent_name \
-               for in-process agent execution."
+               'opencode', 'cursor', 'local', or a known alias (e.g. 'opus', \
+               'sonnet', 'haiku', 'gpt-5.4', 'codex-spark', 'glm-5', \
+               'glm-5.1', 'kimi-coding'). Use 'local' with agent_name for \
+               in-process agent execution."
         | Some Background_task.Claude
           when match config with
                | Some (c : Runtime_config.t) ->
@@ -588,20 +601,24 @@ let delegate_tool_with_notify ?(check_available = true) ?config ~db
       (fun ?context args ->
         let open Yojson.Safe.Util in
         let goal = try args |> member "goal" |> to_string with _ -> "" in
-        let runner_pref, runner_error =
+        let runner_pref, runner_alias_model, runner_error =
           try
             match args |> member "runner" |> to_string with
             | s when String.trim s = "" || String.lowercase_ascii s = "auto" ->
-                (None, None)
+                (None, None, None)
             | s -> (
-                match Background_task.runner_of_string s with
-                | Some runner -> (Some runner, None)
+                (* B487: accept bare runner OR alias like 'opus', 'glm-5'. *)
+                match Background_task.runner_and_model_of_string s with
+                | Some (runner, alias_model) -> (Some runner, alias_model, None)
                 | None ->
                     ( None,
+                      None,
                       Some
                         "runner must be 'auto', 'codex', 'claude', 'kimi', \
-                         'gemini', 'opencode', or 'cursor'" ))
-          with _ -> (None, None)
+                         'gemini', 'opencode', 'cursor', or a known alias \
+                         (opus, sonnet, haiku, gpt-5.4, codex-spark, glm-5, \
+                         glm-5.1, kimi-coding)" ))
+          with _ -> (None, None, None)
         in
         let repo_path =
           try

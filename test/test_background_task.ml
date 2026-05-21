@@ -2820,6 +2820,43 @@ let test_runner_of_string_cursor_aliases () =
   check "cursor-agent";
   check "cursor_agent"
 
+(* B487: runner_and_model_of_string recognises bare runner names AND
+   alias shortcuts like "opus", "glm-5", "kimi-coding". Aliases resolve to
+   (runner, default_model) so callers don't need to know the full
+   provider+model syntax. *)
+let test_runner_alias_resolution () =
+  let check_alias alias expected_runner expected_model =
+    match Background_task.runner_and_model_of_string alias with
+    | Some (r, m) ->
+        Alcotest.(check string)
+          (Printf.sprintf "alias %S -> runner" alias)
+          expected_runner
+          (Background_task.string_of_runner r);
+        Alcotest.(check (option string))
+          (Printf.sprintf "alias %S -> model" alias)
+          (Some expected_model) m
+    | None -> Alcotest.fail (Printf.sprintf "alias %S not recognised" alias)
+  in
+  check_alias "opus" "claude" "claude-opus-4-6";
+  check_alias "Sonnet" "claude" "claude-sonnet-4-6";
+  check_alias "  HAIKU  " "claude" "claude-haiku-4-5";
+  check_alias "gpt-5.4" "codex" "gpt-5.4";
+  check_alias "codex-spark" "codex" "gpt-5.3-codex-spark";
+  check_alias "glm-5" "opencode" "zai-coding-plan:glm-5";
+  check_alias "glm-5.1" "opencode" "zai-coding-plan:glm-5.1";
+  check_alias "kimi-coding" "kimi" "kimi-for-coding";
+  (* Bare runner names map to (runner, None) — no alias-derived model. *)
+  (match Background_task.runner_and_model_of_string "codex" with
+  | Some (r, None) ->
+      Alcotest.(check string)
+        "bare codex maps to codex runner" "codex"
+        (Background_task.string_of_runner r)
+  | _ -> Alcotest.fail "bare codex should resolve to (Codex, None)");
+  (* Unknown values fall through. *)
+  Alcotest.(check bool)
+    "unknown returns None" true
+    (Background_task.runner_and_model_of_string "no-such-runner" = None)
+
 let test_resolve_runner_cursor_wins_when_kimi_unavailable () =
   (* With check_available:false every runner is considered available.
      The auto-select order is: kimi → cursor → opencode → claude → codex → gemini.
@@ -4757,6 +4794,8 @@ let suite =
       test_readopt_skips_dead_pid;
     Alcotest.test_case "runner_of_string cursor aliases" `Quick
       test_runner_of_string_cursor_aliases;
+    Alcotest.test_case "B487: runner alias resolution" `Quick
+      test_runner_alias_resolution;
     Alcotest.test_case "resolve_runner cursor wins when kimi unavailable" `Quick
       test_resolve_runner_cursor_wins_when_kimi_unavailable;
     Alcotest.test_case "health terminal statuses" `Quick

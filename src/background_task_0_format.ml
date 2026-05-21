@@ -78,6 +78,41 @@ let runner_of_string s =
   | "local" -> Some Local
   | _ -> None
 
+(* B487: shortname aliases that map to (runner, model). When a caller passes
+   one of these as the runner argument, the daemon resolves it into both a
+   runner choice AND a model override so prompts like "use opus" or "delegate
+   to glm-5" work without the caller having to know the full provider+model
+   syntax. Resolution is case-insensitive and trim-tolerant. *)
+let runner_alias_table : (string * (runner * string)) list =
+  [
+    ("opus", (Claude, "claude-opus-4-6"));
+    ("sonnet", (Claude, "claude-sonnet-4-6"));
+    ("haiku", (Claude, "claude-haiku-4-5"));
+    ("gpt-5", (Codex, "gpt-5.4"));
+    ("gpt-5.4", (Codex, "gpt-5.4"));
+    ("codex-spark", (Codex, "gpt-5.3-codex-spark"));
+    ("glm-5", (Opencode, "zai-coding-plan:glm-5"));
+    ("glm-5.1", (Opencode, "zai-coding-plan:glm-5.1"));
+    ("kimi-coding", (Kimi, "kimi-for-coding"));
+    ("k2", (Kimi, "kimi-for-coding"));
+    ("k2.6", (Kimi, "kimi-k2.6"));
+  ]
+
+let runner_alias_of_string s =
+  let key = String.lowercase_ascii (String.trim s) in
+  List.assoc_opt key runner_alias_table
+
+(* runner_of_string that ALSO recognises B487 aliases. Returns the
+   (runner, optional model override) tuple. Bare runner names map to
+   (runner, None). *)
+let runner_and_model_of_string s : (runner * string option) option =
+  match runner_of_string s with
+  | Some r -> Some (r, None)
+  | None -> (
+      match runner_alias_of_string s with
+      | Some (r, model) -> Some (r, Some model)
+      | None -> None)
+
 let string_of_status = function
   | Queued -> "queued"
   | Running -> "running"
