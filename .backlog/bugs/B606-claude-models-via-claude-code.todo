@@ -1,14 +1,15 @@
 ---
+claimed_at: "2026-05-21T10:04:34Z"
+claimed_by: cli-user
+completed_at: null
 complexity: medium
 depends_on: []
 estimate_hours: 1
 id: B606
 priority: high
-status: pending
-tags:
-    - security
-    - config
-    - anthropic
+started_at: "2026-05-21T10:04:34Z"
+status: in_progress
+tags: []
 title: Claude models via Claude Code credentials need explicit safety flag
 ---
 Claude models via Claude Code credentials now require an explicit safety flag (default disabled). Due to Anthropic's recent policy changes, using Anthropic API credentials with the Claude Code runner or via openai-codex-style OAuth flow requires an explicit opt-in config setting.
