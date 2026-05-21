@@ -1,0 +1,11 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B659
+priority: high
+status: pending
+tags: []
+title: kimi_coding LLM calls hang silently with no error logs and no completion
+---
+Symptom: cron:briefing LLM call started at 04:13:29, 04:17:43, 04:21:49 — each ran 3-4 minutes with no response, no error log, no Cost line. ss -tnp showed no active TCP connection to kimi.com during the hang. Earlier in the day (03:00:35) kimi-for-code calls worked. Manual curl with same API key returns 403 'access_terminated_error' from api.kimi.com ('only available for Coding Agents such as Kimi CLI, Claude Code, Roo Code'). But daemon does not log this error. Either (a) the kimi_coding provider call path silently swallows non-200 responses and hangs, OR (b) cohttp default User-Agent (ocaml-cohttp/X.Y.Z) gets a partial response that wedges streaming consumption. Repro: inject any message into a session bound to kimi_coding:kimi-for-code, observe LLM call line followed by no further activity. Also note B658 (no http_timeout_s on stream paths) means this hang is unbounded. Action: add UA injection (clawq/<version> minimum) for kimi_coding requests, verify error response handling, add idle-timeout to post_stream stream body read.

@@ -653,3 +653,4 @@ bugs:
     - file: B656-memory-get-session-channel-ret.todo
     - file: B657-b653-reasoning-content-guard-o.todo
     - file: B658-kimi-coding-provider-has-no-ht.todo
+    - file: B659-kimi-coding-llm-calls-hang-sil.todo
