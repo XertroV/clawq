@@ -282,25 +282,41 @@ let launch ?configured_path ?(timeout_s = 30.0) () =
                   Log.err (fun m ->
                       m "[cdp] read loop error: %s" (Printexc.to_string exn));
                   Lwt.return_unit));
-          (* Let chromium start *)
-          let* () = Lwt_unix.sleep 0.5 in
-          let* targets_result =
-            send_command t ~method_:"Target.getTargets" ~timeout_s ()
+          (* Let chromium start and wait for a page target to appear *)
+          let initial_delay_s = 0.3 in
+          let retry_delay_s = 0.2 in
+          let max_attempts = 24 in
+          let* () = Lwt_unix.sleep initial_delay_s in
+          let rec find_page_target attempts_left =
+            let* targets_result =
+              send_command t ~method_:"Target.getTargets" ~timeout_s ()
+            in
+            let open Yojson.Safe.Util in
+            let targets = targets_result |> member "targetInfos" |> to_list in
+            let page_target =
+              List.find_opt
+                (fun tgt ->
+                  try tgt |> member "type" |> to_string = "page"
+                  with _ -> false)
+                targets
+            in
+            match page_target with
+            | Some _ as target -> Lwt.return target
+            | None when attempts_left > 0 ->
+                let* () = Lwt_unix.sleep retry_delay_s in
+                find_page_target (attempts_left - 1)
+            | None -> Lwt.return_none
           in
-          let open Yojson.Safe.Util in
-          let targets = targets_result |> member "targetInfos" |> to_list in
-          let page_target =
-            List.find_opt
-              (fun tgt ->
-                try tgt |> member "type" |> to_string = "page" with _ -> false)
-              targets
-          in
+          let* page_target = find_page_target max_attempts in
           match page_target with
           | None ->
               Process_group.signal_group pid Sys.sigterm;
               Lwt.fail_with "No page target found after chromium launch"
           | Some target ->
-              let target_id = target |> member "targetId" |> to_string in
+              let target_id =
+                target |> Yojson.Safe.Util.member "targetId"
+                |> Yojson.Safe.Util.to_string
+              in
               let* attach_result =
                 send_command t ~method_:"Target.attachToTarget"
                   ~params:
@@ -311,7 +327,8 @@ let launch ?configured_path ?(timeout_s = 30.0) () =
                   ~timeout_s ()
               in
               let session_id =
-                attach_result |> member "sessionId" |> to_string
+                attach_result |> Yojson.Safe.Util.member "sessionId"
+                |> Yojson.Safe.Util.to_string
               in
               let page = { target_id; session_id } in
               t.pages <- [ ("main", page) ];
