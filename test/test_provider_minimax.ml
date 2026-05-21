@@ -514,6 +514,52 @@ let test_live_streaming () =
      | exception exn ->
          Alcotest.fail ("streaming failed: " ^ Printexc.to_string exn))
 
+(* B620 round 2: when ALL tool_uses in an assistant turn are orphans (zero
+   matching tool_results), the assistant message becomes empty after
+   stripping. ensure_tool_group_integrity must drop it; otherwise the
+   converter serializes content:"" which Anthropic rejects with "text content
+   blocks must be non-empty". *)
+let test_all_orphan_assistant_dropped () =
+  let assistant_with_only_orphans =
+    {
+      Provider.role = "assistant";
+      content = "";
+      content_parts = [];
+      tool_calls =
+        [
+          {
+            Provider.id = "tc-Z";
+            function_name = "shell_exec";
+            arguments = {|{"command":"ls"}|};
+          };
+        ];
+      tool_call_id = None;
+      name = None;
+      provider_response_items_json = None;
+      thinking = None;
+    }
+  in
+  let user =
+    Provider.make_message ~role:"user"
+      ~content:"continue from where we left off"
+  in
+  let messages = [ user; assistant_with_only_orphans ] in
+  let cleaned = Message_history.ensure_tool_group_integrity messages in
+  let roles = List.map (fun (m : Provider.message) -> m.role) cleaned in
+  Alcotest.(check (list string))
+    "empty assistant dropped, only user remains" [ "user" ] roles;
+  let anthropic_messages =
+    Provider_minimax.messages_to_anthropic_json cleaned
+  in
+  let open Yojson.Safe.Util in
+  Alcotest.(check int)
+    "anthropic conversion produces 1 message" 1
+    (List.length anthropic_messages);
+  let m = List.hd anthropic_messages in
+  Alcotest.(check string)
+    "the lone message is the user" "user"
+    (m |> member "role" |> to_string)
+
 (* B620 regression: when session resume produces an assistant turn with
    tool_use blocks whose results were dropped, the converter must filter the
    orphan tool_use so MiniMax doesn't reject the request with HTTP 400 (error
@@ -800,6 +846,8 @@ let suite =
     Alcotest.test_case "live streaming" `Slow test_live_streaming;
     Alcotest.test_case "B620: orphan tool_use filtered before send" `Quick
       test_orphan_tool_use_filtered_before_send;
+    Alcotest.test_case "B620: all-orphan assistant message dropped" `Quick
+      test_all_orphan_assistant_dropped;
     Alcotest.test_case "B614: required-field anthropic input_schema preserved"
       `Quick test_request_body_has_required_field_for_anthropic_tools;
     Alcotest.test_case "B614: live required-field honored by model" `Slow

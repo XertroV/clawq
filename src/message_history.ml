@@ -72,6 +72,14 @@ let ensure_tool_group_integrity msgs =
               m.provider_response_items_json ~kept_ids;
         }
       else m)
+  (* B620 round 2: drop assistant messages that became fully empty after
+     orphan-stripping (no content, no content_parts, no tool_calls). Such
+     messages serialize as content:"" which Anthropic rejects with "text
+     content blocks must be non-empty". *)
+  |> List.filter (fun (m : Provider.message) ->
+      not
+        (m.role = "assistant" && m.content = "" && m.content_parts = []
+       && m.tool_calls = []))
 
 let adjust_split_for_tool_groups to_compact to_keep =
   let rec move_orphans compact keep =

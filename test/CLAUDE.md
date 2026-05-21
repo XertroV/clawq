@@ -1,5 +1,21 @@
 # Test Guidelines
 
+## Fast-Test Discipline (read first)
+
+Unit tests in this repo must be fast. Hard rules:
+
+1. **No real `Lwt_unix.sleep`** in unit-tagged (`Quick`) tests. Tests that need to verify a delay's effect should make the delay configurable (`?throttle:float`, `?delay_s:float`) and pass `0.0` from the test. Tests that need ordering across Lwt yields can use `Lwt.pause` (0-delay yield) instead of `Lwt.sleep`.
+2. **No real HTTP / network requests** in `Quick` tests. Either:
+   - Mock the provider/HTTP layer (most providers expose pure `parse_*` helpers — assert on those).
+   - Stand up a local Cohttp test server (see `test/test_http_client.ml`) for genuinely-need-network paths.
+   - Tag the test `Slow` and skip-on-missing-API-key for live API integration tests (see `test/test_provider_minimax.ml` MINIMAX_API_KEY pattern).
+3. **No real subprocess spawns** in `Quick` tests unless the test explicitly tests process lifecycle. Short-lived commands only (≤200ms). Always use the `forced_result` cleanup pattern.
+4. **No retries-with-backoff loops** at full production cadence in tests. If you must exercise a retry path, lower the base delay via an injectable parameter.
+
+Why: the `Quick` suite is supposed to give signal in seconds, not minutes. A single slow test can hide regressions behind impatient cancellations.
+
+If a production function inherently sleeps or makes network calls, add an injectable hook (`~clock`, `~http`, `?throttle`) and prove the contract via unit tests on the pure path. Reserve `Slow` tests for end-to-end behavior that genuinely needs real I/O.
+
 ## Process and Lwt Patterns
 
 Process I/O:
