@@ -1,0 +1,23 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B626
+priority: high
+status: pending
+tags: []
+title: 'B620 follow-up: Coq extracted AgentLoop integrity path doesn''t drop empty assistants'
+---
+cx-reviewer follow-up on B620 round 3: while native Message_history.ensure_tool_group_integrity now correctly drops empty assistant messages (preserving Codex replay state), the Coq-extracted equivalent at src/extracted/clawq_core.ml:835 only strips orphan calls/results — it doesn't drop empty assistant messages or preserve provider_response_items_json/thinking.
+
+Affected callers: Agent.trim_history and Agent.force_compress_history at src/agent_0_compact.ml:230 still route through Clawq_core.AgentLoop.ensure_tool_group_integrity (extracted), not the native version. After trim_history, an all-orphan assistant remains in agent.history, which causes the same Anthropic 400 'tool call result does not follow tool call' or 'text content blocks must be non-empty' failures.
+
+Conformance oracle: src/agent_loop_conformance.ml verifies native vs extracted match — divergence will eventually surface there.
+
+Fix options:
+1. Route trim/compress sanitization through native Message_history.ensure_tool_group_integrity instead of the extracted Coq function. Simplest.
+2. Extend the Coq AgentLoop message model to represent provider items + thinking + empty-message predicate. Larger Coq change.
+
+Add tests through Agent.trim_history / force_compress_history (not direct Message_history) to cover the broken path.
+
+Tag: coq, message-history, anthropic-api
