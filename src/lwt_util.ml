@@ -15,9 +15,16 @@ let on_fatal_timeout : (string -> unit) ref = ref (fun _ -> ())
 let default_warn_timeout = 10.0
 
 (** Default long timeout (seconds) for the second lock attempt. After this, the
-    process aborts. LLM calls with large contexts (100k+ tokens) can take
-    several minutes, so this must be generous. *)
-let default_fatal_timeout = 600.0
+    process aborts. LLM calls with large contexts (100k+ tokens) plus a long
+    chain of tool calls (file_read + shell_exec batches in a single turn,
+    delegate watching CI runs) can legitimately take 10-25 minutes, so this must
+    be generous.
+
+    B623: bumped from 600s -> 1800s after a real FATAL abort during a CI hook
+    delegate that ran a codex subagent for ~610s. The two-stage warning at
+    [default_warn_timeout] (10s) still surfaces slow locks; the fatal abort is
+    reserved for true deadlocks. *)
+let default_fatal_timeout = 1800.0
 
 (** Shorter fatal timeout for fast-path locks (hashtable guards, etc.) that
     should never be held for more than milliseconds. *)
@@ -66,6 +73,20 @@ let lock_with_timeout ~label ?(warn_timeout = default_warn_timeout)
         m "[%s] Mutex acquisition slow (>%.0fs), retrying with %.0fs timeout"
           label warn_timeout fatal_timeout);
     log_diagnostics `Warn;
+    (* B623: also log a midway warning at the old 600s threshold so the user
+       still sees a heads-up on legitimately-long agent turns before the
+       fatal timeout fires. *)
+    let midway_threshold = min 600.0 (fatal_timeout /. 2.0) in
+    Lwt.async (fun () ->
+        let* () = Lwt_unix.sleep midway_threshold in
+        if not (Lwt_mutex.is_locked mutex) then Lwt.return_unit
+        else begin
+          Logs.warn (fun m ->
+              m "[%s] Mutex still held after %.0fs (fatal at %.0fs)" label
+                midway_threshold (warn_timeout +. fatal_timeout));
+          log_diagnostics `Warn;
+          Lwt.return_unit
+        end);
     let* acquired = try_acquire fatal_timeout in
     if acquired then begin
       Logs.info (fun m -> m "[%s] Mutex acquired after extended wait" label);
