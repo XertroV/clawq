@@ -1,14 +1,15 @@
 ---
 claimed_at: "2026-03-17T13:38:53Z"
 claimed_by: cli-user
-completed_at: null
+completed_at: "2026-05-21T21:29:03Z"
 complexity: medium
 depends_on: []
+duration_minutes: 94070.1770827922
 estimate_hours: 1
 id: B540
 priority: high
 started_at: "2026-03-17T13:38:53Z"
-status: in_progress
+status: done
 tags: []
 title: in addition to cron, should have a run-every type of scheduled job (with optional TTL)
 ---
