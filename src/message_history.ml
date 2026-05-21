@@ -72,14 +72,29 @@ let ensure_tool_group_integrity msgs =
               m.provider_response_items_json ~kept_ids;
         }
       else m)
-  (* B620 round 2: drop assistant messages that became fully empty after
-     orphan-stripping (no content, no content_parts, no tool_calls). Such
-     messages serialize as content:"" which Anthropic rejects with "text
-     content blocks must be non-empty". *)
+  (* B620 round 2/3: drop assistant messages that became fully empty after
+     orphan-stripping (no content, no content_parts, no tool_calls, no
+     provider_response_items_json, no thinking). Such messages serialize as
+     content:"" which Anthropic rejects with "text content blocks must be
+     non-empty". Codex (OpenAI Responses API) replays
+     provider_response_items_json from such messages — those MUST be kept
+     so their reasoning/output items round-trip. Similarly an assistant
+     turn that emitted thinking-only content (rare but legal) must be
+     preserved. *)
   |> List.filter (fun (m : Provider.message) ->
+      let has_provider_items =
+        match m.provider_response_items_json with
+        | Some s when String.trim s <> "" && s <> "[]" -> true
+        | _ -> false
+      in
+      let has_thinking =
+        match m.thinking with
+        | Some s when String.trim s <> "" -> true
+        | _ -> false
+      in
       not
         (m.role = "assistant" && m.content = "" && m.content_parts = []
-       && m.tool_calls = []))
+       && m.tool_calls = [] && (not has_provider_items) && not has_thinking))
 
 let adjust_split_for_tool_groups to_compact to_keep =
   let rec move_orphans compact keep =

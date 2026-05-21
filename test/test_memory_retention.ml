@@ -281,17 +281,45 @@ let test_ensure_integrity_removes_orphaned_results () =
   Alcotest.(check string) "remaining is user msg" "user" (List.hd fixed).role
 
 let test_ensure_integrity_strips_dangling_calls () =
+  (* B620: when an assistant turn has tool_calls but no matching tool_results
+     AND no other content (no text, no thinking, no provider_response_items),
+     the post-strip message is empty and Anthropic rejects it ("text content
+     blocks must be non-empty"). ensure_tool_group_integrity drops the empty
+     assistant. *)
   let tc = make_tool_call "tc1" "shell_exec" in
   let assistant = make_assistant_with_tool_calls [ tc ] in
   let user_msg = Provider.make_message ~role:"user" ~content:"hi" in
   (* No tool result for tc1 *)
   let msgs = [ assistant; user_msg ] in
   let fixed = Agent.ensure_tool_group_integrity msgs in
-  Alcotest.(check int) "still 2 messages" 2 (List.length fixed);
+  Alcotest.(check int)
+    "empty assistant dropped, only user remains" 1 (List.length fixed);
+  Alcotest.(check string) "remaining is user" "user" (List.hd fixed).role
+
+(* B620 round 3: when an empty-after-strip assistant DOES carry Codex
+   provider_response_items_json (e.g., reasoning output items), the message
+   must be preserved so Codex can replay those items. *)
+let test_ensure_integrity_preserves_assistant_with_provider_items () =
+  let tc = make_tool_call "tc-x" "shell_exec" in
+  let assistant_with_items =
+    {
+      (make_assistant_with_tool_calls [ tc ]) with
+      provider_response_items_json =
+        Some {|[{"type":"reasoning","content":"thinking through the request"}]|};
+    }
+  in
+  let user_msg = Provider.make_message ~role:"user" ~content:"hi" in
+  let msgs = [ assistant_with_items; user_msg ] in
+  let fixed = Agent.ensure_tool_group_integrity msgs in
+  Alcotest.(check int)
+    "assistant preserved when provider items remain" 2 (List.length fixed);
   let fixed_assistant = List.hd fixed in
   Alcotest.(check int)
-    "tool_calls stripped" 0
-    (List.length fixed_assistant.Provider.tool_calls)
+    "tool_calls stripped from preserved assistant" 0
+    (List.length fixed_assistant.Provider.tool_calls);
+  Alcotest.(check bool)
+    "provider_response_items_json intact" true
+    (fixed_assistant.Provider.provider_response_items_json <> None)
 
 let test_ensure_integrity_preserves_complete_groups () =
   let tc = make_tool_call "tc1" "shell_exec" in
@@ -427,6 +455,9 @@ let suite =
       test_ensure_integrity_strips_dangling_calls;
     Alcotest.test_case "ensure_integrity preserves complete groups" `Quick
       test_ensure_integrity_preserves_complete_groups;
+    Alcotest.test_case
+      "B620: ensure_integrity preserves assistant with provider items" `Quick
+      test_ensure_integrity_preserves_assistant_with_provider_items;
     Alcotest.test_case "trim_history tool group integrity" `Quick
       test_trim_history_tool_group_integrity;
     Alcotest.test_case "force_compress tool group integrity" `Quick
