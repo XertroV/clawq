@@ -1,0 +1,11 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B613
+priority: high
+status: pending
+tags: []
+title: postmortem.model null cannot clear the model override
+---
+Runtime_config.to_json can emit model: null, but Config_loader.parse_config maps null back to the default model (Some 'zai_coding:glm-5-turbo'), not None. Make null mean 'use primary model' and add a roundtrip test. config_loader.ml around line 1872-1894 (postmortem section). Found by cx-reviewer.
