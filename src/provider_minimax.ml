@@ -2,6 +2,17 @@
 
 let minimax_base = "https://api.minimax.io"
 
+let api_model_name model =
+  match String.lowercase_ascii (String.trim model) with
+  | "minimax-m2.7" -> "MiniMax-M2.7"
+  | "minimax-m2.7-highspeed" -> "MiniMax-M2.7-highspeed"
+  | "minimax-m2.5" -> "MiniMax-M2.5"
+  | "minimax-m2.5-highspeed" -> "MiniMax-M2.5-highspeed"
+  | "minimax-m2.1" -> "MiniMax-M2.1"
+  | "minimax-m2.1-highspeed" -> "MiniMax-M2.1-highspeed"
+  | "minimax-m2" -> "MiniMax-M2"
+  | _ -> model
+
 let messages_to_anthropic_json messages =
   List.filter_map
     (fun (m : Provider.message) ->
@@ -205,11 +216,12 @@ let complete ~(config : Runtime_config.t)
     match provider.base_url with Some url -> url | None -> minimax_base
   in
   let uri = base_url ^ "/anthropic/v1/messages" in
+  let api_model = api_model_name model in
   let system_prompt = extract_system_prompt messages in
   let anthropic_messages = messages_to_anthropic_json messages in
   let body_fields =
     [
-      ("model", `String model);
+      ("model", `String api_model);
       ("max_tokens", `Int 8192);
       ("messages", `List anthropic_messages);
       ("temperature", `Float (max 1e-8 config.default_temperature));
@@ -242,8 +254,8 @@ let complete ~(config : Runtime_config.t)
     [ ("x-api-key", provider.api_key); ("anthropic-version", "2023-06-01") ]
   in
   Logs.info (fun m ->
-      m "MiniMax request to %s model=%s msgs=%d" uri model
-        (List.length messages));
+      m "MiniMax request to %s model=%s api_model=%s msgs=%d" uri model
+        api_model (List.length messages));
   let* status, response_body = Http_client.post_json ~uri ~headers ~body in
   if status < 200 || status >= 300 then
     Lwt.fail_with
@@ -261,11 +273,12 @@ let complete_streaming ~(config : Runtime_config.t)
     match provider.base_url with Some url -> url | None -> minimax_base
   in
   let uri = base_url ^ "/anthropic/v1/messages" in
+  let api_model = api_model_name model in
   let system_prompt = extract_system_prompt messages in
   let anthropic_messages = messages_to_anthropic_json messages in
   let body_fields =
     [
-      ("model", `String model);
+      ("model", `String api_model);
       ("max_tokens", `Int 8192);
       ("messages", `List anthropic_messages);
       ("temperature", `Float (max 1e-8 config.default_temperature));
@@ -299,8 +312,8 @@ let complete_streaming ~(config : Runtime_config.t)
     [ ("x-api-key", provider.api_key); ("anthropic-version", "2023-06-01") ]
   in
   Logs.info (fun m ->
-      m "MiniMax stream request to %s model=%s msgs=%d" uri model
-        (List.length messages));
+      m "MiniMax stream request to %s model=%s api_model=%s msgs=%d" uri model
+        api_model (List.length messages));
   Http_client.post_stream_with ~uri ~headers ~body ~label:"MiniMax API error"
     ~on_ok:(fun stream ->
       let buf = Buffer.create 256 in

@@ -121,6 +121,43 @@ let test_plain_list_canonical_format () =
   in
   Alcotest.(check bool) "no slash provider/model" false has_slash
 
+let test_minimax_catalog_uses_api_model_ids () =
+  let ids =
+    Models_catalog.by_provider "minimax"
+    |> List.filter (fun m -> not m.Models_catalog.deprecated)
+    |> List.map (fun m -> m.Models_catalog.id)
+  in
+  List.iter
+    (fun id -> Alcotest.(check bool) ("contains " ^ id) true (List.mem id ids))
+    [
+      "MiniMax-M2.7";
+      "MiniMax-M2.7-highspeed";
+      "MiniMax-M2.5";
+      "MiniMax-M2.5-highspeed";
+      "MiniMax-M2.1";
+      "MiniMax-M2.1-highspeed";
+      "MiniMax-M2";
+    ];
+  Alcotest.(check bool)
+    "does not advertise unsupported m2.5-free" false
+    (List.mem "minimax-m2.5-free" ids)
+
+let test_minimax_find_by_full_name_accepts_lowercase_alias () =
+  let exact =
+    Models_catalog.find_by_full_name "minimax:MiniMax-M2.7-highspeed"
+  in
+  let alias =
+    Models_catalog.find_by_full_name "minimax:minimax-m2.7-highspeed"
+  in
+  match (exact, alias) with
+  | Some exact, Some alias ->
+      Alcotest.(check string)
+        "exact id" "MiniMax-M2.7-highspeed" exact.Models_catalog.id;
+      Alcotest.(check string)
+        "alias resolves to API id" exact.Models_catalog.id
+        alias.Models_catalog.id
+  | _ -> Alcotest.fail "expected exact and lowercase MiniMax names to resolve"
+
 let suite =
   [
     ("find_by_id", `Quick, test_find_by_id);
@@ -136,4 +173,10 @@ let suite =
     ("codex find by full name", `Quick, test_codex_find_by_full_name);
     ("providers includes codex", `Quick, test_providers_includes_codex);
     ("plain list canonical format", `Quick, test_plain_list_canonical_format);
+    ( "minimax catalog uses API model IDs",
+      `Quick,
+      test_minimax_catalog_uses_api_model_ids );
+    ( "minimax find by full name accepts lowercase alias",
+      `Quick,
+      test_minimax_find_by_full_name_accepts_lowercase_alias );
   ]

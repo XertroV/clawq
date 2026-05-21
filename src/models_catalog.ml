@@ -625,7 +625,7 @@ let known_models : model_info list =
     (* Minimax *)
     {
       provider = "minimax";
-      id = "minimax-m2.7";
+      id = "MiniMax-M2.7";
       display_name = Some "MiniMax-M2.7";
       context_window = Some 204800;
       supports_vision = false;
@@ -635,7 +635,7 @@ let known_models : model_info list =
     };
     {
       provider = "minimax";
-      id = "minimax-m2.7-highspeed";
+      id = "MiniMax-M2.7-highspeed";
       display_name = Some "MiniMax-M2.7-highspeed";
       context_window = Some 204800;
       supports_vision = false;
@@ -645,7 +645,7 @@ let known_models : model_info list =
     };
     {
       provider = "minimax";
-      id = "minimax-m2.5";
+      id = "MiniMax-M2.5";
       display_name = Some "MiniMax-M2.5";
       context_window = Some 204800;
       supports_vision = false;
@@ -655,8 +655,8 @@ let known_models : model_info list =
     };
     {
       provider = "minimax";
-      id = "minimax-m2.5-free";
-      display_name = Some "MiniMax-M2.5-free";
+      id = "MiniMax-M2.5-highspeed";
+      display_name = Some "MiniMax-M2.5-highspeed";
       context_window = Some 204800;
       supports_vision = false;
       supports_tools = true;
@@ -665,8 +665,28 @@ let known_models : model_info list =
     };
     {
       provider = "minimax";
-      id = "minimax-m2.1";
+      id = "MiniMax-M2.1";
       display_name = Some "MiniMax-M2.1";
+      context_window = Some 204800;
+      supports_vision = false;
+      supports_tools = true;
+      supports_thinking = true;
+      deprecated = false;
+    };
+    {
+      provider = "minimax";
+      id = "MiniMax-M2.1-highspeed";
+      display_name = Some "MiniMax-M2.1-highspeed";
+      context_window = Some 204800;
+      supports_vision = false;
+      supports_tools = true;
+      supports_thinking = true;
+      deprecated = false;
+    };
+    {
+      provider = "minimax";
+      id = "MiniMax-M2";
+      display_name = Some "MiniMax-M2";
       context_window = Some 204800;
       supports_vision = false;
       supports_tools = true;
@@ -694,7 +714,12 @@ let providers =
 let by_provider provider =
   List.filter (fun m -> m.provider = provider) known_models
 
-let find_by_id id = List.find_opt (fun m -> m.id = id) known_models
+let model_id_matches (m : model_info) id =
+  m.id = id
+  || m.provider = "minimax"
+     && String.lowercase_ascii m.id = String.lowercase_ascii id
+
+let find_by_id id = List.find_opt (fun m -> model_id_matches m id) known_models
 
 type name_format = Canonical | Legacy | Plain
 
@@ -718,7 +743,7 @@ let find_by_full_name name =
   match split_name name with
   | provider, model, (Canonical | Legacy) ->
       List.find_opt
-        (fun m -> m.provider = provider && m.id = model)
+        (fun m -> m.provider = provider && model_id_matches m model)
         known_models
   | _, model, Plain -> find_by_id model
 

@@ -1,14 +1,15 @@
 ---
 claimed_at: "2026-05-21T04:14:57Z"
 claimed_by: cli-user
-completed_at: null
+completed_at: "2026-05-21T04:27:45Z"
 complexity: medium
 depends_on: []
+duration_minutes: 12.8015961111
 estimate_hours: 1
 id: B601
 priority: high
 started_at: "2026-05-21T04:14:57Z"
-status: in_progress
+status: done
 tags: []
 title: minimax models show 404, see ~/.clawq/daemon.log
 ---

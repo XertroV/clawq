@@ -238,6 +238,20 @@ let test_parse_ignores_extra_blocks () =
       Alcotest.(check string) "visible text only" "hello" content
   | _ -> Alcotest.fail "expected Text response"
 
+let test_api_model_name_canonicalizes_catalog_aliases () =
+  Alcotest.(check string)
+    "M2.7 alias" "MiniMax-M2.7"
+    (Provider_minimax.api_model_name "minimax-m2.7");
+  Alcotest.(check string)
+    "M2.7 highspeed alias" "MiniMax-M2.7-highspeed"
+    (Provider_minimax.api_model_name "minimax-m2.7-highspeed");
+  Alcotest.(check string)
+    "official casing preserved" "MiniMax-M2.5"
+    (Provider_minimax.api_model_name "MiniMax-M2.5");
+  Alcotest.(check string)
+    "custom model preserved" "custom-minimax-model"
+    (Provider_minimax.api_model_name "custom-minimax-model")
+
 (* --- Integration tests (call actual MiniMax API) --- *)
 
 let minimax_api_key =
@@ -411,6 +425,8 @@ let suite =
     Alcotest.test_case "parse empty content" `Quick test_parse_empty_content;
     Alcotest.test_case "parse ignores extra blocks" `Quick
       test_parse_ignores_extra_blocks;
+    Alcotest.test_case "api model name canonicalizes catalog aliases" `Quick
+      test_api_model_name_canonicalizes_catalog_aliases;
     Alcotest.test_case "live simple completion" `Slow
       test_live_simple_completion;
     Alcotest.test_case "live with system prompt" `Slow
