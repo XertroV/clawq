@@ -1,0 +1,11 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B662
+priority: high
+status: pending
+tags: []
+title: web_search_prime MCP returns 401 'Api key not found' — Z.ai search not configured
+---
+MCP tool web_search_prime (from zai-web-search MCP server at https://api.z.ai/api/mcp/web_search_prime/mcp) returns 'Error: MCP error -401: Api key not found, please get your apikey'. The MCP server is reachable but rejects the call because clawq isn't sending an API key in the right header/field. Likely needs config in zai provider section or MCP server config. Action: investigate src/mcp_client.ml or wherever zai-web-search MCP is configured; either pass api_key in headers, or document that this MCP requires a separate Z.ai search API key the user must add.
