@@ -1,14 +1,15 @@
 ---
 claimed_at: "2026-03-19T17:10:52Z"
 claimed_by: cli-user
-completed_at: null
+completed_at: "2026-05-21T21:14:51Z"
 complexity: medium
 depends_on: []
+duration_minutes: 90963.98898022105
 estimate_hours: 1
 id: B570
 priority: high
 started_at: "2026-03-19T17:10:52Z"
-status: in_progress
+status: done
 tags: []
 title: Set model for session via CLI
 ---
