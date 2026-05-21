@@ -130,9 +130,7 @@ let test_consecutive_tool_results_coalesce () =
   Alcotest.(check string) "role" "user" (user |> member "role" |> to_string);
   let blocks = user |> member "content" |> to_list in
   Alcotest.(check int) "2 tool_result blocks" 2 (List.length blocks);
-  let ids =
-    List.map (fun b -> b |> member "tool_use_id" |> to_string) blocks
-  in
+  let ids = List.map (fun b -> b |> member "tool_use_id" |> to_string) blocks in
   Alcotest.(check (list string)) "ids in order" [ "tc-a"; "tc-b" ] ids
 
 let test_user_text_between_tool_use_and_result_is_reordered () =
@@ -174,7 +172,8 @@ let test_user_text_between_tool_use_and_result_is_reordered () =
   let roles = List.map (fun m -> m |> member "role" |> to_string) result in
   Alcotest.(check (list string))
     "assistant/user-tool/user-text"
-    [ "assistant"; "user"; "user" ] roles;
+    [ "assistant"; "user"; "user" ]
+    roles;
   let second = List.nth result 1 in
   let block = List.hd (second |> member "content" |> to_list) in
   Alcotest.(check string)

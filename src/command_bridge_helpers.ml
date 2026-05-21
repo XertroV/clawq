@@ -821,81 +821,115 @@ let cmd_models args =
   | [ "list"; "--json"; "--provider"; p ] ->
       Yojson.Safe.to_string
         (Models_catalog.to_json ~provider_filter:(Some p) ())
-  | [ "set-default"; model ] ->
-      let provider, model_id, fmt = Models_catalog.split_name model in
-      (* Plain name with no provider: reject if not in catalog *)
-      if
-        fmt = Models_catalog.Plain
-        && Models_catalog.find_by_full_name model = None
-      then
-        Printf.sprintf
-          "Error: model '%s' not found in catalog.\n\
-           Hint: use provider:model format (e.g. anthropic:claude-sonnet-4-6) \
-           to set an unknown model."
-          model
-      else
-        (* Auto-normalize legacy provider/model to canonical provider:model,
-           and correct model-id casing against the catalog when it matches
-           case-insensitively. *)
-        let canonical_value, hint =
-          match fmt with
-          | Models_catalog.Legacy ->
-              let canonical_id =
-                Option.value
-                  ~default:model_id
-                  (Models_catalog.canonical_id ~provider model_id)
-              in
-              let canonical = provider ^ ":" ^ canonical_id in
-              ( canonical,
-                Printf.sprintf
-                  "\nNote: normalized \"%s\" to canonical format \"%s\"." model
-                  canonical )
-          | Models_catalog.Plain -> (
-              match Models_catalog.find_by_full_name model with
-              | Some m when m.Models_catalog.provider <> "" ->
-                  let canonical =
-                    m.Models_catalog.provider ^ ":" ^ m.Models_catalog.id
+  | "set-default" :: rest when rest <> [] -> (
+      let skip_validation =
+        List.exists (fun a -> a = "--skip-validation" || a = "--no-test") rest
+      in
+      let positional =
+        List.filter (fun a -> a <> "--skip-validation" && a <> "--no-test") rest
+      in
+      match positional with
+      | [ model ] -> (
+          let provider, model_id, fmt = Models_catalog.split_name model in
+          (* Plain name with no provider: reject if not in catalog *)
+          if
+            fmt = Models_catalog.Plain
+            && Models_catalog.find_by_full_name model = None
+          then
+            Printf.sprintf
+              "Error: model '%s' not found in catalog.\n\
+               Hint: use provider:model format (e.g. \
+               anthropic:claude-sonnet-4-6) to set an unknown model."
+              model
+          else
+            (* Auto-normalize legacy provider/model to canonical
+               provider:model, and correct model-id casing against the catalog
+               when it matches case-insensitively. *)
+            let canonical_value, hint =
+              match fmt with
+              | Models_catalog.Legacy ->
+                  let canonical_id =
+                    Option.value ~default:model_id
+                      (Models_catalog.canonical_id ~provider model_id)
                   in
-                  ( canonical,
-                    Printf.sprintf "\nNote: resolved bare model name to \"%s\"."
-                      canonical )
-              | _ -> (model, ""))
-          | Models_catalog.Canonical -> (
-              match Models_catalog.canonical_id ~provider model_id with
-              | Some canonical_id ->
                   let canonical = provider ^ ":" ^ canonical_id in
                   ( canonical,
                     Printf.sprintf
-                      "\nNote: corrected model casing \"%s\" -> \"%s\"." model
-                      canonical )
-              | None -> (model, ""))
-        in
-        let set_result =
-          Config_set.set_value "agent_defaults.primary_model" canonical_value
-        in
-        let display_provider =
-          match fmt with
-          | Models_catalog.Canonical | Models_catalog.Legacy -> provider
-          | Models_catalog.Plain -> (
-              match Models_catalog.find_by_full_name model with
-              | Some m when m.Models_catalog.provider <> "" ->
-                  m.Models_catalog.provider
-              | _ -> "")
-        in
-        let display_model =
-          match fmt with
-          | Models_catalog.Canonical | Models_catalog.Legacy -> model_id
-          | Models_catalog.Plain -> model
-        in
-        let confirm =
-          if display_provider <> "" then
-            Printf.sprintf "Default model set to: %s (provider: %s)%s\n%s"
-              display_model display_provider hint set_result
-          else
-            Printf.sprintf "Default model set to: %s%s\n%s" display_model hint
-              set_result
-        in
-        confirm
+                      "\nNote: normalized \"%s\" to canonical format \"%s\"."
+                      model canonical )
+              | Models_catalog.Plain -> (
+                  match Models_catalog.find_by_full_name model with
+                  | Some m when m.Models_catalog.provider <> "" ->
+                      let canonical =
+                        m.Models_catalog.provider ^ ":" ^ m.Models_catalog.id
+                      in
+                      ( canonical,
+                        Printf.sprintf
+                          "\nNote: resolved bare model name to \"%s\"."
+                          canonical )
+                  | _ -> (model, ""))
+              | Models_catalog.Canonical -> (
+                  match Models_catalog.canonical_id ~provider model_id with
+                  | Some canonical_id ->
+                      let canonical = provider ^ ":" ^ canonical_id in
+                      ( canonical,
+                        Printf.sprintf
+                          "\nNote: corrected model casing \"%s\" -> \"%s\"."
+                          model canonical )
+                  | None -> (model, ""))
+            in
+            let cfg = get_config () in
+            let previous_model = cfg.agent_defaults.primary_model in
+            let rollback_cmd =
+              if previous_model <> "" then
+                Printf.sprintf "clawq models set-default %s" previous_model
+              else "clawq models set-default <previous-model>"
+            in
+            let display_provider =
+              match fmt with
+              | Models_catalog.Canonical | Models_catalog.Legacy -> provider
+              | Models_catalog.Plain -> (
+                  match Models_catalog.find_by_full_name model with
+                  | Some m when m.Models_catalog.provider <> "" ->
+                      m.Models_catalog.provider
+                  | _ -> "")
+            in
+            let display_model =
+              match fmt with
+              | Models_catalog.Canonical | Models_catalog.Legacy -> model_id
+              | Models_catalog.Plain -> model
+            in
+            let rollback_banner =
+              Printf.sprintf
+                "Current model: %s\nRollback command if needed:\n  %s\n"
+                previous_model rollback_cmd
+            in
+            let commit_and_format () =
+              let set_result =
+                Config_set.set_value "agent_defaults.primary_model"
+                  canonical_value
+              in
+              if display_provider <> "" then
+                Printf.sprintf "%sDefault model set to: %s (provider: %s)%s\n%s"
+                  rollback_banner display_model display_provider hint set_result
+              else
+                Printf.sprintf "%sDefault model set to: %s%s\n%s"
+                  rollback_banner display_model hint set_result
+            in
+            if skip_validation then
+              commit_and_format ()
+              ^ "\nNote: validation skipped (--skip-validation)."
+            else
+              let result =
+                Model_validation.validate_sync ~config:cfg
+                  ~model:canonical_value ()
+              in
+              match result with
+              | Model_validation.Ok_validated -> commit_and_format ()
+              | Model_validation.Error_msg msg ->
+                  rollback_banner
+                  ^ Model_validation.format_failure ~rollback_cmd msg)
+      | _ -> "Usage: clawq models set-default MODEL [--skip-validation]")
   | [ "refresh" ] ->
       let db = get_db () in
       let config = get_config () in

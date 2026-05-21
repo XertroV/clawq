@@ -343,10 +343,7 @@ let messages_to_anthropic_json messages =
     | blocks ->
         let user =
           `Assoc
-            [
-              ("role", `String "user");
-              ("content", `List (List.rev blocks));
-            ]
+            [ ("role", `String "user"); ("content", `List (List.rev blocks)) ]
         in
         user :: acc
   in
@@ -393,15 +390,8 @@ let summarize_anthropic_messages msgs =
   in
   let summarize_msg m =
     let open Yojson.Safe.Util in
-    let role =
-      try m |> member "role" |> to_string with _ -> "?"
-    in
-    let tag =
-      match role with
-      | "user" -> "U"
-      | "assistant" -> "A"
-      | r -> r
-    in
+    let role = try m |> member "role" |> to_string with _ -> "?" in
+    let tag = match role with "user" -> "U" | "assistant" -> "A" | r -> r in
     let content = try Some (m |> member "content") with _ -> None in
     match content with
     | Some (`List blocks) ->

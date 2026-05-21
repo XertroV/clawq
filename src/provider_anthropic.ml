@@ -1,7 +1,6 @@
 (* Provider implementation for Anthropic Messages API *)
 
 let anthropic_version = "2023-06-01"
-
 let messages_to_anthropic_json = Provider.messages_to_anthropic_json
 
 let tools_to_anthropic_json tools =

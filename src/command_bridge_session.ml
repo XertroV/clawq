@@ -676,6 +676,17 @@ let cmd_session args =
       | _ -> "Usage: clawq session heartbeat SESSION [on|off|status]")
   | [ "heartbeat" ] -> "Usage: clawq session heartbeat SESSION [on|off|status]"
   | "model" :: session_key :: rest -> (
+      let parse_set_args args =
+        let skip =
+          List.exists (fun a -> a = "--skip-validation" || a = "--no-test") args
+        in
+        let positional =
+          List.filter
+            (fun a -> a <> "--skip-validation" && a <> "--no-test")
+            args
+        in
+        (skip, positional)
+      in
       match rest with
       | [] | [ "get" ] | [ "status" ] -> (
           let model = Memory.get_session_model_override ~db ~session_key in
@@ -686,40 +697,87 @@ let cmd_session args =
               Printf.sprintf
                 "Session %s: no model override (using global default: %s)"
                 session_key config.agent_defaults.primary_model)
-      | [ "set"; model ] ->
-          let provider, model_id, fmt = Models_catalog.split_name model in
-          let canonical, hint =
-            match fmt with
-            | Models_catalog.Legacy ->
-                let canonical_id =
-                  Option.value ~default:model_id
-                    (Models_catalog.canonical_id ~provider model_id)
-                in
-                let c = provider ^ ":" ^ canonical_id in
-                ( c,
-                  Printf.sprintf
-                    "\nNote: normalized to canonical format \"%s\"." c )
-            | Models_catalog.Canonical -> (
-                match Models_catalog.canonical_id ~provider model_id with
-                | Some canonical_id ->
+      | "set" :: set_args -> (
+          let skip_validation, positional = parse_set_args set_args in
+          match positional with
+          | [ model ] -> (
+              let provider, model_id, fmt = Models_catalog.split_name model in
+              let canonical, hint =
+                match fmt with
+                | Models_catalog.Legacy ->
+                    let canonical_id =
+                      Option.value ~default:model_id
+                        (Models_catalog.canonical_id ~provider model_id)
+                    in
                     let c = provider ^ ":" ^ canonical_id in
                     ( c,
                       Printf.sprintf
-                        "\nNote: corrected model casing \"%s\" -> \"%s\"." model
-                        c )
-                | None -> (model, ""))
-            | Models_catalog.Plain -> (model, "")
-          in
-          Memory.set_session_model_override ~db ~session_key ~model:canonical;
-          Printf.sprintf "Model override set for session %s: %s%s" session_key
-            canonical hint
+                        "\nNote: normalized to canonical format \"%s\"." c )
+                | Models_catalog.Canonical -> (
+                    match Models_catalog.canonical_id ~provider model_id with
+                    | Some canonical_id ->
+                        let c = provider ^ ":" ^ canonical_id in
+                        ( c,
+                          Printf.sprintf
+                            "\nNote: corrected model casing \"%s\" -> \"%s\"."
+                            model c )
+                    | None -> (model, ""))
+                | Models_catalog.Plain -> (model, "")
+              in
+              let previous_override =
+                Memory.get_session_model_override ~db ~session_key
+              in
+              let rollback_cmd =
+                match previous_override with
+                | Some prev ->
+                    Printf.sprintf "clawq session model %s set %s" session_key
+                      prev
+                | None ->
+                    Printf.sprintf "clawq session model %s clear" session_key
+              in
+              let previous_label =
+                match previous_override with
+                | Some prev -> Printf.sprintf "override=%s" prev
+                | None ->
+                    Printf.sprintf "no override (default: %s)"
+                      config.agent_defaults.primary_model
+              in
+              let rollback_banner =
+                Printf.sprintf
+                  "Current session model: %s\n\
+                   Rollback command if needed:\n\
+                  \  %s\n"
+                  previous_label rollback_cmd
+              in
+              let commit () =
+                Memory.set_session_model_override ~db ~session_key
+                  ~model:canonical;
+                Printf.sprintf "%sModel override set for session %s: %s%s"
+                  rollback_banner session_key canonical hint
+              in
+              if skip_validation then
+                commit () ^ "\nNote: validation skipped (--skip-validation)."
+              else
+                let result =
+                  Model_validation.validate_sync ~config ~model:canonical ()
+                in
+                match result with
+                | Model_validation.Ok_validated -> commit ()
+                | Model_validation.Error_msg msg ->
+                    rollback_banner
+                    ^ Model_validation.format_failure ~rollback_cmd msg)
+          | _ ->
+              "Usage: clawq session model SESSION set MODEL [--skip-validation]"
+          )
       | [ "clear" ] ->
           Memory.clear_session_model_override ~db ~session_key;
           Printf.sprintf
             "Model override cleared for session %s (will use global default: \
              %s)"
             session_key config.agent_defaults.primary_model
-      | _ -> "Usage: clawq session model SESSION [get|set MODEL|clear]")
+      | _ ->
+          "Usage: clawq session model SESSION [get|set MODEL \
+           [--skip-validation]|clear]")
   | [ "model" ] -> "Usage: clawq session model SESSION [get|set MODEL|clear]"
   | "postmortems" :: rest ->
       let session_key, limit =

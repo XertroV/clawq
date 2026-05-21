@@ -109,6 +109,7 @@
   test_keepalive
   test_completions
   test_session_model_override
+  test_model_validation
   test_setup_github
   test_setup_discord
   test_setup_slack

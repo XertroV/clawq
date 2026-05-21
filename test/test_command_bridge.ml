@@ -2910,8 +2910,11 @@ let test_models_set_default_rejects_unknown_plain () =
 
 let test_models_set_default_accepts_known_plain () =
   with_temp_home (fun _dir ->
+      (* --skip-validation: test exercises the catalog/parsing path, not the
+         live validation safety net (B600). *)
       let result =
-        Command_bridge.handle [ "models"; "set-default"; "claude-3-5-sonnet" ]
+        Command_bridge.handle
+          [ "models"; "set-default"; "claude-3-5-sonnet"; "--skip-validation" ]
       in
       let contains s sub =
         let re = Re.(compile (str sub)) in
@@ -2925,7 +2928,12 @@ let test_models_set_default_accepts_unknown_with_provider () =
   with_temp_home (fun _dir ->
       let result =
         Command_bridge.handle
-          [ "models"; "set-default"; "myprovider:some-custom-model" ]
+          [
+            "models";
+            "set-default";
+            "myprovider:some-custom-model";
+            "--skip-validation";
+          ]
       in
       let contains s sub =
         let re = Re.(compile (str sub)) in
@@ -2935,6 +2943,46 @@ let test_models_set_default_accepts_unknown_with_provider () =
         "confirms set" true
         (contains result "Default model set to:");
       Alcotest.(check bool) "no error" true (not (contains result "Error:")))
+
+(* B600: validation safety net aborts switch when provider has no auth. *)
+let test_models_set_default_validation_aborts_on_bad_model () =
+  with_temp_home (fun _dir ->
+      let result =
+        Command_bridge.handle
+          [ "models"; "set-default"; "myprovider:some-custom-model" ]
+      in
+      let contains s sub =
+        let re = Re.(compile (str sub)) in
+        Re.execp re s
+      in
+      Alcotest.(check bool)
+        "validation error reported" true
+        (contains result "validation failed");
+      Alcotest.(check bool)
+        "rollback hint shown" true
+        (contains result "Rollback command if needed"))
+
+let test_models_set_default_skip_validation_commits () =
+  with_temp_home (fun _dir ->
+      let result =
+        Command_bridge.handle
+          [
+            "models";
+            "set-default";
+            "myprovider:some-custom-model";
+            "--skip-validation";
+          ]
+      in
+      let contains s sub =
+        let re = Re.(compile (str sub)) in
+        Re.execp re s
+      in
+      Alcotest.(check bool)
+        "set proceeds with --skip-validation" true
+        (contains result "Default model set to:");
+      Alcotest.(check bool)
+        "notes validation was skipped" true
+        (contains result "validation skipped"))
 
 let test_models_set_usage_excludes_session_only_set_without_live_session () =
   with_temp_home (fun _dir ->
@@ -2973,6 +3021,10 @@ let suite =
       test_models_set_default_rejects_unknown_plain;
     Alcotest.test_case "models set-default accepts known plain model" `Quick
       test_models_set_default_accepts_known_plain;
+    Alcotest.test_case "models set-default validation aborts on bad model"
+      `Quick test_models_set_default_validation_aborts_on_bad_model;
+    Alcotest.test_case "models set-default --skip-validation commits" `Quick
+      test_models_set_default_skip_validation_commits;
     Alcotest.test_case "models set-default accepts unknown with provider" `Quick
       test_models_set_default_accepts_unknown_with_provider;
     Alcotest.test_case

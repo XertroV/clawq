@@ -806,50 +806,102 @@ let models_tool ~(config : Runtime_config.t) ?session_mgr () =
   let current_model () =
     Runtime_config.effective_primary_model config.agent_defaults
   in
-  let set_model ?session_key model =
+  (* Set the session model after a successful safety-net check. Returns the
+     tool response string. Includes a rollback hint so the agent can self-
+     recover even after committing. *)
+  let do_set ~cfg ~session_key ~model ~provider ~model_id ~fmt ~previous_model =
+    let hint =
+      match fmt with
+      | Models_catalog.Legacy ->
+          Printf.sprintf "\nHint: use %s:%s format instead of %s/%s." provider
+            model_id provider model_id
+      | _ -> ""
+    in
+    let provider_in_config =
+      List.mem_assoc provider cfg.Runtime_config.providers
+    in
+    let warn =
+      if not provider_in_config then
+        Printf.sprintf
+          "\n\
+           Warning: provider '%s' not found in config. Add it to your \
+           config.json to use this model."
+          provider
+      else ""
+    in
+    let rollback_tool_call =
+      Printf.sprintf "{\"action\":\"set\",\"model\":\"%s\"}" previous_model
+    in
+    match session_mgr with
+    | Some mgr -> (
+        match session_key with
+        | Some key ->
+            Session.set_session_model mgr ~key ~model;
+            Printf.sprintf
+              "Model set to: %s (provider: %s)%s%s\n\
+               Previous model: %s\n\
+               Rollback (call this tool again with): %s\n\
+               Persisted for this session across restarts. Use 'models \
+               set-default' to change the global default."
+              model_id provider hint warn previous_model rollback_tool_call
+        | None -> "Error: session key not available; cannot set session model.")
+    | None ->
+        "Error: no active session available; session-scoped model changes \
+         require a live session. Use the CLI 'models set-default' command to \
+         change the persistent default."
+  in
+  let set_model_lwt ?session_key ?(skip_validation = false) model =
+    let open Lwt.Syntax in
     match Models_catalog.find_by_full_name model with
+    | None ->
+        Lwt.return
+          (Printf.sprintf
+             "Error: model '%s' not found in catalog. Use 'models list' to see \
+              available models. Format: provider:model-name (e.g., \
+              openai:gpt-5.4)"
+             model)
     | Some _ -> (
         match session_mgr with
+        | None ->
+            Lwt.return
+              "Error: no active session available; session-scoped model \
+               changes require a live session. Use the CLI 'models \
+               set-default' command to change the persistent default."
         | Some mgr -> (
             let provider, model_id, fmt = Models_catalog.split_name model in
-            let hint =
-              match fmt with
-              | Models_catalog.Legacy ->
-                  Printf.sprintf "\nHint: use %s:%s format instead of %s/%s."
-                    provider model_id provider model_id
-              | _ -> ""
-            in
             let cfg = Session.get_config mgr in
-            let provider_in_config = List.mem_assoc provider cfg.providers in
-            let warn =
-              if not provider_in_config then
-                Printf.sprintf
-                  "\n\
-                   Warning: provider '%s' not found in config. Add it to your \
-                   config.json to use this model."
-                  provider
-              else ""
+            let previous_model =
+              match session_key with
+              | Some key -> Session.get_session_effective_model mgr ~key
+              | None ->
+                  Runtime_config.effective_primary_model cfg.agent_defaults
             in
-            match session_key with
-            | Some key ->
-                Session.set_session_model mgr ~key ~model;
-                Printf.sprintf
-                  "Model set to: %s (provider: %s)%s%s\n\
-                   Persisted for this session across restarts. Use 'models \
-                   set-default' to change the global default."
-                  model_id provider hint warn
-            | None ->
-                "Error: session key not available; cannot set session model.")
-        | None ->
-            "Error: no active session available; session-scoped model changes \
-             require a live session. Use the CLI 'models set-default' command \
-             to change the persistent default.")
-    | None ->
-        Printf.sprintf
-          "Error: model '%s' not found in catalog. Use 'models list' to see \
-           available models. Format: provider:model-name (e.g., \
-           openai:gpt-5.4)"
-          model
+            if skip_validation then
+              Lwt.return
+                (do_set ~cfg ~session_key ~model ~provider ~model_id ~fmt
+                   ~previous_model
+                ^ "\nNote: validation skipped (skip_validation=true).")
+            else
+              let* result = Model_validation.validate ~config:cfg ~model () in
+              match result with
+              | Model_validation.Ok_validated ->
+                  Lwt.return
+                    (do_set ~cfg ~session_key ~model ~provider ~model_id ~fmt
+                       ~previous_model)
+              | Model_validation.Error_msg msg ->
+                  let rollback_cmd =
+                    Printf.sprintf "models set %s (previous model still active)"
+                      previous_model
+                  in
+                  Lwt.return
+                    (Printf.sprintf
+                       "Error: model validation failed for '%s' — %s\n\
+                        Previous model '%s' remains active. To re-attempt or \
+                        rollback explicitly:\n\
+                       \  %s\n\
+                        To bypass validation (not recommended), call this tool \
+                        again with skip_validation=true."
+                       model msg previous_model rollback_cmd)))
   in
   {
     Tool.name = "models";
@@ -857,7 +909,10 @@ let models_tool ~(config : Runtime_config.t) ?session_mgr () =
       "List available LLM models, get the current model, or set the model for \
        this session. Models are specified in provider:model format (e.g., \
        anthropic:claude-sonnet-4-6, openai:gpt-5.4). Use 'list' to discover \
-       available models.";
+       available models. 'set' runs a live test completion against the target \
+       model first and aborts on failure so a bad selection cannot brick the \
+       session. The response includes a rollback tool call you can use to \
+       revert.";
     parameters_schema =
       `Assoc
         [
@@ -896,6 +951,17 @@ let models_tool ~(config : Runtime_config.t) ?session_mgr () =
                           "Filter by provider for 'list' action (e.g., \
                            'openai', 'anthropic')" );
                     ] );
+                ( "skip_validation",
+                  `Assoc
+                    [
+                      ("type", `String "boolean");
+                      ( "description",
+                        `String
+                          "Optional. If true, skip the live test completion \
+                           that normally runs before a 'set' commits. Use only \
+                           when you know the model works and just want to \
+                           switch fast." );
+                    ] );
               ] );
           ("required", `List [ `String "action" ]);
         ];
@@ -924,12 +990,15 @@ let models_tool ~(config : Runtime_config.t) ?session_mgr () =
             let model =
               try args |> member "model" |> to_string with _ -> ""
             in
+            let skip_validation =
+              try args |> member "skip_validation" |> to_bool with _ -> false
+            in
             if model = "" then
               Lwt.return
                 "Error: model parameter is required for 'set' action. Specify \
                  a model in provider:model format (e.g., openai:gpt-5.4). Use \
                  'models list' to see available models."
-            else Lwt.return (set_model ?session_key model)
+            else set_model_lwt ?session_key ~skip_validation model
         | _ ->
             Lwt.return
               "Error: action must be 'list', 'get', or 'set'. Use 'list' to \

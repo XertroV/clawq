@@ -314,7 +314,8 @@ let launch ?configured_path ?(timeout_s = 30.0) () =
               Lwt.fail_with "No page target found after chromium launch"
           | Some target ->
               let target_id =
-                target |> Yojson.Safe.Util.member "targetId"
+                target
+                |> Yojson.Safe.Util.member "targetId"
                 |> Yojson.Safe.Util.to_string
               in
               let* attach_result =
@@ -327,7 +328,8 @@ let launch ?configured_path ?(timeout_s = 30.0) () =
                   ~timeout_s ()
               in
               let session_id =
-                attach_result |> Yojson.Safe.Util.member "sessionId"
+                attach_result
+                |> Yojson.Safe.Util.member "sessionId"
                 |> Yojson.Safe.Util.to_string
               in
               let page = { target_id; session_id } in

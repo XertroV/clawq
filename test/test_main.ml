@@ -140,6 +140,7 @@ let () =
        ("session_keepalive", Test_keepalive.suite);
        ("completions", Test_completions.suite);
        ("session_model_override", Test_session_model_override.suite);
+       ("model_validation", Test_model_validation.suite);
        ("summarizer", Test_summarizer.suite);
        ("ask_user_question", Test_ask_user_question.suite);
        ("question_presenter", Test_question_presenter.suite);

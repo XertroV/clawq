@@ -126,6 +126,7 @@
   debate
   models_catalog
   model_preferences
+  model_validation
   completions
   stuck_detector
   session_observer

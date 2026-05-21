@@ -744,10 +744,10 @@ let canonical_full_name name =
         | _ -> None)
   with
   | None -> None
-  | Some (delim, i) ->
+  | Some (delim, i) -> (
       let provider = String.sub name 0 i in
       let model = String.sub name (i + 1) (String.length name - i - 1) in
-      (match canonical_id ~provider model with
+      match canonical_id ~provider model with
       | Some canonical ->
           Some (Printf.sprintf "%s%c%s" provider delim canonical)
       | None -> None)
