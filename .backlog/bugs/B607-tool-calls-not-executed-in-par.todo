@@ -1,0 +1,15 @@
+---
+complexity: high
+depends_on: []
+estimate_hours: 4
+id: B607
+priority: high
+status: pending
+tags: []
+title: Tool calls not executed in parallel
+---
+Models can emit multiple tool_call entries in a single response (all provider parsers accumulate tool_calls : tool_call list). However, clawq executes them sequentially: both execute_tool_calls_stream (agent.ml:489) and execute_tool_calls (agent.ml:736) use Lwt_list.map_s (sequential), not Lwt_list.map_p (parallel). OpenAI Codex explicitly sends 'parallel_tool_calls: true' in its request payload (provider_openai_codex.ml:422) but this hint is ignored by the agent loop.
+
+Impact: when a model emits multiple independent tool calls (e.g. grep + file_read + glob), clawq executes them one at a time instead of concurrently. This wastes time and prevents efficient parallelism on multi-core workloads.
+
+Fix: swap map_s for map_p with concurrency limits, accounting for state mutation edge cases (workspace file watching, effective_cwd, etc.).
