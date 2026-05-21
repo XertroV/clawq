@@ -1,0 +1,76 @@
+---
+complexity: high
+depends_on: []
+estimate_hours: 1
+id: B634
+priority: critical
+status: pending
+tags:
+    - minimax
+    - tool-call
+    - streaming
+title: 'MiniMax M2.7-highspeed: tool_use blocks arrive with empty arguments {}, sessions stuck in failure loop'
+---
+## Summary
+
+Live observation in ~/.clawq/daemon.log (2026-05-21): the teams Personal session
+`teams:personal:a:1JPVFngEx3FRRV...` is wedged. Of 138 assistant messages with
+tool_calls (provider=minimax, model=MiniMax-M2.7-highspeed), 118 (~85%) have
+tool_calls_json with arguments literally equal to "{}" — i.e. the function
+arguments JSON object is empty. Only 12 calls (08:28–08:34 window, fresh
+context) emitted non-empty arguments.
+
+Resulting symptom: tool dispatcher returns
+"Error: missing required parameter 'command' for tool shell_exec" repeatedly.
+Stuck-detection (observer + postmortem circuit breaker) eventually fires but
+the model keeps emitting the same empty-input tool_use, so the session never
+recovers. Same pattern reproduces for shell_exec, use_skill, file_read, grep,
+delegate, send_message, file_write, background_task_logs, background_task_wait,
+task_tree (61+13+6+5+4+1+1+2+1+~3 occurrences in current daemon.log).
+
+The model's own thinking_content even acknowledges the issue:
+> "tool arguments arriving as empty `{}` at execution layer. Let me try
+> shell_exec with proper args."
+
+…and STILL emits empty input.
+
+## Diagnosis pointers
+
+- Tool IDs use the MiniMax-server format `call_function_<random>_1`, so the
+  blocks reach clawq from upstream — not client-generated.
+- `src/provider_minimax.ml` streaming handler (lines 277-444) accumulates
+  `input_json_delta.partial_json` into a per-tool Buffer. If MiniMax sends no
+  `input_json_delta` events (or sends them with empty partial_json), the
+  buffer stays empty.
+- Non-streaming `parse_response` (line 102) stringifies `input` field: if
+  the API returns `\"input\": {}` we get `arguments = \"{}\"` directly.
+- `test/test_provider_minimax.ml::test_parse_tool_use_response` (lines 326-337)
+  does NOT assert on `tc.arguments` after parsing, so this regression is
+  invisible to the test suite.
+
+## Suggested next steps
+
+1. Capture a raw SSE stream from a wedged turn (re-run with debug logging on
+   `provider_minimax.ml`) to confirm whether MiniMax is omitting deltas or
+   sending empty `partial_json`.
+2. Add a streaming-path regression test that drives the SSE parser with a
+   fixture stream containing tool_use + input_json_delta and asserts
+   `tc.arguments` round-trips.
+3. Add a non-streaming-path regression test asserting
+   `arguments = '{\"path\":\"/tmp\"}'` for the existing test_parse_tool_use
+   fixture.
+4. When the agent loop sees N consecutive tool_calls with arguments equal to
+   either '' or '{}' from the same model, treat it as a hard stop: send a
+   user-facing message and pause the session (current circuit breaker only
+   suppresses postmortem launch — it does not stop the main loop).
+5. Consider rotating model (M2.7-highspeed → M2.7 non-highspeed) when the
+   empty-args pattern is detected — highspeed variants are known to
+   compress tool-call output.
+
+## Evidence
+
+- Sessions table: ~/.clawq/memory.db, session_key above
+- Log file: ~/.clawq/daemon.log (current rotation), period 2026-05-21 08:25 to 14:01
+- Sample assistant rows with tool_calls_json = '[{...,\"arguments\":\"{}\"}]':
+  ids 33938-34403 (excluding 34098,34103,34105,34107,34109,34113,34115,
+  34119,34128,34134,34157,34161)

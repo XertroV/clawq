@@ -844,6 +844,87 @@ let test_file_read_rejects_symlink_escape () =
       (try Unix.rmdir outside_dir with _ -> ());
       try Unix.rmdir workspace with _ -> ())
 
+(* B645 regression: file_write/file_append/file_edit/file_edit_lines must
+   refuse any path under a .backlog/ directory and direct the agent to the
+   `bl` CLI instead. Triggered by a teams agent that wrote a phantom B605
+   bug file directly into /home/xertrov/src/clawq/.backlog/bugs/ with
+   hallucinated content. *)
+let test_file_write_rejects_backlog_path () =
+  with_temp_workspace (fun workspace ->
+      let backlog_path = ".backlog/bugs/B999-phantom.todo" in
+      let tool =
+        Tools_builtin.file_write ~workspace ~workspace_only:false
+          ~extra_allowed_paths:[]
+      in
+      let out =
+        Lwt_main.run
+          (tool.invoke
+             (`Assoc
+                [
+                  ("path", `String backlog_path);
+                  ("content", `String "hallucinated bug content");
+                ]))
+      in
+      let contains s sub =
+        try
+          ignore (Str.search_forward (Str.regexp_string sub) s 0);
+          true
+        with Not_found -> false
+      in
+      Alcotest.(check bool)
+        "refuses backlog path" true
+        (contains out "refusing to file_write");
+      Alcotest.(check bool)
+        "points to bl bug --simple" true
+        (contains out "bl bug --simple");
+      Alcotest.(check bool)
+        "file was NOT created" false
+        (Sys.file_exists backlog_path))
+
+let test_file_append_rejects_nested_backlog_path () =
+  with_temp_workspace (fun workspace ->
+      let nested = "subdir/.backlog/ideas/I999.todo" in
+      let tool =
+        Tools_builtin.file_append ~workspace ~workspace_only:false
+          ~extra_allowed_paths:[]
+      in
+      let out =
+        Lwt_main.run
+          (tool.invoke
+             (`Assoc [ ("path", `String nested); ("content", `String "x") ]))
+      in
+      let contains s sub =
+        try
+          ignore (Str.search_forward (Str.regexp_string sub) s 0);
+          true
+        with Not_found -> false
+      in
+      Alcotest.(check bool)
+        "refuses nested .backlog" true
+        (contains out ".backlog/ directory is managed");
+      Alcotest.(check bool) "did not create file" false (Sys.file_exists nested))
+
+let test_file_write_allows_nonbacklog_path () =
+  with_temp_workspace (fun workspace ->
+      let safe_path = "notes.txt" in
+      let tool =
+        Tools_builtin.file_write ~workspace ~workspace_only:false
+          ~extra_allowed_paths:[]
+      in
+      let out =
+        Lwt_main.run
+          (tool.invoke
+             (`Assoc [ ("path", `String safe_path); ("content", `String "ok") ]))
+      in
+      let contains s sub =
+        try
+          ignore (Str.search_forward (Str.regexp_string sub) s 0);
+          true
+        with Not_found -> false
+      in
+      Alcotest.(check bool)
+        "non-backlog write succeeds" true (contains out "Written"))
+
 let test_file_append_creates_and_appends () =
   with_temp_workspace (fun workspace ->
       let path = "append.txt" in
@@ -1336,6 +1417,12 @@ let suite =
       test_file_read_rejects_invalid_offset_limit;
     Alcotest.test_case "file_read rejects symlink escape" `Quick
       test_file_read_rejects_symlink_escape;
+    Alcotest.test_case "B645: file_write refuses .backlog/ path" `Quick
+      test_file_write_rejects_backlog_path;
+    Alcotest.test_case "B645: file_append refuses nested .backlog/ path" `Quick
+      test_file_append_rejects_nested_backlog_path;
+    Alcotest.test_case "B645: file_write still allows non-backlog paths" `Quick
+      test_file_write_allows_nonbacklog_path;
     Alcotest.test_case "file_append creates and appends" `Quick
       test_file_append_creates_and_appends;
     Alcotest.test_case "file_edit replace_all" `Quick test_file_edit_replace_all;

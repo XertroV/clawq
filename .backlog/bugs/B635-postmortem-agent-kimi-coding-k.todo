@@ -1,0 +1,60 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B635
+priority: high
+status: pending
+tags:
+    - postmortem
+    - provider
+    - kimi
+title: 'Postmortem agent (kimi_coding/kimi-for-code) rejects temperature: only 1 allowed'
+---
+## Summary
+
+Postmortem agent is configured with provider=kimi_coding, model=kimi-for-code.
+That model rejects any temperature value other than 1 with:
+
+  HTTP 400 \"invalid temperature: only 1 is allowed for this model\"
+
+clawq passes the global default_temperature (0.7) into the request, causing
+the postmortem turn to fail on every retry (Attempt 1/3, 2/3, 3/3), spamming
+WARN and ERROR lines.
+
+Excerpts from ~/.clawq/daemon.log:
+```
+[23:54:54.994] [__postmortem_teams:...] -> LLM provider=kimi_coding model=kimi-for-code msgs=3
+[23:54:55.986] WARN  Attempt 1/3 failed (HTTP 400 invalid temperature: only 1 is allowed)
+[23:54:57.936] WARN  Attempt 2/3 failed (same)
+[23:55:01.205] WARN  postmortem agent error for session ... (same)
+```
+
+8 occurrences total in current rotation (Telegram-poll-cancel-ERROR also
+amplifies log noise but is a separate issue).
+
+Same class of issue covers OpenAI reasoning models (o1/o3 family) which
+also require temperature=1.
+
+## Suggested fix
+
+In `src/provider_*.ml`, suppress the `temperature` body field when the
+target model is in a known temperature-locked list. Alternatively, parse the
+'only 1 is allowed' error string and auto-retry with temperature=1 once.
+Cleanest: a provider-side `supports_temperature` capability per model in
+`src/models_catalog.ml` (or wherever provider/model metadata lives) and have
+each provider's `complete`/`complete_streaming` honor it.
+
+## Related
+
+- B338 postmortem model is using wrong provider — partially overlapping;
+  this is a separate symptom (temperature rejection, not provider mismatch).
+- B395 postmortem circuit breaker (already done) suppresses additional
+  postmortem launches after retries fail, but the per-attempt error storm
+  still hits the log.
+
+## Test
+
+Add an `Quick` unit test that builds the request body for a temperature-
+locked model and asserts `temperature` is omitted. Add a regression
+test that the postmortem agent does not retry on this specific error.

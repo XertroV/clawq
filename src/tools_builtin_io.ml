@@ -110,6 +110,36 @@ let is_path_allowed ~workspace ~workspace_only ~extra_allowed_paths path =
   if not workspace_only then true
   else is_path_within_allowed_roots ~workspace ~extra_allowed_paths path
 
+(* B645: block direct writes into any `.backlog/` directory. The backlog is
+   ID-allocated and indexed by the `bl` CLI; bypassing it via raw file_write
+   risks ID collisions, format drift, and hallucinated entries (one teams
+   agent did exactly this — wrote two versions of a phantom 'B605' bug with
+   invented Anthropic policy text). Direct ad-hoc writes are not the right
+   path; agents should use `shell_exec bl bug --simple ...` instead. *)
+let backlog_write_error path =
+  Printf.sprintf
+    "Error: refusing to file_write into '%s'. The .backlog/ directory is \
+     managed by the `bl` CLI which allocates IDs and keeps the index \
+     consistent. Use `shell_exec` with one of:\n\
+    \  - bl bug --simple \"<title>\" --body \"<body>\"  (for bug reports)\n\
+    \  - bl idea \"<title>\"                            (for ideas/intake)\n\
+    \  - bl edit <ID>                                  (to edit an existing \
+     entry)\n\
+     Run `bl --help` for the full command list."
+    path
+
+let path_targets_backlog path =
+  (* Match any path that contains '/.backlog/' or starts with '.backlog/'. *)
+  let needle = "/.backlog/" in
+  let len_p = String.length path in
+  let len_n = String.length needle in
+  let rec scan i =
+    if i + len_n > len_p then false
+    else if String.sub path i len_n = needle then true
+    else scan (i + 1)
+  in
+  scan 0 || (len_p >= 9 && String.sub path 0 9 = ".backlog/")
+
 let format_dir_listing ?(show_hidden = false) path =
   match Sys.readdir path with
   | entries ->
@@ -310,6 +340,8 @@ let file_append ~workspace ~workspace_only ~extra_allowed_paths =
         in
         if path = "" then
           Lwt.return (param_err "parameter 'path' must be a non-empty string")
+        else if path_targets_backlog path then
+          Lwt.return (backlog_write_error path)
         else if
           not
             (is_path_allowed ~workspace ~workspace_only ~extra_allowed_paths
@@ -388,6 +420,8 @@ let file_write ~workspace ~workspace_only ~extra_allowed_paths =
         in
         if path = "" then
           Lwt.return (param_err "parameter 'path' must be a non-empty string")
+        else if path_targets_backlog path then
+          Lwt.return (backlog_write_error path)
         else if
           not
             (is_path_allowed ~workspace ~workspace_only ~extra_allowed_paths
@@ -480,6 +514,8 @@ let file_edit ~workspace ~workspace_only ~extra_allowed_paths =
         else if old_text = "" then
           Lwt.return
             (param_err "parameter 'old_text' must be a non-empty string")
+        else if path_targets_backlog path then
+          Lwt.return (backlog_write_error path)
         else if
           not
             (is_path_allowed ~workspace ~workspace_only ~extra_allowed_paths
@@ -630,6 +666,8 @@ let file_edit_lines ~workspace ~workspace_only ~extra_allowed_paths =
                "parameters 'start_line' and 'end_line' must be integers >= 1")
         else if end_line < start_line then
           Lwt.return (param_err "parameter 'end_line' must be >= 'start_line'")
+        else if path_targets_backlog path then
+          Lwt.return (backlog_write_error path)
         else if
           not
             (is_path_allowed ~workspace ~workspace_only ~extra_allowed_paths

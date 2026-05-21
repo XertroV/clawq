@@ -122,10 +122,38 @@ let poll_account ~bot_token ~(account : Runtime_config.telegram_account) ~name
                  (fun () ->
                    Telegram.get_updates ~bot_token ~offset:!offset ~timeout:30)
                  (fun exn ->
-                   Logs.err (fun m ->
-                       m "Telegram poll error for '%s': %s" name
-                         (Printexc.to_string exn));
-                   let* () = Lwt_unix.sleep 5.0 in
+                   let msg = Printexc.to_string exn in
+                   let contains_substr s sub =
+                     let ls = String.length s in
+                     let lb = String.length sub in
+                     if lb = 0 then true
+                     else if lb > ls then false
+                     else
+                       let limit = ls - lb in
+                       let rec loop i =
+                         if i > limit then false
+                         else if String.sub s i lb = sub then true
+                         else loop (i + 1)
+                       in
+                       loop 0
+                   in
+                   let is_cancel =
+                     exn = Lwt.Canceled || contains_substr msg "Canceled"
+                   in
+                   (* B636: shutdown / mid-poll cancellation is normal;
+                      log at INFO so real errors are not drowned out. *)
+                   if is_cancel then
+                     Logs.info (fun m ->
+                         m
+                           "Telegram poll cancelled for '%s' (shutdown or \
+                            stop-signal): %s"
+                           name msg)
+                   else
+                     Logs.err (fun m ->
+                         m "Telegram poll error for '%s': %s" name msg);
+                   let* () =
+                     if is_cancel then Lwt.return_unit else Lwt_unix.sleep 5.0
+                   in
                    Lwt.return (Telegram.Updates (0, [])))
              in
              Lwt.return (Some r));

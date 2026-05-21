@@ -21,6 +21,12 @@ type provider_config = {
   quota_threshold : float option;
   quota_check_enabled : bool;
   prompt_cache_retention : string option;
+  http_timeout_s : float option;
+      (* B647: per-provider HTTP timeout for Provider.complete /
+         complete_streaming calls. When None, falls back to
+         Http_client.default_timeout_s. Set to a generous value (e.g. 180s
+         or 300s) for providers that take a long time on large contexts
+         (e.g. zai_coding/glm-5.1, deepseek-reasoner). *)
 }
 
 let default_provider_config : provider_config =
@@ -39,6 +45,7 @@ let default_provider_config : provider_config =
     quota_threshold = None;
     quota_check_enabled = true;
     prompt_cache_retention = Some "24h";
+    http_timeout_s = None;
   }
 
 type agent_defaults = {
@@ -1208,6 +1215,11 @@ let to_json (cfg : t) : Yojson.Safe.t =
       if not p.quota_check_enabled then
         fields @ [ ("quota_check_enabled", `Bool false) ]
       else fields
+    in
+    let fields =
+      match p.http_timeout_s with
+      | Some t -> fields @ [ ("http_timeout_s", `Float t) ]
+      | None -> fields
     in
     `Assoc fields
   in

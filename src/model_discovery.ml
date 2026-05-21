@@ -291,6 +291,19 @@ let fetch_ollama_models ~base_url =
         (Error (Printf.sprintf "parse error: %s" (Printexc.to_string exn)))
   else Lwt.return (Error (Printf.sprintf "HTTP %d" status))
 
+(* B648: per-provider de-dupe for refresh-failure WARNs. First failure of
+   a given (provider, error-signature) emits WARN; subsequent identical
+   failures within the same process lifetime are demoted to DEBUG. Reset
+   on successful refresh so a transient outage doesn't permanently silence
+   the warning. *)
+let warned_failures : (string, string) Hashtbl.t = Hashtbl.create 8
+
+let error_signature err =
+  (* Group HTTP-status failures so different request_ids don't bypass dedup. *)
+  match String.index_opt err ':' with
+  | Some i -> String.sub err 0 i
+  | None -> err
+
 let refresh_provider ~db ~provider_name
     ~(provider_config : Runtime_config.provider_config) =
   let open Lwt.Syntax in
@@ -303,10 +316,23 @@ let refresh_provider ~db ~provider_name
     in
     match result with
     | Error e ->
-        Logs.warn (fun m ->
-            m "model_discovery: %s refresh failed: %s" provider_name e);
+        let sig_ = error_signature e in
+        let already =
+          match Hashtbl.find_opt warned_failures provider_name with
+          | Some prev when prev = sig_ -> true
+          | _ -> false
+        in
+        Hashtbl.replace warned_failures provider_name sig_;
+        if already then
+          Logs.debug (fun m ->
+              m "model_discovery: %s refresh failed (repeat): %s" provider_name
+                e)
+        else
+          Logs.warn (fun m ->
+              m "model_discovery: %s refresh failed: %s" provider_name e);
         Lwt.return (Error e)
     | Ok model_ids ->
+        Hashtbl.remove warned_failures provider_name;
         let count = upsert_models ~db ~provider:provider_name model_ids in
         Logs.info (fun m ->
             m "model_discovery: %s refreshed %d models" provider_name count);

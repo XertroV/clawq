@@ -197,7 +197,14 @@ let complete ~(config : Runtime_config.t)
   if status < 200 || status >= 300 then begin
     Logs.warn (fun m ->
         m "MiniMax body shape on error (HTTP %d): %s" status
-          (Provider.summarize_anthropic_messages anthropic_messages));
+          (* B642: truncate to last 24 messages by default; set
+             MINIMAX_DEBUG_BODY=1 to see the full history shape. *)
+          (let tail =
+             match Sys.getenv_opt "MINIMAX_DEBUG_BODY" with
+             | Some v when v <> "" && v <> "0" -> 0
+             | _ -> 24
+           in
+           Provider.summarize_anthropic_messages ~tail anthropic_messages));
     Lwt.fail_with
       (Printf.sprintf "MiniMax API error (HTTP %d): %s" status response_body)
   end
@@ -262,7 +269,14 @@ let complete_streaming ~(config : Runtime_config.t)
     let* err_body = Http_client.collect_error_body r.stream in
     Logs.warn (fun m ->
         m "MiniMax stream body shape on error (HTTP %d): %s" r.status
-          (Provider.summarize_anthropic_messages anthropic_messages));
+          (* B642: truncate to last 24 messages by default; set
+             MINIMAX_DEBUG_BODY=1 to see the full history shape. *)
+          (let tail =
+             match Sys.getenv_opt "MINIMAX_DEBUG_BODY" with
+             | Some v when v <> "" && v <> "0" -> 0
+             | _ -> 24
+           in
+           Provider.summarize_anthropic_messages ~tail anthropic_messages));
     Lwt.fail_with
       (Printf.sprintf "MiniMax API error (HTTP %d): %s" r.status err_body)
   in

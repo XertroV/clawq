@@ -401,7 +401,7 @@ let messages_to_anthropic_json messages =
 (* One-line summary of an Anthropic-format message list, for debug logging
    when the API rejects a request. E.g. "A[2tu] U[2tr] U[txt] A[1tu] U[1tr]"
    where A=assistant, U=user, tu=tool_use, tr=tool_result, txt=plain text. *)
-let summarize_anthropic_messages msgs =
+let summarize_anthropic_messages ?(tail = 0) msgs =
   let summarize_block b =
     try
       let open Yojson.Safe.Util in
@@ -437,7 +437,23 @@ let summarize_anthropic_messages msgs =
     | Some (`String _) -> Printf.sprintf "%s[txt]" tag
     | _ -> tag
   in
-  String.concat " " (List.map summarize_msg msgs)
+  (* B642: when tail > 0, only summarize the last N messages and prefix
+     with elision count so a wedged session doesn't fill the log line. *)
+  let total = List.length msgs in
+  let head_dropped, body =
+    if tail > 0 && total > tail then
+      let dropped = total - tail in
+      let rec drop n = function
+        | _ :: rest when n > 0 -> drop (n - 1) rest
+        | xs -> xs
+      in
+      (dropped, drop dropped msgs)
+    else (0, msgs)
+  in
+  let summarized = String.concat " " (List.map summarize_msg body) in
+  if head_dropped > 0 then
+    Printf.sprintf "[+%d earlier elided] %s" head_dropped summarized
+  else summarized
 
 let estimate_messages_tokens messages =
   List.fold_left
@@ -760,6 +776,21 @@ let is_codex_associated_model norm =
       && String.sub norm 0 (String.length prefix) = prefix)
     codex_associated_models
 
+(* B635: models that hard-reject any temperature != 1. For these the
+   OpenAI-compat request body must omit the `temperature` field entirely
+   rather than send the configured default. Detected by name prefix on
+   the normalized form. *)
+let temperature_locked_to_one_prefixes =
+  [ "o1"; "o3"; "o4"; "kimi-for-code"; "kimi-for-coding" ]
+
+let model_requires_temperature_one model =
+  let norm = normalize_model_name model in
+  List.exists
+    (fun prefix ->
+      String.length norm >= String.length prefix
+      && String.sub norm 0 (String.length prefix) = prefix)
+    temperature_locked_to_one_prefixes
+
 (* Routing needs credentials that can satisfy the next request, not just
    config-shaped auth. Codex providers require viable OAuth, and expired access
    tokens only remain usable when a refresh token is present. *)
@@ -971,12 +1002,15 @@ let complete ~(config : Runtime_config.t) ~messages ?tools ?session_key
         | None -> default_base_url_for provider_name
       in
       let uri = base_url ^ "/chat/completions" in
+      let temp_locked = model_requires_temperature_one model in
       let body_fields =
-        [
-          ("model", `String model);
-          ("messages", messages_to_json messages);
-          ("temperature", `Float (max 1e-8 config.default_temperature));
-        ]
+        [ ("model", `String model); ("messages", messages_to_json messages) ]
+      in
+      let body_fields =
+        if temp_locked then body_fields
+        else
+          body_fields
+          @ [ ("temperature", `Float (max 1e-8 config.default_temperature)) ]
       in
       let body_fields =
         match tools with
@@ -1003,7 +1037,14 @@ let complete ~(config : Runtime_config.t) ~messages ?tools ?session_key
           m "%s-> LLM provider=%s model=%s msgs=%d ~%dk tok" sk_tag
             provider_name model (List.length messages)
             (estimate_messages_tokens messages / 1000));
-      let* status, response_body = Http_client.post_json ~uri ~headers ~body in
+      (* B647: honor per-provider HTTP timeout when configured. Fall back
+         to the unparameterized post_json (uses global default) when None. *)
+      let* status, response_body =
+        match provider.http_timeout_s with
+        | Some timeout_s ->
+            Http_client.post_json_with_timeout ~timeout_s ~uri ~headers ~body
+        | None -> Http_client.post_json ~uri ~headers ~body
+      in
       if status < 200 || status >= 300 then begin
         if status = 400 then
           try
@@ -1382,13 +1423,19 @@ let complete_stream ~(config : Runtime_config.t) ~messages ?tools ?session_key
         | None -> default_base_url_for provider_name
       in
       let uri = base_url ^ "/chat/completions" in
+      let temp_locked = model_requires_temperature_one model in
       let body_fields =
         [
           ("model", `String model);
           ("messages", messages_to_json messages);
-          ("temperature", `Float (max 1e-8 config.default_temperature));
           ("stream", `Bool true);
         ]
+      in
+      let body_fields =
+        if temp_locked then body_fields
+        else
+          body_fields
+          @ [ ("temperature", `Float (max 1e-8 config.default_temperature)) ]
       in
       let body_fields =
         match tools with

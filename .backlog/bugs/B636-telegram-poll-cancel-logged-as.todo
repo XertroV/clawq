@@ -1,0 +1,41 @@
+---
+complexity: low
+depends_on: []
+estimate_hours: 1
+id: B636
+priority: medium
+status: pending
+tags:
+    - telegram
+    - log-noise
+title: Telegram poll cancel logged as ERROR on shutdown (Lwt.Resolution_loop.Canceled spam)
+---
+## Summary
+
+31 occurrences in current ~/.clawq/daemon.log:
+```
+ERROR Telegram poll error for 'default': Lwt.Resolution_loop.Canceled
+```
+
+This is normal Lwt cancellation when daemon shuts down or the long-poll
+promise is interrupted. Logging it at ERROR severity produces noise and
+makes real errors harder to find.
+
+## Suggested fix
+
+In `src/telegram.ml`, classify `Lwt.Resolution_loop.Canceled` (and the
+sibling `Lwt.Canceled` exception path used by Lwt 6.x) as an INFO/DEBUG
+log line rather than ERROR. Also distinguish a Canceled-during-shutdown
+from a Canceled-because-of-something-else: if a shutdown_waiter has
+already been resolved, treat Canceled as expected.
+
+## Test
+
+Add a unit test that drives the telegram poll loop, calls `Lwt.cancel`
+on the in-flight long-poll, and asserts the resulting log line is INFO,
+not ERROR.
+
+## Evidence
+
+- ~/.clawq/daemon.log, search 'Telegram poll error for ' — 31 matches
+- Timestamps cluster around daemon startup/restart events

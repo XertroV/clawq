@@ -214,6 +214,51 @@ let task_depth ~tasks ~id =
 
 let get_children ~tasks ~id = List.filter (fun t -> t.parent_id = Some id) tasks
 
+(* B641: when an ID lookup misses, return up to 3 close-match suggestions so
+   the agent can recover instead of hallucinating another bad ID. Match by
+   prefix first (cheap, dominant case), then by case-insensitive equality. *)
+let suggest_similar_ids ~tasks ~id =
+  let lower s = String.lowercase_ascii s in
+  let target_lc = lower id in
+  let prefix_matches =
+    List.filter_map
+      (fun t ->
+        let tl = lower t.id in
+        if tl = target_lc then Some t.id
+        else if
+          String.length tl >= String.length target_lc
+          && String.sub tl 0 (String.length target_lc) = target_lc
+        then Some t.id
+        else None)
+      tasks
+  in
+  let take n l =
+    let rec loop acc i = function
+      | [] -> List.rev acc
+      | _ when i = 0 -> List.rev acc
+      | x :: rest -> loop (x :: acc) (i - 1) rest
+    in
+    loop [] n l
+  in
+  take 3 prefix_matches
+
+let not_found_error ~tasks ~id =
+  let suggestions = suggest_similar_ids ~tasks ~id in
+  let hint =
+    match suggestions with
+    | [] ->
+        "Run shell_exec `bl tree` (or `bl list --bugs` / `bl list --ideas`) to \
+         enumerate current IDs. Bug IDs are B-prefixed, ideas are I-prefixed; \
+         phase/milestone/epic/task IDs use P/M/E/T prefixes joined by dots \
+         (e.g. P1.M2.E3.T004). IDs are case-sensitive."
+    | xs ->
+        Printf.sprintf
+          "Did you mean: %s? Run `bl tree` to enumerate all current IDs. IDs \
+           are case-sensitive."
+          (String.concat ", " xs)
+  in
+  Printf.sprintf "Task '%s' not found. %s" id hint
+
 let rec get_subtree_ids ~tasks ~id =
   let children = get_children ~tasks ~id in
   id :: List.concat_map (fun c -> get_subtree_ids ~tasks ~id:c.id) children
@@ -973,12 +1018,7 @@ let do_add ~db ~session_key ~id ~parent_id ~title ~status ~note =
 let do_update ~db ~session_key ~id ~status ~note =
   let tasks = load_tasks ~db ~session_key () in
   match List.find_opt (fun t -> t.id = id) tasks with
-  | None ->
-      Error
-        (Printf.sprintf
-           "Task '%s' not found. Check the ID against the current task tree — \
-            IDs are case-sensitive."
-           id)
+  | None -> Error (not_found_error ~tasks ~id)
   | Some task -> (
       match (status, note) with
       | None, None -> Error "Update requires at least status or note"
@@ -1040,12 +1080,7 @@ let do_update ~db ~session_key ~id ~status ~note =
 let do_remove ~db ~session_key ~id ?(recursive = false) () =
   let tasks = load_tasks ~db ~session_key () in
   match List.find_opt (fun t -> t.id = id) tasks with
-  | None ->
-      Error
-        (Printf.sprintf
-           "Task '%s' not found. Check the ID against the current task tree — \
-            IDs are case-sensitive."
-           id)
+  | None -> Error (not_found_error ~tasks ~id)
   | Some _ ->
       let subtree_ids = get_subtree_ids ~tasks ~id in
       if not recursive then begin
@@ -1175,12 +1210,7 @@ let do_archive ~db ~session_key ~id =
   match id with
   | Some root_id -> (
       match List.find_opt (fun t -> t.id = root_id) tasks with
-      | None ->
-          Error
-            (Printf.sprintf
-               "Task '%s' not found. Check the ID against the current task \
-                tree — IDs are case-sensitive."
-               root_id)
+      | None -> Error (not_found_error ~tasks ~id:root_id)
       | Some _ -> archive_subtree root_id)
   | None ->
       (* Archive all fully-completed root trees *)

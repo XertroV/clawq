@@ -119,6 +119,15 @@ let parse_config ?(resolve_secrets = true) json =
               | s -> Some (to_string s)
             with _ -> Some "24h"
           in
+          let http_timeout_s =
+            try
+              match v |> member "http_timeout_s" with
+              | `Null -> None
+              | `Float f -> Some f
+              | `Int i -> Some (float_of_int i)
+              | _ -> None
+            with _ -> None
+          in
           ( name,
             ({
                api_key;
@@ -135,6 +144,7 @@ let parse_config ?(resolve_secrets = true) json =
                quota_threshold;
                quota_check_enabled;
                prompt_cache_retention;
+               http_timeout_s;
              }
               : Runtime_config.provider_config) ))
     with _ -> []

@@ -332,9 +332,79 @@ let test_parse_tool_use_response () =
       Alcotest.(check int) "1 call" 1 (List.length calls);
       let tc = List.hd calls in
       Alcotest.(check string) "id" "call-1" tc.id;
-      Alcotest.(check string) "name" "file_read" tc.function_name
+      Alcotest.(check string) "name" "file_read" tc.function_name;
+      (* B634/B640 regression: arguments must round-trip from the API
+         response's `input` field, not silently become "{}" or "". *)
+      let parsed = try Yojson.Safe.from_string tc.arguments with _ -> `Null in
+      Alcotest.(check bool) "arguments parse as JSON" true (parsed <> `Null);
+      let open Yojson.Safe.Util in
+      Alcotest.(check string)
+        "arguments preserves path" "/tmp"
+        (parsed |> member "path" |> to_string)
   | Ok (Provider.Text _) -> Alcotest.fail "expected ToolCalls"
   | Error e -> Alcotest.fail ("error: " ^ e)
+
+(* B634 regression: when the upstream model returns a tool_use block with an
+   empty `input` object, the parser must produce arguments = "{}" — not "",
+   and must not invent missing required parameters. The agent loop is what
+   should refuse to dispatch tools that the model invoked without required
+   inputs; the parser's job is only to surface the truth. *)
+let test_parse_tool_use_empty_input () =
+  let body =
+    {|{"content":[{"type":"tool_use","id":"call-empty","name":"shell_exec","input":{}}],"model":"MiniMax-M2.7-highspeed","stop_reason":"tool_use","usage":{"input_tokens":10,"output_tokens":5}}|}
+  in
+  match Provider_minimax.parse_response body "MiniMax-M2.7-highspeed" with
+  | Ok (Provider.ToolCalls { calls; _ }) ->
+      Alcotest.(check int) "1 call" 1 (List.length calls);
+      let tc = List.hd calls in
+      Alcotest.(check string) "arguments is empty object" "{}" tc.arguments
+  | _ -> Alcotest.fail "expected ToolCalls with one empty-input call"
+
+(* B634/B640 regression: nested input object must survive the round trip.
+   This caught the missing arguments assertion in the original
+   test_parse_tool_use_response. *)
+let test_parse_tool_use_nested_input () =
+  let body =
+    {|{"content":[{"type":"tool_use","id":"c2","name":"file_edit","input":{"path":"/a","edits":[{"old":"x","new":"y"}],"meta":{"force":true}}}],"model":"MiniMax-M2.7","stop_reason":"tool_use","usage":{"input_tokens":1,"output_tokens":1}}|}
+  in
+  match Provider_minimax.parse_response body "MiniMax-M2.7" with
+  | Ok (Provider.ToolCalls { calls; _ }) ->
+      let tc = List.hd calls in
+      let parsed = Yojson.Safe.from_string tc.arguments in
+      let open Yojson.Safe.Util in
+      Alcotest.(check string)
+        "nested path" "/a"
+        (parsed |> member "path" |> to_string);
+      Alcotest.(check bool)
+        "edits array preserved" true
+        (parsed |> member "edits" |> to_list |> List.length = 1);
+      Alcotest.(check bool)
+        "nested meta.force preserved" true
+        (parsed |> member "meta" |> member "force" |> to_bool)
+  | _ -> Alcotest.fail "expected ToolCalls"
+
+(* B634 regression: multiple tool_use blocks in a single response — each
+   must keep its own arguments. *)
+let test_parse_multiple_tool_uses () =
+  let body =
+    {|{"content":[
+       {"type":"tool_use","id":"c-a","name":"file_read","input":{"path":"/a"}},
+       {"type":"tool_use","id":"c-b","name":"shell_exec","input":{"command":"ls"}}
+     ],"model":"MiniMax-M2.7","stop_reason":"tool_use"}|}
+  in
+  match Provider_minimax.parse_response body "MiniMax-M2.7" with
+  | Ok (Provider.ToolCalls { calls; _ }) ->
+      Alcotest.(check int) "2 calls" 2 (List.length calls);
+      let a = List.nth calls 0 in
+      let b = List.nth calls 1 in
+      let open Yojson.Safe.Util in
+      Alcotest.(check string)
+        "a.path" "/a"
+        (Yojson.Safe.from_string a.arguments |> member "path" |> to_string);
+      Alcotest.(check string)
+        "b.command" "ls"
+        (Yojson.Safe.from_string b.arguments |> member "command" |> to_string)
+  | _ -> Alcotest.fail "expected ToolCalls"
 
 let test_parse_invalid_json () =
   match Provider_minimax.parse_response "not json" "model" with
@@ -951,6 +1021,12 @@ let suite =
       test_parse_thinking_response;
     Alcotest.test_case "parse tool use response" `Quick
       test_parse_tool_use_response;
+    Alcotest.test_case "B634: parse tool_use with empty input -> '{}'" `Quick
+      test_parse_tool_use_empty_input;
+    Alcotest.test_case "B634: parse tool_use preserves nested input" `Quick
+      test_parse_tool_use_nested_input;
+    Alcotest.test_case "B634: parse multiple tool_use blocks keep separate args"
+      `Quick test_parse_multiple_tool_uses;
     Alcotest.test_case "parse invalid json" `Quick test_parse_invalid_json;
     Alcotest.test_case "parse empty content" `Quick test_parse_empty_content;
     Alcotest.test_case "parse ignores extra blocks" `Quick
