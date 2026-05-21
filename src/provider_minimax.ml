@@ -147,6 +147,10 @@ let complete ~(config : Runtime_config.t)
   let uri = base_url ^ "/anthropic/v1/messages" in
   let api_model = api_model_name model in
   let system_prompt = extract_system_prompt messages in
+  (* B620: strip orphan tool_use/tool_result pairs before conversion so the
+     Anthropic adjacency requirement is satisfied even after session resume
+     dropped intermediate state. *)
+  let messages = Message_history.ensure_tool_group_integrity messages in
   let anthropic_messages = messages_to_anthropic_json messages in
   let body_fields =
     [
@@ -208,6 +212,8 @@ let complete_streaming ~(config : Runtime_config.t)
   let uri = base_url ^ "/anthropic/v1/messages" in
   let api_model = api_model_name model in
   let system_prompt = extract_system_prompt messages in
+  (* B620: see complete() for rationale. *)
+  let messages = Message_history.ensure_tool_group_integrity messages in
   let anthropic_messages = messages_to_anthropic_json messages in
   let body_fields =
     [

@@ -495,6 +495,97 @@ let test_live_streaming () =
      | exception exn ->
          Alcotest.fail ("streaming failed: " ^ Printexc.to_string exn))
 
+(* B620 regression: when session resume produces an assistant turn with
+   tool_use blocks whose results were dropped, the converter must filter the
+   orphan tool_use so MiniMax doesn't reject the request with HTTP 400 (error
+   2013: "tool call result does not follow tool call"). The fix lives in
+   Provider_minimax.complete (via Message_history.ensure_tool_group_integrity)
+   so the test exercises that pipeline end-to-end. *)
+let test_orphan_tool_use_filtered_before_send () =
+  let assistant_with_three_tools =
+    {
+      Provider.role = "assistant";
+      content = "";
+      content_parts = [];
+      tool_calls =
+        [
+          {
+            Provider.id = "tc-A";
+            function_name = "shell_exec";
+            arguments = {|{"command":"ls"}|};
+          };
+          {
+            Provider.id = "tc-B";
+            function_name = "shell_exec";
+            arguments = {|{"command":"pwd"}|};
+          };
+          {
+            Provider.id = "tc-C";
+            function_name = "shell_exec";
+            arguments = {|{"command":"echo hi"}|};
+          };
+        ];
+      tool_call_id = None;
+      name = None;
+      provider_response_items_json = None;
+      thinking = None;
+    }
+  in
+  let result_a =
+    Provider.make_tool_result ~tool_call_id:"tc-A" ~name:"shell_exec"
+      ~content:"a.txt b.txt"
+  in
+  let result_b =
+    Provider.make_tool_result ~tool_call_id:"tc-B" ~name:"shell_exec"
+      ~content:"/home"
+  in
+  (* tc-C was interrupted; no matching tool_result exists. *)
+  let messages = [ assistant_with_three_tools; result_a; result_b ] in
+  let cleaned = Message_history.ensure_tool_group_integrity messages in
+  let anthropic_messages =
+    Provider_minimax.messages_to_anthropic_json cleaned
+  in
+  let open Yojson.Safe.Util in
+  Alcotest.(check int)
+    "2 messages: assistant + user-with-tool-results" 2
+    (List.length anthropic_messages);
+  let assistant = List.nth anthropic_messages 0 in
+  Alcotest.(check string)
+    "first is assistant" "assistant"
+    (assistant |> member "role" |> to_string);
+  let assistant_blocks = assistant |> member "content" |> to_list in
+  let tool_use_ids =
+    List.filter_map
+      (fun b ->
+        try
+          if b |> member "type" |> to_string = "tool_use" then
+            Some (b |> member "id" |> to_string)
+          else None
+        with _ -> None)
+      assistant_blocks
+  in
+  Alcotest.(check (list string))
+    "orphan tool_use tc-C filtered; tc-A and tc-B remain" [ "tc-A"; "tc-B" ]
+    tool_use_ids;
+  let user = List.nth anthropic_messages 1 in
+  Alcotest.(check string)
+    "second is user" "user"
+    (user |> member "role" |> to_string);
+  let user_blocks = user |> member "content" |> to_list in
+  let tool_result_ids =
+    List.filter_map
+      (fun b ->
+        try
+          if b |> member "type" |> to_string = "tool_result" then
+            Some (b |> member "tool_use_id" |> to_string)
+          else None
+        with _ -> None)
+      user_blocks
+  in
+  Alcotest.(check (list string))
+    "tool_results in order match remaining tool_use ids" [ "tc-A"; "tc-B" ]
+    tool_result_ids
+
 (* B614 integration: send a real request to MiniMax with a tool that has
    required:["query"] and verify the model honors the required field by either
    (a) emitting a tool_call that includes the required argument, or (b)
@@ -685,6 +776,8 @@ let suite =
     Alcotest.test_case "live thinking response" `Slow
       test_live_thinking_response;
     Alcotest.test_case "live streaming" `Slow test_live_streaming;
+    Alcotest.test_case "B620: orphan tool_use filtered before send" `Quick
+      test_orphan_tool_use_filtered_before_send;
     Alcotest.test_case "B614: required-field anthropic input_schema preserved"
       `Quick test_request_body_has_required_field_for_anthropic_tools;
     Alcotest.test_case "B614: live required-field honored by model" `Slow
