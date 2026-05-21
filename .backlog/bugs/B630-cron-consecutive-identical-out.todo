@@ -1,0 +1,15 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B630
+priority: high
+status: pending
+tags: []
+title: Cron consecutive-identical-output detection — disable and alert after N identical runs
+---
+The briefing-hourly cron has produced "Nothing notable." without performing any tool calls for the 8th+ time since 2026-03-30. Root cause: empty topics array in rig:briefing:config + prompt provides literal idle shortcut. The fix that prevents this entire class of failure: implement consecutive-identical-output detection for cron jobs — if a cron produces identical output N times in a row (suggest N=3-5), automatically disable the cron and send an alert. This has been recommended in every postmortem since 2026-03-30 and never implemented. Secondary fix: cron prompts should gate any idle response behind evidence of completed tool use — never provide a literal shortcut alongside required tool calls.
+
+--
+Auto-filed by clawq postmortem for session teams:personal:a:1JPVFngEx3FRRVWXUe5fb97HWjfsCdtDimgKuD3u_N6IpgOD0euB5bnQHI9RsDQuK3qOG_5Jyhq4wWGr0IczaxEXPN5vIGppdngtwZucpyhDNrW1_YJCrXnHrksQ5fCuT (pattern: repeating same response without performing web_search).
+Postmortem doc: /home/xertrov/.clawq/postmortems/2026-05-21T210038-teams:personal:a:1JPVFngEx3FRRVWXUe5fb97HWjfsCdtDimgKuD3u_N6IpgOD0euB5bnQHI9RsDQuK3qOG_5Jyhq4wWGr0IczaxEXPN5vIGppdngtwZucpyhDNrW1_YJCrXnHrksQ5fCuT.md
