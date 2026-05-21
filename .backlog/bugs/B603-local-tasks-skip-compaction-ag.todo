@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B603
+priority: high
+status: pending
+tags: []
+title: Local tasks skip compaction — Agent.turn called directly without Session.turn, context grows unbounded
+---
+
+Local tasks skip compaction — Agent.turn called directly without Session.turn, context grows unbounded
