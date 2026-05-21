@@ -851,12 +851,24 @@ let tick ~db ~session_mgr
                           in
                           let* () =
                             if has_notifier then begin
+                              (* B463/B467/B472: when a notifier is registered,
+                                 the LLM response is dispatched fire-and-forget
+                                 through that notifier (Session.turn -> channel
+                                 send). The notifier returns unit so the
+                                 scheduler cannot prove delivery here. Record
+                                 explicit "ok_notifier_unconfirmed" status so
+                                 cron history distinguishes "turn done +
+                                 notifier called" from "delivery confirmed via
+                                 deliver_fn" (the path below, which checks
+                                 Ok/Error). *)
                               Logs.info (fun m ->
                                   m
                                     "Cron job %s: notifier present, delivery \
-                                     handled during turn"
+                                     handled during turn (unconfirmed by \
+                                     scheduler)"
                                     job.name);
-                              record_run_finish ~db ~run_id ~status:"ok"
+                              record_run_finish ~db ~run_id
+                                ~status:"ok_notifier_unconfirmed"
                                 ~result_preview:result;
                               mark_run_output_by_run_id ~db ~run_id
                                 ~job_name:job.name ~output:result;

@@ -202,6 +202,24 @@ let test_record_run_delivery_failed () =
   Alcotest.(check string) "status" "delivery_failed" r.status;
   Alcotest.(check bool) "has preview" true (r.result_preview <> None)
 
+(* B463/B467/B472: explicit "ok_notifier_unconfirmed" status exists in the
+   cron run schema; cron history can render it distinctly from "ok"
+   (deliver_fn confirmed) and "delivery_failed". *)
+let test_record_run_ok_notifier_unconfirmed () =
+  let db = Memory.init ~db_path:":memory:" () in
+  Scheduler.init_schema db;
+  ignore
+    (Scheduler.add_job ~db ~name:"notif" ~session_key:"teams:c:u" ~message:"m"
+       ~schedule:"every 1m" ());
+  let run_id = Scheduler.record_run_start ~db ~job_name:"notif" in
+  Scheduler.record_run_finish ~db ~run_id ~status:"ok_notifier_unconfirmed"
+    ~result_preview:"LLM ok, delivery via registered notifier (unconfirmed)";
+  let runs = Scheduler.get_history ~db ~name:"notif" ~limit:1 in
+  Alcotest.(check int) "one run" 1 (List.length runs);
+  let r = List.hd runs in
+  Alcotest.(check string)
+    "status notifier-unconfirmed" "ok_notifier_unconfirmed" r.status
+
 let test_tick_posts_prompt_via_deliver () =
   Lwt_main.run
     (let open Lwt.Syntax in
@@ -756,6 +774,9 @@ let suite =
       test_get_session_channel_nonexistent;
     Alcotest.test_case "record_run delivery_failed status" `Quick
       test_record_run_delivery_failed;
+    Alcotest.test_case
+      "B463/B467/B472: record_run ok_notifier_unconfirmed status" `Quick
+      test_record_run_ok_notifier_unconfirmed;
     Alcotest.test_case "tick posts prompt via deliver callback" `Quick
       test_tick_posts_prompt_via_deliver;
     Alcotest.test_case "tick posts prompt via notifier" `Quick
