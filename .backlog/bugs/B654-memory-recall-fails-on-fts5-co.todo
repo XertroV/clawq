@@ -1,0 +1,11 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B654
+priority: high
+status: pending
+tags: []
+title: memory_recall fails on FTS5 colon syntax in query (rig:briefing:config)
+---
+memory_recall returns 'No matching memories found' for queries containing colons (our key naming convention like 'rig:briefing:config'). FTS5 treats colons as column qualifiers (e.g. 'rig:foo' = 'in column rig, MATCH foo'), so 'rig:briefing:config' errors as 'no such column: rig'. Workaround: wrap query in double quotes for FTS5 quoted-phrase syntax. Repro: SELECT * FROM core_memories_fts WHERE core_memories_fts MATCH 'rig:briefing:config' -- fails. With '"rig:briefing:config"' it returns the row. Impact: briefing agent could not load its config at 04:00 cron run, agent fumbled through alternative tools (memory_list, glob) and produced no useful briefing.
