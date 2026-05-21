@@ -1346,6 +1346,20 @@ let turn agent ~user_message ?db ?session_key ?interrupt_check ?inject_messages
               msgs
         | None -> ());
         let* () = fire_history_update len_before_tool_loop in
+        (* B603: proactive mid-turn compaction. Within a single Agent.turn
+           call the model may emit many tool batches (file reads, shell
+           outputs, etc.) that grow history without bound. compact_history_
+           if_needed checks token/message thresholds and compacts only when
+           needed — so this is cheap when not at the threshold. *)
+        let* mid_turn_compaction =
+          compact_history_if_needed agent ?db ()
+        in
+        (match mid_turn_compaction with
+        | Some _ ->
+            agent.compacted_mid_turn <- true;
+            Logs.info (fun m ->
+                m "Mid-turn compaction triggered at iteration %d" iteration)
+        | None -> ());
         (* Check for stuck patterns after each tool call batch *)
         let stuck_signals =
           let result =
@@ -1683,6 +1697,19 @@ let turn_stream agent ~user_message ?db ?session_key ?interrupt_check
                   msgs
             | None -> ());
             let* () = fire_history_update len_before_tool_loop in
+            (* B603: mid-turn compaction in the streaming path too. *)
+            let* mid_turn_compaction =
+              compact_history_if_needed agent ?db ()
+            in
+            (match mid_turn_compaction with
+            | Some _ ->
+                agent.compacted_mid_turn <- true;
+                Logs.info (fun m ->
+                    m
+                      "Mid-turn compaction (streaming) triggered at iteration \
+                       %d"
+                      iteration)
+            | None -> ());
             (* Check for stuck patterns after each tool call batch *)
             let stuck_signals =
               let result =
