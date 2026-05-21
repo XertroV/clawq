@@ -1,0 +1,14 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B616
+priority: high
+status: pending
+tags:
+    - kimi
+    - quota
+title: Integrate Kimi quota API for tracking and respecting Kimi token usage
+---
+
+Integrate Kimi quota API for tracking and respecting Kimi token usage
