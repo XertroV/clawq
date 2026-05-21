@@ -1,14 +1,15 @@
 ---
 claimed_at: "2026-03-15T06:32:01Z"
 claimed_by: cli-user
-completed_at: null
+completed_at: "2026-05-21T21:13:41Z"
 complexity: medium
 depends_on: []
+duration_minutes: 97361.67653311037
 estimate_hours: 1
 id: B459
 priority: high
 started_at: "2026-03-15T06:32:01Z"
-status: in_progress
+status: done
 tags: []
 title: Add to system prompt example of tool call `shell_exec(command="motd")`
 ---
