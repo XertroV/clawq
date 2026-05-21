@@ -1,10 +1,14 @@
 ---
+claimed_at: "2026-05-21T19:13:03Z"
+claimed_by: cli-user
+completed_at: null
 complexity: medium
 depends_on: []
 estimate_hours: 1
 id: B667
 priority: high
-status: pending
+started_at: "2026-05-21T19:13:03Z"
+status: in_progress
 tags: []
 title: 'Observer false-positive: ''invalid_response_format'' fires on legitimate short responses (e.g., ''Nothing notable.'')'
 ---
