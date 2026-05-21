@@ -14,6 +14,12 @@ type t = {
   mutable project_docs_git_root : string option;
   mutable project_doc_dirs_seen : (string, bool) Hashtbl.t;
   mutable on_project_doc_loaded : (string -> unit Lwt.t) option;
+  (* B622: track consecutive (tool_name, sorted-missing-params) repeats so
+     we can escalate the validation error after the model fails to honor
+     it. Reset on any successful tool call OR a tool call with a different
+     missing-params key. *)
+  mutable last_missing_required_key : string option;
+  mutable last_missing_required_count : int;
 }
 
 exception Interrupted of string

@@ -60,6 +60,8 @@ let create ~config ?tool_registry ?agent_template ?cwd () =
     project_docs_git_root = pd.git_root;
     project_doc_dirs_seen = dirs_seen;
     on_project_doc_loaded = None;
+    last_missing_required_key = None;
+    last_missing_required_count = 0;
   }
 
 let inject_runtime_context messages runtime_context =
@@ -133,6 +135,34 @@ let risk_level_to_string = function
   | Tool.Low -> "low"
   | Tool.Medium -> "medium"
   | Tool.High -> "high"
+
+(* B622: escalation-aware required-param validation. Track consecutive
+   (tool_name, missing-params) repeats on the agent and return progressively
+   stronger error messages so the model breaks out of the same-call loop. *)
+let validate_required_with_escalation agent (tool : Tool.t)
+    (args : Yojson.Safe.t) : (unit, string) result =
+  match Tool.find_missing_required_params tool args with
+  | [] ->
+      agent.last_missing_required_key <- None;
+      agent.last_missing_required_count <- 0;
+      Ok ()
+  | missing ->
+      let sorted = List.sort compare missing in
+      let key = tool.name ^ "|" ^ String.concat "," sorted in
+      let level =
+        match agent.last_missing_required_key with
+        | Some prev when prev = key ->
+            agent.last_missing_required_count <-
+              agent.last_missing_required_count + 1;
+            agent.last_missing_required_count
+        | _ ->
+            agent.last_missing_required_key <- Some key;
+            agent.last_missing_required_count <- 1;
+            1
+      in
+      Error
+        (Tool.format_missing_required_error tool ~missing
+           ~escalation_level:(level - 1) ())
 
 let active_workspace_files agent =
   active_workspace_files_for_config agent.config
@@ -580,7 +610,9 @@ let execute_tool_calls_stream agent ~db ~audit_enabled ~session_key
                                       tc.function_name tc.arguments);
                                 `Assoc []
                             in
-                            match Tool.validate_required_params tool args with
+                            match
+                              validate_required_with_escalation agent tool args
+                            with
                             | Error msg -> Lwt.return msg
                             | Ok () -> (
                                 let context =
@@ -806,7 +838,9 @@ let execute_tool_calls agent ~db ~audit_enabled ~session_key ?interrupt_check
                                       tc.function_name tc.arguments);
                                 `Assoc []
                             in
-                            match Tool.validate_required_params tool args with
+                            match
+                              validate_required_with_escalation agent tool args
+                            with
                             | Error msg -> Lwt.return msg
                             | Ok () ->
                                 let context =

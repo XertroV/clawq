@@ -1156,6 +1156,56 @@ let test_validate_required_params_catches_missing () =
         "null treated as missing" true (contains msg "'foo'")
   | Ok () -> Alcotest.fail "expected Error for null required param"
 
+(* B622: when the model emits the same missing-param failure repeatedly,
+   the error escalates so the model gets a stronger nudge. Pass-then-fail
+   resets the counter; fail-with-different-tool also resets per-key. *)
+let test_missing_required_error_escalates_on_repeats () =
+  let tool : Tool.t =
+    {
+      name = "shell_exec";
+      description = "Run a shell command";
+      parameters_schema =
+        `Assoc
+          [
+            ( "properties",
+              `Assoc [ ("command", `Assoc [ ("type", `String "string") ]) ] );
+            ("required", `List [ `String "command" ]);
+          ];
+      invoke = (fun ?context:_ _args -> Lwt.return "ok");
+      invoke_stream = None;
+      risk_level = Tool.Low;
+      deferred = false;
+    }
+  in
+  let agent = Agent.create ~config:Runtime_config.default () in
+  let go args = Agent.validate_required_with_escalation agent tool args in
+  (match go (`Assoc []) with
+  | Error msg ->
+      Alcotest.(check bool)
+        "level 0: no SECOND/STOP escalation prefix" true
+        ((not (contains msg "SECOND")) && not (contains msg "STOP"))
+  | Ok () -> Alcotest.fail "expected Error on first repeat");
+  (match go (`Assoc []) with
+  | Error msg ->
+      Alcotest.(check bool)
+        "level 1: SECOND notice present" true (contains msg "SECOND")
+  | Ok () -> Alcotest.fail "expected Error on second repeat");
+  (match go (`Assoc []) with
+  | Error msg ->
+      Alcotest.(check bool)
+        "level 2+: STOP notice present" true (contains msg "STOP")
+  | Ok () -> Alcotest.fail "expected Error on third repeat");
+  (* Successful call clears the counter *)
+  (match go (`Assoc [ ("command", `String "ls") ]) with
+  | Ok () -> ()
+  | Error msg -> Alcotest.fail ("expected Ok after providing arg: " ^ msg));
+  match go (`Assoc []) with
+  | Error msg ->
+      Alcotest.(check bool)
+        "back to level 0 after successful intervening call" true
+        ((not (contains msg "SECOND")) && not (contains msg "STOP"))
+  | Ok () -> Alcotest.fail "expected Error after reset"
+
 let test_validate_required_params_passes_valid () =
   let mock_tool : Tool.t =
     {
@@ -1313,4 +1363,7 @@ let suite =
       test_validate_required_params_catches_missing;
     Alcotest.test_case "validate_required_params passes valid" `Quick
       test_validate_required_params_passes_valid;
+    Alcotest.test_case
+      "B622: missing-required error escalates on repeats, resets on success"
+      `Quick test_missing_required_error_escalates_on_repeats;
   ]

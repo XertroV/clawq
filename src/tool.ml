@@ -78,8 +78,8 @@ let make_param_error ~tool_name ~parameters_schema ~detail =
       Printf.sprintf "Error: %s for tool %s. %s. Example: %s" detail tool_name
         req_info example
 
-let validate_required_params (tool : t) (args : Yojson.Safe.t) :
-    (unit, string) result =
+let find_missing_required_params (tool : t) (args : Yojson.Safe.t) : string list
+    =
   let open Yojson.Safe.Util in
   let required =
     try
@@ -87,28 +87,56 @@ let validate_required_params (tool : t) (args : Yojson.Safe.t) :
       |> List.map to_string
     with _ -> []
   in
-  let missing =
-    List.filter
-      (fun name ->
-        match args with
-        | `Assoc fields -> (
-            match List.assoc_opt name fields with
-            | None | Some `Null -> true
-            | Some _ -> false)
-        | _ -> true)
-      required
+  List.filter
+    (fun name ->
+      match args with
+      | `Assoc fields -> (
+          match List.assoc_opt name fields with
+          | None | Some `Null -> true
+          | Some _ -> false)
+      | _ -> true)
+    required
+
+let format_missing_required_error (tool : t) ~(missing : string list)
+    ?(escalation_level = 0) () =
+  let missing_str =
+    String.concat ", " (List.map (fun n -> "'" ^ n ^ "'") missing)
   in
-  match missing with
-  | [] -> Ok ()
+  let detail =
+    Printf.sprintf "missing required parameter%s %s"
+      (if List.length missing > 1 then "s" else "")
+      missing_str
+  in
+  let base =
+    make_param_error ~tool_name:tool.name
+      ~parameters_schema:tool.parameters_schema ~detail
+  in
+  (* B622: escalate the error message when the model has repeated the same
+     missing-param mistake. Level 0 = first occurrence, plain error. Level 1
+     = second consecutive: add "REPEATED" notice. Level >= 2 = third+: hard
+     STOP message and explicit reminder of the contract. *)
+  match escalation_level with
+  | 0 -> base
+  | 1 ->
+      Printf.sprintf
+        "%s\n\n\
+         NOTE: This is the SECOND consecutive call to '%s' with the same \
+         missing parameter(s). The tool's schema requires %s. Re-emit the tool \
+         call WITH the required argument(s) included before attempting any \
+         other action."
+        base tool.name missing_str
   | _ ->
-      let missing_str =
-        String.concat ", " (List.map (fun n -> "'" ^ n ^ "'") missing)
-      in
-      let detail =
-        Printf.sprintf "missing required parameter%s %s"
-          (if List.length missing > 1 then "s" else "")
-          missing_str
-      in
-      Error
-        (make_param_error ~tool_name:tool.name
-           ~parameters_schema:tool.parameters_schema ~detail)
+      Printf.sprintf
+        "%s\n\n\
+         STOP: '%s' has been called %d times in a row with the same missing \
+         parameter(s) %s. The model is in a loop. Either (a) include the \
+         required argument(s) in the next tool call OR (b) stop calling this \
+         tool and respond in text explaining why the required argument cannot \
+         be supplied. Do NOT repeat the failing call."
+        base tool.name (escalation_level + 1) missing_str
+
+let validate_required_params (tool : t) (args : Yojson.Safe.t) :
+    (unit, string) result =
+  match find_missing_required_params tool args with
+  | [] -> Ok ()
+  | missing -> Error (format_missing_required_error tool ~missing ())
