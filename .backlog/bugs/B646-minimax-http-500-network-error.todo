@@ -1,0 +1,39 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B646
+priority: medium
+status: pending
+tags:
+    - provider
+    - minimax
+    - retries
+title: MiniMax HTTP 500 'Network error' (code 1234) retried 3x then surfaced — no exponential cap or specific handling
+---
+## Summary
+
+~/.clawq/daemon.log shows ≥3 distinct MiniMax 500 errors with provider-side
+error id `1234` 'Network error':
+
+```
+WARN Attempt 1/3 failed (HTTP 500): code 1234 Network error, error id: 656c356aae3...f2e, please try again later
+WARN Attempt 1/3 failed (HTTP 500): code 1234 Network error, error id: 49df26509b44f242dd, please try again later
+WARN Attempt 1/3 failed (HTTP 500): code 1234 Network error, error id: 8be71e6be4ddf, please try again later
+```
+
+Each blasts 3 retries (1s, 2s backoff) and then user sees an error.
+
+## Suggested next steps
+
+1. Distinguish MiniMax 500 'Network error' from other 500s — back off
+   longer (e.g., 10s, 30s, 60s) since the provider explicitly says 'please
+   try again later'.
+2. Cap MiniMax retries at 5 attempts (not 3) for code 1234 because the
+   provider asks for it.
+3. Capture the error_id in the surfaced user message so it can be
+   reported to MiniMax support.
+
+## Evidence
+
+- ~/.clawq/daemon.log: search 'code\":\"1234' — 3+ matches
