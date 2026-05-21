@@ -1,0 +1,24 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B670
+priority: high
+status: pending
+tags: []
+title: Briefing cron fires unbounded parallel web_search calls with no rate-limiting or provider fallback
+---
+The briefing-daily and briefing-hourly crons in rig:briefing:config fire one web_search call per monitored topic (currently 11 topics) all in parallel. This predictably hits Brave Search API rate limits (HTTP 429). When 429 occurs, the web_search tool has no provider fallback (B597 requests this), and the cron prompt has no stagger/batch logic, so the model retries the identical failing burst pattern indefinitely.
+
+This is the ninth distinct postmortem for this cron since 2026-03-30. Prior "fixes" oscillated between switching providers (Brave ↔ DDG), which only changed which error appeared.
+
+Required fixes:
+1. Add sequential staggering or batching to the briefing cron prompt — fire searches serially with ~2-3s delays, or collapse topics into fewer combined queries.
+2. Implement provider fallback in the web_search tool on HTTP 429 (retry with DDG before surfacing error).
+3. Add cron self-throttling: if identical tool errors repeat >3 times, pause with backoff or switch to degraded RSS-only mode.
+
+Files/paths: rig:briefing:config (11 topics), ~/.clawq/config.json (web_search.provider = "brave"), B597 (existing web_search fallback bug).
+
+--
+Auto-filed by clawq postmortem for session cron:briefing (pattern: SameErrorString: error repeated 7 times: Error: Brave search API rate-limited (HTTP 429) after 3 retries. Try again in a minute, or configure a different search_...).
+Postmortem doc: /home/xertrov/.clawq/postmortems/2026-05-22T070057-cron:briefing.md
