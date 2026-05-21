@@ -1239,6 +1239,26 @@ let run ~(config : Runtime_config.t) =
                     (Printexc.to_string exn));
               Lwt.return_unit))
   | None -> ());
+  (* B668: web_search backend health probe at startup. Logs a warning if the
+     configured provider is broken so cron operators see it immediately
+     instead of after a postmortem. *)
+  if config.web_search <> None then
+    Lwt.async (fun () ->
+        Lwt.catch
+          (fun () ->
+            let open Lwt.Syntax in
+            let* result = Tools_builtin_net.web_search_health_check ~config in
+            (match result with
+            | Ok msg -> Logs.info (fun m -> m "web_search health check: %s" msg)
+            | Error reason ->
+                Logs.warn (fun m ->
+                    m "web_search health check FAILED: %s" reason));
+            Lwt.return_unit)
+          (fun exn ->
+            Logs.warn (fun m ->
+                m "web_search health check exception: %s"
+                  (Printexc.to_string exn));
+            Lwt.return_unit));
   (* Error Correction watcher process *)
   if config.error_watcher.enabled then begin
     Logs.info (fun m -> m "Starting Error Correction watcher process");

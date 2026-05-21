@@ -1212,3 +1212,87 @@ let git_operations ~workspace =
   }
 
 (* ───── Messaging tools ───── *)
+
+(* B668: Validate the configured web_search provider at daemon startup so the
+   agent doesn't waste cron turns burning tokens against a broken backend.
+   Performs a single tiny probe query and returns Ok if results are non-empty,
+   Error with a short reason otherwise. Caller logs the result. *)
+let web_search_health_check ~(config : Runtime_config.t) :
+    (string, string) result Lwt.t =
+  let open Lwt.Syntax in
+  match config.web_search with
+  | None -> Lwt.return (Error "web_search not configured")
+  | Some ws ->
+      let provider = ws.search_provider in
+      let api_key = ws.search_api_key in
+      Lwt.catch
+        (fun () ->
+          match provider with
+          | "brave" ->
+              if api_key = "" then
+                Lwt.return
+                  (Error
+                     "provider=brave but api_key is empty; set \
+                      web_search.api_key in ~/.clawq/config.json (free key at \
+                      https://api.search.brave.com/app/keys)")
+              else
+                let base =
+                  match ws.search_base_url with
+                  | Some u -> u
+                  | None -> "https://api.search.brave.com/res/v1/web/search"
+                in
+                let uri = Printf.sprintf "%s?q=clawq+ping&count=1" base in
+                let* status, body =
+                  Http_client.get ~uri
+                    ~headers:
+                      [
+                        ("X-Subscription-Token", api_key);
+                        ("Accept", "application/json");
+                      ]
+                in
+                if status = 200 then Lwt.return (Ok "brave ok")
+                else if status = 401 || status = 403 then
+                  Lwt.return
+                    (Error
+                       (Printf.sprintf
+                          "brave HTTP %d (unauthorized) — api_key invalid or \
+                           expired; regenerate at \
+                           https://api.search.brave.com/app/keys"
+                          status))
+                else if status = 429 then
+                  Lwt.return
+                    (Error
+                       "brave HTTP 429 (rate limited) — temporarily over \
+                        quota, not fatal")
+                else
+                  Lwt.return
+                    (Error
+                       (Printf.sprintf "brave HTTP %d: %s" status
+                          (String.sub body 0 (min 200 (String.length body)))))
+          | "ddg" ->
+              let base =
+                match ws.search_base_url with
+                | Some u -> u
+                | None -> "https://api.duckduckgo.com"
+              in
+              let uri =
+                Printf.sprintf "%s/?q=clawq+ping&format=json&no_redirect=1" base
+              in
+              let* status, _ =
+                Http_client.get ~uri ~headers:[ ("Accept", "application/json") ]
+              in
+              if status = 200 then
+                Lwt.return
+                  (Ok
+                     "ddg reachable (note: instant-answer API has limited \
+                      coverage; consider provider=brave if api_key starts with \
+                      'BSA')")
+              else Lwt.return (Error (Printf.sprintf "ddg HTTP %d" status))
+          | other ->
+              Lwt.return
+                (Error
+                   (Printf.sprintf
+                      "unknown provider %S; supported: brave, ddg, searxng"
+                      other)))
+        (fun exn ->
+          Lwt.return (Error ("probe exception: " ^ Printexc.to_string exn)))

@@ -99,8 +99,86 @@ let build_json_ddg_no_key () =
       Alcotest.(check string) "api_key" "" ws.search_api_key
   | None -> Alcotest.fail "expected web_search config"
 
+(* B668: web_search health check early-exit branches (no network). *)
+let cfg_with_ws ws_opt = { Runtime_config.default with web_search = ws_opt }
+
+let health_check_no_config () =
+  let cfg = cfg_with_ws None in
+  let result =
+    Lwt_main.run (Tools_builtin_net.web_search_health_check ~config:cfg)
+  in
+  match result with
+  | Error msg ->
+      Alcotest.(check bool)
+        "mentions not configured" true
+        (String.length msg > 0
+        &&
+          try
+            let _ =
+              Str.search_forward (Str.regexp_string "not configured") msg 0
+            in
+            true
+          with Not_found -> false)
+  | Ok _ -> Alcotest.fail "expected Error for None web_search"
+
+let health_check_brave_empty_key () =
+  let ws =
+    Some
+      {
+        Runtime_config.search_provider = "brave";
+        search_api_key = "";
+        num_results = 5;
+        search_base_url = None;
+      }
+  in
+  let result =
+    Lwt_main.run
+      (Tools_builtin_net.web_search_health_check ~config:(cfg_with_ws ws))
+  in
+  match result with
+  | Error msg ->
+      Alcotest.(check bool)
+        "mentions api_key" true
+        (try
+           let _ = Str.search_forward (Str.regexp_string "api_key") msg 0 in
+           true
+         with Not_found -> false)
+  | Ok _ -> Alcotest.fail "expected Error for brave with empty api_key"
+
+let health_check_unknown_provider () =
+  let ws =
+    Some
+      {
+        Runtime_config.search_provider = "google";
+        search_api_key = "irrelevant";
+        num_results = 5;
+        search_base_url = None;
+      }
+  in
+  let result =
+    Lwt_main.run
+      (Tools_builtin_net.web_search_health_check ~config:(cfg_with_ws ws))
+  in
+  match result with
+  | Error msg ->
+      Alcotest.(check bool)
+        "mentions unknown provider" true
+        (try
+           let _ =
+             Str.search_forward (Str.regexp_string "unknown provider") msg 0
+           in
+           true
+         with Not_found -> false)
+  | Ok _ -> Alcotest.fail "expected Error for unknown provider"
+
 let suite =
   [
+    Alcotest.test_case "B668: health_check no config" `Quick
+      health_check_no_config;
+    Alcotest.test_case "B668: health_check brave empty key" `Quick
+      health_check_brave_empty_key;
+    Alcotest.test_case "B668: health_check unknown provider" `Quick
+      health_check_unknown_provider;
     Alcotest.test_case "validate_provider brave" `Quick validate_provider_brave;
     Alcotest.test_case "validate_provider ddg" `Quick validate_provider_ddg;
     Alcotest.test_case "validate_provider searxng" `Quick
