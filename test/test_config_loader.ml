@@ -909,6 +909,37 @@ let test_full_config_roundtrip () =
   Alcotest.(check (float 0.001))
     "postmortem.delay_s" cfg.postmortem.delay_s cfg2.postmortem.delay_s
 
+(* B613: explicit JSON null for postmortem.model means "use primary model"
+   (no override). Previously null fell through to the default
+   "zai_coding:glm-5-turbo" so once a user set a model they couldn't clear
+   the override by writing null. *)
+let test_postmortem_model_null_clears_override () =
+  let json =
+    Yojson.Safe.from_string
+      {|{"postmortem": {"enabled": true, "model": null, "delay_s": 0.0}}|}
+  in
+  let cfg = Config_loader.parse_config ~resolve_secrets:false json in
+  Alcotest.(check (option string))
+    "postmortem.model: null parses as None" None cfg.postmortem.model
+
+let test_postmortem_model_string_preserved () =
+  let json =
+    Yojson.Safe.from_string
+      {|{"postmortem": {"enabled": true, "model": "anthropic:claude-haiku-4-5", "delay_s": 1.0}}|}
+  in
+  let cfg = Config_loader.parse_config ~resolve_secrets:false json in
+  Alcotest.(check (option string))
+    "postmortem.model: explicit string preserved"
+    (Some "anthropic:claude-haiku-4-5") cfg.postmortem.model
+
+let test_postmortem_model_missing_uses_default () =
+  (* No postmortem section at all → defaults apply (including default model). *)
+  let json = Yojson.Safe.from_string {|{"agent_defaults": {}}|} in
+  let cfg = Config_loader.parse_config ~resolve_secrets:false json in
+  Alcotest.(check (option string))
+    "postmortem.model: missing section → default"
+    Runtime_config.default_postmortem_config.model cfg.postmortem.model
+
 let suite =
   [
     Alcotest.test_case "load warns on invalid port" `Quick
@@ -997,6 +1028,12 @@ let suite =
       test_to_json_includes_interactive;
     Alcotest.test_case "interactive roundtrip" `Quick test_interactive_roundtrip;
     Alcotest.test_case "full config roundtrip" `Quick test_full_config_roundtrip;
+    Alcotest.test_case "B613: postmortem.model null clears override" `Quick
+      test_postmortem_model_null_clears_override;
+    Alcotest.test_case "B613: postmortem.model string preserved" `Quick
+      test_postmortem_model_string_preserved;
+    Alcotest.test_case "B613: postmortem.model missing uses default" `Quick
+      test_postmortem_model_missing_uses_default;
     Alcotest.test_case "default_path returns config.json path" `Quick (fun () ->
         let path = Config_loader.default_path () in
         Alcotest.(check bool)

@@ -1878,7 +1878,10 @@ let parse_config ?(resolve_secrets = true) json =
            try
              match pm |> member "model" with
              | `String s when s <> "" -> Some s
-             | `Null -> def.model
+             (* B613: explicit null means "use primary model" (no override).
+                Previously this fell through to the default model so users
+                couldn't clear the override once set. *)
+             | `Null -> None
              | _ -> def.model
            with _ -> def.model
          in
