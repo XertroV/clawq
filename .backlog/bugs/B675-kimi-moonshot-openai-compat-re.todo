@@ -1,0 +1,30 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B675
+priority: high
+status: pending
+tags: []
+title: Kimi (Moonshot OpenAI-compat) rejects resumed sessions with orphan tool_call_id (HTTP 400)
+---
+Today's daemon log (2026-05-22 07:36) shows kimi failing 3× on the same Teams session with:
+
+> LLM API error (HTTP 400): {"error":{"message":"an assistant message with 'tool_calls' must be followed by tool messages responding to each 'tool_call_id'. The following tool_call_ids did not have response messages: use_skill:76","type":"invalid_request_error"}}
+
+This is the Kimi/Moonshot OpenAI-compat endpoint enforcing strict tool_call_id pairing. We already have analogous handling for MiniMax (B644: strict_pairing in messages_to_anthropic_json). The OpenAI-compat path in provider.ml runs inline_ensure_tool_group_integrity but that doesn't prevent orphan tool_call_ids from leaking through after restart-resume injection / postmortem context interleaving.
+
+Specifics:
+- Session was Teams personal a:1JPV… with ~379 messages / ~60k tokens.
+- The orphan tool_call_id was "use_skill:76" — the skills tool with an internal id from a prior turn.
+- Attempt 1/3, Attempt 2/3, Attempt 3/3 all returned HTTP 400 — retry-with-backoff did not help (the same broken payload was resent).
+- Cache hit was 95% (27904/29305 cached prompt tokens), so resending didn't shake loose a different shape.
+
+Required:
+1. Tighten provider.ml's pre-send filter so any assistant.tool_calls whose id has no matching subsequent tool/role-tool message gets stripped (or the assistant message dropped if no other content remains). This is the kimi/openai-compat equivalent of B644's strict_pairing.
+2. Add an integration test that builds a history with a known orphan tool_call_id, runs it through kimi (skip-on-no-key), and asserts HTTP 200 (not 400). Currently no such regression test exists.
+3. Confirm that when restart-resume injects system messages, the tool_call_id pairing in the surrounding context still holds. The 379-msg history suggests interleaved injections may be breaking pairs.
+
+Related: B644 (minimax adjacency), B617 (zai_anthropic), B674 (broader integration test coverage), and the auto-filed postmortem bug about hard-aborting turns on consecutive invalid tool calls.
+
+Separately: also seeing model_discovery: kimi_coding refresh failed: HTTP 401 — model discovery against the kimi coding endpoint is unauthorized (the inference endpoint works, the model-listing endpoint doesn't). Worth filing as a separate small bug if it's not already.
