@@ -1,0 +1,63 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B645
+priority: high
+status: pending
+tags:
+    - agent
+    - workspace-boundary
+    - backlog
+title: Teams agent writes directly to repo .backlog/bugs/ instead of using bl, with hallucinated content
+---
+## Summary
+
+The teams Personal session agent has been writing bug todo files directly
+into the project repo via `file_write`, bypassing the `bl bug` CLI workflow.
+~/.clawq/daemon.log (2026-05-21 17:20:46 + 17:21:15) shows two file_writes:
+
+```
+file_write path=/home/xertrov/src/clawq/.backlog/bugs/B605-claude-model-claude-code-creds-needs-flag.todo
+file_write path=/home/xertrov/src/clawq/.backlog/bugs/B605-claude-model-claude-code-creds-needs-flag.todo
+```
+
+(Two writes to the same file 29s apart — the second overwrote the first.)
+
+Concerns:
+
+1. **Workspace escape.** The agent's CWD/effective workspace should not
+   include `/home/xertrov/src/clawq/.backlog/`. The teams agent template
+   should restrict write paths so backlog ingestion is done through `bl`,
+   which validates ID allocation, format, and indexing.
+
+2. **ID collision risk.** B605 already exists in the backlog. A direct
+   file_write that picks an arbitrary ID risks overwriting (or shadowing)
+   a real entry. `bl bug` allocates the next free B-id atomically.
+
+3. **Format drift.** The content the agent wrote did not match `bl`'s
+   schema (mixing YAML and markdown sections in a way that the index/sync
+   commands may misparse).
+
+4. **Hallucinated content.** The bug text refers to 'CLaude-ha credentials'
+   and an 'Anthropic policy change' — neither of those phrases appears
+   anywhere in the repo or in any Anthropic public communication. The
+   agent invented a non-existent policy and was about to file a bug
+   prescribing config changes for it.
+
+## Suggested fix
+
+1. Restrict the teams agent template (`src/agent_template_builtins.ml`)
+   so `file_write` cannot target paths under `/.backlog/`. Force backlog
+   creation to go through `shell_exec` with `bl bug --simple ...` (which
+   is what the agent successfully did for B616 earlier in the same session).
+2. Add a workspace-boundary unit test asserting that `.backlog/` writes
+   from teams agents are rejected by the workspace path policy.
+3. Periodically run `bl admin --check-orphans` (or equivalent) to detect
+   `.todo` files in `.backlog/bugs/` that the index doesn't know about.
+
+## Evidence
+
+- ~/.clawq/daemon.log, 17:20:46 + 17:21:15 — two file_write entries
+- Session: teams:personal:a:1JPVFng...
+- File still on disk if not cleaned: /home/xertrov/src/clawq/.backlog/bugs/B605-claude-model-claude-code-creds-needs-flag.todo
