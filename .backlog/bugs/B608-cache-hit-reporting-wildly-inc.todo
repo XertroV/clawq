@@ -1,0 +1,11 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B608
+priority: high
+status: pending
+tags: []
+title: Cache hit % reporting wildly incorrect (api_cached > prompt_tokens)
+---
+The cache hit percentage logged as 'cached=X/Y (Z%) prompt tokens' is wildly off — api_cached (e.g. 80000+) is often many times larger than the prompt_tokens (e.g. 200-2000). This means the cache hit calculation is using the wrong value for one or both of these fields.\n\nRoot cause traced to agent.ml:1113-1117 and :1443-1447. The log line computes: api_cached / pt * 100%, where api_cached comes from the provider's usage response (provider_minimax.ml reads 'cache_read_input_tokens'). The prompt_tokens 'pt' comes from the message history token count (pre-send), not from the API response.\n\nMiniMax may report cache_read_input_tokens in a way that's not directly comparable to the local prompt token count, OR MiniMax's cache mechanism works differently than expected (it may include system prompt / previously cached context that's not counted in the local pt estimate).\n\nAlso check: does the Anthropic provider have the same issue? Their cached tokens field works differently — Anthropic reports 'cache_creation' and 'cache_read' tokens separately in their usage response.\n\nAcceptance criteria:\n- cached=%d/%d shows api_cached <= pt (capped or reported separately)\n- If MiniMax's cache model differs, report it accurately (e.g. show cached vs total context tokens separately)\n- Test with Anthropic models to see if the same bug exists there\n- Add a sanity check that logs a warning if api_cached > pt

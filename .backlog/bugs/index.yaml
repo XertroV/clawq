@@ -604,3 +604,4 @@ bugs:
     - file: B605-kimi-coding-catalog-stale-mode.todo
     - file: B606-claude-models-via-claude-code.todo
     - file: B607-tool-calls-not-executed-in-par.todo
+    - file: B608-cache-hit-reporting-wildly-inc.todo
