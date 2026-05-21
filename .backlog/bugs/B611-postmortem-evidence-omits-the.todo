@@ -1,0 +1,11 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B611
+priority: high
+status: pending
+tags: []
+title: postmortem evidence omits the data needed to diagnose loops
+---
+Postmortem.format_history_text only includes role/content for the last 15 messages and 3000 chars, losing assistant tool-call names/args that triggered RepeatedToolCall detection. Include structured recent messages with order, tool call args, tool result names, and detector signals. Without this the postmortem analyst is guessing. Found by cx-reviewer.
