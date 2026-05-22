@@ -1,0 +1,17 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B680
+priority: medium
+status: pending
+tags: []
+title: Reconfigure briefing cron to use persistent session with send_to_session delivery
+---
+Change briefing-daily and briefing-hourly cron jobs to:
+1. Use session_key='cron:briefing' (persistent, already exists in session_state)
+2. Update prompts to instruct agent: after generating briefing, use send_to_session tool to deliver results to session 'teams:personal:a:1JPVFngEx3FRRVWXUe5fb97HWjfsCdtDimgKuD3u_N6IpgOD0euB5bnQHI9RsDQuK3qOG_5Jyhq4wWGr0IczaxEXPN5vIGppdngtwZucpyhDNrW1_YJCrXnHrksQ5fCuT' with wake_agent=false
+3. If nothing notable, still deliver 'Nothing notable.' via send_to_session (so the user knows it ran)
+4. Depends on B679 (send_to_session tool)
+
+Current state: both crons target the DM session directly (session_key=teams:personal:a:...), ephemeral=0. The cron:briefing session already exists in session_state with teams channel info.
