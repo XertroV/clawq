@@ -1,10 +1,15 @@
 ---
+claimed_at: "2026-05-22T08:52:03Z"
+claimed_by: cli-user
+completed_at: "2026-05-22T08:52:06Z"
 complexity: medium
 depends_on: []
+duration_minutes: 0.06591403865
 estimate_hours: 1
 id: B681
 priority: high
-status: pending
+started_at: "2026-05-22T08:52:03Z"
+status: done
 tags: []
 title: briefing-hourly cron prompt causes model to call memory_recall without required 'query' parameter
 ---

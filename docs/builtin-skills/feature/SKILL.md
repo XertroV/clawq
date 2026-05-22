@@ -8,21 +8,30 @@ argument-hint: [feature description in natural language]
 
 Create a new clawq feature end-to-end: gather requirements, discover existing capabilities, decompose into implementation layers (preferring no-recompilation approaches), gate risky changes behind admin approval, and delegate implementation.
 
-## Progress Reporting
+## Mandatory Progress Protocol
 
-At the start of each phase, call send_message to report progress:
-- send_message(text="Add Feature, step 1/6: Gathering requirements...")
-- send_message(text="Add Feature, step 2/6: Discovering capabilities...")
-- send_message(text="Add Feature, step 3/6: Decomposing feature...")
-- send_message(text="Add Feature, step 4/6: Checking approvals...")
-- send_message(text="Add Feature, step 5/6: Implementing...")
-- send_message(text="Add Feature, step 6/6: Verifying and reporting...")
+**You MUST emit a progress message at the start of every phase below before doing anything else in that phase.** Use `send_message(text=...)` — it delivers immediately to the active session. Failing to emit progress leaves the user staring at a silent terminal; treat this as a hard requirement, not a suggestion.
 
-Always send the progress message before starting each phase.
+The six messages are exactly:
+
+1. `Add Feature, step 1/6: Gathering requirements...`
+2. `Add Feature, step 2/6: Discovering capabilities...`
+3. `Add Feature, step 3/6: Decomposing feature...`
+4. `Add Feature, step 4/6: Checking approvals...`
+5. `Add Feature, step 5/6: Implementing...`
+6. `Add Feature, step 6/6: Verifying and reporting...`
+
+Additionally, emit a `send_message` whenever you load a skill, spawn a background task, or are about to wait on a long operation (>5 s). Examples:
+
+- `Loading skill: <name>`
+- `Spawning background task <runner> on branch <branch>...`
+- `Waiting on background task <id> (this may take a few minutes)...`
+
+If `send_message` is not registered (no active session), fall back to printing a plain assistant message that begins with the same text — but only after attempting send_message first.
 
 ## Phase 1: Requirement Gathering
 
-> First, call send_message(text="Add Feature, step 1/6: Gathering requirements...").
+**Step 1.0 (MANDATORY):** call `send_message(text="Add Feature, step 1/6: Gathering requirements...")`.
 
 If `$ARGUMENTS` provides a description, parse it for context and pre-fill answers. Confirm with the user.
 
@@ -36,7 +45,7 @@ Collect via `ask_user_question` (or conversationally if unavailable):
 
 ## Phase 2: Capability Discovery
 
-> First, call send_message(text="Add Feature, step 2/6: Discovering capabilities...").
+**Step 2.0 (MANDATORY):** call `send_message(text="Add Feature, step 2/6: Discovering capabilities...")`.
 
 Read existing capabilities:
 
@@ -47,11 +56,13 @@ Read existing capabilities:
 5. `shell_exec("clawq agents list")` — existing agent templates
 6. `tool_search("<keywords from feature description>")` — deferred tool discovery
 
+After each `shell_exec` call above, emit `send_message(text="Checked: <thing>")` so the user sees discovery progress.
+
 Summarize: "Here's what clawq can already do related to your request: ..."
 
 ## Phase 3: Feature Decomposition
 
-> First, call send_message(text="Add Feature, step 3/6: Decomposing feature...").
+**Step 3.0 (MANDATORY):** call `send_message(text="Add Feature, step 3/6: Decomposing feature...")`.
 
 Classify each requirement into implementation layers (prefer lower layers):
 
@@ -70,7 +81,7 @@ Present the decomposition table and ask for confirmation via `ask_user_question`
 
 ## Phase 4: Approval Gating
 
-> First, call send_message(text="Add Feature, step 4/6: Checking approvals...").
+**Step 4.0 (MANDATORY):** call `send_message(text="Add Feature, step 4/6: Checking approvals...")`.
 
 **Layers 0-4** (no recompilation, low risk): Proceed after user confirmation.
 
@@ -89,9 +100,9 @@ Present the decomposition table and ask for confirmation via `ask_user_question`
 
 ## Phase 5: Implementation
 
-> First, call send_message(text="Add Feature, step 5/6: Implementing...").
+**Step 5.0 (MANDATORY):** call `send_message(text="Add Feature, step 5/6: Implementing...")`.
 
-Execute in dependency order based on decomposition:
+Execute in dependency order based on decomposition. Before each Layer block below, emit `send_message(text="Implementing layer <N>: <short description>")`.
 
 ### Layer 0 (already exists)
 Show usage instructions to the user. Done.
@@ -135,7 +146,8 @@ Show usage instructions to the user. Done.
    - "Small team (orchestrator + coder + reviewer)" — multi-file with review
    - "Full team (lead + N coders + reviewer)" — cross-subsystem changes
 
-3. Spawn background task:
+3. Before spawning, emit `send_message(text="Spawning background task <runner> on branch <branch>...")`.
+4. Spawn background task:
    ```
    background_task_enqueue(
      runner: "<selected>",
@@ -145,12 +157,12 @@ Show usage instructions to the user. Done.
      use_worktree: true
    )
    ```
-4. Monitor: `background_task_logs(id)`, `background_task_wait(id)`
-5. On failure: `background_task_recover(id)`
+5. Monitor: `background_task_logs(id)`, `background_task_wait(id)`
+6. On failure: `background_task_recover(id)`
 
 ## Phase 6: Verification and Reporting
 
-> First, call send_message(text="Add Feature, step 6/6: Verifying and reporting...").
+**Step 6.0 (MANDATORY):** call `send_message(text="Add Feature, step 6/6: Verifying and reporting...")`.
 
 1. **Skills**: invoke via `use_skill` to verify loading
 2. **Cron**: verify via `shell_exec("clawq cron list")`
