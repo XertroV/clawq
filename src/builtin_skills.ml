@@ -346,6 +346,109 @@ Get the live CLI interface:
 - Use only flags from the live `--help` output above.
 - Only ask follow-up if the description is truly unintelligible.|}
     );
+    ( "briefing-hourly",
+      "Hourly breaking-news check across the user's monitored topics. \
+       Deterministic orchestration with pre-flight config validation; \
+       guarantees web_search is never called with empty args. Invoked by the \
+       briefing-hourly cron job.",
+      {|# briefing-hourly — Hourly breaking-news check
+
+You are running the hourly briefing. Follow every step exactly in order. Do not call any tool before completing Step 1's pre-flight validation.
+
+## Step 1: Load and validate config
+
+Call `memory_recall` with `query="rig:briefing:config"` to retrieve the briefing configuration.
+
+**Pre-flight validation (MUST complete before any other tool call):**
+
+1. If memory_recall returns no result or an empty value, respond with EXACTLY: `Briefing not configured. Run /rig install briefing first.` and stop.
+2. The returned value is a JSON string. Parse it. If parsing fails, respond with `Briefing config malformed: <one-line reason>.` and stop.
+3. Locate the `topics` field. If it is missing, empty, or not an array, respond with `Briefing has no topics configured. Run /rig adjust briefing.` and stop.
+
+## Step 2: Emit planned queries (audit trail)
+
+Before any web_search call, emit a single assistant message listing your planned queries, one per line, in this exact format:
+
+```
+Planned hourly queries:
+- <topic 1> breaking
+- <topic 2> breaking
+```
+
+This makes silent failures observable in session logs.
+
+## Step 3: Sequential web_search
+
+For each topic in the topics list (one at a time, never parallel):
+
+- Build a non-empty query string: `<topic> breaking` (or `<topic> just announced`).
+- Call `web_search(query="<built_query>")`. The `query` parameter MUST be a non-empty string — never call web_search with `args={}` or any empty query.
+- If the result indicates `rate-limited` or `no results`, record the topic as skipped and continue to the next topic. Do not retry.
+- Search APIs throttle at ~1 req/sec; making these calls sequentially (never parallel) honors that limit.
+
+## Step 4: Summarize
+
+- If nothing genuinely notable was found across all topics, respond with EXACTLY: `Nothing notable.`
+- Otherwise, write 2-3 sentences per notable item with a link. Only report truly significant events (breaking news, just-announced milestones), not routine updates.|}
+    );
+    ( "briefing-daily",
+      "Daily briefing across RSS feeds, monitored topics, and weather. \
+       Deterministic orchestration with pre-flight config validation; \
+       guarantees web_search is never called with empty args. Invoked by the \
+       briefing-daily cron job.",
+      {|# briefing-daily — Daily briefing
+
+You are generating the user's daily briefing. Follow every step exactly in order. Do not call any tool before completing Step 1's pre-flight validation.
+
+## Step 1: Load and validate config
+
+Call `memory_recall` with `query="rig:briefing:config"` to retrieve the briefing configuration.
+
+**Pre-flight validation (MUST complete before any other tool call):**
+
+1. If memory_recall returns no result or an empty value, respond with EXACTLY: `Briefing not configured. Run /rig install briefing first.` and stop.
+2. The returned value is a JSON string. Parse it. If parsing fails, respond with `Briefing config malformed: <one-line reason>.` and stop.
+3. Locate the `feeds_file` path (default `~/.clawq/briefing_feeds.txt`), the `topics` array, the `weather_location` (optional), and the `rss_tool` (default `sfeed`).
+
+## Step 2: Emit plan (audit trail)
+
+Before any tool call after Step 1, emit a single assistant message in this exact format:
+
+```
+Daily briefing plan:
+- Feeds: <feeds_file>
+- RSS tool: <rss_tool>
+- Topics: <topic1>, <topic2>, ...
+- Weather: <location_or_none>
+```
+
+## Step 3: Fetch RSS headlines
+
+Use shell_exec to run the configured RSS tool against `<feeds_file>`. Extract the top 5 most notable headlines. If the command fails, record the failure and continue (the briefing still has value with topics + weather).
+
+## Step 4: Sequential web_search for topics
+
+For each topic in the topics list (one at a time, never parallel):
+
+- Build a non-empty query string: `<topic> today`.
+- Call `web_search(query="<built_query>")`. The `query` parameter MUST be a non-empty string — never call web_search with `args={}` or any empty query.
+- If the result indicates `rate-limited` or `no results`, record the topic as skipped and continue.
+
+## Step 5: Weather (if configured)
+
+If `weather_location` is set, call `web_search(query="<location> weather today")` and extract today's forecast.
+
+## Step 6: Compose
+
+Write a 400-800 word briefing with sections (omit empty sections):
+
+- **Top Headlines** — from Step 3
+- **Topic Updates** — from Step 4
+- **Weather** — from Step 5
+- **Worth Reading** — anything notable from headlines or topics
+
+Use bullet points and links. Keep it scannable.|}
+    );
   ]
 
 let builtin_metas () =

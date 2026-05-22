@@ -25,12 +25,12 @@ Start with these defaults unless the user has specified otherwise:
 ## Step 3: Create the daily briefing cron job
 
 Use shell_exec to run:
-  clawq cron add briefing-daily briefing "0 7 * * *" You are generating the user's daily briefing. STEP 0: Call memory_recall with query="rig:briefing:config" to retrieve the briefing configuration (topic list, weather location, feeds file). If memory_recall returns no result, respond with EXACTLY: 'Briefing not configured; run /rig install briefing first.' and stop. STEP 1: Run the installed RSS tool to fetch headlines from the feeds file in the config (default ~/.clawq/briefing_feeds.txt). Extract the top 5 most notable headlines. STEP 2: For each topic in the recalled config, call web_search SEQUENTIALLY (one call at a time, never parallel) — typical free-tier search APIs rate-limit at ~1 req/sec. If a search returns "rate-limited" or "no results", skip that topic and continue. STEP 3: If a weather location is configured, use web_search for today's weather. STEP 4: Compose a briefing with sections: Top Headlines, Topic Updates, Weather, Worth Reading. Keep it 400-800 words, scannable, with bullet points and links.
+  clawq cron add briefing-daily briefing "0 7 * * *" Invoke the briefing-daily skill: call use_skill with name="briefing-daily". The skill handles config loading, pre-flight validation, RSS fetch, topic search, weather, and composition. Do not perform briefing work outside the skill — orchestrate only through use_skill.
 
 ## Step 4: Create the hourly notable-events cron job
 
 Use shell_exec to run:
-  clawq cron add briefing-hourly briefing "0 * * * *" Quick breaking-news check. STEP 0: Call memory_recall with query="rig:briefing:config" to retrieve the topic list. If memory_recall returns no result, respond with EXACTLY: 'Briefing not configured.' and stop. STEP 1: For each topic in the recalled config, call web_search SEQUENTIALLY (one call at a time, never parallel) — search APIs rate-limit at ~1 req/sec. Add 'breaking' or 'just announced' qualifiers. If a search returns "rate-limited" or "no results", skip that topic and continue with the next. STEP 2: If nothing genuinely notable happened, respond with EXACTLY: 'Nothing notable.' Only report truly significant events. 2-3 sentences with a link if notable.
+  clawq cron add briefing-hourly briefing "0 * * * *" Invoke the briefing-hourly skill: call use_skill with name="briefing-hourly". The skill handles config loading, pre-flight validation, planned-query emission, and sequential web_search. Do not perform briefing work outside the skill — orchestrate only through use_skill.
 
 ## Step 5: Store rig state
 
@@ -49,6 +49,22 @@ Summarize what was installed and configured. Mention:
 
 let briefing_adjust_prompt =
   {|You are adjusting the "daily briefing" rig configuration.
+
+## Step 0: Migrate legacy cron prompts (idempotent)
+
+Existing briefing cron jobs may still contain the legacy inline prompt that asked the LLM to orchestrate the search loop directly. That pattern is fragile (B678). Re-point both jobs to the deterministic built-in skills via remove + re-add.
+
+For each job (`briefing-hourly` first, then `briefing-daily`):
+
+1. Run `clawq cron show <name>` via shell_exec. If the output already mentions `use_skill with name="<name>"`, skip — the job is already migrated.
+2. Otherwise, capture the existing schedule from the show output, then run:
+
+   ```
+   clawq cron remove <name>
+   clawq cron add <name> briefing "<original_schedule>" Invoke the <name> skill: call use_skill with name="<name>". The skill handles all orchestration. Do not perform briefing work outside the skill.
+   ```
+
+3. If a job does not exist (cron show fails), skip — the user may not have it installed.
 
 ## Step 1: Recall current configuration
 

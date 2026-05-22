@@ -1351,6 +1351,46 @@ let test_builtin_idea_skill () =
   Alcotest.(check bool)
     "find_skill_md finds idea" true (Option.is_some skill_md)
 
+(* B678: briefing-hourly and briefing-daily are deterministic built-in skills
+   that the briefing cron jobs invoke. They must be discoverable and contain
+   the pre-flight validation directives. *)
+let test_builtin_briefing_skills_present () =
+  let check_skill name =
+    let found = Builtin_skills.find_builtin name in
+    Alcotest.(check bool) (name ^ " skill found") true (Option.is_some found);
+    let _, _, instructions = Option.get found in
+    Alcotest.(check bool)
+      (name ^ " mentions memory_recall")
+      true
+      (try
+         ignore
+           (Str.search_forward
+              (Str.regexp_string "memory_recall")
+              instructions 0);
+         true
+       with Not_found -> false);
+    Alcotest.(check bool)
+      (name ^ " enforces non-empty query")
+      true
+      (try
+         ignore
+           (Str.search_forward (Str.regexp_string "non-empty") instructions 0);
+         true
+       with Not_found -> false);
+    Alcotest.(check bool)
+      (name ^ " mentions pre-flight")
+      true
+      (try
+         ignore
+           (Str.search_forward
+              (Str.regexp_case_fold "pre-flight")
+              instructions 0);
+         true
+       with Not_found -> false)
+  in
+  check_skill "briefing-hourly";
+  check_skill "briefing-daily"
+
 let suite =
   [
     Alcotest.test_case "template substitution" `Quick test_substitute_template;
@@ -1449,4 +1489,7 @@ let suite =
       test_compaction_reload_empty;
     Alcotest.test_case "builtin idea skill discoverable" `Quick
       test_builtin_idea_skill;
+    Alcotest.test_case
+      "B678: briefing-hourly and briefing-daily built-in skills present" `Quick
+      test_builtin_briefing_skills_present;
   ]
