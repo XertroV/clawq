@@ -1227,8 +1227,14 @@ let complete ~(config : Runtime_config.t) ~messages ?tools ?session_key
          parameter is illegal" when orphan tool_use / tool_result pairs
          survive (typically after session resume drops intermediate state).
          Inlined here to avoid a cyclic dependency on Message_history
-         (which itself imports Provider for the message type). *)
-      let messages = inline_ensure_tool_group_integrity messages in
+         (which itself imports Provider for the message type).
+         B675: also enforce adjacency — kimi (Moonshot OpenAI-compat) rejects
+         with HTTP 400 if an assistant tool_calls message is not immediately
+         followed by tool messages for each id. Intervening system/user
+         messages (e.g. observer notes injected on resume) break this. *)
+      let messages =
+        messages |> inline_ensure_tool_group_integrity |> reorder_tool_groups
+      in
       let body_fields =
         [
           ("model", `String model);
@@ -1678,7 +1684,10 @@ let complete_stream ~(config : Runtime_config.t) ~messages ?tools ?session_key
       in
       let uri = base_url ^ "/chat/completions" in
       let temp_locked = model_requires_temperature_one model in
-      let messages = inline_ensure_tool_group_integrity messages in
+      (* B675: enforce both integrity and adjacency on the streaming path too. *)
+      let messages =
+        messages |> inline_ensure_tool_group_integrity |> reorder_tool_groups
+      in
       let body_fields =
         [
           ("model", `String model);

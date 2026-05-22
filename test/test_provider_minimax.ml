@@ -1534,6 +1534,76 @@ let test_b675_orphan_tool_call_mid_history_filtered () =
     "paired tool_call_id 'kept-1' is preserved" true
     (List.mem "kept-1" surviving_call_ids)
 
+(* B675: kimi-side adjacency check. After integrity + reorder, an assistant
+   tool_calls message must be immediately followed by its tool result, even
+   when the original history had an intervening system/user message (e.g.
+   restart-resume observer note). This is what reorder_tool_groups does, and
+   provider.ml now invokes it on the OpenAI-compat path. *)
+let test_b675_adjacency_after_reorder () =
+  let assistant_with_call =
+    {
+      Provider.role = "assistant";
+      content = "";
+      content_parts = [];
+      tool_calls =
+        [
+          {
+            Provider.id = "tc-1";
+            function_name = "use_skill";
+            arguments = {|{"name":"bug"}|};
+          };
+        ];
+      tool_call_id = None;
+      name = None;
+      provider_response_items_json = None;
+      thinking = None;
+      is_error = false;
+    }
+  in
+  let intervening_system =
+    Provider.make_message ~role:"system"
+      ~content:"[Observer] note injected on resume"
+  in
+  let tool_result =
+    Provider.make_tool_result ~tool_call_id:"tc-1" ~name:"use_skill"
+      ~content:"ok"
+  in
+  let history =
+    [
+      Provider.make_message ~role:"user" ~content:"start";
+      assistant_with_call;
+      intervening_system;
+      tool_result;
+    ]
+  in
+  let cleaned =
+    history |> Provider.inline_ensure_tool_group_integrity
+    |> Provider.reorder_tool_groups
+  in
+  (* Find the index of the assistant message with tc-1 and assert the very
+     next message is the tool result for tc-1. *)
+  let arr = Array.of_list cleaned in
+  let find_assistant_idx () =
+    let result = ref (-1) in
+    Array.iteri
+      (fun i (m : Provider.message) ->
+        if
+          !result = -1 && m.role = "assistant"
+          && List.exists
+               (fun (tc : Provider.tool_call) -> tc.id = "tc-1")
+               m.tool_calls
+        then result := i)
+      arr;
+    !result
+  in
+  let idx = find_assistant_idx () in
+  Alcotest.(check bool) "assistant tool_call present" true (idx >= 0);
+  Alcotest.(check bool)
+    "tool result is adjacent" true
+    (idx + 1 < Array.length arr
+    && arr.(idx + 1).Provider.role = "tool"
+    && arr.(idx + 1).tool_call_id = Some "tc-1")
+
 let suite =
   [
     Alcotest.test_case "user message" `Quick test_user_message;
@@ -1622,4 +1692,7 @@ let suite =
     Alcotest.test_case
       "B675: orphan tool_call_id mid-history filtered before send" `Quick
       test_b675_orphan_tool_call_mid_history_filtered;
+    Alcotest.test_case
+      "B675: tool result is adjacent after reorder (kimi adjacency)" `Quick
+      test_b675_adjacency_after_reorder;
   ]
