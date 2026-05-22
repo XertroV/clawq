@@ -373,7 +373,19 @@ let web_search ~(config : Runtime_config.t) =
                     Buffer.contents buf
                   in
                   (* B670: provider-specific helpers so we can fall back from
-                     Brave to DDG on 429 without re-implementing the parser. *)
+                     Brave to DDG on 429 without re-implementing the parser.
+                     B672: structured per-attempt log with backend, status, and
+                     latency so failover paths are diagnosable from daemon.log. *)
+                  let log_attempt ~backend ~status ~t0 =
+                    let latency_ms =
+                      int_of_float ((Unix.gettimeofday () -. t0) *. 1000.0)
+                    in
+                    Logs.info (fun m ->
+                        m
+                          "web_search attempt: backend=%s status=%d \
+                           latency_ms=%d query=%S"
+                          backend status latency_ms query)
+                  in
                   let do_brave () =
                     let base =
                       match ws.search_base_url with
@@ -383,6 +395,7 @@ let web_search ~(config : Runtime_config.t) =
                     let uri =
                       Printf.sprintf "%s?q=%s&count=%d" base encoded_query limit
                     in
+                    let t0 = Unix.gettimeofday () in
                     let* status, body =
                       http_get_with_429_retry ~uri
                         ~headers:
@@ -392,6 +405,7 @@ let web_search ~(config : Runtime_config.t) =
                           ]
                         ()
                     in
+                    log_attempt ~backend:"brave" ~status ~t0;
                     if status = 429 then Lwt.return (`Rate_limited "brave")
                     else if status >= 400 then
                       Lwt.return
@@ -437,11 +451,13 @@ let web_search ~(config : Runtime_config.t) =
                         "%s/?q=%s&format=json&no_redirect=1&no_html=1" base_url
                         encoded_query
                     in
+                    let t0 = Unix.gettimeofday () in
                     let* status, body =
                       http_get_with_429_retry ~uri
                         ~headers:[ ("Accept", "application/json") ]
                         ()
                     in
+                    log_attempt ~backend:"ddg" ~status ~t0;
                     if status = 429 then Lwt.return (`Rate_limited "ddg")
                     else if status >= 400 then
                       Lwt.return
@@ -518,8 +534,14 @@ let web_search ~(config : Runtime_config.t) =
                                   failed: " ^ e)
                           | `Rate_limited _ ->
                               Lwt.return
-                                "Error: both brave and ddg returned HTTP 429 — \
-                                 try again in a minute."))
+                                "Error: both brave and ddg returned HTTP 429. \
+                                 Alternatives the agent can try without \
+                                 web_search: (a) wait ~60s and retry; (b) call \
+                                 `web_fetch` against a known URL if you have \
+                                 one; (c) call `http_get` against a specific \
+                                 endpoint; (d) if `web_search_prime` is \
+                                 registered, use that instead (zai_mcp \
+                                 backend)."))
                   | "ddg" | _ -> (
                       let base_url =
                         match ws.search_base_url with
@@ -533,7 +555,12 @@ let web_search ~(config : Runtime_config.t) =
                       | `Rate_limited _ ->
                           Lwt.return
                             "Error: DuckDuckGo search API rate-limited (HTTP \
-                             429) after 3 retries. Try again in a minute."))
+                             429) after 3 retries. Alternatives the agent can \
+                             try: (a) wait ~60s and retry; (b) call \
+                             `web_fetch` against a known URL; (c) call \
+                             `http_get` against a specific endpoint; (d) if \
+                             `web_search_prime` is registered (zai_mcp \
+                             backend), use that instead."))
                 (fun exn -> Lwt.return ("Error: " ^ Printexc.to_string exn)));
     invoke_stream = None;
     risk_level = Low;
