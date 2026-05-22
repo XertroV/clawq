@@ -329,7 +329,11 @@ let file_append ~workspace ~workspace_only ~extra_allowed_paths =
   {
     Tool.name = "file_append";
     description =
-      "Append content to the end of a file, creating it if it does not exist";
+      "Append content to the end of a file, creating it if it does not exist. \
+       Use this for log-like writes or accumulating notes. To overwrite the \
+       whole file, use `file_write`. To insert/replace text at a specific \
+       location, use `file_edit` (unique substring) or `file_edit_lines` (line \
+       range).";
     parameters_schema = schema;
     invoke =
       (fun ?context args ->
@@ -409,7 +413,14 @@ let file_write ~workspace ~workspace_only ~extra_allowed_paths =
   in
   {
     Tool.name = "file_write";
-    description = "Create or overwrite a file with the given content";
+    description =
+      "Create or overwrite a file with the given content. Path must be \
+       absolute and inside the workspace (workspace_only) or in an \
+       extra_allowed_paths location. To MODIFY part of an existing file, \
+       prefer `file_edit` (exact substring replace) or `file_edit_lines` \
+       (line-range replace) — they fail loudly on a non-unique match instead \
+       of silently clobbering. To ADD to the end of a file, use `file_append`. \
+       Reserved for new files or full rewrites.";
     parameters_schema = schema;
     invoke =
       (fun ?context args ->
@@ -820,7 +831,12 @@ let transcribe ~(config : Runtime_config.t) =
   in
   {
     Tool.name = "transcribe";
-    description = "Transcribe an audio file to text using speech-to-text";
+    description =
+      "Transcribe an audio file to text via the configured speech-to-text \
+       provider (Whisper, etc.). Supports common formats (mp3, wav, m4a, ogg). \
+       Returns the plain-text transcription; no timestamps unless the provider \
+       includes them. The file must already exist on disk — to download audio \
+       first, use `http_get` or `web_fetch`.";
     parameters_schema = schema;
     invoke =
       (fun ?context:_ args ->
@@ -901,7 +917,12 @@ let memory_store ~db =
     Tool.name = "memory_store";
     description =
       "Store a persistent key-value memory that survives across sessions. \
-       Overwrites if the key already exists.";
+       Overwrites if the key already exists. Use this when the user tells you \
+       something to remember, or when you derive a stable fact (a preference, \
+       a setup detail, a directive) that would help future turns. Keys should \
+       be short, descriptive, and namespaced (e.g. `user:timezone`, \
+       `project:default_branch`). To search stored memories later, use \
+       `memory_recall`.";
     parameters_schema = schema;
     invoke =
       (fun ?context:_ args ->
@@ -960,7 +981,10 @@ let memory_recall ~db =
     Tool.name = "memory_recall";
     description =
       "Search persistent memories by full-text query and return matching \
-       key-content pairs";
+       key-content pairs. Use BEFORE answering questions about prior \
+       conversations, preferences, or facts the user has shared — these are \
+       stored via `memory_store` and outlive the current session. To enumerate \
+       all keys, use `memory_list`. To delete one, use `memory_forget`.";
     parameters_schema = schema;
     invoke =
       (fun ?context:_ args ->
@@ -1010,7 +1034,11 @@ let memory_forget ~db =
   in
   {
     Tool.name = "memory_forget";
-    description = "Delete a persistent memory by its exact key";
+    description =
+      "Delete a persistent memory by its exact key. Returns success/failure; \
+       silently no-ops if the key doesn't exist. To list keys first, use \
+       `memory_list`. To overwrite a value rather than delete, call \
+       `memory_store` with the same key.";
     parameters_schema = schema;
     invoke =
       (fun ?context:_ args ->
@@ -1031,7 +1059,11 @@ let memory_list ~db =
   {
     Tool.name = "memory_list";
     description =
-      "List all persistent memories, optionally filtered by category";
+      "List all persistent memory keys, optionally filtered by category. \
+       Returns key + category + short content preview, NOT full contents — use \
+       `memory_recall` to fetch full values by search. Lightweight: call this \
+       when you need to see what's stored without paying the token cost of \
+       full content.";
     parameters_schema =
       `Assoc
         [
