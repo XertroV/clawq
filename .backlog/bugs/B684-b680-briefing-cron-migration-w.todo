@@ -1,0 +1,25 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B684
+priority: high
+status: pending
+tags: []
+title: B680 briefing cron migration was marked done but never executed — DB still has legacy prompts
+---
+The briefing-daily and briefing-hourly cron jobs in the database still use the legacy inline prompt on the DM session `teams:personal:a:1JPVFngEx3FRRVWXUe5fb97HWjfsCdtDImgKuD3u_N6IpgOD0euB5bnQHI9RsDQuK3qOG_5Jyhq4wWGr0IczaxEXPN5vIGppdngtwZucpyhDNrW1_YJCrXnHrksQ5fCuT` instead of the `use_skill` + `cron:briefing` worker pattern. This causes the model to emit `{}` for `memory_recall` and `web_search`, triggering the `SameErrorString` stuck-session guard every hour. This is the seventh identical failure since 2026-05-23.
+
+To fix:
+1. Run `clawq cron remove briefing-daily` and `clawq cron remove briefing-hourly`
+2. Run:
+   - `clawq cron add briefing-daily cron:briefing "0 7 * * *" Invoke the briefing-daily skill: call use_skill with name="briefing-daily".`
+   - `clawq cron add briefing-hourly cron:briefing "0 * * * *" Invoke the briefing-hourly skill: call use_skill with name="briefing-hourly".`
+3. Ensure `rig:briefing:config` contains `"delivery_session": "<current DM session id>"`
+4. Verify with `sqlite3 ~/.clawq/memory.db "SELECT name, session_key FROM cron_jobs WHERE name LIKE '%briefing%';"` — both should show `cron:briefing`
+
+Do not trust backlog item closure without verifying the actual cron DB state.
+
+--
+Auto-filed by clawq postmortem for session teams:personal:a:1JPVFngEx3FRRVWXUe5fb97HWjfsCdtDImgKuD3u_N6IpgOD0euB5bnQHI9RsDQuK3qOG_5Jyhq4wWGr0IczaxEXPN5vIGppdngtwZucpyhDNrW1_YJCrXnHrksQ5fCuT (pattern: SameErrorString: error repeated 3 times: Error: missing required parameter 'query' for tool memory_recall. Required parameters: query (string). Example: memory_r...).
+Postmortem doc: /home/xertrov/.clawq/postmortems/2026-05-27T120730-teams:personal:a:1JPVFngEx3FRRVWXUe5fb97HWjfsCdtDImgKuD3u_N6IpgOD0euB5bnQHI9RsDQuK3qOG_5Jyhq4wWGr0IczaxEXPN5vIGppdngtwZucpyhDNrW1_YJCrXnHrksQ5fCuT.md
