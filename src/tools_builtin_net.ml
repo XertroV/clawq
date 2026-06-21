@@ -1160,15 +1160,9 @@ let git_operations ~workspace =
                   else
                     let open Lwt.Syntax in
                     let env =
-                      [|
-                        ("HOME="
-                        ^ try Sys.getenv "HOME" with Not_found -> "/tmp");
-                        ("PATH="
-                        ^
-                          try Sys.getenv "PATH"
-                          with Not_found -> "/usr/bin:/bin");
-                        "GIT_TERMINAL_PROMPT=0";
-                      |]
+                      Array.append
+                        (Runtime_config.workspace_only_env ())
+                        [| "GIT_TERMINAL_PROMPT=0" |]
                     in
                     let proc =
                       Process_group.start ~cwd ~env

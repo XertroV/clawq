@@ -208,6 +208,60 @@ let test_wrap_bubblewrap_binds_extra_paths () =
     "contains extra bind" true
     (contains wrapped "--bind '/etc/hosts' '/etc/hosts'")
 
+let test_wrap_bubblewrap_ro_binds_user_bin_dirs () =
+  Test_helpers.with_temp_home (fun home ->
+      let local_bin = Filename.concat home ".local/bin" in
+      let opam_bin = Filename.concat home ".opam/agent/bin" in
+      Test_helpers.rm_tree local_bin;
+      Test_helpers.rm_tree opam_bin;
+      Unix.mkdir (Filename.concat home ".local") 0o755;
+      Unix.mkdir local_bin 0o755;
+      Unix.mkdir (Filename.concat home ".opam") 0o755;
+      Unix.mkdir (Filename.concat home ".opam/agent") 0o755;
+      Unix.mkdir opam_bin 0o755;
+      let sb = mk_sandbox ~backend:Sandbox.Bubblewrap ~workspace:"/tmp" () in
+      let wrapped = Sandbox.wrap_command sb "test" in
+      let contains s sub =
+        try
+          ignore (Str.search_forward (Str.regexp_string sub) s 0);
+          true
+        with Not_found -> false
+      in
+      Alcotest.(check bool)
+        "ro-binds ~/.local/bin" true
+        (contains wrapped
+           (Printf.sprintf "--ro-bind %s %s" (Filename.quote local_bin)
+              (Filename.quote local_bin)));
+      Alcotest.(check bool)
+        "ro-binds ~/.opam/*/bin" true
+        (contains wrapped
+           (Printf.sprintf "--ro-bind %s %s" (Filename.quote opam_bin)
+              (Filename.quote opam_bin))))
+
+let test_wrap_firejail_whitelists_user_bin_dirs () =
+  Test_helpers.with_temp_home (fun home ->
+      let pnpm_home = Filename.concat home ".local/share/pnpm" in
+      let pnpm_bin = Filename.concat pnpm_home "bin" in
+      Test_helpers.rm_tree pnpm_home;
+      Unix.mkdir (Filename.concat home ".local") 0o755;
+      Unix.mkdir (Filename.concat home ".local/share") 0o755;
+      Unix.mkdir pnpm_home 0o755;
+      Unix.mkdir pnpm_bin 0o755;
+      let sb = mk_sandbox ~backend:Sandbox.Firejail ~workspace:"/tmp" () in
+      let wrapped = Sandbox.wrap_command sb "test" in
+      let contains s sub =
+        try
+          ignore (Str.search_forward (Str.regexp_string sub) s 0);
+          true
+        with Not_found -> false
+      in
+      Alcotest.(check bool)
+        "whitelists pnpm home" true
+        (contains wrapped ("--whitelist=" ^ Filename.quote pnpm_home));
+      Alcotest.(check bool)
+        "whitelists pnpm bin" true
+        (contains wrapped ("--whitelist=" ^ Filename.quote pnpm_bin)))
+
 let test_wrap_command_skips_fs_isolation_when_disabled () =
   let sb =
     mk_sandbox ~backend:Sandbox.Firejail ~workspace:"/tmp"
@@ -244,6 +298,10 @@ let suite =
       test_wrap_firejail_whitelists_extra_paths;
     Alcotest.test_case "bubblewrap binds extra paths" `Quick
       test_wrap_bubblewrap_binds_extra_paths;
+    Alcotest.test_case "bubblewrap ro-binds user bin dirs" `Quick
+      test_wrap_bubblewrap_ro_binds_user_bin_dirs;
+    Alcotest.test_case "firejail whitelists user bin dirs" `Quick
+      test_wrap_firejail_whitelists_user_bin_dirs;
     Alcotest.test_case "disabled fs isolation returns raw command" `Quick
       test_wrap_command_skips_fs_isolation_when_disabled;
   ]

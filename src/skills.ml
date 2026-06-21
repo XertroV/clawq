@@ -120,15 +120,9 @@ let load_skill ?(workspace_only = true) ?(timeout_secs = 30.0)
                       in
                       let env =
                         if workspace_only then
-                          [|
-                            ("HOME="
-                            ^ try Sys.getenv "HOME" with Not_found -> "/tmp");
-                            ("PATH="
-                            ^
-                              try Sys.getenv "PATH"
-                              with Not_found -> "/usr/bin:/bin");
-                          |]
-                        else Unix.environment ()
+                          Runtime_config.workspace_only_env ()
+                        else
+                          Runtime_config.augment_env_path (Unix.environment ())
                       in
                       let cwd =
                         if workspace_only then Some (Sys.getcwd ()) else None

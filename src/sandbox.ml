@@ -53,6 +53,11 @@ let bind_if_exists path =
     " --bind " ^ Filename.quote path ^ " " ^ Filename.quote path
   else ""
 
+let ro_bind_if_exists path =
+  if Sys.file_exists path then
+    " --ro-bind " ^ Filename.quote path ^ " " ^ Filename.quote path
+  else ""
+
 let whitelist_if_exists path =
   if Sys.file_exists path then " --whitelist=" ^ Filename.quote path else ""
 
@@ -61,6 +66,14 @@ let extra_binds t =
 
 let extra_whitelists t =
   String.concat "" (List.map whitelist_if_exists t.extra_allowed_paths)
+
+let user_bin_ro_binds () =
+  String.concat ""
+    (List.map ro_bind_if_exists (Runtime_config.common_user_bin_dirs ()))
+
+let user_bin_whitelists () =
+  String.concat ""
+    (List.map whitelist_if_exists (Runtime_config.common_user_bin_dirs ()))
 
 let wrap_command t cmd =
   if not t.isolate_filesystem then cmd
@@ -72,11 +85,13 @@ let wrap_command t cmd =
           "firejail --private=%s%s --net=none --quiet --noprofile -- /bin/sh \
            -c %s"
           (Filename.quote t.workspace)
-          (extra_whitelists t) (Filename.quote cmd)
+          (extra_whitelists t ^ user_bin_whitelists ())
+          (Filename.quote cmd)
     | Bubblewrap ->
         let extra_binds =
           bind_if_exists "/lib" ^ bind_if_exists "/lib64"
           ^ bind_if_exists "/bin" ^ bind_if_exists "/etc" ^ extra_binds t
+          ^ user_bin_ro_binds ()
         in
         let dev_binds =
           " --dev /dev" ^ bind_if_exists "/dev/null"

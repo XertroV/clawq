@@ -2504,6 +2504,36 @@ let test_shell_exec_injects_session_id_env () =
         (contains result "telegram:42:testuser");
       Alcotest.(check bool) "exit code 0" true (contains result "exit_code: 0"))
 
+let test_shell_exec_workspace_only_path_includes_user_bins () =
+  Test_helpers.with_temp_home (fun home ->
+      with_temp_workspace (fun workspace ->
+          let bin_dir = Filename.concat home ".local/bin" in
+          Unix.mkdir (Filename.concat home ".local") 0o755;
+          Unix.mkdir bin_dir 0o755;
+          let helper = Filename.concat bin_dir "clawq-test-helper" in
+          let oc = open_out helper in
+          output_string oc "#!/bin/sh\necho helper\n";
+          close_out oc;
+          Unix.chmod helper 0o755;
+          let sandbox =
+            Sandbox.create ~backend:Sandbox.None ~workspace
+              ~extra_allowed_paths:[] ~workspace_only:true ()
+          in
+          let tool =
+            Tools_builtin.shell_exec ~workspace ~workspace_only:true
+              ~allowed_commands:[ "which" ] ~extra_allowed_paths:[] ~sandbox
+          in
+          let result =
+            Lwt_main.run
+              (tool.Tool.invoke
+                 (`Assoc [ ("command", `String "which clawq-test-helper") ]))
+          in
+          Alcotest.(check bool)
+            "helper is found via augmented PATH" true (contains result helper);
+          Alcotest.(check bool)
+            "exit code 0" true
+            (contains result "exit_code: 0")))
+
 let test_watch_ci_after_push_injects_failure_follow_up () =
   let mgr = Session.create ~config:Runtime_config.default () in
   let injected = ref [] in
@@ -3721,6 +3751,8 @@ let suite =
       test_shell_exec_cd_prefix_optimization;
     Alcotest.test_case "shell_exec injects CLAWQ_SESSION_ID env" `Quick
       test_shell_exec_injects_session_id_env;
+    Alcotest.test_case "shell_exec user bin PATH" `Quick
+      test_shell_exec_workspace_only_path_includes_user_bins;
     Alcotest.test_case "git_operations relative repo_path rejected" `Quick
       test_git_operations_repo_path_relative_rejected;
     Alcotest.test_case "git_operations absolute repo_path used as cwd" `Quick

@@ -1114,15 +1114,8 @@ let shell_exec_with_hooks ~workspace ~workspace_only ~allowed_commands
                 | Ok cwd -> (
                     let base_env =
                       if workspace_only then
-                        [|
-                          ("HOME="
-                          ^ try Sys.getenv "HOME" with Not_found -> "/tmp");
-                          ("PATH="
-                          ^
-                            try Sys.getenv "PATH"
-                            with Not_found -> "/usr/bin:/bin");
-                        |]
-                      else Unix.environment ()
+                        Runtime_config.workspace_only_env ()
+                      else Runtime_config.augment_env_path (Unix.environment ())
                     in
                     let env =
                       match context with

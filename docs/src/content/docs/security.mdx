@@ -86,6 +86,8 @@ bwrap --ro-bind /usr /usr --unshare-all --bind <workspace> <workspace>
 ```
 System paths `/lib`, `/lib64`, `/bin`, `/etc`, `/dev/null`, `/dev/urandom` are bound read-only. The workspace is bound read-write. Extra allowed paths from config are added as additional bind mounts.
 
+Common user binary directories (`~/.local/share/pnpm`, `~/.local/share/pnpm/bin`, `~/.cargo/bin`, `~/.bun/bin`, `~/.local/bin`, `~/.npm-global/bin`, and any `~/.opam/*/bin`) are automatically exposed when they exist. Bubblewrap binds these directories read-only, Firejail whitelists them, and the shell `PATH` is augmented to include them.
+
 **None** (`"none"`): No sandbox. Used as fallback when neither Firejail nor Bubblewrap is installed.
 
 Auto-detection order: Firejail → Bubblewrap → None. Set `sandbox_backend` explicitly to override.

@@ -38,12 +38,8 @@ let execute_injection ?(workspace_only = false)
          (Tools_builtin.extract_command cmd))
   else
     let base_env =
-      if workspace_only then
-        [|
-          ("HOME=" ^ try Sys.getenv "HOME" with Not_found -> "/tmp");
-          ("PATH=" ^ try Sys.getenv "PATH" with Not_found -> "/usr/bin:/bin");
-        |]
-      else Unix.environment ()
+      if workspace_only then Runtime_config.workspace_only_env ()
+      else Runtime_config.augment_env_path (Unix.environment ())
     in
     let env =
       match skill_dir with

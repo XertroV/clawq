@@ -67,6 +67,24 @@ let test_execute_injection_workspace_blocked () =
        true
      with Not_found -> false)
 
+let test_execute_injection_workspace_path_includes_user_bins () =
+  Test_helpers.with_temp_home (fun home ->
+      let pnpm_home = Filename.concat home ".local/share/pnpm" in
+      Unix.mkdir (Filename.concat home ".local") 0o755;
+      Unix.mkdir (Filename.concat home ".local/share") 0o755;
+      Unix.mkdir pnpm_home 0o755;
+      let helper = Filename.concat pnpm_home "skill-helper" in
+      let oc = open_out helper in
+      output_string oc "#!/bin/sh\necho pnpm-home-helper\n";
+      close_out oc;
+      Unix.chmod helper 0o755;
+      let result =
+        Lwt_main.run
+          (Skills_cmd_inject.execute_injection ~workspace_only:true
+             ~allowed_commands:[ "skill-helper" ] "skill-helper")
+      in
+      Alcotest.(check string) "helper found via PATH" "pnpm-home-helper" result)
+
 let test_expand_injections_full () =
   let body = "start !`echo one` middle !`echo two` end" in
   let result = Lwt_main.run (Skills_cmd_inject.expand_injections body) in
@@ -94,6 +112,8 @@ let suite =
       test_execute_injection_skill_dir_path;
     Alcotest.test_case "execute injection workspace blocked" `Quick
       test_execute_injection_workspace_blocked;
+    Alcotest.test_case "execute injection user bin PATH" `Quick
+      test_execute_injection_workspace_path_includes_user_bins;
     Alcotest.test_case "expand injections full" `Quick
       test_expand_injections_full;
     Alcotest.test_case "expand injections passthrough" `Quick

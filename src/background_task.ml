@@ -1641,7 +1641,9 @@ let spawn_task ?(on_task_started = fun _ -> Lwt.return_unit)
                 | Some sid ->
                     set_runner_session_id ~db ~id:task.id ~runner_session_id:sid
                 | None -> ());
-                let base_env = Unix.environment () in
+                let base_env =
+                  Runtime_config.augment_env_path (Unix.environment ())
+                in
                 let env =
                   match task.session_key with
                   | Some sk ->

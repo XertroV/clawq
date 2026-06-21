@@ -583,7 +583,7 @@ Agent dispatch surfaces:
 - The command is validated before execution: unsafe shell syntax is rejected, the first token must be an allowed command, and absolute/`~` path arguments must stay under the workspace or `security.extra_allowed_paths`.
 - Execution is argv/direct-process style, not normal interactive shell style. In practice this means shell builtins such as `cd` and `command` are not available as standalone commands.
 - `&&`, `||`, pipes, redirects, subshells, glob expansion by the shell, and similar compound shell syntax are rejected in `workspace_only` mode.
-- `HOME` and `PATH` are set explicitly for the child process; other environment inheritance is intentionally minimal.
+- `HOME` and `PATH` are set explicitly for the child process; existing common user binary directories (`~/.local/share/pnpm`, `~/.local/share/pnpm/bin`, `~/.cargo/bin`, `~/.bun/bin`, `~/.local/bin`, `~/.npm-global/bin`, and `~/.opam/*/bin`) are appended to `PATH`; other environment inheritance is intentionally minimal.
 - Timeout defaults to 30 seconds. The LLM can pass a `timeout` parameter (in seconds, max 600) for longer-running commands.
 
 ### `shell_exec` when `security.workspace_only = false`
@@ -599,6 +599,7 @@ Agent dispatch surfaces:
 - `security.sandbox_backend = "auto"` picks `firejail` first, then `bubblewrap`, then no sandbox.
 - In `workspace_only = true`, Firejail wrapper: `firejail --private=<workspace> --whitelist=<extra_allowed_path>... --net=none --quiet --noprofile -- /bin/sh -c <cmd>`.
 - In `workspace_only = true`, Bubblewrap wrapper: `bwrap --ro-bind /usr /usr --unshare-all --bind <workspace> <workspace> ... --bind <extra_allowed_path> <extra_allowed_path> ... --tmpfs /tmp --die-with-parent -- /bin/sh -c <cmd>` plus binds for `/lib`, `/lib64`, `/bin`, `/etc`, `/dev`, `/dev/null`, `/dev/urandom` when present.
+- Existing common user binary directories (`~/.local/share/pnpm`, `~/.local/share/pnpm/bin`, `~/.cargo/bin`, `~/.bun/bin`, `~/.local/bin`, `~/.npm-global/bin`, and `~/.opam/*/bin`) are exposed automatically: Firejail whitelists them and Bubblewrap binds them read-only.
 - File tools always use direct OCaml filesystem access with path checks.
 - In `workspace_only = true`, shell and file tools are intended to agree on the allowed roots: workspace plus `security.extra_allowed_paths`.
 - In `workspace_only = false`, shell and file tools both use the host filesystem view.

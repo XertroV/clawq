@@ -1108,12 +1108,87 @@ let default_provider_deprecation_warning (cfg : t) =
             config.json."
            p)
 
+let home_dir () = try Sys.getenv "HOME" with Not_found -> "/tmp"
+
 let expand_home path =
   if String.length path >= 2 && String.sub path 0 2 = "~/" then
-    let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
-    Filename.concat home (String.sub path 2 (String.length path - 2))
-  else if path = "~" then try Sys.getenv "HOME" with Not_found -> "/tmp"
+    Filename.concat (home_dir ()) (String.sub path 2 (String.length path - 2))
+  else if path = "~" then home_dir ()
   else path
+
+let is_existing_dir path =
+  try Sys.file_exists path && Sys.is_directory path with _ -> false
+
+let opam_bin_dirs home =
+  let opam_dir = Filename.concat home ".opam" in
+  if not (is_existing_dir opam_dir) then []
+  else
+    try
+      Sys.readdir opam_dir |> Array.to_list
+      |> List.filter_map (fun switch ->
+          let bin_dir =
+            Filename.concat (Filename.concat opam_dir switch) "bin"
+          in
+          if is_existing_dir bin_dir then Some bin_dir else None)
+    with _ -> []
+
+let common_user_bin_dirs () =
+  let home = home_dir () in
+  [
+    ".local/share/pnpm";
+    ".local/share/pnpm/bin";
+    ".cargo/bin";
+    ".bun/bin";
+    ".local/bin";
+    ".npm-global/bin";
+  ]
+  |> List.map (Filename.concat home)
+  |> fun dirs ->
+  dirs @ opam_bin_dirs home
+  |> List.filter is_existing_dir
+  |> List.sort_uniq String.compare
+
+let augment_path_with_user_bins path =
+  let existing =
+    String.split_on_char ':' path |> List.filter (fun entry -> entry <> "")
+  in
+  let additions =
+    common_user_bin_dirs ()
+    |> List.filter (fun dir -> not (List.mem dir existing))
+  in
+  String.concat ":" (existing @ additions)
+
+let workspace_only_env () =
+  [|
+    "HOME=" ^ home_dir ();
+    "PATH="
+    ^ augment_path_with_user_bins
+        (try Sys.getenv "PATH" with Not_found -> "/usr/bin:/bin");
+  |]
+
+let augment_env_path env =
+  let prefix = "PATH=" in
+  let plen = String.length prefix in
+  let replaced = ref false in
+  let updated =
+    Array.map
+      (fun entry ->
+        if String.length entry >= plen && String.sub entry 0 plen = prefix then begin
+          replaced := true;
+          let path = String.sub entry plen (String.length entry - plen) in
+          prefix ^ augment_path_with_user_bins path
+        end
+        else entry)
+      env
+  in
+  if !replaced then updated
+  else
+    Array.append updated
+      [|
+        prefix
+        ^ augment_path_with_user_bins
+            (try Sys.getenv "PATH" with Not_found -> "/usr/bin:/bin");
+      |]
 
 let effective_workspace (cfg : t) =
   let path = expand_home cfg.workspace in
