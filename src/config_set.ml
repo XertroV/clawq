@@ -207,6 +207,8 @@ let channels_schema =
             ("allow_teams", L);
             ("allow_users", L);
             ("default_model", L);
+            ("mention_mode", L);
+            ("file_consent_cards", L);
           ] );
     ]
 
@@ -321,12 +323,21 @@ let config_schema =
             ("landlock_enabled", L);
             ("landlock_extra_read_paths", L);
             ("extra_allowed_paths", L);
+            ("allowed_cwd_patterns", L);
             ("sandbox_backend", L);
             ("attachment_downloads_enabled", L);
             ("allow_anthropic_oauth_inference", L);
           ] );
       ("stt", O [ ("provider", L); ("model", L); ("language", L) ]);
-      ("mcp", O [ ("enabled", L); ("exposed_tools", L) ]);
+      ( "mcp",
+        O
+          [
+            ("enabled", L);
+            ("exposed_tools", L);
+            ("runner_relay_enabled", L);
+            ("runner_token_ttl_hours", L);
+            ("runner_question_timeout_s", L);
+          ] );
       ( "resilience",
         O
           [
@@ -353,6 +364,7 @@ let config_schema =
             ("path_prefix", L);
             ("totp_secret", L);
             ("token_ttl_hours", L);
+            ("allowed_origins", L);
           ] );
       ("telemetry", O [ ("enabled", L); ("endpoint", L); ("service_name", L) ]);
       ("agent_bindings", L);

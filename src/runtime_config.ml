@@ -1315,6 +1315,16 @@ let to_json (cfg : t) : Yojson.Safe.t =
       | Some t -> fields @ [ ("http_timeout_s", `Float t) ]
       | None -> fields
     in
+    let fields =
+      match p.prompt_cache_retention with
+      | Some s -> fields @ [ ("prompt_cache_retention", `String s) ]
+      | None -> fields
+    in
+    let fields =
+      match p.max_output_tokens with
+      | Some n -> fields @ [ ("max_output_tokens", `Int n) ]
+      | None -> fields
+    in
     `Assoc fields
   in
   let ad = cfg.agent_defaults in
@@ -1456,11 +1466,14 @@ let to_json (cfg : t) : Yojson.Safe.t =
               ("include_runtime_section", `Bool prompt.include_runtime_section);
               ("include_datetime_section", `Bool prompt.include_datetime_section);
               ("include_autonomy_section", `Bool prompt.include_autonomy_section);
+              ("include_project_docs", `Bool prompt.include_project_docs);
               ( "workspace_files",
                 `List (List.map (fun f -> `String f) prompt.workspace_files) );
               ("max_workspace_file_chars", `Int prompt.max_workspace_file_chars);
               ( "max_workspace_total_chars",
                 `Int prompt.max_workspace_total_chars );
+              ("max_project_doc_chars", `Int prompt.max_project_doc_chars);
+              ("project_doc_warn_chars", `Int prompt.project_doc_warn_chars);
             ] );
         ( "channels",
           `Assoc
@@ -1912,6 +1925,18 @@ let to_json (cfg : t) : Yojson.Safe.t =
     | Some tools ->
         mcp_fields
         @ [ ("exposed_tools", `List (List.map (fun s -> `String s) tools)) ]
+  in
+  let mcp_fields =
+    mcp_fields
+    @ [ ("runner_relay_enabled", `Bool cfg.mcp.runner_relay_enabled) ]
+  in
+  let mcp_fields =
+    mcp_fields
+    @ [ ("runner_token_ttl_hours", `Int cfg.mcp.runner_token_ttl_hours) ]
+  in
+  let mcp_fields =
+    mcp_fields
+    @ [ ("runner_question_timeout_s", `Int cfg.mcp.runner_question_timeout_s) ]
   in
   let fields = fields @ [ ("mcp", `Assoc mcp_fields) ] in
   let res_fields =
