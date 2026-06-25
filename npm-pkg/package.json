@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "description": "Formally verified personal AI assistant runtime",
   "author": "Max Kaye <m@xk.io>",
-  "license": "MIT",
+  "license": "(Unlicense OR CC0-1.0)",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/XertroV/clawq.git"
@@ -29,7 +29,4 @@
     "LICENSE"
   ],
   "debug": "./bin/clawq.debug",
-  "scripts": {
-    "postinstall": "node scripts/install.js"
-  }
 }
