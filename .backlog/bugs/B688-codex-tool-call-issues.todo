@@ -1,0 +1,63 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B688
+priority: high
+status: pending
+tags: []
+title: codex tool call issues
+---
+codex issues: [03:01:22.446] WARN  Codex: dropping orphaned function_call_output call_id=call_LatFEidys5ODykxTw2ZmmkKM (no call)
+[03:01:22.446] WARN  Codex: dropping orphaned function_call_output call_id=call_Ez8sRrE5BaJO33u5Q91FyLnk (no call)
+[03:01:22.446] WARN  Codex: dropping orphaned function_call_output call_id=call_6s7eYhc50JjYjAIBZwgTe3Ub (no call)
+[03:01:22.446] WARN  Codex: dropping orphaned function_call_output call_id=call_7RCyDE8y92mADSDTHhU4k3z2 (no call)
+[03:01:22.446] WARN  Codex: dropping orphaned function_call_output call_id=call_x70fdZj21mnLzC0fDdUwaqOj (no call)
+[03:01:22.446] WARN  Codex: dropping orphaned function_call_output call_id=call_LNe1JrS6oun0rKCCjBKIwPTp (no call)
+[03:01:22.446] WARN  Codex: dropping orphaned function_call_output call_id=call_1DHrR9GT6VVWM0QB7TplibYm (no call)
+[03:01:22.446] WARN  Codex: dropping orphaned function_call_output call_id=call_bd0Nr0DtpUE9J3JiMR3yPat9 (no call)
+[03:01:22.446] WARN  Codex: dropping orphaned function_call_output call_id=call_jKqIaSZWJGbkoCHu06vaWHjD (no call)
+[03:01:29.246] INFO  [cache] cached=18432/23826 (77%) prompt tokens
+[03:01:29.246] INFO  [teams:personal:a:1JPVFngEx3FRRVWXUe5fb97HWjfsCdtDImgKuD3u_N6IpgOD0euB5bnQHI9RsDQuK3qOG_5Jyhq4wWGr0IczaxEXPN5vIGppdngtwZucpyhDNrW1_YJCrXnHrksQ5fCuT] Cost: model=gpt-5.5 prompt=23826 completion=128 cost=$0.031062 session_total=$6.6755
+[03:01:29.259] INFO  [teams:personal:a:1JPVFngEx3FRRVWXUe5fb97HWjfsCdtDImgKuD3u_N6IpgOD0euB5bnQHI9RsDQuK3qOG_5Jyhq4wWGr0IczaxEXPN5vIGppdngtwZucpyhDNrW1_YJCrXnHrksQ5fCuT] Tool call: shell_exec (id=call_RRqEcmNVMEvqF4Dhq54NDwXV) args={"command":"bl bug --help && printf '\n--- existing relevant bugs ---\n' && bl list --json | head -c 20000","cwd":"/home/xertrov/src/clawq","timeout":30,"head":200,"tail":200}
+[03:01:29.259] INFO  Teams: POST https://smba.trafficmanager.net/au/2fdee6e6-38a0-4625-aaa1-1a84314b6b0e//v3/conversations/a:1JPVFngEx3FRRVWXUe5fb97HWjfsCdtDImgKuD3u_N6IpgOD0euB5bnQHI9RsDQuK3qOG_5Jyhq4wWGr0IczaxEXPN5vIGppdngtwZucpyhDNrW1_YJCrXnHrksQ5fCuT/activities/1782405231867 body_len=231
+[03:01:29.314] INFO  [teams:personal:a:1JPVFngEx3FRRVWXUe5fb97HWjfsCdtDImgKuD3u_N6IpgOD0euB5bnQHI9RsDQuK3qOG_5Jyhq4wWGr0IczaxEXPN5vIGppdngtwZucpyhDNrW1_YJCrXnHrksQ5fCuT] Tool shell_exec completed in 0.055s
+[03:01:29.314] INFO  [teams:personal:a:1JPVFngEx3FRRVWXUe5fb97HWjfsCdtDImgKuD3u_N6IpgOD0euB5bnQHI9RsDQuK3qOG_5Jyhq4wWGr0IczaxEXPN5vIGppdngtwZucpyhDNrW1_YJCrXnHrksQ5fCuT] Tool result: shell_exec -> exit_code: 0
+stdout:
+
+Command Help: backlog bug
+Create a bug item for tracking and resolution.
+
+Usage: backlog bug [--title <TITLE> | BUG_TEXT] [options]
+
+Options
+  --title, -T
+  --estimate, -e
+  --co...
+[03:01:30.050] INFO  Teams: POST ok (HTTP 201) conv=a:1JPVFngEx3FRRVWXUe5fb97HWjfsCdtDImgKuD3u_N6IpgOD0euB5bnQHI9RsDQuK3qOG_5Jyhq4wWGr0IczaxEXPN5vIGppdngtwZucpyhDNrW1_YJCrXnHrksQ5fCuT resp_len=22
+[03:01:32.001] INFO  [teams:personal:a:1JPVFngEx3FRRVWXUe5fb97HWjfsCdtDImgKuD3u_N6IpgOD0euB5bnQHI9RsDQuK3qOG_5Jyhq4wWGr0IczaxEXPN5vIGppdngtwZucpyhDNrW1_YJCrXnHrksQ5fCuT] -> LLM provider=openai-codex model=gpt-5.5 msgs=202 ~85k tok
+WARNING: "default_provider" ("zai_coding") is deprecated. The provider is already embedded in "agent_defaults.primary_model" using the "provider:model" format. Remove "default_provider" from your config.json.
+WARNING: "default_provider" ("zai_coding") is deprecated. The provider is already embedded in "agent_defaults.primary_model" using the "provider:model" format. Remove "default_provider" from your config.json.
+[03:01:32.002] WARN  Codex: dropping orphaned function_call_output call_id=call_2IbqM7HJuTGx8ljs5ZXNO2JY (no call)
+[03:01:32.002] WARN  Codex: dropping orphaned function_call_output call_id=call_yhGdLAElusIVApzB5DEJyhe1 (no call)
+[03:01:32.002] WARN  Codex: dropping orphaned function_call_output call_id=call_qcEefHjnhsugsHossGVmqzwZ (no call)
+[03:01:32.002] WARN  Codex: dropping orphaned function_call_output call_id=call_W6yguWtOr8gDBCCsyBJAVoYY (no call)
+[03:01:32.002] WARN  Codex: dropping orphaned function_call_output call_id=call_ydlfPCp6h5WfyM9sWt4iORYf (no call)
+[03:01:32.002] WARN  Codex: dropping orphaned function_call_output call_id=call_dBJ7P48KNSnSdPSrAS2O1ewQ (no call)
+[03:01:32.002] WARN  Codex: dropping orphaned function_call_output call_id=call_UExtJWH3sQesukhfFLq69Ba8 (no call)
+[03:01:32.002] WARN  Codex: dropping orphaned function_call_output call_id=call_sb659ROtrvHJl2DKuu0OmD2q (no call)
+[03:01:32.002] WARN  Codex: dropping orphaned function_call_output call_id=call_maIy5sCl3DFVNCSkEtUWJ1yd (no call)
+[03:01:32.002] WARN  Codex: dropping orphaned function_call_output call_id=call_Nck0FAuJxD13EAcbxmz8MnRh (no call)
+[03:01:32.002] WARN  Codex: dropping orphaned function_call_output call_id=call_OMUi2SBb9N53KkzthxbWvQV5 (no call)
+[03:01:32.002] WARN  Codex: dropping orphaned function_call_output call_id=call_JTkfuo4ise3DzjDcvTki9E9N (no call)
+[03:01:32.002] WARN  Codex: dropping orphaned function_call_output call_id=call_o7rXwN9q1qmqnJtQT5wBuVnt (no call)
+[03:01:32.002] WARN  Codex: dropping orphaned function_call_output call_id=call_gs3cU1pb47mLFiFTLM871VEi (no call)
+[03:01:32.002] WARN  Codex: dropping orphaned function_call_output call_id=call_TYUijMR23o09UzkvR1CwOq6l (no call)
+[03:01:32.002] WARN  Codex: dropping orphaned function_call_output call_id=call_hdmSptQCjKps7TTrAzIjgHaM (no call)
+[03:01:32.002] WARN  Codex: dropping orphaned function_call_output call_id=call_TtI8YxVrWBnWOFri9xMMGncN (no call)
+[03:01:32.002] WARN  Codex: dropping orphaned function_call_output call_id=call_ykqEm59JbEc1EgczXAci5hjP (no call)
+[03:01:32.002] WARN  Codex: dropping orphaned function_call_output call_id=call_PJvvavKYAGXVr3JD4C4ZMJcS (no call)
+[03:01:32.002] WARN  Codex: dropping orphaned function_call_output call_id=call_gR1JdFHRAds19LPbgKy2J8YU (no call)
+[03:01:32.002] WARN  Codex: dropping orphaned function_call_output call_id=call_TEjYIdUseTUSadchcaAsf4xF (no call)
+[03:01:32.002] WARN  Codex: dropping orphaned function_call_output call_id=call_IGUGlxY8gmJvi2WPj7tsgifq (no call)
+[03:01:32.002] WARN  Codex: dropping orphaned function_call_output call_id=call_yIXaNY1dbcbWmr6vfxm4sUJ2 (no call)
