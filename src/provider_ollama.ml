@@ -148,6 +148,13 @@ let complete ~(config : Runtime_config.t)
       let resp_model =
         try json |> member "model" |> to_string with _ -> model
       in
+      let usage =
+        try
+          let pt = json |> member "prompt_eval_count" |> to_int in
+          let ct = json |> member "eval_count" |> to_int in
+          Some (pt, ct, 0)
+        with _ -> None
+      in
       let tool_calls = parse_tool_calls_from_message msg in
       if tool_calls <> [] then
         Lwt.return
@@ -155,7 +162,7 @@ let complete ~(config : Runtime_config.t)
              {
                calls = tool_calls;
                model = resp_model;
-               usage = None;
+               usage;
                provider_response_items_json = None;
                thinking = None;
              })
@@ -180,7 +187,7 @@ let complete ~(config : Runtime_config.t)
                {
                  content;
                  model = resp_model;
-                 usage = None;
+                 usage;
                  provider_response_items_json = None;
                  thinking;
                })
@@ -225,6 +232,7 @@ let complete_streaming ~(config : Runtime_config.t)
       let thinking_acc = Buffer.create 256 in
       let resp_model = ref model in
       let tool_calls_acc : Provider.tool_call list ref = ref [] in
+      let usage_acc = ref None in
       let tagged_state = { Provider.in_thinking = false; pending = "" } in
       let on_chunk chunk =
         (match chunk with
@@ -244,10 +252,15 @@ let complete_streaming ~(config : Runtime_config.t)
               try json |> member "done" |> to_bool with _ -> false
             in
             if done_flag then begin
-              (* Final message - check for tool calls *)
+              (* Final message - check for tool calls and usage *)
               let msg = try json |> member "message" with _ -> `Null in
               let tc = parse_tool_calls_from_message msg in
               if tc <> [] then tool_calls_acc := tc;
+              (try
+                 let pt = json |> member "prompt_eval_count" |> to_int in
+                 let ct = json |> member "eval_count" |> to_int in
+                 usage_acc := Some (pt, ct, 0)
+               with _ -> ());
               let* () =
                 match Provider.thinking_style_of_provider provider with
                 | Provider.TaggedThinking ->
@@ -296,5 +309,5 @@ let complete_streaming ~(config : Runtime_config.t)
       let final_model = !resp_model in
       Lwt.return
         (Provider.make_stream_result ~tool_calls:!tool_calls_acc ~content
-           ~thinking ~model:final_model ~usage:None ()))
+           ~thinking ~model:final_model ~usage:!usage_acc ()))
     ()

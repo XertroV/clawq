@@ -103,7 +103,7 @@ let messages_to_contents = Provider_gemini.messages_to_gemini_contents
 let extract_system_prompt = Provider.extract_system_prompt
 let tools_to_vertex_json = Provider_gemini.tools_to_gemini_json
 
-let make_request_body ~config ~messages ~tools =
+let make_request_body ~config ~provider ~messages ~tools =
   let contents = messages_to_contents messages in
   let system_prompt = extract_system_prompt messages in
   let body_fields =
@@ -114,7 +114,10 @@ let make_request_body ~config ~messages ~tools =
           [
             ( "temperature",
               `Float (max 1e-8 config.Runtime_config.default_temperature) );
-            ("maxOutputTokens", `Int 8192);
+            ( "maxOutputTokens",
+              `Int
+                (Option.value ~default:8192
+                   provider.Runtime_config.max_output_tokens) );
           ] );
     ]
   in
@@ -151,7 +154,7 @@ let complete ~(config : Runtime_config.t)
        GOOGLE_CLOUD_PROJECT env)"
   else
     let uri = vertex_endpoint ~project_id ~location ~model in
-    let body = make_request_body ~config ~messages ~tools in
+    let body = make_request_body ~config ~provider ~messages ~tools in
     let* token = get_access_token provider in
     let headers =
       if token <> "" then [ ("Authorization", "Bearer " ^ token) ] else []
@@ -183,7 +186,7 @@ let complete_streaming ~(config : Runtime_config.t)
        GOOGLE_CLOUD_PROJECT env)"
   else
     let uri = vertex_stream_endpoint ~project_id ~location ~model in
-    let body = make_request_body ~config ~messages ~tools in
+    let body = make_request_body ~config ~provider ~messages ~tools in
     let* token = get_access_token provider in
     let headers =
       if token <> "" then [ ("Authorization", "Bearer " ^ token) ] else []

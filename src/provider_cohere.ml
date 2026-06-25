@@ -190,6 +190,7 @@ let complete_streaming ~(config : Runtime_config.t)
       let content_acc = Buffer.create 1024 in
       let resp_model = ref model in
       let usage_acc = ref None in
+      let done_emitted = ref false in
       let tool_calls_acc : Provider.tool_call list ref = ref [] in
       let current_event = ref "" in
       let process_event event_type data_str =
@@ -239,6 +240,7 @@ let complete_streaming ~(config : Runtime_config.t)
                  let ct = u |> member "output_tokens" |> to_int in
                  usage_acc := Some (pt, ct, 0)
                with _ -> ());
+              done_emitted := true;
               on_chunk Provider.Done
           | _ -> Lwt.return_unit
         with _ -> Lwt.return_unit
@@ -271,6 +273,9 @@ let complete_streaming ~(config : Runtime_config.t)
       let remaining = Buffer.contents buf in
       let* () =
         if remaining <> "" then process_line remaining else Lwt.return_unit
+      in
+      let* () =
+        if !done_emitted then Lwt.return_unit else on_chunk Provider.Done
       in
       let content = Buffer.contents content_acc in
       let final_model = !resp_model in

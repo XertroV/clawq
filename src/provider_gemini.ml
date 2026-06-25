@@ -200,7 +200,7 @@ let parse_gemini_response body model =
   with exn ->
     Error ("Failed to parse Gemini response: " ^ Printexc.to_string exn)
 
-let make_request_body ~config ~messages ~tools =
+let make_request_body ~config ~provider ~messages ~tools =
   let contents = messages_to_gemini_contents messages in
   let system_prompt = extract_system_prompt messages in
   let body_fields =
@@ -211,7 +211,10 @@ let make_request_body ~config ~messages ~tools =
           [
             ( "temperature",
               `Float (max 1e-8 config.Runtime_config.default_temperature) );
-            ("maxOutputTokens", `Int 8192);
+            ( "maxOutputTokens",
+              `Int
+                (Option.value ~default:8192
+                   provider.Runtime_config.max_output_tokens) );
           ] );
     ]
   in
@@ -242,11 +245,9 @@ let complete ~(config : Runtime_config.t)
   let base_url =
     match provider.base_url with Some url -> url | None -> gemini_base
   in
-  let uri =
-    Printf.sprintf "%s/models/%s:generateContent?key=%s" base_url model api_key
-  in
-  let body = make_request_body ~config ~messages ~tools in
-  let headers = [] in
+  let uri = Printf.sprintf "%s/models/%s:generateContent" base_url model in
+  let body = make_request_body ~config ~provider ~messages ~tools in
+  let headers = [ ("x-goog-api-key", api_key) ] in
   Logs.info (fun m ->
       m "Gemini request model=%s msgs=%d" model (List.length messages));
   let timeout_s = Option.value ~default:180.0 provider.http_timeout_s in
@@ -270,11 +271,10 @@ let complete_streaming ~(config : Runtime_config.t)
     match provider.base_url with Some url -> url | None -> gemini_base
   in
   let uri =
-    Printf.sprintf "%s/models/%s:streamGenerateContent?key=%s&alt=sse" base_url
-      model api_key
+    Printf.sprintf "%s/models/%s:streamGenerateContent?alt=sse" base_url model
   in
-  let body = make_request_body ~config ~messages ~tools in
-  let headers = [] in
+  let body = make_request_body ~config ~provider ~messages ~tools in
+  let headers = [ ("x-goog-api-key", api_key) ] in
   Logs.info (fun m ->
       m "Gemini stream request model=%s msgs=%d" model (List.length messages));
   Http_client.post_stream_with ?stream_idle_timeout_s:provider.http_timeout_s

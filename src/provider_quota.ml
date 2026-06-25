@@ -562,9 +562,8 @@ let make_unknown provider_name msg =
 (* Anthropic quota via OAuth usage API.
    Token source: ~/.claude/.credentials.json -> .claudeAiOauth.accessToken
    Required header: anthropic-beta: oauth-2025-04-20 *)
-let fetch_anthropic ~credentials_file () =
+let fetch_anthropic ~provider_name ~credentials_file () =
   let open Lwt.Syntax in
-  let provider_name = "anthropic" in
   match read_file_opt credentials_file with
   | None -> make_unknown provider_name "not_configured"
   | Some contents -> (
@@ -628,9 +627,8 @@ let fetch_anthropic ~credentials_file () =
 
 (* Codex/OpenAI quota via wham usage API.
    Token source: ~/.codex/auth.json -> .tokens.access_token *)
-let fetch_codex ~credentials_file ?account_id () =
+let fetch_codex ~provider_name ~credentials_file ?account_id () =
   let open Lwt.Syntax in
-  let provider_name = "codex" in
   match read_file_opt credentials_file with
   | None -> make_unknown provider_name "not_configured"
   | Some contents -> (
@@ -1101,23 +1099,14 @@ let fetch_for_provider ~(config : Runtime_config.provider_config) ~name () =
       || string_has_substring lurl "kimi"
     in
     let is_cursor = lname = "cursor" in
-    if is_anthropic then (
-      let* pq =
-        fetch_anthropic
-          ~credentials_file:(auto_cred_path ".claude" ".credentials.json")
-          ()
-      in
-      (* Store under the actual provider name the user configured *)
-      let pq' = { pq with provider_name = name } in
-      store_result pq';
-      Lwt.return pq')
-    else if is_codex then (
-      let* pq =
-        fetch_codex ~credentials_file:(auto_cred_path ".codex" "auth.json") ()
-      in
-      let pq' = { pq with provider_name = name } in
-      store_result pq';
-      Lwt.return pq')
+    if is_anthropic then
+      fetch_anthropic ~provider_name:name
+        ~credentials_file:(auto_cred_path ".claude" ".credentials.json")
+        ()
+    else if is_codex then
+      fetch_codex ~provider_name:name
+        ~credentials_file:(auto_cred_path ".codex" "auth.json")
+        ()
     else if is_zai then fetch_zai ~api_key:config.api_key ()
     else if is_kimi then
       let api_key = config.api_key in
