@@ -688,3 +688,4 @@ bugs:
     - file: B691-when-i-use-a-skill-multiple-ti.todo
     - file: B692-task-tree-should-give-out-ids.todo
     - file: B693-improve-task-tree-msg-updates.todo
+    - file: B694-get-native-subagents-working-s.todo
