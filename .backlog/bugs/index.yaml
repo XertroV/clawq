@@ -684,3 +684,4 @@ bugs:
     - file: B687-admin-stop-message-does-not-te.todo
     - file: B688-codex-tool-call-issues.todo
     - file: B689-add-a-debug-mode-flag-to-each.todo
+    - file: B690-need-to-check-logs-around-2-52.todo
