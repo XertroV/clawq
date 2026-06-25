@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B693
+priority: high
+status: pending
+tags: []
+title: improve task tree msg updates (too much info sent to user) and minimize tool call response sizes
+---
+
+improve task tree msg updates (too much info sent to user) and minimize tool call response sizes
