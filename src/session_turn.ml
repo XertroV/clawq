@@ -197,7 +197,9 @@ let notify_skill_loads ~send injections =
       Lwt.async (fun () ->
           Lwt.catch
             (fun () -> send (Printf.sprintf "Loaded skill: %s" name))
-            (fun _ -> Lwt.return_unit)))
+            (fun exn ->
+              Logs.warn (fun m -> m "Skill load notification failed: %s" (Printexc.to_string exn));
+              Lwt.return_unit)))
     names
 
 let dedup_skill_injections = Skill_dedup.dedup_skill_injections
