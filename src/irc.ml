@@ -82,15 +82,19 @@ let connect_tcp ~host ~port =
     | a :: _ -> a
   in
   let fd = Lwt_unix.socket addr.ai_family Unix.SOCK_STREAM 0 in
+  let owned = ref false in
   Lwt.finalize
     (fun () ->
       let* () = Lwt_unix.connect fd addr.ai_addr in
       let ic = Lwt_io.of_fd ~mode:Lwt_io.Input fd in
       let oc = Lwt_io.of_fd ~mode:Lwt_io.Output fd in
+      owned := true;
       Lwt.return { ic; oc })
     (fun () ->
-      (* fd ownership transferred to ic/oc on success; close on failure *)
-      Lwt.return_unit)
+      if !owned then Lwt.return_unit
+      else
+        (* connect failed before channels claimed fd; close it *)
+        Lwt.catch (fun () -> Lwt_unix.close fd) (fun _ -> Lwt.return_unit))
 
 let connect_tls ~host ~port =
   let open Lwt.Syntax in
@@ -104,6 +108,7 @@ let connect_tls ~host ~port =
     | a :: _ -> a
   in
   let fd = Lwt_unix.socket addr.ai_family Unix.SOCK_STREAM 0 in
+  let owned = ref false in
   Lwt.finalize
     (fun () ->
       let* () = Lwt_unix.connect fd addr.ai_addr in
@@ -125,8 +130,11 @@ let connect_tls ~host ~port =
       in
       let* tls_socket = Tls_lwt.Unix.client_of_fd tls_config fd in
       let ic, oc = Tls_lwt.of_t tls_socket in
+      owned := true;
       Lwt.return { ic; oc })
-    (fun () -> Lwt.return_unit)
+    (fun () ->
+      if !owned then Lwt.return_unit
+      else Lwt.catch (fun () -> Lwt_unix.close fd) (fun _ -> Lwt.return_unit))
 
 let sasl_plain_payload ~nick ~password =
   (* \0nick\0password *)
