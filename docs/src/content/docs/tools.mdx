@@ -33,7 +33,7 @@ The following tools are registered in `src/tools_builtin.ml` and are available t
 | `compact_history` | Summarize and compact older conversation history to free context | Low |
 | `models` | List available models, get the current model, or set the session model | Low |
 | `provider_usage` | Check quota and usage information for configured LLM providers | Low |
-| `use_skill` | Invoke a named SKILL.md skill by loading its instructions as a system message | Low |
+| `use_skill` | Ensure a named SKILL.md skill is loaded in the current agent context | Low |
 | `skill_create` | Create a new SKILL.md skill saved to `~/.clawq/skills/<name>/SKILL.md` | Medium |
 | `skill_list` | List all available skills (SKILL.md and legacy JSON) | Low |
 | `change_working_dir` | Change the agent's effective working directory for subsequent tool operations. Relative paths resolve from the current effective CWD. Optionally wipe conversation history to reduce context noise after initial navigation. Restricted by `security.allowed_cwd_patterns` glob list. | Medium |

@@ -904,6 +904,31 @@ let test_slash_command_skill () =
   | Slash_commands.NotACommand -> ()
   | _ -> Alcotest.fail "expected NotACommand"
 
+let test_expand_skill_refs_skips_loaded_skill () =
+  let dir = make_temp_dir "skill_refs_loaded" in
+  let skills_dir = Filename.concat dir ".claude/skills" in
+  Sys.mkdir (Filename.concat dir ".claude") 0o755;
+  Sys.mkdir skills_dir 0o755;
+  let sd = Filename.concat skills_dir "already-loaded" in
+  Sys.mkdir sd 0o755;
+  write_file
+    (Filename.concat sd "SKILL.md")
+    "---\n\
+     name: already-loaded\n\
+     description: skip loaded\n\
+     ---\n\
+     Body that should not be expanded: !`echo SHOULD-NOT-RUN`";
+  let _cache = Skills.init_cache ~workspace_dir:dir () in
+  let _message, injections, _md_skills =
+    Lwt_main.run
+      (Skills.expand_skill_refs ~skip_loaded:[ "already-loaded" ]
+         "@already-loaded hello")
+  in
+  Alcotest.(check int)
+    "loaded skill ref is not expanded" 0 (List.length injections);
+  Skills.global_cache := None;
+  rm_rf dir
+
 let test_skill_list_tool_both_formats () =
   let base = make_temp_dir "skill_list_both" in
   let skills_dir = Filename.concat base ".claude/skills" in
@@ -1149,6 +1174,130 @@ let test_use_skill_no_context () =
   Skills.global_cache := None;
   rm_rf dir
 
+let test_use_skill_loaded_noop_no_args () =
+  let history =
+    [
+      Provider.make_message ~role:"system"
+        ~content:"[Skill: retained-skill]\nInstructions";
+    ]
+  in
+  let tool = Skills.use_skill_tool () in
+  match
+    Skill_invocation_guard.use_skill_loaded_noop ~history tool
+      (`Assoc [ ("name", `String "retained-skill") ])
+  with
+  | Some response ->
+      Alcotest.(check bool)
+        "returns no-op response" true
+        (try
+           ignore
+             (Str.search_forward
+                (Str.regexp_string "already loaded")
+                response 0);
+           true
+         with Not_found -> false)
+  | None -> Alcotest.fail "expected loaded no-op response"
+
+let test_use_skill_loaded_noop_with_args () =
+  let history =
+    [
+      Provider.make_message ~role:"system"
+        ~content:"[Skill: retained-skill]\nInstructions";
+    ]
+  in
+  let tool = Skills.use_skill_tool () in
+  match
+    Skill_invocation_guard.use_skill_loaded_noop ~history tool
+      (`Assoc
+         [
+           ("name", `String "retained-skill");
+           ("arguments", `String "load this variant");
+         ])
+  with
+  | None -> ()
+  | Some _ -> Alcotest.fail "argument-bearing skill invocation should expand"
+
+let test_use_skill_same_batch_duplicate_runs_injection_once () =
+  let dir = make_temp_dir "skill_batch_dedup" in
+  let skills_dir = Filename.concat dir ".claude/skills" in
+  Sys.mkdir (Filename.concat dir ".claude") 0o755;
+  Sys.mkdir skills_dir 0o755;
+  let sd = Filename.concat skills_dir "batch-skill" in
+  Sys.mkdir sd 0o755;
+  let counter_path = Filename.concat dir "counter.txt" in
+  write_file
+    (Filename.concat sd "SKILL.md")
+    (Printf.sprintf
+       "---\n\
+        name: batch-skill\n\
+        description: batch duplicate test\n\
+        ---\n\
+        Result: !`printf x >> %s; echo expanded`"
+       (Filename.quote counter_path));
+  let _cache = Skills.init_cache ~workspace_dir:dir () in
+  let registry = Tool_registry.create () in
+  Tool_registry.register registry (Skills.use_skill_tool ());
+  let agent =
+    Agent.create ~config:Runtime_config.default ~tool_registry:registry ()
+  in
+  let args =
+    Yojson.Safe.to_string (`Assoc [ ("name", `String "batch-skill") ])
+  in
+  let calls =
+    [
+      { Provider.id = "call_1"; function_name = "use_skill"; arguments = args };
+      { Provider.id = "call_2"; function_name = "use_skill"; arguments = args };
+    ]
+  in
+  Lwt_main.run
+    (Agent.execute_tool_calls agent ~db:None ~audit_enabled:false
+       ~session_key:None calls);
+  let counter_len =
+    if Sys.file_exists counter_path then begin
+      let ic = open_in_bin counter_path in
+      let len = in_channel_length ic in
+      close_in ic;
+      len
+    end
+    else 0
+  in
+  let injected_count =
+    List.fold_left
+      (fun count (msg : Provider.message) ->
+        if
+          msg.role = "system"
+          &&
+          match Skill_dedup.extract_skill_name_from_injection msg.content with
+          | Some name -> name = "batch-skill"
+          | None -> false
+        then count + 1
+        else count)
+      0 agent.Agent.history
+  in
+  Alcotest.(check int) "command injection ran once" 1 counter_len;
+  Alcotest.(check int) "skill injected once in history" 1 injected_count;
+  Skills.global_cache := None;
+  rm_rf dir
+
+let test_session_skill_loaded_in_context_uses_persisted_history () =
+  let db = Memory.init ~db_path:":memory:" () in
+  let key = "web:cold-restored" in
+  Memory.store_message ~db ~session_key:key
+    (Provider.make_message ~role:"system"
+       ~content:
+         "[Skill: retained-skill]\nInstructions with !`echo SHOULD-NOT-RUN`");
+  let mgr = Session.create ~config:Runtime_config.default ~db () in
+  Alcotest.(check int) "session starts cold" 0 (Session.session_count mgr);
+  Alcotest.(check bool)
+    "persisted retained skill is visible to slash precheck" true
+    (Session.skill_loaded_in_context mgr ~key "retained-skill");
+  Alcotest.(check bool)
+    "missing skill still expands normally" false
+    (Session.skill_loaded_in_context mgr ~key "other-skill");
+  Alcotest.(check int)
+    "precheck does not hydrate session" 0
+    (Session.session_count mgr)
+
 let test_dedup_no_args_skill () =
   let history =
     [
@@ -1159,14 +1308,20 @@ let test_dedup_no_args_skill () =
   in
   let injections = [ "[Skill: my-skill]\nDo something" ] in
   let result = Skill_dedup.dedup_skill_injections ~history injections in
-  Alcotest.(check int) "one result" 1 (List.length result);
-  let r = List.hd result in
-  Alcotest.(check bool)
-    "deduped to already loaded" true
-    (try
-       ignore (Str.search_forward (Str.regexp_string "already loaded") r 0);
-       true
-     with Not_found -> false)
+  Alcotest.(check int) "duplicate is a no-op" 0 (List.length result)
+
+let test_dedup_autoloaded_compaction_skill () =
+  let history =
+    [
+      Provider.make_message ~role:"system"
+        ~content:"[Skill: my-skill (autoloaded after compaction)]\nDo something";
+      Provider.make_message ~role:"user" ~content:"hello again";
+    ]
+  in
+  let injections = [ "[Skill: my-skill]\nDo something" ] in
+  let result = Skill_dedup.dedup_skill_injections ~history injections in
+  Alcotest.(check int)
+    "post-compaction autoload counts as loaded" 0 (List.length result)
 
 let test_dedup_with_args_not_deduped () =
   let history =
@@ -1272,6 +1427,25 @@ let test_compaction_no_reload_if_kept () =
   in
   let result = Agent.reload_skills_after_compaction ~to_compact ~to_keep in
   Alcotest.(check int) "no reload (already kept)" 0 (List.length result);
+  Agent.find_skill_for_reload_fn := fun _ -> None
+
+let test_compaction_no_reload_if_autoloaded_kept () =
+  (Agent.find_skill_for_reload_fn := fun _ -> Some ("desc", "body"));
+  let to_compact =
+    [
+      Provider.make_message ~role:"system"
+        ~content:"[Skill: kept-skill]\nInstructions";
+    ]
+  in
+  let to_keep =
+    [
+      Provider.make_message ~role:"system"
+        ~content:"[Skill: kept-skill (autoloaded after compaction)]\nBody";
+    ]
+  in
+  let result = Agent.reload_skills_after_compaction ~to_compact ~to_keep in
+  Alcotest.(check int)
+    "no reload (autoloaded skill already kept)" 0 (List.length result);
   Agent.find_skill_for_reload_fn := fun _ -> None
 
 let has_substring ~sub s =
@@ -1490,6 +1664,8 @@ let suite =
       test_discover_flat_md_skills;
     Alcotest.test_case "extract skill refs" `Quick test_extract_skill_refs;
     Alcotest.test_case "slash command skill" `Quick test_slash_command_skill;
+    Alcotest.test_case "expand skill refs skips loaded skill" `Quick
+      test_expand_skill_refs_skips_loaded_skill;
     Alcotest.test_case "skill list tool both formats" `Quick
       test_skill_list_tool_both_formats;
     Alcotest.test_case "skill list shows deprecated" `Quick
@@ -1503,7 +1679,17 @@ let suite =
     Alcotest.test_case "expand slash skill not found" `Quick
       test_expand_slash_skill_not_found;
     Alcotest.test_case "use skill no context" `Quick test_use_skill_no_context;
+    Alcotest.test_case "use skill loaded no-op no args" `Quick
+      test_use_skill_loaded_noop_no_args;
+    Alcotest.test_case "use skill loaded no-op with args" `Quick
+      test_use_skill_loaded_noop_with_args;
+    Alcotest.test_case "same-batch use_skill duplicate is reserved" `Quick
+      test_use_skill_same_batch_duplicate_runs_injection_once;
+    Alcotest.test_case "slash precheck sees persisted loaded skill" `Quick
+      test_session_skill_loaded_in_context_uses_persisted_history;
     Alcotest.test_case "dedup no-args skill" `Quick test_dedup_no_args_skill;
+    Alcotest.test_case "dedup autoloaded compaction skill" `Quick
+      test_dedup_autoloaded_compaction_skill;
     Alcotest.test_case "dedup with-args not deduped" `Quick
       test_dedup_with_args_not_deduped;
     Alcotest.test_case "dedup new skill not deduped" `Quick
@@ -1512,6 +1698,8 @@ let suite =
       test_compaction_skill_reload;
     Alcotest.test_case "compaction no reload if kept" `Quick
       test_compaction_no_reload_if_kept;
+    Alcotest.test_case "compaction no reload if autoloaded kept" `Quick
+      test_compaction_no_reload_if_autoloaded_kept;
     Alcotest.test_case "compaction reload at cap" `Quick
       test_compaction_reload_at_cap;
     Alcotest.test_case "compaction reload overflow" `Quick

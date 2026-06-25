@@ -576,6 +576,7 @@ let execute_tool_calls_stream agent ~db ~audit_enabled ~session_key
           | None -> false)
       | None -> false
   in
+  let reserved_no_arg_skills = Hashtbl.create 8 in
   (* B607: emit ToolStart for every call up-front so the UI sees "running N"
      immediately. Audit log entries also fire up-front to match. *)
   List.iter
@@ -677,50 +678,59 @@ let execute_tool_calls_stream agent ~db ~audit_enabled ~session_key
                             with
                             | Error msg -> Lwt.return msg
                             | Ok () -> (
-                                let context =
-                                  {
-                                    Tool.session_key;
-                                    send_progress =
-                                      Some
-                                        (fun text ->
-                                          streamed_output := true;
-                                          on_chunk
-                                            (Provider.ToolOutputDelta
-                                               { id = tc.id; chunk = text }));
-                                    interrupt_check;
-                                    inject_system_messages =
-                                      Some
-                                        (fun msgs ->
-                                          let msgs =
-                                            Skill_dedup.dedup_skill_injections
-                                              ~history:agent.history msgs
-                                          in
-                                          List.iter
-                                            (fun content ->
-                                              agent.history <-
-                                                Provider.make_message
-                                                  ~role:"system" ~content
-                                                :: agent.history)
-                                            msgs);
-                                    effective_cwd = agent.effective_cwd;
-                                    request_cwd_change =
-                                      Some
-                                        (fun new_cwd wipe ->
-                                          agent.effective_cwd <- Some new_cwd;
-                                          if wipe then
-                                            pending_history_wipe := true);
-                                  }
-                                in
-                                match tool.invoke_stream with
-                                | Some invoke_stream ->
-                                    invoke_stream ~context
-                                      ~on_output_chunk:(fun chunk ->
-                                        streamed_output := true;
-                                        on_chunk
-                                          (Provider.ToolOutputDelta
-                                             { id = tc.id; chunk }))
-                                      args
-                                | None -> tool.invoke ~context args))
+                                match
+                                  Skill_invocation_guard.use_skill_loaded_noop
+                                    ~reserved_no_arg_skills
+                                    ~history:agent.history tool args
+                                with
+                                | Some response -> Lwt.return response
+                                | None -> (
+                                    let context =
+                                      {
+                                        Tool.session_key;
+                                        send_progress =
+                                          Some
+                                            (fun text ->
+                                              streamed_output := true;
+                                              on_chunk
+                                                (Provider.ToolOutputDelta
+                                                   { id = tc.id; chunk = text }));
+                                        interrupt_check;
+                                        inject_system_messages =
+                                          Some
+                                            (fun msgs ->
+                                              let msgs =
+                                                Skill_dedup
+                                                .dedup_skill_injections
+                                                  ~history:agent.history msgs
+                                              in
+                                              List.iter
+                                                (fun content ->
+                                                  agent.history <-
+                                                    Provider.make_message
+                                                      ~role:"system" ~content
+                                                    :: agent.history)
+                                                msgs);
+                                        effective_cwd = agent.effective_cwd;
+                                        request_cwd_change =
+                                          Some
+                                            (fun new_cwd wipe ->
+                                              agent.effective_cwd <-
+                                                Some new_cwd;
+                                              if wipe then
+                                                pending_history_wipe := true);
+                                      }
+                                    in
+                                    match tool.invoke_stream with
+                                    | Some invoke_stream ->
+                                        invoke_stream ~context
+                                          ~on_output_chunk:(fun chunk ->
+                                            streamed_output := true;
+                                            on_chunk
+                                              (Provider.ToolOutputDelta
+                                                 { id = tc.id; chunk }))
+                                          args
+                                    | None -> tool.invoke ~context args)))
                           (fun exn ->
                             Lwt.return
                               ("Error invoking tool: " ^ Printexc.to_string exn))
@@ -853,6 +863,7 @@ let execute_tool_calls agent ~db ~audit_enabled ~session_key ?interrupt_check
           | None -> false)
       | None -> false
   in
+  let reserved_no_arg_skills = Hashtbl.create 8 in
   (* B607: emit tool invocation audit entries up-front for the whole batch. *)
   List.iter
     (fun (tc : Provider.tool_call) ->
@@ -935,36 +946,45 @@ let execute_tool_calls agent ~db ~audit_enabled ~session_key ?interrupt_check
                               validate_required_with_escalation agent tool args
                             with
                             | Error msg -> Lwt.return msg
-                            | Ok () ->
-                                let context =
-                                  {
-                                    Tool.session_key;
-                                    send_progress = None;
-                                    interrupt_check;
-                                    inject_system_messages =
-                                      Some
-                                        (fun msgs ->
-                                          let msgs =
-                                            Skill_dedup.dedup_skill_injections
-                                              ~history:agent.history msgs
-                                          in
-                                          List.iter
-                                            (fun content ->
-                                              agent.history <-
-                                                Provider.make_message
-                                                  ~role:"system" ~content
-                                                :: agent.history)
-                                            msgs);
-                                    effective_cwd = agent.effective_cwd;
-                                    request_cwd_change =
-                                      Some
-                                        (fun new_cwd wipe ->
-                                          agent.effective_cwd <- Some new_cwd;
-                                          if wipe then
-                                            pending_history_wipe := true);
-                                  }
-                                in
-                                tool.invoke ~context args)
+                            | Ok () -> (
+                                match
+                                  Skill_invocation_guard.use_skill_loaded_noop
+                                    ~reserved_no_arg_skills
+                                    ~history:agent.history tool args
+                                with
+                                | Some response -> Lwt.return response
+                                | None ->
+                                    let context =
+                                      {
+                                        Tool.session_key;
+                                        send_progress = None;
+                                        interrupt_check;
+                                        inject_system_messages =
+                                          Some
+                                            (fun msgs ->
+                                              let msgs =
+                                                Skill_dedup
+                                                .dedup_skill_injections
+                                                  ~history:agent.history msgs
+                                              in
+                                              List.iter
+                                                (fun content ->
+                                                  agent.history <-
+                                                    Provider.make_message
+                                                      ~role:"system" ~content
+                                                    :: agent.history)
+                                                msgs);
+                                        effective_cwd = agent.effective_cwd;
+                                        request_cwd_change =
+                                          Some
+                                            (fun new_cwd wipe ->
+                                              agent.effective_cwd <-
+                                                Some new_cwd;
+                                              if wipe then
+                                                pending_history_wipe := true);
+                                      }
+                                    in
+                                    tool.invoke ~context args))
                           (fun exn ->
                             Lwt.return
                               ("Error invoking tool: " ^ Printexc.to_string exn))

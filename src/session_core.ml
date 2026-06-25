@@ -135,7 +135,26 @@ let rec root_postmortem_session_key session_key =
          (String.length session_key - prefix_len))
   else session_key
 
+let is_postmortem_session_key key =
+  let prefix_len = String.length postmortem_session_prefix in
+  String.length key >= prefix_len
+  && String.sub key 0 prefix_len = postmortem_session_prefix
+
+let load_restorable_history mgr ~key =
+  let key = sanitize_session_key key in
+  match mgr.db with
+  | Some db when not (is_postmortem_session_key key) ->
+      let history = Memory.load_history ~db ~session_key:key in
+      if history = [] then []
+      else
+        let sanitized = Message_history.ensure_tool_group_integrity history in
+        if List.length sanitized <> List.length history then
+          Memory.replace_session_messages ~db ~session_key:key sanitized;
+        sanitized
+  | _ -> []
+
 let get_context_usage_percent mgr ~key =
+  let key = sanitize_session_key key in
   match Hashtbl.find_opt mgr.sessions key with
   | Some (agent, _, _) ->
       let estimated_tokens = Agent.estimate_history_tokens agent.history in
@@ -145,6 +164,16 @@ let get_context_usage_percent mgr ~key =
         Some (percent, estimated_tokens, context_window)
       else None
   | None -> None
+
+let skill_loaded_in_context mgr ~key name =
+  let key = sanitize_session_key key in
+  match Hashtbl.find_opt mgr.sessions key with
+  | Some (agent, _, _) ->
+      Skill_dedup.skill_loaded_in_history agent.Agent.history name
+  | None ->
+      Skill_dedup.skill_loaded_in_history
+        (load_restorable_history mgr ~key)
+        name
 
 let compaction_suggestion_for_prompt mgr ~key =
   match get_context_usage_percent mgr ~key with
@@ -793,28 +822,12 @@ let get_or_create_locked mgr ~key =
       let agent =
         Agent.create ~config:mgr.config ?tool_registry ?agent_template ()
       in
-      let is_postmortem =
-        let plen = String.length postmortem_session_prefix in
-        String.length key >= plen
-        && String.sub key 0 plen = postmortem_session_prefix
-      in
-      (match mgr.db with
-      | Some db ->
-          if not is_postmortem then begin
-            let history = Memory.load_history ~db ~session_key:key in
-            if history <> [] then begin
-              let sanitized =
-                Message_history.ensure_tool_group_integrity history
-              in
-              agent.history <- List.rev sanitized;
-              Logs.info (fun m ->
-                  m "Restored %d messages for session %s"
-                    (List.length sanitized) key);
-              if List.length sanitized <> List.length history then
-                Memory.replace_session_messages ~db ~session_key:key sanitized
-            end
-          end
-      | None -> ());
+      let history = load_restorable_history mgr ~key in
+      if history <> [] then begin
+        agent.history <- List.rev history;
+        Logs.info (fun m ->
+            m "Restored %d messages for session %s" (List.length history) key)
+      end;
       (match mgr.db with
       | Some db ->
           let loaded_len = List.length agent.history in

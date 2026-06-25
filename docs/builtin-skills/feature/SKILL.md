@@ -21,7 +21,7 @@ The six messages are exactly:
 5. `Add Feature, step 5/6: Implementing...`
 6. `Add Feature, step 6/6: Verifying and reporting...`
 
-Additionally, emit a `send_message` whenever you load a skill, spawn a background task, or are about to wait on a long operation (>5 s). Examples:
+Additionally, emit a `send_message` whenever you actually load a skill, spawn a background task, or are about to wait on a long operation (>5 s). Do not emit a loading message when `use_skill` is a no-op because that no-argument skill is already present in current agent context. Examples:
 
 - `Loading skill: <name>`
 - `Spawning background task <runner> on branch <branch>...`

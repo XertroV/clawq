@@ -37,6 +37,7 @@
   path_util
   agent_cost
   skill_dedup
+  skill_invocation_guard
   agent_tools
   agent_0_compact
   agent

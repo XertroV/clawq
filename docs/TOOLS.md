@@ -53,11 +53,11 @@ Generates the full `setMyCommands` JSON payload sorted by priority. Primarily us
 
 SKILL.md skills (from `.claude-p/skills/`, `.claude/skills/`, `~/.clawq/skills/`) are automatically included in slash command manifests and menus. Each skill appears as `/skill-name` with its description from YAML frontmatter. Skills are appended after built-in commands at priority 100.
 
-Skills can also be referenced via `@skill-name` in messages (auto-attached as context) or invoked via the `use_skill` tool.
+Skills can also be referenced via `@skill-name` in messages (ensured in context) or invoked via the `use_skill` tool. No-argument skills are de-duplicated against the current agent context: if the skill has been retained since session start or the last compaction, clawq skips reloading it and does not emit another load notification. If compaction removes the skill instructions from retained context, the next invocation loads them again.
 
 ### Command Injection in SKILL.md
 
-SKILL.md bodies support command injection via `` !`command` `` syntax. When the skill is invoked, each `` !`...` `` expression is replaced with the command's stdout output. This enables dynamic content in skill instructions.
+SKILL.md bodies support command injection via `` !`command` `` syntax. When the skill actually loads, each `` !`...` `` expression is replaced with the command's stdout output. De-duplicated no-op invocations do not rerun command injections. This enables dynamic content in skill instructions.
 
 Example SKILL.md body:
 ```

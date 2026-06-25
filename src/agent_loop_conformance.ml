@@ -2,10 +2,12 @@
 
 (* Convert Provider.message to Clawq_core.AgentLoop.message for conformance testing.
    Only preserves information needed for tool-group integrity: role, tool_calls,
-   tool_call_id. Event messages are encoded into user messages with a sentinel so
-   trim/integrity passes preserve their role across the Coq roundtrip. *)
+   tool_call_id. Roles not represented in the Coq type are encoded into user
+   messages with a sentinel so trim/integrity passes preserve their role across
+   the Coq roundtrip. *)
 
 let event_role_prefix = "__clawq_event__:"
+let system_role_prefix = "__clawq_system__:"
 
 (* Build a mapping from tool_call_id to function_name from provider messages.
    Used to restore tool names when converting back from Coq representation,
@@ -28,6 +30,7 @@ let provider_to_coq_message (m : Provider.message) :
     Clawq_core.AgentLoop.message =
   match m.role with
   | "event" -> Clawq_core.AgentLoop.UserMsg (event_role_prefix ^ m.content)
+  | "system" -> Clawq_core.AgentLoop.UserMsg (system_role_prefix ^ m.content)
   | "user" -> Clawq_core.AgentLoop.UserMsg m.content
   | "assistant" when m.tool_calls <> [] ->
       let coq_calls =
@@ -54,7 +57,13 @@ let coq_to_provider_message (m : Clawq_core.AgentLoop.message) :
     Provider.message =
   match m with
   | Clawq_core.AgentLoop.UserMsg content ->
-      if String.starts_with ~prefix:event_role_prefix content then
+      if String.starts_with ~prefix:system_role_prefix content then
+        let prefix_len = String.length system_role_prefix in
+        let system_content =
+          String.sub content prefix_len (String.length content - prefix_len)
+        in
+        Provider.make_message ~role:"system" ~content:system_content
+      else if String.starts_with ~prefix:event_role_prefix content then
         let prefix_len = String.length event_role_prefix in
         let event_content =
           String.sub content prefix_len (String.length content - prefix_len)
@@ -108,7 +117,13 @@ let coq_to_provider_message_with_names ~tool_name_map
     (m : Clawq_core.AgentLoop.message) : Provider.message =
   match m with
   | Clawq_core.AgentLoop.UserMsg content ->
-      if String.starts_with ~prefix:event_role_prefix content then
+      if String.starts_with ~prefix:system_role_prefix content then
+        let prefix_len = String.length system_role_prefix in
+        let system_content =
+          String.sub content prefix_len (String.length content - prefix_len)
+        in
+        Provider.make_message ~role:"system" ~content:system_content
+      else if String.starts_with ~prefix:event_role_prefix content then
         let prefix_len = String.length event_role_prefix in
         let event_content =
           String.sub content prefix_len (String.length content - prefix_len)

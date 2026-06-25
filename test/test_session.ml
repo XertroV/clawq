@@ -1620,6 +1620,52 @@ let test_turn_stream_uses_special_command_handler () =
     "stream done sent" true
     (List.exists (function Provider.Done -> true | _ -> false) !chunks)
 
+let test_turn_stream_skill_load_notifies_registered_notifier_once () =
+  with_fake_chat_provider (fun config ->
+      let mgr = Session.create ~config () in
+      let key = "telegram:skill-load" in
+      let notifications = ref [] in
+      let chunks = ref [] in
+      let skill_injection = "[Skill: stream-skill]\nUse stream skill" in
+      let on_chunk chunk =
+        chunks := chunk :: !chunks;
+        Lwt.return_unit
+      in
+      let run_once message =
+        Session.turn_stream mgr ~key ~message
+          ~skill_injections:[ skill_injection ] ~on_chunk ()
+      in
+      Lwt_main.run
+        (Session.with_registered_notifier mgr ~key
+           ~notify:(fun text ->
+             notifications := text :: !notifications;
+             Lwt.return_unit)
+           (fun () ->
+             let open Lwt.Syntax in
+             let* _ = run_once "first" in
+             let* () = Lwt.pause () in
+             Alcotest.(check (list string))
+               "first load notification"
+               [ "Loaded skill: stream-skill" ]
+               (List.rev !notifications);
+             let* _ = run_once "repeat" in
+             let* () = Lwt.pause () in
+             Lwt.return_unit));
+      Alcotest.(check (list string))
+        "repeat does not notify again"
+        [ "Loaded skill: stream-skill" ]
+        (List.rev !notifications);
+      let deltas =
+        List.filter_map
+          (function Provider.Delta text -> Some text | _ -> None)
+          (List.rev !chunks)
+      in
+      Alcotest.(check bool)
+        "registered notifier suppresses stream delta notification" false
+        (List.exists
+           (fun text -> string_contains text "Loaded skill: stream-skill")
+           deltas))
+
 let test_turn_stream_emits_compaction_notice () =
   with_fake_chat_provider (fun config ->
       let config =
@@ -4310,6 +4356,8 @@ let suite =
       test_turn_uses_special_command_handler;
     Alcotest.test_case "turn stream uses special command handler" `Quick
       test_turn_stream_uses_special_command_handler;
+    Alcotest.test_case "turn stream notifies registered skill loads once" `Quick
+      test_turn_stream_skill_load_notifies_registered_notifier_once;
     Alcotest.test_case "turn stream emits compaction notice" `Quick
       test_turn_stream_emits_compaction_notice;
     Alcotest.test_case

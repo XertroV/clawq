@@ -485,28 +485,25 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
             (Skills.available_skills ())
         in
         let cmd_result = Slash_commands.handle ~skill_names user_text in
-        let* cmd_result, user_text, skill_injections, loaded_skill_name =
+        let* cmd_result, user_text, skill_injections, _loaded_skill_name =
           match cmd_result with
           | Slash_commands.SkillInvoke (name, args) -> (
-              let* result = Skills.expand_slash_skill ~name ~args () in
-              match result with
-              | Ok r ->
-                  Lwt.return
-                    ( Slash_commands.NotACommand,
-                      user_text,
-                      [ r.skill_injection ],
-                      Some name )
-              | Error msg ->
-                  Lwt.return (Slash_commands.Reply msg, user_text, [], None))
+              if
+                args = ""
+                && Session.skill_loaded_in_context session_mgr ~key name
+              then Lwt.return (Slash_commands.NotACommand, user_text, [], None)
+              else
+                let* result = Skills.expand_slash_skill ~name ~args () in
+                match result with
+                | Ok r ->
+                    Lwt.return
+                      ( Slash_commands.NotACommand,
+                        user_text,
+                        [ r.skill_injection ],
+                        Some name )
+                | Error msg ->
+                    Lwt.return (Slash_commands.Reply msg, user_text, [], None))
           | other -> Lwt.return (other, user_text, [], None)
-        in
-        let* () =
-          match loaded_skill_name with
-          | Some name ->
-              send_message ~bot_token ~chat_id:update.chat_id
-                ~text:(Printf.sprintf "Loaded skill: %s" name)
-                ()
-          | None -> Lwt.return_unit
         in
         let is_admin =
           match Session.get_db session_mgr with

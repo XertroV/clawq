@@ -730,10 +730,20 @@ let extract_skill_refs (skills : skill_md_meta list) message =
     done;
     List.rev !results
 
-let expand_skill_refs ?(workspace_only = false) message =
+let expand_skill_refs ?(workspace_only = false) ?(skip_loaded = []) message =
   let open Lwt.Syntax in
   let skills = available_skills () in
-  let refs = extract_skill_refs skills message in
+  let is_loaded name =
+    let name_lower = String.lowercase_ascii name in
+    List.exists
+      (fun loaded -> String.lowercase_ascii loaded = name_lower)
+      skip_loaded
+  in
+  let refs =
+    extract_skill_refs skills message
+    |> List.filter (fun (_text, (meta : skill_md_meta)) ->
+        not (is_loaded meta.md_name))
+  in
   let md_skills =
     List.filter_map
       (fun (s : skill_md_meta) ->

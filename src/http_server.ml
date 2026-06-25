@@ -145,20 +145,30 @@ let handler ~session_manager ~require_pairing ~auth_token
                     (fun (s : Skills.skill_md_meta) -> s.md_name)
                     (Skills.available_skills ())
                 in
-                let* cmd_result, message, skill_injections, loaded_skill_name =
+                let* cmd_result, message, skill_injections, _loaded_skill_name =
                   match Slash_commands.handle ~skill_names message with
                   | Slash_commands.SkillInvoke (name, args) -> (
-                      let* result = Skills.expand_slash_skill ~name ~args () in
-                      match result with
-                      | Ok r ->
-                          Lwt.return
-                            ( Slash_commands.NotACommand,
-                              message,
-                              [ r.skill_injection ],
-                              Some name )
-                      | Error err_msg ->
-                          Lwt.return
-                            (Slash_commands.Reply err_msg, message, [], None))
+                      if
+                        args = ""
+                        && Session.skill_loaded_in_context session_manager ~key
+                             name
+                      then
+                        Lwt.return
+                          (Slash_commands.NotACommand, message, [], None)
+                      else
+                        let* result =
+                          Skills.expand_slash_skill ~name ~args ()
+                        in
+                        match result with
+                        | Ok r ->
+                            Lwt.return
+                              ( Slash_commands.NotACommand,
+                                message,
+                                [ r.skill_injection ],
+                                Some name )
+                        | Error err_msg ->
+                            Lwt.return
+                              (Slash_commands.Reply err_msg, message, [], None))
                   | other -> Lwt.return (other, message, [], None)
                 in
                 let cmd_result =
@@ -616,12 +626,20 @@ let handler ~session_manager ~require_pairing ~auth_token
                     Cohttp_lwt_unix.Server.respond_string ~status:`OK
                       ~headers:json_headers ~body:resp_json ()
                 | _ -> (
+                    let loaded_notifications = ref [] in
                     let* result =
                       Lwt.catch
                         (fun () ->
                           let* response =
-                            Session.turn session_manager ~key ~message
-                              ~skill_injections ~user_group:"admin" ()
+                            Session.with_registered_notifier session_manager
+                              ~key
+                              ~notify:(fun text ->
+                                loaded_notifications :=
+                                  !loaded_notifications @ [ text ];
+                                Lwt.return_unit)
+                              (fun () ->
+                                Session.turn session_manager ~key ~message
+                                  ~skill_injections ~user_group:"admin" ())
                           in
                           Lwt.return (Ok response))
                         (fun exn -> Lwt.return (Error (Printexc.to_string exn)))
@@ -633,11 +651,11 @@ let handler ~session_manager ~require_pairing ~auth_token
                             (Session.take_response_deferred session_manager ~key)
                         then Session.mark_response_sent session_manager ~key;
                         let response =
-                          match loaded_skill_name with
-                          | Some name ->
-                              Printf.sprintf "Loaded skill: %s\n\n%s" name
-                                response
-                          | None -> response
+                          match !loaded_notifications with
+                          | [] -> response
+                          | notes ->
+                              Printf.sprintf "%s\n\n%s"
+                                (String.concat "\n" notes) response
                         in
                         let resp_json =
                           `Assoc [ ("response", `String response) ]
@@ -1029,25 +1047,36 @@ let handler ~session_manager ~require_pairing ~auth_token
               in
               if not sess_ok then rate_limit_response ()
               else
+                let key = "web:" ^ session_id in
                 let skill_names =
                   List.map
                     (fun (s : Skills.skill_md_meta) -> s.md_name)
                     (Skills.available_skills ())
                 in
-                let* cmd_result, message, skill_injections, loaded_skill_name =
+                let* cmd_result, message, skill_injections, _loaded_skill_name =
                   match Slash_commands.handle ~skill_names message with
                   | Slash_commands.SkillInvoke (name, args) -> (
-                      let* result = Skills.expand_slash_skill ~name ~args () in
-                      match result with
-                      | Ok r ->
-                          Lwt.return
-                            ( Slash_commands.NotACommand,
-                              message,
-                              [ r.skill_injection ],
-                              Some name )
-                      | Error err_msg ->
-                          Lwt.return
-                            (Slash_commands.Reply err_msg, message, [], None))
+                      if
+                        args = ""
+                        && Session.skill_loaded_in_context session_manager ~key
+                             name
+                      then
+                        Lwt.return
+                          (Slash_commands.NotACommand, message, [], None)
+                      else
+                        let* result =
+                          Skills.expand_slash_skill ~name ~args ()
+                        in
+                        match result with
+                        | Ok r ->
+                            Lwt.return
+                              ( Slash_commands.NotACommand,
+                                message,
+                                [ r.skill_injection ],
+                                Some name )
+                        | Error err_msg ->
+                            Lwt.return
+                              (Slash_commands.Reply err_msg, message, [], None))
                   | other -> Lwt.return (other, message, [], None)
                 in
                 let cmd_result =
@@ -1698,17 +1727,6 @@ let handler ~session_manager ~require_pairing ~auth_token
                             push (Some (Printf.sprintf "data: %s\n\n" data));
                             Lwt.return_unit)
                           (fun () ->
-                            (match loaded_skill_name with
-                            | Some name ->
-                                let data =
-                                  Yojson.Safe.to_string
-                                    (json_of_stream_event
-                                       (Provider.Delta
-                                          (Printf.sprintf "Loaded skill: %s\n"
-                                             name)))
-                                in
-                                push (Some (Printf.sprintf "data: %s\n\n" data))
-                            | None -> ());
                             Lwt.catch
                               (fun () ->
                                 let* _response =

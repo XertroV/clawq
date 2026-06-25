@@ -588,19 +588,24 @@ let handle_message ~(discord_config : Runtime_config.discord_config)
             (fun (s : Skills.skill_md_meta) -> s.md_name)
             (Skills.available_skills ())
         in
-        let* cmd_result, msg, skill_injections, loaded_skill_name =
+        let* cmd_result, msg, skill_injections, _loaded_skill_name =
           match Slash_commands.handle ~skill_names msg.content with
           | Slash_commands.SkillInvoke (name, args) -> (
-              let* result = Skills.expand_slash_skill ~name ~args () in
-              match result with
-              | Ok r ->
-                  Lwt.return
-                    ( Slash_commands.NotACommand,
-                      msg,
-                      [ r.skill_injection ],
-                      Some name )
-              | Error err_msg ->
-                  Lwt.return (Slash_commands.Reply err_msg, msg, [], None))
+              if
+                args = ""
+                && Session.skill_loaded_in_context session_mgr ~key name
+              then Lwt.return (Slash_commands.NotACommand, msg, [], None)
+              else
+                let* result = Skills.expand_slash_skill ~name ~args () in
+                match result with
+                | Ok r ->
+                    Lwt.return
+                      ( Slash_commands.NotACommand,
+                        msg,
+                        [ r.skill_injection ],
+                        Some name )
+                | Error err_msg ->
+                    Lwt.return (Slash_commands.Reply err_msg, msg, [], None))
           | Slash_commands.InjectConnectorHistory count ->
               let cfg = Session.get_config session_mgr in
               let hist_key = Printf.sprintf "discord-hist:%s" msg.channel_id in
@@ -641,14 +646,6 @@ let handle_message ~(discord_config : Runtime_config.discord_config)
                   (Slash_commands.NotACommand, new_msg, [ context ], None)
               end
           | other -> Lwt.return (other, msg, [], None)
-        in
-        let* () =
-          match loaded_skill_name with
-          | Some name ->
-              send_message_fn ~bot_token:discord_config.bot_token
-                ~channel_id:msg.channel_id
-                ~text:(Printf.sprintf "Loaded skill: %s" name)
-          | None -> Lwt.return_unit
         in
         let is_admin =
           match Session.get_db session_mgr with

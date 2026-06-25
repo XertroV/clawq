@@ -90,22 +90,22 @@ Based on the above, summarize what changes are staged and whether anything looks
 ```
 
 <Callout type="warning">
-Command injections run at skill invocation time in the agent's workspace. They are subject to the same shell allowlist and workspace_only restrictions as the `shell_exec` tool.
+Command injections run only when the skill is actually loaded into the agent's workspace context. They are subject to the same shell allowlist and workspace_only restrictions as the `shell_exec` tool.
 </Callout>
 
 ## Invoking Skills
 
 ### @mention syntax
 
-Type `@skill-name` anywhere in a message to inject the skill's instructions alongside your message:
+Type `@skill-name` anywhere in a message to ensure the skill's instructions are present alongside your message:
 
 ```
 @review-and-fix please also check the migration files
 ```
 
-clawq detects the `@` prefix (preceded by whitespace or at the start of the message), looks up the skill by name (case-insensitive), and prepends the expanded instructions as a system message before the agent turn runs.
+clawq detects the `@` prefix (preceded by whitespace or at the start of the message), looks up the skill by name (case-insensitive), and prepends the expanded instructions as a system message before the agent turn runs if that skill is not already retained in the current agent context.
 
-Multiple skill references in a single message are each expanded and injected.
+Multiple skill references in a single message are each considered. Skills already retained since session start or the last compaction are skipped; skills no longer retained after compaction are loaded again.
 
 ### /slash command syntax
 
@@ -117,6 +117,8 @@ Skills can also be invoked as slash commands from the web UI or any channel:
 ```
 
 The part after the skill name becomes `$ARGUMENTS`.
+
+Slash skill invocations follow the same context-aware behavior as `@skill-name`: a no-argument skill that is already retained in the current agent context is not reloaded and does not emit another load notification. Argument-bearing skill invocations are treated as distinct loads because the expanded instructions can differ by argument.
 
 ### use_skill tool
 
@@ -131,6 +133,8 @@ The agent can invoke skills programmatically using the `use_skill` built-in tool
   }
 }
 ```
+
+`use_skill` ensures the named SKILL.md skill is present in the current agent context. If the no-argument skill is already retained since session start or the last compaction, the existing instructions are reused instead of injecting another copy.
 
 ## Chat Discovery
 
