@@ -35,3 +35,4 @@ tmp.*
 # worktrees
 .worktrees/
 .worktrees/
+npm-pkg/bin/
