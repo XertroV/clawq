@@ -594,9 +594,50 @@ let execute_tool_calls_stream agent ~db ~audit_enabled ~session_key
             (Provider.ToolStart
                { id = tc.id; name = tc.function_name; arguments = tc.arguments })))
     calls;
+  (* F1 fix: validate all tool calls serially before parallel execution.
+     validate_required_with_escalation mutates agent.last_missing_required_key,
+     agent.last_missing_required_count, and agent.hard_abort_reason, which
+     would race under Lwt_list.map_p. Pre-validate serially, then use cached
+     results in the parallel block. *)
+  let pre_validations =
+    List.map
+      (fun (tc : Provider.tool_call) ->
+        if check_interrupt () then
+          (tc, Error "[skipped: interrupted by user]")
+        else
+          match agent.tool_registry with
+          | None -> (tc, Error "Error: no tool registry available")
+          | Some registry -> (
+              match Tool_registry.find registry tc.function_name with
+              | None ->
+                  ( tc,
+                    Error
+                      (Printf.sprintf "Error: unknown tool '%s'"
+                         tc.function_name) )
+              | Some tool -> (
+                  match tc.function_name with
+                  | "tool_search" -> (tc, Ok None)
+                  | _ -> (
+                      let args =
+                        try Yojson.Safe.from_string tc.arguments
+                        with _ ->
+                          Logs.warn (fun m ->
+                              m
+                                "Tool call '%s': failed to parse arguments \
+                                 as JSON (raw: %s)"
+                                tc.function_name tc.arguments);
+                          `Assoc []
+                      in
+                      match
+                        validate_required_with_escalation agent tool args
+                      with
+                      | Error msg -> (tc, Error msg)
+                      | Ok () -> (tc, Ok (Some (tool, args)))))))
+      calls
+  in
   let* results =
     Lwt_list.map_p
-      (fun (tc : Provider.tool_call) ->
+      (fun ((tc : Provider.tool_call), pre_validation) ->
         if check_interrupt () then begin
           Logs.info (fun m ->
               m "%sSkipping tool %s (interrupted)" sk_tag tc.function_name);
@@ -629,89 +670,69 @@ let execute_tool_calls_stream agent ~db ~audit_enabled ~session_key
           let before_active_workspace_files =
             capture_active_workspace_file_state agent
           in
-          let is_tool_search = tc.function_name = "tool_search" in
           let streamed_output = ref false in
           let t0 = Unix.gettimeofday () in
           let* result_msg, result_for_event =
-            if is_tool_search then
-              let msg = resolve_tool_search agent tc in
-              Lwt.return (msg, msg.Provider.content)
-            else
+            match pre_validation with
+            | Error err_msg ->
+                Lwt.return
+                  ( Provider.make_tool_result ~tool_call_id:tc.id
+                      ~name:tc.function_name ~content:err_msg,
+                    err_msg )
+            | Ok None ->
+                let msg = resolve_tool_search agent tc in
+                Lwt.return (msg, msg.Provider.content)
+            | Ok (Some (tool, args)) ->
               let* result =
-                match agent.tool_registry with
-                | None -> Lwt.return "Error: no tool registry available"
-                | Some registry -> (
-                    match Tool_registry.find registry tc.function_name with
-                    | None ->
-                        Lwt.return
-                          (Printf.sprintf "Error: unknown tool '%s'"
-                             tc.function_name)
-                    | Some tool ->
-                        Lwt.catch
-                          (fun () ->
-                            let args =
-                              try Yojson.Safe.from_string tc.arguments
-                              with _ ->
-                                Logs.warn (fun m ->
-                                    m
-                                      "Tool call '%s': failed to parse \
-                                       arguments as JSON (raw: %s)"
-                                      tc.function_name tc.arguments);
-                                `Assoc []
-                            in
-                            match
-                              validate_required_with_escalation agent tool args
-                            with
-                            | Error msg -> Lwt.return msg
-                            | Ok () -> (
-                                let context =
-                                  {
-                                    Tool.session_key;
-                                    send_progress =
-                                      Some
-                                        (fun text ->
-                                          streamed_output := true;
-                                          on_chunk
-                                            (Provider.ToolOutputDelta
-                                               { id = tc.id; chunk = text }));
-                                    interrupt_check;
-                                    inject_system_messages =
-                                      Some
-                                        (fun msgs ->
-                                          let msgs =
-                                            Skill_dedup.dedup_skill_injections
-                                              ~history:agent.history msgs
-                                          in
-                                          List.iter
-                                            (fun content ->
-                                              agent.history <-
-                                                Provider.make_message
-                                                  ~role:"system" ~content
-                                                :: agent.history)
-                                            msgs);
-                                    effective_cwd = agent.effective_cwd;
-                                    request_cwd_change =
-                                      Some
-                                        (fun new_cwd wipe ->
-                                          agent.effective_cwd <- Some new_cwd;
-                                          if wipe then
-                                            pending_history_wipe := true);
-                                  }
-                                in
-                                match tool.invoke_stream with
-                                | Some invoke_stream ->
-                                    invoke_stream ~context
-                                      ~on_output_chunk:(fun chunk ->
-                                        streamed_output := true;
-                                        on_chunk
-                                          (Provider.ToolOutputDelta
-                                             { id = tc.id; chunk }))
-                                      args
-                                | None -> tool.invoke ~context args))
-                          (fun exn ->
-                            Lwt.return
-                              ("Error invoking tool: " ^ Printexc.to_string exn))
-                    )
+                Lwt.catch
+                  (fun () ->
+                    let context =
+                      {
+                        Tool.session_key;
+                        send_progress =
+                          Some
+                            (fun text ->
+                              streamed_output := true;
+                              on_chunk
+                                (Provider.ToolOutputDelta
+                                   { id = tc.id; chunk = text }));
+                        interrupt_check;
+                        inject_system_messages =
+                          Some
+                            (fun msgs ->
+                              let msgs =
+                                Skill_dedup.dedup_skill_injections
+                                  ~history:agent.history msgs
+                              in
+                              List.iter
+                                (fun content ->
+                                  agent.history <-
+                                    Provider.make_message
+                                      ~role:"system" ~content
+                                    :: agent.history)
+                                msgs);
+                        effective_cwd = agent.effective_cwd;
+                        request_cwd_change =
+                          Some
+                            (fun new_cwd wipe ->
+                              agent.effective_cwd <- Some new_cwd;
+                              if wipe then
+                                pending_history_wipe := true);
+                      }
+                    in
+                    match tool.invoke_stream with
+                    | Some invoke_stream ->
+                        invoke_stream ~context
+                          ~on_output_chunk:(fun chunk ->
+                            streamed_output := true;
+                            on_chunk
+                              (Provider.ToolOutputDelta
+                                 { id = tc.id; chunk }))
+                          args
+                    | None -> tool.invoke ~context args)
+                  (fun exn ->
+                    Lwt.return
+                      ("Error invoking tool: " ^ Printexc.to_string exn))
               in
               let* result_for_history =
                 Tool_postprocess.process_tool_result ~config:agent.config ~db
@@ -866,9 +887,46 @@ let execute_tool_calls agent ~db ~audit_enabled ~session_key ?interrupt_check
                })
       | _ -> ())
     calls;
+  (* F1 fix: pre-validate tool calls serially (see streaming path above). *)
+  let pre_validations =
+    List.map
+      (fun (tc : Provider.tool_call) ->
+        if check_interrupt () then
+          (tc, Error "[skipped: interrupted by user]")
+        else
+          match agent.tool_registry with
+          | None -> (tc, Error "Error: no tool registry available")
+          | Some registry -> (
+              match Tool_registry.find registry tc.function_name with
+              | None ->
+                  ( tc,
+                    Error
+                      (Printf.sprintf "Error: unknown tool '%s'"
+                         tc.function_name) )
+              | Some tool -> (
+                  match tc.function_name with
+                  | "tool_search" -> (tc, Ok None)
+                  | _ -> (
+                      let args =
+                        try Yojson.Safe.from_string tc.arguments
+                        with _ ->
+                          Logs.warn (fun m ->
+                              m
+                                "Tool call '%s': failed to parse arguments \
+                                 as JSON (raw: %s)"
+                                tc.function_name tc.arguments);
+                          `Assoc []
+                      in
+                      match
+                        validate_required_with_escalation agent tool args
+                      with
+                      | Error msg -> (tc, Error msg)
+                      | Ok () -> (tc, Ok (Some (tool, args)))))))
+      calls
+  in
   let* results =
     Lwt_list.map_p
-      (fun (tc : Provider.tool_call) ->
+      (fun ((tc : Provider.tool_call), pre_validation) ->
         if check_interrupt () then begin
           Logs.info (fun m ->
               m "%sSkipping tool %s (interrupted)" sk_tag tc.function_name);
@@ -892,70 +950,49 @@ let execute_tool_calls agent ~db ~audit_enabled ~session_key ?interrupt_check
           let before_active_workspace_files =
             capture_active_workspace_file_state agent
           in
-          let is_tool_search = tc.function_name = "tool_search" in
           let* result_msg =
-            if is_tool_search then Lwt.return (resolve_tool_search agent tc)
-            else
+            match pre_validation with
+            | Error err_msg ->
+                Lwt.return
+                  (Provider.make_tool_result ~tool_call_id:tc.id
+                     ~name:tc.function_name ~content:err_msg)
+            | Ok None -> Lwt.return (resolve_tool_search agent tc)
+            | Ok (Some (tool, args)) ->
               let* result =
-                match agent.tool_registry with
-                | None -> Lwt.return "Error: no tool registry available"
-                | Some registry -> (
-                    match Tool_registry.find registry tc.function_name with
-                    | None ->
-                        Lwt.return
-                          (Printf.sprintf "Error: unknown tool '%s'"
-                             tc.function_name)
-                    | Some tool ->
-                        Lwt.catch
-                          (fun () ->
-                            let args =
-                              try Yojson.Safe.from_string tc.arguments
-                              with _ ->
-                                Logs.warn (fun m ->
-                                    m
-                                      "Tool call '%s': failed to parse \
-                                       arguments as JSON (raw: %s)"
-                                      tc.function_name tc.arguments);
-                                `Assoc []
-                            in
-                            match
-                              validate_required_with_escalation agent tool args
-                            with
-                            | Error msg -> Lwt.return msg
-                            | Ok () ->
-                                let context =
-                                  {
-                                    Tool.session_key;
-                                    send_progress = None;
-                                    interrupt_check;
-                                    inject_system_messages =
-                                      Some
-                                        (fun msgs ->
-                                          let msgs =
-                                            Skill_dedup.dedup_skill_injections
-                                              ~history:agent.history msgs
-                                          in
-                                          List.iter
-                                            (fun content ->
-                                              agent.history <-
-                                                Provider.make_message
-                                                  ~role:"system" ~content
-                                                :: agent.history)
-                                            msgs);
-                                    effective_cwd = agent.effective_cwd;
-                                    request_cwd_change =
-                                      Some
-                                        (fun new_cwd wipe ->
-                                          agent.effective_cwd <- Some new_cwd;
-                                          if wipe then
-                                            pending_history_wipe := true);
-                                  }
-                                in
-                                tool.invoke ~context args)
-                          (fun exn ->
-                            Lwt.return
-                              ("Error invoking tool: " ^ Printexc.to_string exn))
-                    )
+                Lwt.catch
+                  (fun () ->
+                    let context =
+                      {
+                        Tool.session_key;
+                        send_progress = None;
+                        interrupt_check;
+                        inject_system_messages =
+                          Some
+                            (fun msgs ->
+                              let msgs =
+                                Skill_dedup.dedup_skill_injections
+                                  ~history:agent.history msgs
+                              in
+                              List.iter
+                                (fun content ->
+                                  agent.history <-
+                                    Provider.make_message
+                                      ~role:"system" ~content
+                                    :: agent.history)
+                                msgs);
+                        effective_cwd = agent.effective_cwd;
+                        request_cwd_change =
+                          Some
+                            (fun new_cwd wipe ->
+                              agent.effective_cwd <- Some new_cwd;
+                              if wipe then
+                                pending_history_wipe := true);
+                      }
+                    in
+                    tool.invoke ~context args)
+                  (fun exn ->
+                    Lwt.return
+                      ("Error invoking tool: " ^ Printexc.to_string exn))
               in
               let* result_for_history =
                 Tool_postprocess.process_tool_result ~config:agent.config ~db
