@@ -172,8 +172,21 @@ let cmd_debug args =
                      Lwt_io.flush oc)
                    (fun _exn -> Lwt.return_unit))
            in
-           let forever, _ = Lwt.wait () in
-           forever)
+           let forever, wakener = Lwt.wait () in
+           let handler_int =
+             Lwt_unix.on_signal Sys.sigint (fun _ ->
+                 Lwt.wakeup_later wakener "")
+           in
+           let handler_term =
+             Lwt_unix.on_signal Sys.sigterm (fun _ ->
+                 Lwt.wakeup_later wakener "")
+           in
+           Lwt.finalize
+             (fun () -> forever)
+             (fun () ->
+               Lwt_unix.disable_signal_handler handler_int;
+               Lwt_unix.disable_signal_handler handler_term;
+               Lwt.return_unit))
       in
       "debug html-preview: stopped"
   | "http" :: rest -> cmd_debug_http rest
