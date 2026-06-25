@@ -594,7 +594,7 @@ let rec drain_queued_messages_loop mgr ~key agent interrupt ?on_drain_progress
         | Some msgs -> msgs
         | None -> []
       in
-      Hashtbl.replace mgr.Session_core.queued_messages key (queued :: existing);
+      Hashtbl.replace mgr.Session_core.queued_messages key (existing @ [ queued ]);
       Lwt.return_unit
   | None, _ ->
       if drained_any then
@@ -1292,7 +1292,8 @@ let turn_stream mgr ~key ~message ?(content_parts = []) ?(attachments = [])
                                    ?channel_name:qm.channel_name
                                    ?channel_type:qm.channel_type
                                    ?sender_id:qm.sender_id
-                                   ?sender_name:qm.sender_name ()))
+                                   ?sender_name:qm.sender_name
+                                   ?user_group:qm.user_group ()))
                             msgs
                         in
                         let* response =
