@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B700
+priority: high
+status: pending
+tags: []
+title: Limit codex gpt-5.5 to 272k tokens (compact at 80%)
+---
+
+Limit codex gpt-5.5 to 272k tokens (compact at 80%)
