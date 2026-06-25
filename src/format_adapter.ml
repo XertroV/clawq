@@ -28,16 +28,14 @@ let escape connector text =
         text;
       Buffer.contents buf
   | Discord | Slack | Teams ->
-      (* Escape Markdown special characters to prevent unintended formatting.
-         Covers bold/italic (*_), strikethrough (~), code (`), and link syntax
-         ([ ] ( )). *)
+      (* Escape backslash to prevent unintended escape sequences. Do NOT
+         escape formatting markers because escape is called before bold/italic/
+         code wrappers are applied. *)
       let buf = Buffer.create (String.length text + 16) in
       String.iter
         (fun c ->
           match c with
-          | '*' | '_' | '~' | '`' | '[' | ']' | '(' | ')' ->
-              Buffer.add_char buf '\\';
-              Buffer.add_char buf c
+          | '\\' -> Buffer.add_string buf "\\\\"
           | _ -> Buffer.add_char buf c)
         text;
       Buffer.contents buf

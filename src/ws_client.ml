@@ -13,9 +13,9 @@ type t = {
 let is_resolved p = not (Lwt.is_sleeping p)
 
 (** Shared WebSocket connection logic. [default_port] is used when the URI has
-    no port. [do_connect] performs the transport-level WebSocket handshake
-    (TLS or plain TCP) using the resolved file descriptor. The transport
-    connection is bound in this scope to prevent GC. *)
+    no port. [do_connect] performs the transport-level WebSocket handshake (TLS
+    or plain TCP) using the resolved file descriptor. The transport connection
+    is bound in this scope to prevent GC. *)
 let connect_common ~default_port ~do_connect ~uri () =
   let open Lwt.Syntax in
   let parsed = Uri.of_string uri in

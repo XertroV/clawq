@@ -1,5 +1,4 @@
 let responses_uri = Openai_codex_oauth.codex_base_url ^ "/responses"
-
 let string_contains = String_util.string_contains
 
 let strip_provider_prefix model =
