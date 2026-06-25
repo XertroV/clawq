@@ -30,6 +30,36 @@ let substitute_template template (args : Yojson.Safe.t) =
       replace acc)
     template pairs
 
+let command_template_vars command =
+  let len = String.length command in
+  let rec find_close i =
+    if i + 1 >= len then None
+    else if command.[i] = '}' && command.[i + 1] = '}' then Some i
+    else find_close (i + 1)
+  in
+  let rec collect i acc =
+    if i + 1 >= len then acc
+    else if command.[i] = '{' && command.[i + 1] = '{' then
+      match find_close (i + 2) with
+      | None -> collect (i + 2) acc
+      | Some j ->
+          let name = String.sub command (i + 2) (j - i - 2) in
+          let acc = if name = "" then acc else name :: acc in
+          collect (j + 2) acc
+    else collect (i + 1) acc
+  in
+  collect 0 [] |> List.sort_uniq String.compare
+
+let parameter_property_names parameters_schema =
+  let open Yojson.Safe.Util in
+  try parameters_schema |> member "properties" |> to_assoc |> List.map fst
+  with _ -> []
+
+let missing_template_parameters command parameters_schema =
+  let declared = parameter_property_names parameters_schema in
+  command_template_vars command
+  |> List.filter (fun name -> not (List.mem name declared))
+
 let risk_level_of_string = function
   | "high" -> Tool.High
   | "medium" -> Tool.Medium
@@ -60,156 +90,172 @@ let load_skill ?(workspace_only = true) ?(timeout_secs = 30.0)
         `Assoc [ ("type", `String "object"); ("properties", `Assoc []) ]
     in
     let command = json |> member "command" |> to_string in
-    let risk_level =
-      try json |> member "risk_level" |> to_string |> risk_level_of_string
-      with _ -> Tool.Medium
+    let missing_template_params =
+      missing_template_parameters command parameters_schema
     in
-    Logs.warn (fun m ->
-        m
-          "JSON skill '%s' at %s is deprecated. Convert to SKILL.md format \
-           (see docs/TOOLS.md)."
-          name file_path);
-    let tool : Tool.t =
-      {
-        name;
-        description;
-        parameters_schema;
-        invoke =
-          (fun ?context args ->
-            let cmd = substitute_template command args in
-            if workspace_only && Tools_builtin.has_unsafe_shell_syntax cmd then
-              Lwt.return
-                "Error: skill command contains unsafe shell syntax in \
-                 workspace_only mode"
-            else if
-              workspace_only
-              && not (Tools_builtin.is_command_allowed ~allowed_commands cmd)
-            then
-              Lwt.return
-                (Printf.sprintf
-                   "Error: skill command '%s' is not in the allowlist"
-                   (Tools_builtin.extract_command cmd))
-            else
-              match Tools_builtin.split_command_words cmd with
-              | Error msg -> Lwt.return ("Error: " ^ msg)
-              | Ok argv -> (
-                  match argv with
-                  | [] -> Lwt.return "Error: skill command is empty"
-                  | cmd :: _
-                    when workspace_only
-                         && not
-                              (Tools_builtin.is_workspace_safe_command_token cmd)
-                    ->
-                      Lwt.return
-                        "Error: skill command binary path is disallowed in \
-                         workspace_only mode"
-                  | _
-                    when workspace_only
-                         && Tools_builtin.has_workspace_unsafe_args
-                              ~workspace:(Sys.getcwd ()) ~extra_allowed_paths:[]
-                              argv ->
-                      Lwt.return
-                        "Error: skill command contains paths/targets \
-                         disallowed in workspace_only mode"
-                  | _ -> (
-                      let open Lwt.Syntax in
-                      let interrupt_check =
-                        match context with
-                        | Some c -> c.Tool.interrupt_check
-                        | None -> None
-                      in
-                      let env =
-                        if workspace_only then
-                          Runtime_config.workspace_only_env ()
-                        else
-                          Runtime_config.augment_env_path (Unix.environment ())
-                      in
-                      let cwd =
-                        if workspace_only then Some (Sys.getcwd ()) else None
-                      in
-                      let proc =
-                        Process_group.start ?cwd ~env
-                          (Process_group.Exec (Array.of_list argv))
-                      in
-                      let runner_result, runner_wakener = Lwt.wait () in
-                      let forced_result = ref None in
-                      let finish_runner result =
-                        if Lwt.is_sleeping runner_result then
-                          Lwt.wakeup_later runner_wakener result
-                      in
-                      Lwt.async (fun () ->
-                          Lwt.catch
-                            (fun () ->
-                              Lwt.finalize
-                                (fun () ->
-                                  let* stdout, stderr =
-                                    Lwt.both
-                                      (Lwt_io.read proc.Process_group.stdout)
-                                      (Lwt_io.read proc.Process_group.stderr)
+    if missing_template_params <> [] then (
+      Logs.warn (fun m ->
+          m
+            "Failed to load JSON skill '%s' at %s: command template references \
+             undeclared parameter(s): %s. Add each name under \
+             parameters.properties or convert to SKILL.md format with \
+             $ARGUMENTS."
+            name file_path
+            (String.concat ", " missing_template_params));
+      None)
+    else
+      let risk_level =
+        try json |> member "risk_level" |> to_string |> risk_level_of_string
+        with _ -> Tool.Medium
+      in
+      Logs.warn (fun m ->
+          m
+            "JSON skill '%s' at %s is deprecated. Convert to SKILL.md format \
+             (see docs/TOOLS.md)."
+            name file_path);
+      let tool : Tool.t =
+        {
+          name;
+          description;
+          parameters_schema;
+          invoke =
+            (fun ?context args ->
+              let cmd = substitute_template command args in
+              if workspace_only && Tools_builtin.has_unsafe_shell_syntax cmd
+              then
+                Lwt.return
+                  "Error: skill command contains unsafe shell syntax in \
+                   workspace_only mode"
+              else if
+                workspace_only
+                && not (Tools_builtin.is_command_allowed ~allowed_commands cmd)
+              then
+                Lwt.return
+                  (Printf.sprintf
+                     "Error: skill command '%s' is not in the allowlist"
+                     (Tools_builtin.extract_command cmd))
+              else
+                match Tools_builtin.split_command_words cmd with
+                | Error msg -> Lwt.return ("Error: " ^ msg)
+                | Ok argv -> (
+                    match argv with
+                    | [] -> Lwt.return "Error: skill command is empty"
+                    | cmd :: _
+                      when workspace_only
+                           && not
+                                (Tools_builtin.is_workspace_safe_command_token
+                                   cmd) ->
+                        Lwt.return
+                          "Error: skill command binary path is disallowed in \
+                           workspace_only mode"
+                    | _
+                      when workspace_only
+                           && Tools_builtin.has_workspace_unsafe_args
+                                ~workspace:(Sys.getcwd ())
+                                ~extra_allowed_paths:[] argv ->
+                        Lwt.return
+                          "Error: skill command contains paths/targets \
+                           disallowed in workspace_only mode"
+                    | _ -> (
+                        let open Lwt.Syntax in
+                        let interrupt_check =
+                          match context with
+                          | Some c -> c.Tool.interrupt_check
+                          | None -> None
+                        in
+                        let env =
+                          if workspace_only then
+                            Runtime_config.workspace_only_env ()
+                          else
+                            Runtime_config.augment_env_path
+                              (Unix.environment ())
+                        in
+                        let cwd =
+                          if workspace_only then Some (Sys.getcwd ()) else None
+                        in
+                        let proc =
+                          Process_group.start ?cwd ~env
+                            (Process_group.Exec (Array.of_list argv))
+                        in
+                        let runner_result, runner_wakener = Lwt.wait () in
+                        let forced_result = ref None in
+                        let finish_runner result =
+                          if Lwt.is_sleeping runner_result then
+                            Lwt.wakeup_later runner_wakener result
+                        in
+                        Lwt.async (fun () ->
+                            Lwt.catch
+                              (fun () ->
+                                Lwt.finalize
+                                  (fun () ->
+                                    let* stdout, stderr =
+                                      Lwt.both
+                                        (Lwt_io.read proc.Process_group.stdout)
+                                        (Lwt_io.read proc.Process_group.stderr)
+                                    in
+                                    let* status = Process_group.wait proc.pid in
+                                    let exit_code =
+                                      match status with
+                                      | Unix.WEXITED n -> n
+                                      | Unix.WSIGNALED n -> 128 + n
+                                      | Unix.WSTOPPED n -> 128 + n
+                                    in
+                                    finish_runner
+                                      (Ok
+                                         (Printf.sprintf
+                                            "exit_code: %d\n\
+                                             stdout:\n\
+                                             %s\n\
+                                             stderr:\n\
+                                             %s"
+                                            exit_code stdout stderr));
+                                    Lwt.return_unit)
+                                  (fun () -> Process_group.close proc))
+                              (fun exn ->
+                                finish_runner (Error exn);
+                                Lwt.return_unit));
+                        let* result =
+                          Lwt.pick
+                            [
+                              (let* result = runner_result in
+                               match !forced_result with
+                               | Some output -> Lwt.return (`Done output)
+                               | None -> Lwt.return (`Runner result));
+                              (let* () = Lwt_unix.sleep timeout_secs in
+                               let output =
+                                 Printf.sprintf
+                                   "Error: skill command timed out after %.0f \
+                                    seconds"
+                                   timeout_secs
+                               in
+                               forced_result := Some output;
+                               let* () = Process_group.terminate proc.pid in
+                               let* _ = runner_result in
+                               Lwt.return (`Done output));
+                              (match interrupt_check with
+                              | None -> fst (Lwt.wait ())
+                              | Some check ->
+                                  let* () = wait_for_interrupt check in
+                                  forced_result :=
+                                    Some "Skill command interrupted by user.";
+                                  let* () =
+                                    Process_group.terminate_immediately proc.pid
                                   in
-                                  let* status = Process_group.wait proc.pid in
-                                  let exit_code =
-                                    match status with
-                                    | Unix.WEXITED n -> n
-                                    | Unix.WSIGNALED n -> 128 + n
-                                    | Unix.WSTOPPED n -> 128 + n
-                                  in
-                                  finish_runner
-                                    (Ok
-                                       (Printf.sprintf
-                                          "exit_code: %d\n\
-                                           stdout:\n\
-                                           %s\n\
-                                           stderr:\n\
-                                           %s"
-                                          exit_code stdout stderr));
-                                  Lwt.return_unit)
-                                (fun () -> Process_group.close proc))
-                            (fun exn ->
-                              finish_runner (Error exn);
-                              Lwt.return_unit));
-                      let* result =
-                        Lwt.pick
-                          [
-                            (let* result = runner_result in
-                             match !forced_result with
-                             | Some output -> Lwt.return (`Done output)
-                             | None -> Lwt.return (`Runner result));
-                            (let* () = Lwt_unix.sleep timeout_secs in
-                             let output =
-                               Printf.sprintf
-                                 "Error: skill command timed out after %.0f \
-                                  seconds"
-                                 timeout_secs
-                             in
-                             forced_result := Some output;
-                             let* () = Process_group.terminate proc.pid in
-                             let* _ = runner_result in
-                             Lwt.return (`Done output));
-                            (match interrupt_check with
-                            | None -> fst (Lwt.wait ())
-                            | Some check ->
-                                let* () = wait_for_interrupt check in
-                                forced_result :=
-                                  Some "Skill command interrupted by user.";
-                                let* () =
-                                  Process_group.terminate_immediately proc.pid
-                                in
-                                let* _ = runner_result in
-                                Lwt.return
-                                  (`Done "Skill command interrupted by user."));
-                          ]
-                      in
-                      match result with
-                      | `Runner (Ok output) -> Lwt.return output
-                      | `Runner (Error exn) -> Lwt.fail exn
-                      | `Done output -> Lwt.return output)));
-        invoke_stream = None;
-        risk_level;
-        deferred = false;
-      }
-    in
-    Some tool
+                                  let* _ = runner_result in
+                                  Lwt.return
+                                    (`Done "Skill command interrupted by user."));
+                            ]
+                        in
+                        match result with
+                        | `Runner (Ok output) -> Lwt.return output
+                        | `Runner (Error exn) -> Lwt.fail exn
+                        | `Done output -> Lwt.return output)));
+          invoke_stream = None;
+          risk_level;
+          deferred = false;
+        }
+      in
+      Some tool
   with exn ->
     Logs.warn (fun m ->
         m "Failed to load skill from %s: %s" path (Printexc.to_string exn));

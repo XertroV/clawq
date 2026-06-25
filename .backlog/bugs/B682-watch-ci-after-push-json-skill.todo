@@ -1,14 +1,15 @@
 ---
 claimed_at: "2026-06-25T17:09:20Z"
 claimed_by: cli-user
-completed_at: null
+completed_at: "2026-06-25T17:25:11Z"
 complexity: medium
 depends_on: []
+duration_minutes: 15.861090378766667
 estimate_hours: 1
 id: B682
 priority: high
 started_at: "2026-06-25T17:09:20Z"
-status: in_progress
+status: done
 tags: []
 title: watch_ci_after_push JSON skill has empty parameters but uses {{branch}}, {{workflow}}, {{limit}} template vars
 ---

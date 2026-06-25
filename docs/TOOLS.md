@@ -74,7 +74,7 @@ When `workspace_only` security is enabled, command injections are subject to the
 
 ### JSON Skills (Deprecated)
 
-Legacy JSON skills (`.json` files in `~/.clawq/skills/`) are still loaded but deprecated. A warning is emitted when JSON skills are loaded. The `skill_create` tool now creates SKILL.md skills instead of JSON. Convert existing JSON skills to SKILL.md format by creating a `<name>/SKILL.md` file with the command embedded as `` !`command` ``.
+Legacy JSON skills (`.json` files in `~/.clawq/skills/`) are still loaded but deprecated. A warning is emitted when JSON skills are loaded. Every `{{param_name}}` placeholder used in a JSON skill command must be declared under `parameters.properties`; otherwise the skill is refused at load time with a warning. The `skill_create` tool now creates SKILL.md skills instead of JSON. Convert existing JSON skills to SKILL.md format by creating a `<name>/SKILL.md` file with the command embedded as `` !`command` ``.
 
 ## Adding a New Command
 

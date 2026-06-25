@@ -175,7 +175,7 @@ An older JSON skill format is still loaded for backward compatibility. JSON skil
 }
 ```
 
-JSON skills use `{{param_name}}` template substitution and are stored as `.json` files in `~/.clawq/skills/`. Convert them to SKILL.md format when possible — JSON skill support may be removed in a future release.
+JSON skills use `{{param_name}}` template substitution and are stored as `.json` files in `~/.clawq/skills/`. Each `{{param_name}}` placeholder in the command must be declared under `parameters.properties`; skills with undeclared placeholders are refused at load time with a warning. Convert them to SKILL.md format when possible — JSON skill support may be removed in a future release.
 
 <Callout type="info">
 The `skill_create` built-in tool creates SKILL.md skills directly from an agent conversation. Use it to persist reusable patterns discovered during a session: `skill_create(name="...", description="...", command="...")`.

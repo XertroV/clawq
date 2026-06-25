@@ -55,6 +55,24 @@ let test_load_skill_from_file () =
             (tool.risk_level = Tool.Low)
       | None -> Alcotest.fail "failed to load skill")
 
+let test_load_skill_rejects_undeclared_template_vars () =
+  let json =
+    {|{
+    "name": "watch_ci_after_push",
+    "description": "Watch CI runs after a push",
+    "parameters": {
+      "type": "object",
+      "properties": {}
+    },
+    "command": "gh run list --branch {{branch}} --workflow {{workflow}} --limit {{limit}}",
+    "risk_level": "low"
+  }|}
+  in
+  with_temp_skill_file json (fun tmp ->
+      let result = Skills.load_skill ~workspace_only:false tmp in
+      Alcotest.(check bool)
+        "undeclared template vars reject skill" true (result = None))
+
 let test_load_skill_invalid () =
   let tmp = Filename.temp_file "skill_bad" ".json" in
   let oc = open_out tmp in
@@ -1408,6 +1426,8 @@ let suite =
     Alcotest.test_case "template multiple" `Quick test_substitute_multiple;
     Alcotest.test_case "template no match" `Quick test_substitute_no_match;
     Alcotest.test_case "load skill from file" `Quick test_load_skill_from_file;
+    Alcotest.test_case "load skill rejects undeclared template vars" `Quick
+      test_load_skill_rejects_undeclared_template_vars;
     Alcotest.test_case "load invalid skill" `Quick test_load_skill_invalid;
     Alcotest.test_case "load_all empty dir" `Quick test_load_all_empty_dir;
     Alcotest.test_case "load_all with skill" `Quick test_load_all_with_skill;
