@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B697
+priority: high
+status: pending
+tags: []
+title: 'Add support for xiaomi token plan, auto read API keys from the usual places and ~/.mimo too. We care particularly about the sg region, though there are 2 more regions i think. popualte the models for the token plan too. urls: https://token-plan-sgp.xiaomimimo.com/v1 and https://token-plan-sgp.xiaomimimo.com/anthropic'
+---
+
+Add support for xiaomi token plan, auto read API keys from the usual places and ~/.mimo too. We care particularly about the sg region, though there are 2 more regions i think. popualte the models for the token plan too. urls: https://token-plan-sgp.xiaomimimo.com/v1 and https://token-plan-sgp.xiaomimimo.com/anthropic
