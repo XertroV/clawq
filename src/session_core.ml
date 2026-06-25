@@ -69,6 +69,9 @@ type t = {
   pending_questions : (string, string Lwt.u) Hashtbl.t;
   question_callbacks : (string, string) Hashtbl.t;
       (** Maps callback_id -> answer_text for pending questions. *)
+  session_callbacks : (string, string list) Hashtbl.t;
+      (** Reverse map: session_key -> list of callback_ids registered for it.
+          Used to clean up sibling callbacks on resolution. *)
 }
 
 type drain_progress = {
@@ -313,6 +316,7 @@ let create ~config ?tool_registry ?sandbox ?(landlock_enabled = false) ?db () =
     postmortem_circuit_breakers = Hashtbl.create 8;
     pending_questions = Hashtbl.create 8;
     question_callbacks = Hashtbl.create 16;
+    session_callbacks = Hashtbl.create 16;
   }
 
 let is_draining mgr = mgr.draining
@@ -356,7 +360,8 @@ let unregister_channel_notifier mgr ~key =
   Hashtbl.remove mgr.alert_channel_notifiers key;
   Hashtbl.remove mgr.status_message_factories key;
   Hashtbl.remove mgr.connector_capabilities key;
-  Hashtbl.remove mgr.interrupt_finalizers key
+  Hashtbl.remove mgr.interrupt_finalizers key;
+  Hashtbl.remove mgr.rich_notifiers key
 
 let register_silent_channel_notifier mgr ~key notify =
   Hashtbl.replace mgr.silent_channel_notifiers key notify
@@ -481,6 +486,8 @@ let stop_busy_session_if_admin_stop mgr ~key ~message ?user_group () =
 let register_question_callbacks mgr ~key ~callbacks =
   Logs.debug (fun m ->
       m "[%s] Registering %d question callback(s)" key (List.length callbacks));
+  let cb_ids = List.map fst callbacks in
+  Hashtbl.replace mgr.session_callbacks key cb_ids;
   List.iter
     (fun (cb_id, answer_text) ->
       Hashtbl.replace mgr.question_callbacks cb_id answer_text)
@@ -492,7 +499,14 @@ let resolve_question_callback mgr ~key ~callback_id =
       Logs.debug (fun m ->
           m "[%s] Resolving question callback %s -> %s" key callback_id
             answer_text);
-      Hashtbl.remove mgr.question_callbacks callback_id;
+      (* Clean up sibling callbacks registered for the same question *)
+      (match Hashtbl.find_opt mgr.session_callbacks key with
+      | Some cb_ids ->
+          List.iter
+            (fun cb_id -> Hashtbl.remove mgr.question_callbacks cb_id)
+            cb_ids;
+          Hashtbl.remove mgr.session_callbacks key
+      | None -> Hashtbl.remove mgr.question_callbacks callback_id);
       match Hashtbl.find_opt mgr.pending_questions key with
       | Some resolver ->
           Hashtbl.remove mgr.pending_questions key;
@@ -1375,8 +1389,8 @@ let update_config ?(source = "") mgr config =
       Logs.info (fun m ->
           m "Primary model changed from '%s' to '%s' [source: %s]" old_model
             new_model source);
-  Hashtbl.iter
-    (fun key (agent, _, _) ->
+  List.iter
+    (fun (key, (agent, _, _)) ->
       agent.Agent.config <- config;
       (* Re-apply session model override or channel default *)
       (let db_override =
@@ -1401,7 +1415,7 @@ let update_config ?(source = "") mgr config =
        | None -> ());
       Agent.sync_observed_active_workspace_files agent;
       persist_session_workspace_state mgr ~key agent)
-    mgr.sessions
+    (Hashtbl.to_seq mgr.sessions |> List.of_seq)
 
 let set_session_model mgr ~key ~model =
   (match Hashtbl.find_opt mgr.sessions key with
@@ -1487,6 +1501,15 @@ let reset mgr ~key =
         Hashtbl.remove mgr.queued_messages key;
         Hashtbl.remove mgr.continuation_checks key;
         Hashtbl.remove mgr.observer_last_checked key;
+        (* Clean up question callbacks for the session being reset *)
+        (match Hashtbl.find_opt mgr.session_callbacks key with
+        | Some cb_ids ->
+            List.iter
+              (fun cb_id -> Hashtbl.remove mgr.question_callbacks cb_id)
+              cb_ids;
+            Hashtbl.remove mgr.session_callbacks key
+        | None -> ());
+        cancel_pending_question mgr ~key;
         let target_root = root_postmortem_session_key key in
         Hashtbl.filter_map_inplace
           (fun (rk, _) v -> if rk = target_root then None else Some v)

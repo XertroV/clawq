@@ -229,44 +229,49 @@ let update_phase ~db ~id (phase : Pair_coding_types.phase) =
 
 let set_approval ~db ~id ~(role : Pair_coding_types.role) ~approved ~comment =
   exec_exn db "BEGIN IMMEDIATE";
-  let col_approved, col_comment =
-    match role with
-    | Pair_coding_types.Coder -> ("coder_approved", "coder_comment")
-    | Observer -> ("observer_approved", "observer_comment")
-    | Coordinator ->
-        exec_exn db "ROLLBACK";
-        failwith "Coordinator cannot set approval"
-  in
-  let sql =
-    Printf.sprintf "UPDATE pair_session SET %s = ?, %s = ? WHERE id = ?"
-      col_approved col_comment
-  in
-  let stmt = Sqlite3.prepare db sql in
-  ignore (Sqlite3.bind stmt 1 (INT (if approved then 1L else 0L)));
-  ignore (Sqlite3.bind stmt 2 (TEXT comment));
-  ignore (Sqlite3.bind stmt 3 (TEXT id));
-  (match Sqlite3.step stmt with
-  | Sqlite3.Rc.DONE -> ()
-  | rc ->
+  let committed = ref false in
+  Fun.protect
+    ~finally:(fun () ->
+      if not !committed then
+        (try exec_exn db "ROLLBACK" with _ -> ()))
+    (fun () ->
+      let col_approved, col_comment =
+        match role with
+        | Pair_coding_types.Coder -> ("coder_approved", "coder_comment")
+        | Observer -> ("observer_approved", "observer_comment")
+        | Coordinator -> failwith "Coordinator cannot set approval"
+      in
+      let sql =
+        Printf.sprintf "UPDATE pair_session SET %s = ?, %s = ? WHERE id = ?"
+          col_approved col_comment
+      in
+      let stmt = Sqlite3.prepare db sql in
+      ignore (Sqlite3.bind stmt 1 (INT (if approved then 1L else 0L)));
+      ignore (Sqlite3.bind stmt 2 (TEXT comment));
+      ignore (Sqlite3.bind stmt 3 (TEXT id));
+      (match Sqlite3.step stmt with
+      | Sqlite3.Rc.DONE -> ()
+      | rc ->
+          ignore (Sqlite3.finalize stmt);
+          failwith
+            (Printf.sprintf "Failed to set approval: %s"
+               (Sqlite3.Rc.to_string rc)));
       ignore (Sqlite3.finalize stmt);
-      exec_exn db "ROLLBACK";
-      failwith
-        (Printf.sprintf "Failed to set approval: %s" (Sqlite3.Rc.to_string rc)));
-  ignore (Sqlite3.finalize stmt);
-  (* Check if both are now approved *)
-  let check_stmt =
-    Sqlite3.prepare db
-      "SELECT coder_approved, observer_approved FROM pair_session WHERE id = ?"
-  in
-  ignore (Sqlite3.bind check_stmt 1 (TEXT id));
-  let both =
-    match Sqlite3.step check_stmt with
-    | Sqlite3.Rc.ROW -> bool_col check_stmt 0 && bool_col check_stmt 1
-    | _ -> false
-  in
-  ignore (Sqlite3.finalize check_stmt);
-  exec_exn db "COMMIT";
-  both
+      (* Check if both are now approved *)
+      let check_stmt =
+        Sqlite3.prepare db
+          "SELECT coder_approved, observer_approved FROM pair_session WHERE id = ?"
+      in
+      ignore (Sqlite3.bind check_stmt 1 (TEXT id));
+      let both =
+        match Sqlite3.step check_stmt with
+        | Sqlite3.Rc.ROW -> bool_col check_stmt 0 && bool_col check_stmt 1
+        | _ -> false
+      in
+      ignore (Sqlite3.finalize check_stmt);
+      exec_exn db "COMMIT";
+      committed := true;
+      both)
 
 let add_note ~db ~session_id ~description ?category ~severity ?file ?line () =
   let stmt =

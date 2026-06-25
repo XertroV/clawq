@@ -93,7 +93,9 @@ let rec schedule_autonomous_continuation ?delay ?(around_turn = fun f -> f ())
                   Logs.warn (fun m ->
                       m "Autonomous continuation on_response failed for %s: %s"
                         key (Printexc.to_string exn));
-                  Lwt.return_unit)
+                  Session_core.with_continuation_state mgr ~key (fun state ->
+                      state.disarmed <- true;
+                      Lwt.return_unit))
             in
             let* () = Session_core.cancel_autonomous_continuation mgr ~key in
             schedule_autonomous_continuation ~delay ~around_turn ~on_response
