@@ -236,7 +236,7 @@ let handle_webhook_body ~(config : Runtime_config.lark_config)
                       Logs.err (fun m ->
                           m "Lark: agent error for chat=%s user=%s: %s" chat_id
                             user_id err);
-                      Lwt.return (`Ok {|{"code":0}|})))
+                      Lwt.return (`Error err)))
       with exn ->
         (* H3: catch synchronous exceptions (JSON parse, etc.) *)
         Logs.warn (fun m ->
