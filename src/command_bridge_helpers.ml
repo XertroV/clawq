@@ -16,9 +16,9 @@ let pid_is_alive pid =
 let read_file path =
   try
     let ic = open_in path in
-    let s = really_input_string ic (in_channel_length ic) in
-    close_in ic;
-    Some s
+    Fun.protect ~finally:(fun () -> close_in_noerr ic) (fun () ->
+      let s = really_input_string ic (in_channel_length ic) in
+      Some s)
   with _ -> None
 
 let proc_start_ticks pid =
@@ -744,8 +744,8 @@ let cmd_onboard () =
     in
     (try
        let oc = open_out config_path in
-       output_string oc template;
-       close_out oc
+       Fun.protect ~finally:(fun () -> close_out oc) (fun () ->
+         output_string oc template)
      with exn ->
        failwith
          (Printf.sprintf "Failed to write config: %s" (Printexc.to_string exn)));

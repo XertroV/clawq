@@ -10,10 +10,11 @@ let cmd_transcribe args =
       else
         let cfg = get_config () in
         let ic = open_in_bin file_path in
+        Fun.protect ~finally:(fun () -> close_in_noerr ic) (fun () ->
         let n = in_channel_length ic in
         let buf = Bytes.create n in
         really_input ic buf 0 n;
-        close_in ic;
+        Bytes.to_string buf)
         let audio_data = Bytes.to_string buf in
         let filename = Filename.basename file_path in
         let content_type = Stt.content_type_of_ext filename in
@@ -1110,9 +1111,9 @@ let cmd_tunnel args =
     in
     try
       let oc = open_out path in
-      output_string oc (Yojson.Safe.pretty_to_string ~std:true json);
-      output_char oc '\n';
-      close_out oc;
+      Fun.protect ~finally:(fun () -> close_out oc) (fun () ->
+        output_string oc (Yojson.Safe.pretty_to_string ~std:true json);
+        output_char oc '\n');
       Ok ()
     with exn -> Error (Printexc.to_string exn)
   in

@@ -105,8 +105,8 @@ let cmd_onboard () =
     in
     (try
        let oc = open_out config_path in
-       output_string oc template;
-       close_out oc
+       Fun.protect ~finally:(fun () -> close_out oc) (fun () ->
+         output_string oc template)
      with exn ->
        failwith
          (Printf.sprintf "Failed to write config: %s" (Printexc.to_string exn)));
@@ -398,9 +398,9 @@ let cmd_auth args =
                           Yojson.Safe.pretty_to_string ~std:true new_json
                         in
                         let oc = open_out config_path in
-                        output_string oc s;
-                        output_char oc '\n';
-                        close_out oc;
+                        Fun.protect ~finally:(fun () -> close_out oc) (fun () ->
+                          output_string oc s;
+                          output_char oc '\n');
                         "Secrets encrypted in " ^ config_path
                       with exn ->
                         Printf.sprintf "Failed to write config: %s"
@@ -638,8 +638,8 @@ let cmd_manifest = function
       ""
   | [ "teams"; "--output"; path ] ->
       let oc = open_out path in
-      output_string oc (Slash_commands_manifest.teams_json ());
-      close_out oc;
+      Fun.protect ~finally:(fun () -> close_out oc) (fun () ->
+        output_string oc (Slash_commands_manifest.teams_json ()));
       Printf.sprintf "Wrote Teams manifest to %s" path
   | [ "teams"; "-n"; n ] -> (
       match int_of_string_opt n with
