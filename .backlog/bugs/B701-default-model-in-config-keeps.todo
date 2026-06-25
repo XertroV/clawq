@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B701
+priority: high
+status: pending
+tags: []
+title: 'default model in config keeps returning. cannot get rid of warnings like: WARNING: "default_provider" ("zai_coding") is deprecated. The provider is already embedded in "agent_defaults.primary_model" using the "provider:model" format. Remove "default_provider" from your config.json.'
+---
+
+default model in config keeps returning. cannot get rid of warnings like: WARNING: "default_provider" ("zai_coding") is deprecated. The provider is already embedded in "agent_defaults.primary_model" using the "provider:model" format. Remove "default_provider" from your config.json.

@@ -695,3 +695,4 @@ bugs:
     - file: B698-update-models-available-for-mi.todo
     - file: B699-implement-dynamic-model-cachin.todo
     - file: B700-limit-codex-gpt-5-5-to-272k-to.todo
+    - file: B701-default-model-in-config-keeps.todo
