@@ -227,7 +227,11 @@ let handle_webhook_body ~(config : Runtime_config.lark_config)
                       m "Lark: agent error for chat=%s user=%s: %s" chat_id
                         user_id err);
                   Lwt.return (`Ok {|{"code":0}|})))
-  with _ -> Lwt.return (`Ok {|{"code":0}|})
+  with exn ->
+    (* H3: log exception instead of silently returning Ok. *)
+    Logs.warn (fun m ->
+        m "Lark handle_webhook_body exception: %s" (Printexc.to_string exn));
+    Lwt.return (`Ok {|{"code":0}|})
 
 let start ~(config : Runtime_config.t) ~(session_manager : Session.t) =
   match config.channels.lark with

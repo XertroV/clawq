@@ -598,7 +598,13 @@ let execute_tool_calls_stream agent ~db ~audit_enabled ~session_key
      validate_required_with_escalation mutates agent.last_missing_required_key,
      agent.last_missing_required_count, and agent.hard_abort_reason, which
      would race under Lwt_list.map_p. Pre-validate serially, then use cached
-     results in the parallel block. *)
+     results in the parallel block.
+     Note: agent.history, agent.effective_cwd, pending_history_wipe, and
+     agent.observed_active_workspace_files are also mutated inside the parallel
+     block via inject_system_messages/request_cwd_change callbacks and
+     post-tool workspace refresh. These are safe under OCaml 5.1 cooperative
+     Lwt scheduling (no yield points in the mutation paths). If multi-domain
+     parallelism is introduced, these would need synchronization. *)
   let pre_validations =
     List.map
       (fun (tc : Provider.tool_call) ->

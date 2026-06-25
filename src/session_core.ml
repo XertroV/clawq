@@ -1410,21 +1410,26 @@ let reset mgr ~key =
             ~label:(Printf.sprintf "session_mutex/reset[%s]" key)
             mutex
         in
-        (* F2: only re-clear DB if no new session was created during the gap.
-           If a new session exists, its data should not be wiped.
-           This is a racy read (no sessions_lock) but is only used for the
-           optimization of skipping the redundant clear — if we miss a
-           concurrent creation, we clear unnecessarily (original behavior). *)
-        let new_session_created = Hashtbl.mem mgr.sessions key in
-        (match (mgr.db, new_session_created) with
-        | Some db, false -> Memory.clear_session ~db ~session_key:key
-        | Some _db, true ->
-            Logs.info (fun m ->
-                m
-                  "Session %s was recreated during reset; skipping Phase 2 DB \
-                   clear to preserve new session data"
-                  key)
-        | None, _ -> ());
+        (* F2: check-and-clear under sessions_lock to eliminate the race
+           window between checking if a new session was created and clearing
+           the DB. Without the lock, a new session could be created after
+           the check but before the clear, causing its data to be wiped. *)
+        let* () =
+          Lwt_util.with_lock_timeout ~fatal_timeout:Lwt_util.short_fatal_timeout
+            ~label:(Printf.sprintf "sessions_lock/reset_phase2[%s]" key)
+            mgr.sessions_lock (fun () ->
+              let new_session_created = Hashtbl.mem mgr.sessions key in
+              (match (mgr.db, new_session_created) with
+              | Some db, false -> Memory.clear_session ~db ~session_key:key
+              | Some _db, true ->
+                  Logs.info (fun m ->
+                      m
+                        "Session %s was recreated during reset; skipping Phase \
+                         2 DB clear to preserve new session data"
+                        key)
+              | None, _ -> ());
+              Lwt.return_unit)
+        in
         Lwt_mutex.unlock mutex;
         Lwt.return_unit
     | None -> Lwt.return_unit

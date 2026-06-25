@@ -2,6 +2,17 @@ open Config_loader_support
 
 let default_path = Config_loader_support.default_path
 
+(* H2: helper to log warnings when config field parsing fails silently.
+   Use [with_default field_name default (fun () -> parse_expr)] instead of
+   [try parse_expr with _ -> default] to get visibility into config typos. *)
+let with_default field_name default f =
+  try f ()
+  with exn ->
+    Logs.debug (fun m ->
+        m "Config field '%s' parse failed: %s (using default)" field_name
+          (Printexc.to_string exn));
+    default
+
 let parse_config ?(resolve_secrets = true) json =
   let open Yojson.Safe.Util in
   let default = Runtime_config.default in
@@ -11,12 +22,12 @@ let parse_config ?(resolve_secrets = true) json =
     else try json |> member "models" |> member "providers" with _ -> `Null
   in
   let default_temperature =
-    try json |> member "default_temperature" |> to_float
-    with _ -> default.default_temperature
+    with_default "default_temperature" default.default_temperature (fun () ->
+        json |> member "default_temperature" |> to_float)
   in
   let parsed_default_provider =
-    try Some (json |> member "default_provider" |> to_string)
-    with _ -> default.default_provider
+    with_default "default_provider" default.default_provider (fun () ->
+        Some (json |> member "default_provider" |> to_string))
   in
   let () =
     match parsed_default_provider with
