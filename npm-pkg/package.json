@@ -1,0 +1,35 @@
+{
+  "name": "clawq",
+  "version": "0.0.0",
+  "description": "Formally verified personal AI assistant runtime",
+  "author": "Max Kaye <m@xk.io>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/XertroV/clawq.git"
+  },
+  "bugs": {
+    "url": "https://github.com/XertroV/clawq/issues"
+  },
+  "homepage": "https://github.com/XertroV/clawq#readme",
+  "keywords": [
+    "ai",
+    "assistant",
+    "runtime",
+    "formal-verification",
+    "coq",
+    "ocaml"
+  ],
+  "bin": {
+    "clawq": "./bin/clawq"
+  },
+  "files": [
+    "bin/",
+    "README.md",
+    "LICENSE"
+  ],
+  "debug": "./bin/clawq.debug",
+  "scripts": {
+    "postinstall": "node scripts/install.js"
+  }
+}

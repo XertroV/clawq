@@ -2,6 +2,6 @@
 
 (env
  (release-speed
-  (ocamlopt_flags (:standard -O3)))
+  (ocamlopt_flags (:standard -O2)))
  (release-size
   (ocamlopt_flags (:standard -O2 -compact -nodynlink))))
