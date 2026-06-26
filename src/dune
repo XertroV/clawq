@@ -114,6 +114,7 @@
   typing_indicator
   slash_commands_bl_fmt
   slash_commands_fmt
+  slash_commands_fmt_extra
   slash_commands_stats_fmt
   slash_commands
   slash_commands_bash
