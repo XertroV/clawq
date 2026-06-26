@@ -1,0 +1,12 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B708
+priority: high
+status: pending
+tags: []
+title: On the website home page, add a button in top right of clawq image to change opacity of image and border to 0. should have a nice fade over 0.8s
+---
+
+On the website home page, add a button in top right of clawq image to change opacity of image and border to 0. should have a nice fade over 0.8s
