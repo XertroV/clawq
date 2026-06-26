@@ -54,17 +54,15 @@ let build_json_both_disabled () =
 
 let post_instructions_content () =
   let s = Setup_zai_mcp.post_setup_instructions in
-  let contains sub =
-    try
-      ignore (Str.search_forward (Str.regexp_string sub) s 0);
-      true
-    with Not_found -> false
-  in
   Alcotest.(check bool)
     "has docs url" true
-    (contains "https://clawq.org/zai-mcp/");
-  Alcotest.(check bool) "mentions web search" true (contains "web search");
-  Alcotest.(check bool) "mentions web fetch" true (contains "web fetch")
+    (Test_helpers.string_contains s "https://clawq.org/zai-mcp/");
+  Alcotest.(check bool)
+    "mentions web search" true
+    (Test_helpers.string_contains s "web search");
+  Alcotest.(check bool)
+    "mentions web fetch" true
+    (Test_helpers.string_contains s "web fetch")
 
 let suite =
   [

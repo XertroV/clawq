@@ -116,17 +116,15 @@ let build_json_custom_nak_path () =
 
 let instructions_content () =
   let s = Setup_nostr.post_setup_instructions in
-  let contains sub =
-    try
-      ignore (Str.search_forward (Str.regexp_string sub) s 0);
-      true
-    with Not_found -> false
-  in
   Alcotest.(check bool)
     "has docs URL" true
-    (contains "https://clawq.org/channels/#nostr");
-  Alcotest.(check bool) "has nak mention" true (contains "nak");
-  Alcotest.(check bool) "has daemon start" true (contains "clawq daemon start")
+    (Test_helpers.string_contains s "https://clawq.org/channels/#nostr");
+  Alcotest.(check bool)
+    "has nak mention" true
+    (Test_helpers.string_contains s "nak");
+  Alcotest.(check bool)
+    "has daemon start" true
+    (Test_helpers.string_contains s "clawq daemon start")
 
 let suite =
   [

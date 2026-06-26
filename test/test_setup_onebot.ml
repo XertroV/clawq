@@ -79,17 +79,15 @@ let build_json_with_token () =
 
 let instructions_content () =
   let s = Setup_onebot.post_setup_instructions in
-  let contains sub =
-    try
-      ignore (Str.search_forward (Str.regexp_string sub) s 0);
-      true
-    with Not_found -> false
-  in
   Alcotest.(check bool)
     "has docs URL" true
-    (contains "https://clawq.org/channels/#onebot");
-  Alcotest.(check bool) "has go-cqhttp mention" true (contains "go-cqhttp");
-  Alcotest.(check bool) "has daemon start" true (contains "clawq daemon start")
+    (Test_helpers.string_contains s "https://clawq.org/channels/#onebot");
+  Alcotest.(check bool)
+    "has go-cqhttp mention" true
+    (Test_helpers.string_contains s "go-cqhttp");
+  Alcotest.(check bool)
+    "has daemon start" true
+    (Test_helpers.string_contains s "clawq daemon start")
 
 let suite =
   [

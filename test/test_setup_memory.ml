@@ -117,17 +117,15 @@ let build_json_null_optional_fields () =
 
 let post_instructions_content () =
   let s = Setup_memory.post_setup_instructions in
-  let contains sub =
-    try
-      ignore (Str.search_forward (Str.regexp_string sub) s 0);
-      true
-    with Not_found -> false
-  in
   Alcotest.(check bool)
     "has docs url" true
-    (contains "https://clawq.org/memory/");
-  Alcotest.(check bool) "mentions backend" true (contains "backend");
-  Alcotest.(check bool) "mentions compaction" true (contains "compaction")
+    (Test_helpers.string_contains s "https://clawq.org/memory/");
+  Alcotest.(check bool)
+    "mentions backend" true
+    (Test_helpers.string_contains s "backend");
+  Alcotest.(check bool)
+    "mentions compaction" true
+    (Test_helpers.string_contains s "compaction")
 
 let suite =
   [

@@ -130,50 +130,37 @@ let instructions_without_tunnel () =
     Setup_teams.post_setup_instructions ~webhook_path:"/teams/webhook"
       ~gateway_port:13451 ~tunnel_url:None
   in
-  let contains sub =
-    try
-      ignore (Str.search_forward (Str.regexp_string sub) s 0);
-      true
-    with Not_found -> false
-  in
   Alcotest.(check bool)
     "has localhost url" true
-    (contains "http://localhost:13451/teams/webhook");
-  Alcotest.(check bool) "has tunnel note" true (contains "set up a tunnel");
+    (Test_helpers.string_contains s "http://localhost:13451/teams/webhook");
+  Alcotest.(check bool)
+    "has tunnel note" true
+    (Test_helpers.string_contains s "set up a tunnel");
   Alcotest.(check bool)
     "has azure portal" true
-    (contains "https://portal.azure.com")
+    (Test_helpers.string_contains s "https://portal.azure.com")
 
 let instructions_with_tunnel () =
   let s =
     Setup_teams.post_setup_instructions ~webhook_path:"/teams/webhook"
       ~gateway_port:13451 ~tunnel_url:(Some "https://my.tunnel.example.com")
   in
-  let contains sub =
-    try
-      ignore (Str.search_forward (Str.regexp_string sub) s 0);
-      true
-    with Not_found -> false
-  in
   Alcotest.(check bool)
     "has tunnel url" true
-    (contains "https://my.tunnel.example.com/teams/webhook");
-  Alcotest.(check bool) "no tunnel note" false (contains "set up a tunnel")
+    (Test_helpers.string_contains s
+       "https://my.tunnel.example.com/teams/webhook");
+  Alcotest.(check bool)
+    "no tunnel note" false
+    (Test_helpers.string_contains s "set up a tunnel")
 
 let instructions_mentions_teams_channel () =
   let s =
     Setup_teams.post_setup_instructions ~webhook_path:"/teams/webhook"
       ~gateway_port:8080 ~tunnel_url:None
   in
-  let contains sub =
-    try
-      ignore (Str.search_forward (Str.regexp_string sub) s 0);
-      true
-    with Not_found -> false
-  in
   Alcotest.(check bool)
     "mentions Microsoft Teams" true
-    (contains "Microsoft Teams")
+    (Test_helpers.string_contains s "Microsoft Teams")
 
 let suite =
   [

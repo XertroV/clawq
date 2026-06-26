@@ -88,17 +88,15 @@ let build_json_with_fallback () =
 
 let post_instructions_content () =
   let s = Setup_resilience.post_setup_instructions in
-  let contains sub =
-    try
-      ignore (Str.search_forward (Str.regexp_string sub) s 0);
-      true
-    with Not_found -> false
-  in
   Alcotest.(check bool)
     "has docs url" true
-    (contains "https://clawq.org/resilience/");
-  Alcotest.(check bool) "mentions timeout" true (contains "timeout");
-  Alcotest.(check bool) "mentions retries" true (contains "retries")
+    (Test_helpers.string_contains s "https://clawq.org/resilience/");
+  Alcotest.(check bool)
+    "mentions timeout" true
+    (Test_helpers.string_contains s "timeout");
+  Alcotest.(check bool)
+    "mentions retries" true
+    (Test_helpers.string_contains s "retries")
 
 let suite =
   [

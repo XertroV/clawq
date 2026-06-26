@@ -72,16 +72,12 @@ let build_json_disabled () =
 
 let post_instructions_content () =
   let s = Setup_observer.post_setup_instructions in
-  let contains sub =
-    try
-      ignore (Str.search_forward (Str.regexp_string sub) s 0);
-      true
-    with Not_found -> false
-  in
   Alcotest.(check bool)
     "has docs url" true
-    (contains "https://clawq.org/observer/");
-  Alcotest.(check bool) "mentions model" true (contains "model")
+    (Test_helpers.string_contains s "https://clawq.org/observer/");
+  Alcotest.(check bool)
+    "mentions model" true
+    (Test_helpers.string_contains s "model")
 
 let suite =
   [

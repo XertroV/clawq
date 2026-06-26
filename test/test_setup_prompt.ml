@@ -74,21 +74,15 @@ let build_json_disabled_sections () =
 
 let post_instructions_content () =
   let s = Setup_prompt.post_setup_instructions in
-  let contains sub =
-    try
-      ignore (Str.search_forward (Str.regexp_string sub) s 0);
-      true
-    with Not_found -> false
-  in
   Alcotest.(check bool)
     "has docs url" true
-    (contains "https://clawq.org/prompt/");
+    (Test_helpers.string_contains s "https://clawq.org/prompt/");
   Alcotest.(check bool)
     "mentions dynamic_enabled" true
-    (contains "dynamic_enabled");
+    (Test_helpers.string_contains s "dynamic_enabled");
   Alcotest.(check bool)
     "mentions workspace_files" true
-    (contains "workspace_files")
+    (Test_helpers.string_contains s "workspace_files")
 
 let suite =
   [

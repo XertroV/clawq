@@ -57,17 +57,15 @@ let build_json_email_roundtrip () =
 
 let post_instructions_content () =
   let s = Setup_notify.post_setup_instructions in
-  let contains sub =
-    try
-      ignore (Str.search_forward (Str.regexp_string sub) s 0);
-      true
-    with Not_found -> false
-  in
   Alcotest.(check bool)
     "has docs url" true
-    (contains "https://clawq.org/notify/");
-  Alcotest.(check bool) "mentions telegram" true (contains "telegram");
-  Alcotest.(check bool) "mentions cron" true (contains "cron")
+    (Test_helpers.string_contains s "https://clawq.org/notify/");
+  Alcotest.(check bool)
+    "mentions telegram" true
+    (Test_helpers.string_contains s "telegram");
+  Alcotest.(check bool)
+    "mentions cron" true
+    (Test_helpers.string_contains s "cron")
 
 let suite =
   [

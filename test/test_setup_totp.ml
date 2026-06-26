@@ -110,17 +110,15 @@ let generate_totp_secret_base32_chars () =
 
 let post_instructions_content () =
   let s = Setup_totp.post_setup_instructions in
-  let contains sub =
-    try
-      ignore (Str.search_forward (Str.regexp_string sub) s 0);
-      true
-    with Not_found -> false
-  in
   Alcotest.(check bool)
     "has docs url" true
-    (contains "https://clawq.org/security/#totp");
-  Alcotest.(check bool) "mentions authenticator" true (contains "authenticator");
-  Alcotest.(check bool) "mentions session_ttl" true (contains "session_ttl")
+    (Test_helpers.string_contains s "https://clawq.org/security/#totp");
+  Alcotest.(check bool)
+    "mentions authenticator" true
+    (Test_helpers.string_contains s "authenticator");
+  Alcotest.(check bool)
+    "mentions session_ttl" true
+    (Test_helpers.string_contains s "session_ttl")
 
 let suite =
   [

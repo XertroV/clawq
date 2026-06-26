@@ -106,19 +106,15 @@ let build_json_nested_structure () =
 
 let post_instructions_content () =
   let s = Setup_security.post_setup_instructions in
-  let contains sub =
-    try
-      ignore (Str.search_forward (Str.regexp_string sub) s 0);
-      true
-    with Not_found -> false
-  in
   Alcotest.(check bool)
     "has docs url" true
-    (contains "https://clawq.org/security/");
+    (Test_helpers.string_contains s "https://clawq.org/security/");
   Alcotest.(check bool)
     "mentions workspace_only" true
-    (contains "workspace_only");
-  Alcotest.(check bool) "mentions rate limit" true (contains "Rate limits")
+    (Test_helpers.string_contains s "workspace_only");
+  Alcotest.(check bool)
+    "mentions rate limit" true
+    (Test_helpers.string_contains s "Rate limits")
 
 let suite =
   [

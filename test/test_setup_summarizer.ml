@@ -193,16 +193,18 @@ let post_instructions_content () =
     }
   in
   let s = Setup_summarizer.post_setup_instructions ~sc in
-  let contains sub =
-    try
-      ignore (Str.search_forward (Str.regexp_string sub) s 0);
-      true
-    with Not_found -> false
-  in
-  Alcotest.(check bool) "has enabled" true (contains "yes");
-  Alcotest.(check bool) "has model" true (contains "groq:llama-3.3-70b");
-  Alcotest.(check bool) "has unsummarize" true (contains "unsummarize");
-  Alcotest.(check bool) "has threshold" true (contains "2500")
+  Alcotest.(check bool)
+    "has enabled" true
+    (Test_helpers.string_contains s "yes");
+  Alcotest.(check bool)
+    "has model" true
+    (Test_helpers.string_contains s "groq:llama-3.3-70b");
+  Alcotest.(check bool)
+    "has unsummarize" true
+    (Test_helpers.string_contains s "unsummarize");
+  Alcotest.(check bool)
+    "has threshold" true
+    (Test_helpers.string_contains s "2500")
 
 (* ── Suite ───────────────────────────────────────────────────────── *)
 

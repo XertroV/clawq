@@ -92,35 +92,31 @@ let instructions_socket_mode () =
     Setup_slack.post_setup_instructions ~events_path:"/slack/events"
       ~socket_mode:true ~gateway_port:13451 ~tunnel_url:None
   in
-  let contains sub =
-    try
-      ignore (Str.search_forward (Str.regexp_string sub) s 0);
-      true
-    with Not_found -> false
-  in
   Alcotest.(check bool)
     "has api.slack.com" true
-    (contains "https://api.slack.com/apps");
-  Alcotest.(check bool) "has Socket Mode" true (contains "Socket Mode");
-  Alcotest.(check bool) "has xapp" true (contains "xapp-");
-  Alcotest.(check bool) "has chat:write scope" true (contains "chat:write")
+    (Test_helpers.string_contains s "https://api.slack.com/apps");
+  Alcotest.(check bool)
+    "has Socket Mode" true
+    (Test_helpers.string_contains s "Socket Mode");
+  Alcotest.(check bool) "has xapp" true (Test_helpers.string_contains s "xapp-");
+  Alcotest.(check bool)
+    "has chat:write scope" true
+    (Test_helpers.string_contains s "chat:write")
 
 let instructions_events_api () =
   let s =
     Setup_slack.post_setup_instructions ~events_path:"/slack/events"
       ~socket_mode:false ~gateway_port:13451 ~tunnel_url:None
   in
-  let contains sub =
-    try
-      ignore (Str.search_forward (Str.regexp_string sub) s 0);
-      true
-    with Not_found -> false
-  in
   Alcotest.(check bool)
     "has events url" true
-    (contains "http://localhost:13451/slack/events");
-  Alcotest.(check bool) "has Signing Secret" true (contains "Signing Secret");
-  Alcotest.(check bool) "has tunnel note" true (contains "set up a tunnel")
+    (Test_helpers.string_contains s "http://localhost:13451/slack/events");
+  Alcotest.(check bool)
+    "has Signing Secret" true
+    (Test_helpers.string_contains s "Signing Secret");
+  Alcotest.(check bool)
+    "has tunnel note" true
+    (Test_helpers.string_contains s "set up a tunnel")
 
 let instructions_with_tunnel () =
   let s =
@@ -128,16 +124,12 @@ let instructions_with_tunnel () =
       ~socket_mode:false ~gateway_port:13451
       ~tunnel_url:(Some "https://my.tunnel.example.com")
   in
-  let contains sub =
-    try
-      ignore (Str.search_forward (Str.regexp_string sub) s 0);
-      true
-    with Not_found -> false
-  in
   Alcotest.(check bool)
     "has tunnel url" true
-    (contains "https://my.tunnel.example.com/slack/events");
-  Alcotest.(check bool) "no tunnel note" false (contains "set up a tunnel")
+    (Test_helpers.string_contains s "https://my.tunnel.example.com/slack/events");
+  Alcotest.(check bool)
+    "no tunnel note" false
+    (Test_helpers.string_contains s "set up a tunnel")
 
 let deep_merge_preserves_existing () =
   let existing =

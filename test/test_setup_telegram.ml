@@ -134,16 +134,18 @@ let build_full_with_totp () =
 
 let instructions_content () =
   let s = Setup_telegram.post_setup_instructions ~account_name:"default" in
-  let contains sub =
-    try
-      ignore (Str.search_forward (Str.regexp_string sub) s 0);
-      true
-    with Not_found -> false
-  in
-  Alcotest.(check bool) "mentions BotFather" true (contains "BotFather");
-  Alcotest.(check bool) "mentions /newbot" true (contains "/newbot");
-  Alcotest.(check bool) "mentions daemon start" true (contains "daemon start");
-  Alcotest.(check bool) "mentions account name" true (contains "default")
+  Alcotest.(check bool)
+    "mentions BotFather" true
+    (Test_helpers.string_contains s "BotFather");
+  Alcotest.(check bool)
+    "mentions /newbot" true
+    (Test_helpers.string_contains s "/newbot");
+  Alcotest.(check bool)
+    "mentions daemon start" true
+    (Test_helpers.string_contains s "daemon start");
+  Alcotest.(check bool)
+    "mentions account name" true
+    (Test_helpers.string_contains s "default")
 
 let deep_merge_preserves_existing () =
   let existing =

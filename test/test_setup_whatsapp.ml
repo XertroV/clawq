@@ -76,18 +76,12 @@ let build_json_restricted_numbers () =
 
 let post_instructions_content () =
   let s = Setup_whatsapp.post_setup_instructions in
-  let contains sub =
-    try
-      ignore (Str.search_forward (Str.regexp_string sub) s 0);
-      true
-    with Not_found -> false
-  in
   Alcotest.(check bool)
     "has docs url" true
-    (contains "https://clawq.org/channels/#whatsapp");
+    (Test_helpers.string_contains s "https://clawq.org/channels/#whatsapp");
   Alcotest.(check bool)
     "has meta developers" true
-    (contains "developers.facebook.com")
+    (Test_helpers.string_contains s "developers.facebook.com")
 
 let suite =
   [

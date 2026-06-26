@@ -141,18 +141,22 @@ let post_instructions_managed () =
     }
   in
   let s = Setup_tunnel.post_setup_instructions ~tc ~gateway_port:13451 in
-  let contains sub =
-    try
-      ignore (Str.search_forward (Str.regexp_string sub) s 0);
-      true
-    with Not_found -> false
-  in
-  Alcotest.(check bool) "has provider" true (contains "cloudflare");
-  Alcotest.(check bool) "has managed" true (contains "managed");
-  Alcotest.(check bool) "has port" true (contains "13451");
-  Alcotest.(check bool) "has tunnel name" true (contains "my-tunnel");
-  Alcotest.(check bool) "has install link" true (contains "cloudflare-one");
-  Alcotest.(check bool) "has tunnel start" true (contains "clawq tunnel start")
+  Alcotest.(check bool)
+    "has provider" true
+    (Test_helpers.string_contains s "cloudflare");
+  Alcotest.(check bool)
+    "has managed" true
+    (Test_helpers.string_contains s "managed");
+  Alcotest.(check bool) "has port" true (Test_helpers.string_contains s "13451");
+  Alcotest.(check bool)
+    "has tunnel name" true
+    (Test_helpers.string_contains s "my-tunnel");
+  Alcotest.(check bool)
+    "has install link" true
+    (Test_helpers.string_contains s "cloudflare-one");
+  Alcotest.(check bool)
+    "has tunnel start" true
+    (Test_helpers.string_contains s "clawq tunnel start")
 
 let post_instructions_static () =
   let tc : Runtime_config.tunnel_config =
@@ -166,16 +170,12 @@ let post_instructions_static () =
     }
   in
   let s = Setup_tunnel.post_setup_instructions ~tc ~gateway_port:13451 in
-  let contains sub =
-    try
-      ignore (Str.search_forward (Str.regexp_string sub) s 0);
-      true
-    with Not_found -> false
-  in
   Alcotest.(check bool)
     "has static url" true
-    (contains "https://fixed.example.com");
-  Alcotest.(check bool) "has static mode" true (contains "static URL")
+    (Test_helpers.string_contains s "https://fixed.example.com");
+  Alcotest.(check bool)
+    "has static mode" true
+    (Test_helpers.string_contains s "static URL")
 
 let post_instructions_ngrok () =
   let tc : Runtime_config.tunnel_config =
@@ -189,14 +189,12 @@ let post_instructions_ngrok () =
     }
   in
   let s = Setup_tunnel.post_setup_instructions ~tc ~gateway_port:13451 in
-  let contains sub =
-    try
-      ignore (Str.search_forward (Str.regexp_string sub) s 0);
-      true
-    with Not_found -> false
-  in
-  Alcotest.(check bool) "has ngrok" true (contains "ngrok");
-  Alcotest.(check bool) "has ngrok link" true (contains "ngrok.com/download")
+  Alcotest.(check bool)
+    "has ngrok" true
+    (Test_helpers.string_contains s "ngrok");
+  Alcotest.(check bool)
+    "has ngrok link" true
+    (Test_helpers.string_contains s "ngrok.com/download")
 
 let suite =
   [
