@@ -820,6 +820,139 @@ let test_project_docs_budget_truncation () =
             "content is truncated" true
             (contains c "[...truncated...]"))
 
+(* B706: room/thread sessions autoload project docs from their per-room
+   effective_cwd (workspace subfolder), not the daemon process cwd. *)
+let make_room_dir ?(git = false) () =
+  let base = Filename.get_temp_dir_name () in
+  let dir =
+    Filename.concat base
+      (Printf.sprintf "clawq_room_%d_%d" (Unix.getpid ()) (Random.bits ()))
+  in
+  (try rm_rf dir with _ -> ());
+  Unix.mkdir dir 0o755;
+  if git then Unix.mkdir (Filename.concat dir ".git") 0o755;
+  dir
+
+let test_project_docs_from_effective_cwd_git_repo () =
+  (* Process cwd is one git repo (with its own docs); the room's effective_cwd
+     is a different git repo. Docs must come from the room, not the process. *)
+  with_temp_git_repo (fun process_dir ->
+      write_file
+        (Filename.concat process_dir "CLAUDE.md")
+        "PROCESS CWD SHOULD NOT APPEAR";
+      let room = make_room_dir ~git:true () in
+      Fun.protect ~finally:(fun () -> try rm_rf room with _ -> ())
+      @@ fun () ->
+      write_file (Filename.concat room "CLAUDE.md") "ROOM CLAUDE SENTINEL";
+      write_file (Filename.concat room "AGENTS.md") "ROOM AGENTS SENTINEL";
+      let cfg = { Runtime_config.default with prompt = minimal_prompt_cfg } in
+      let pd =
+        Prompt_builder.build_project_docs_message ~config:cfg
+          ~effective_cwd:room ~ws_doc_digests:[] ()
+      in
+      match pd.content with
+      | None -> Alcotest.fail "expected project docs content from room cwd"
+      | Some c ->
+          Alcotest.(check bool)
+            "room CLAUDE.md loaded" true
+            (contains c "ROOM CLAUDE SENTINEL");
+          Alcotest.(check bool)
+            "room AGENTS.md loaded" true
+            (contains c "ROOM AGENTS SENTINEL");
+          Alcotest.(check bool)
+            "process cwd docs not loaded" false
+            (contains c "PROCESS CWD SHOULD NOT APPEAR"))
+
+let test_project_docs_from_non_git_effective_cwd () =
+  (* A plain (non-git) room folder with an AGENTS.md should still autoload. *)
+  with_temp_git_repo (fun _process_dir ->
+      let room = make_room_dir ~git:false () in
+      Fun.protect ~finally:(fun () -> try rm_rf room with _ -> ())
+      @@ fun () ->
+      (* Guard against a polluted temp tree (e.g. a stray /tmp/.git) that would
+         make the room resolve to an ancestor git root instead of itself. *)
+      (match Prompt_builder.find_git_root_and_dir room with
+      | Some _ -> Alcotest.skip ()
+      | None -> ());
+      write_file (Filename.concat room "AGENTS.md") "PLAIN ROOM AGENTS SENTINEL";
+      let cfg = { Runtime_config.default with prompt = minimal_prompt_cfg } in
+      let pd =
+        Prompt_builder.build_project_docs_message ~config:cfg
+          ~effective_cwd:room ~ws_doc_digests:[] ()
+      in
+      match pd.content with
+      | None -> Alcotest.fail "expected project docs from non-git room folder"
+      | Some c ->
+          Alcotest.(check bool)
+            "plain room AGENTS.md loaded" true
+            (contains c "PLAIN ROOM AGENTS SENTINEL");
+          Alcotest.(check (option string))
+            "git_root reports the room dir" (Some room) pd.git_root)
+
+let test_project_docs_refresh_on_effective_cwd_change () =
+  (* Agent created with no effective_cwd in a docless git repo; later bound to a
+     room with docs. refresh_project_docs_if_changed must load the room docs. *)
+  with_temp_git_repo (fun _process_dir ->
+      let cfg = { Runtime_config.default with prompt = minimal_prompt_cfg } in
+      let agent = Agent.create ~config:cfg () in
+      let room = make_room_dir ~git:true () in
+      Fun.protect ~finally:(fun () -> try rm_rf room with _ -> ())
+      @@ fun () ->
+      write_file (Filename.concat room "AGENTS.md") "REBOUND ROOM SENTINEL";
+      agent.Agent.effective_cwd <- Some room;
+      let event = Agent.refresh_project_docs_if_changed agent in
+      Alcotest.(check bool) "refresh emitted an event" true (event <> None);
+      match agent.Agent.project_docs_content with
+      | None -> Alcotest.fail "expected project docs after rebind"
+      | Some c ->
+          Alcotest.(check bool)
+            "rebound room docs loaded" true
+            (contains c "REBOUND ROOM SENTINEL");
+          Alcotest.(check (option string))
+            "git_root updated to room" (Some room)
+            agent.Agent.project_docs_git_root)
+
+let test_project_docs_docless_rebind_no_event () =
+  (* B706 regression: binding a room to a doc-less folder must update the
+     resolved root (so later docs are picked up) but must NOT emit a spurious
+     "project instructions refreshed" event/notification when no docs exist. *)
+  with_temp_git_repo (fun _process_dir ->
+      let cfg = { Runtime_config.default with prompt = minimal_prompt_cfg } in
+      let agent = Agent.create ~config:cfg () in
+      let room = make_room_dir ~git:true () in
+      Fun.protect ~finally:(fun () -> try rm_rf room with _ -> ())
+      @@ fun () ->
+      (* Room has no CLAUDE.md/AGENTS.md. *)
+      agent.Agent.effective_cwd <- Some room;
+      let event = Agent.refresh_project_docs_if_changed agent in
+      Alcotest.(check bool) "no event for doc-less rebind" true (event = None);
+      Alcotest.(check (option string))
+        "resolved root still updated to room" (Some room)
+        agent.Agent.project_docs_git_root;
+      Alcotest.(check bool)
+        "content remains empty" true
+        (agent.Agent.project_docs_content = None))
+
+let test_project_docs_main_session_non_git_unchanged () =
+  (* Scope guard (B706): the non-git fallback applies only to per-room
+     effective_cwd. A main session (no effective_cwd) in a non-git cwd must NOT
+     start autoloading docs from that cwd — prior behavior is preserved. *)
+  let room = make_room_dir ~git:false () in
+  Fun.protect ~finally:(fun () -> try rm_rf room with _ -> ()) @@ fun () ->
+  (match Prompt_builder.find_git_root_and_dir room with
+  | Some _ -> Alcotest.skip ()
+  | None -> ());
+  write_file (Filename.concat room "CLAUDE.md") "MAIN NON GIT SHOULD NOT LOAD";
+  let cwd_before = Sys.getcwd () in
+  Fun.protect ~finally:(fun () -> Sys.chdir cwd_before) @@ fun () ->
+  Sys.chdir room;
+  let cfg = { Runtime_config.default with prompt = minimal_prompt_cfg } in
+  let pd =
+    Prompt_builder.build_project_docs_message ~config:cfg ~ws_doc_digests:[] ()
+  in
+  Alcotest.(check bool)
+    "main session in non-git cwd loads no project docs" true (pd.content = None)
+
 let test_agent_tmpl =
   {
     Agent_template.name = "test_coder";
@@ -1241,6 +1374,16 @@ let suite =
       test_project_docs_disabled_via_config;
     Alcotest.test_case "project docs budget truncation" `Quick
       test_project_docs_budget_truncation;
+    Alcotest.test_case "project docs from effective_cwd git repo (B706)" `Quick
+      test_project_docs_from_effective_cwd_git_repo;
+    Alcotest.test_case "project docs from non-git effective_cwd (B706)" `Quick
+      test_project_docs_from_non_git_effective_cwd;
+    Alcotest.test_case "project docs refresh on effective_cwd change (B706)"
+      `Quick test_project_docs_refresh_on_effective_cwd_change;
+    Alcotest.test_case "project docs doc-less rebind emits no event (B706)"
+      `Quick test_project_docs_docless_rebind_no_event;
+    Alcotest.test_case "project docs main session non-git unchanged (B706)"
+      `Quick test_project_docs_main_session_non_git_unchanged;
     Alcotest.test_case "workspace docs suppressed for named agent" `Quick
       test_workspace_docs_suppressed_for_named_agent;
     Alcotest.test_case "agent goal and backstory in prompt" `Quick

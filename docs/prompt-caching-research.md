@@ -124,6 +124,7 @@ Key observations:
 `build_messages` (`agent.ml:116-118`) calls `Prompt_builder.build` on **every turn**, which regenerates the entire system prompt. The prompt builder (`prompt_builder.ml:395-533`) includes:
 
 - Workspace doc blocks (`EGO.md`, `AGENTS.md`, `MEMORY.md`, etc.) — **read fresh from disk each turn**. If any workspace file changes (even a single byte), the system prompt changes.
+  - Note: project instruction docs (`CLAUDE.md`/`AGENTS.md`) are a separate block from workspace docs. They are resolved per session from the room/thread `effective_cwd`'s git-root (or that folder itself when non-git), falling back to the daemon process cwd's git-root for the main session, and reloaded by `Agent.refresh_project_docs_if_changed` when the resolved root changes (B706).
 - Tool descriptions block — regenerated from registry each turn. Tool ordering depends on `List.sort` by name, which is at least deterministic.
 - Build info (version, git hash, build date) — stable within a binary.
 - Various config-driven sections (autonomy, safety, workspace, operating stance).

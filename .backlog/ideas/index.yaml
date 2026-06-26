@@ -377,3 +377,5 @@ ideas:
       status: done
       tags: []
       title: Implement rendering for ACP logs with nice formatting via connector -- use format_adapter and DSL
+    - file: I057-per-room-thread-skills-load-sk.todo
+      id: I057

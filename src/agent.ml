@@ -72,7 +72,8 @@ let create ~config ?tool_registry ?agent_template ?cwd () =
     | Some _ -> []
   in
   let pd =
-    Prompt_builder.build_project_docs_message ~config ~ws_doc_digests ()
+    Prompt_builder.build_project_docs_message ~config ?effective_cwd:cwd
+      ~ws_doc_digests ()
   in
   let dirs_seen = Hashtbl.create 16 in
   (match pd.git_root with
@@ -350,29 +351,49 @@ let refresh_project_docs_if_changed agent =
     in
     let pd =
       Prompt_builder.build_project_docs_message ~config:agent.config
-        ~ws_doc_digests ()
+        ?effective_cwd:agent.effective_cwd ~ws_doc_digests ()
     in
     let new_digests = pd.digests in
-    if new_digests = agent.project_docs_digests then None
+    (* Reload state when the docs change OR the resolved root moves (e.g. a
+       room/thread session was bound to a new workspace subfolder via
+       effective_cwd). The root may move without any docs being present, so the
+       state update and the user-facing event are decoupled below. *)
+    let docs_changed = new_digests <> agent.project_docs_digests in
+    let root_changed = pd.git_root <> agent.project_docs_git_root in
+    if (not docs_changed) && not root_changed then None
     else begin
       agent.project_docs_content <- pd.content;
       agent.project_docs_digests <- pd.digests;
-      let event_msg =
-        Provider.make_message ~role:"event"
-          ~content:
-            "[project instructions refreshed: root CLAUDE.md/AGENTS.md changed \
-             since last turn]"
-      in
-      agent.history <- event_msg :: agent.history;
-      (match agent.on_project_doc_loaded with
-      | Some notify ->
-          Lwt.async (fun () ->
-              Lwt.catch
-                (fun () ->
-                  notify "Project instructions refreshed (files changed)")
-                (fun _ -> Lwt.return_unit))
-      | None -> ());
-      Some event_msg
+      if root_changed then begin
+        agent.project_docs_git_root <- pd.git_root;
+        agent.project_docs_subdir_digests <- [];
+        Hashtbl.reset agent.project_doc_dirs_seen;
+        match pd.git_root with
+        | Some root -> Hashtbl.replace agent.project_doc_dirs_seen root true
+        | None -> ()
+      end;
+      (* Only surface an event/notification when project docs are actually
+         present or their content changed — not for a doc-less root move (e.g.
+         binding a room to a plain folder with no CLAUDE.md/AGENTS.md). *)
+      if docs_changed || pd.content <> None then begin
+        let event_msg =
+          Provider.make_message ~role:"event"
+            ~content:
+              "[project instructions refreshed: root CLAUDE.md/AGENTS.md \
+               changed since last turn]"
+        in
+        agent.history <- event_msg :: agent.history;
+        (match agent.on_project_doc_loaded with
+        | Some notify ->
+            Lwt.async (fun () ->
+                Lwt.catch
+                  (fun () ->
+                    notify "Project instructions refreshed (files changed)")
+                  (fun _ -> Lwt.return_unit))
+        | None -> ());
+        Some event_msg
+      end
+      else None
     end
 
 let observe_project_docs agent (tc : Provider.tool_call) =

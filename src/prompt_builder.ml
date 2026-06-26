@@ -335,13 +335,32 @@ type project_docs_result = {
   git_root : string option;
 }
 
-let build_project_docs_message ~(config : Runtime_config.t) ~ws_doc_digests () =
+(* Resolve the directory project docs (CLAUDE.md/AGENTS.md) are loaded from.
+   For room/thread sessions [effective_cwd] is the per-room workspace subfolder
+   (B706): prefer its enclosing git root, but a plain (non-git) room folder
+   still autoloads its own docs. For the main session (no [effective_cwd]) the
+   prior process-cwd, git-root-only behavior is preserved unchanged. *)
+let resolve_project_doc_dir ?effective_cwd () =
+  match effective_cwd with
+  | Some dir when dir <> "" -> (
+      match find_git_root_and_dir dir with
+      | Some (root, _git_dir) -> Some (root, true)
+      | None ->
+          if try Sys.is_directory dir with _ -> false then Some (dir, false)
+          else None)
+  | _ -> (
+      match find_git_root_and_dir (Sys.getcwd ()) with
+      | Some (root, _git_dir) -> Some (root, true)
+      | None -> None)
+
+let build_project_docs_message ~(config : Runtime_config.t) ?effective_cwd
+    ~ws_doc_digests () =
   if not config.prompt.include_project_docs then
     { content = None; digests = []; git_root = None }
   else
-    match find_git_root_and_dir (Sys.getcwd ()) with
+    match resolve_project_doc_dir ?effective_cwd () with
     | None -> { content = None; digests = []; git_root = None }
-    | Some (git_root, _git_dir) -> (
+    | Some (git_root, from_git_root) -> (
         let budget = ref config.prompt.max_project_doc_chars in
         let seen_digests = Hashtbl.create 4 in
         List.iter (fun d -> Hashtbl.replace seen_digests d true) ws_doc_digests;
@@ -378,8 +397,15 @@ let build_project_docs_message ~(config : Runtime_config.t) ~ws_doc_digests () =
         | blocks_rev ->
             let lines = ref [] in
             let add s = lines := s :: !lines in
-            add "## Project Instructions (auto-loaded from git root)";
-            add (Printf.sprintf "Repository root: %s" git_root);
+            if from_git_root then begin
+              add "## Project Instructions (auto-loaded from git root)";
+              add (Printf.sprintf "Repository root: %s" git_root)
+            end
+            else begin
+              add
+                "## Project Instructions (auto-loaded from workspace directory)";
+              add (Printf.sprintf "Directory: %s" git_root)
+            end;
             add "";
             List.iter
               (fun (name, raw) ->
