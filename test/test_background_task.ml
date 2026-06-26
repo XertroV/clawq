@@ -7,14 +7,6 @@ let string_contains haystack needle =
   in
   needle_len = 0 || loop 0
 
-let init_git_repo path =
-  let cmd =
-    Printf.sprintf "git -C %s init -q >/dev/null 2>&1" (Filename.quote path)
-  in
-  match Sys.command cmd with
-  | 0 -> ()
-  | code -> Alcotest.failf "git init failed for %s (exit %d)" path code
-
 let configure_git_identity repo =
   let cmd =
     Printf.sprintf
@@ -27,17 +19,9 @@ let configure_git_identity repo =
   | code ->
       Alcotest.failf "git identity config failed for %s (exit %d)" repo code
 
-let git_cmd repo args =
-  let cmd =
-    Printf.sprintf "git -C %s %s >/dev/null 2>&1" (Filename.quote repo) args
-  in
-  match Sys.command cmd with
-  | 0 -> ()
-  | code -> Alcotest.failf "git command failed for %s (exit %d)" args code
-
 let add_git_worktree repo ~branch ~name =
   let worktree_path = Filename.concat repo name in
-  git_cmd repo
+  Test_helpers.git_cmd repo
     (Printf.sprintf "worktree add -b %s %s HEAD -q" (Filename.quote branch)
        (Filename.quote worktree_path));
   worktree_path
@@ -46,9 +30,9 @@ let with_temp_git_repo f =
   let repo = Filename.temp_file "clawq-bg-repo" "" in
   Sys.remove repo;
   Unix.mkdir repo 0o755;
-  init_git_repo repo;
+  Test_helpers.init_git_repo repo;
   configure_git_identity repo;
-  git_cmd repo "commit --allow-empty -m 'initial' -q";
+  Test_helpers.git_cmd repo "commit --allow-empty -m 'initial' -q";
   Fun.protect
     (fun () -> f repo)
     ~finally:(fun () ->

@@ -1,16 +1,7 @@
 let init_db () = Memory.init ~db_path:":memory:" ()
 
-let with_temp_dir f =
-  let dir = Filename.temp_file "clawq-plan-test" "" in
-  Sys.remove dir;
-  Unix.mkdir dir 0o755;
-  Fun.protect
-    (fun () -> f dir)
-    ~finally:(fun () ->
-      ignore (Sys.command (Printf.sprintf "rm -rf %s" (Filename.quote dir))))
-
 let with_temp_git_repo f =
-  with_temp_dir (fun repo ->
+  Test_helpers.with_temp_dir (fun repo ->
       let cmd =
         Printf.sprintf "git -C %s init -q >/dev/null 2>&1" (Filename.quote repo)
       in
@@ -112,7 +103,7 @@ let test_build_stage_prompt_plan_review () =
 
 (* 5. check_plan_stable returns true when hash unchanged *)
 let test_check_plan_stable_hash_unchanged () =
-  with_temp_dir (fun dir ->
+  Test_helpers.with_temp_dir (fun dir ->
       with_temp_git_repo (fun repo ->
           let db = init_db () in
           Plan_pipeline.init_schema db;
@@ -173,7 +164,7 @@ let test_check_plan_stable_hash_unchanged () =
 
 (* 6. check_plan_stable returns true when PLAN_STABLE in mock output *)
 let test_check_plan_stable_marker () =
-  with_temp_dir (fun dir ->
+  Test_helpers.with_temp_dir (fun dir ->
       with_temp_git_repo (fun repo ->
           let db = init_db () in
           Plan_pipeline.init_schema db;

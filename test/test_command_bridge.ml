@@ -79,25 +79,9 @@ let with_temp_home f =
        with _ -> ());
       try Unix.rmdir dir with _ -> ())
 
-let init_git_repo path =
-  let cmd =
-    Printf.sprintf "git -C %s init -q >/dev/null 2>&1" (Filename.quote path)
-  in
-  match Sys.command cmd with
-  | 0 -> ()
-  | code -> Alcotest.failf "git init failed for %s (exit %d)" path code
-
-let git_cmd repo args =
-  let cmd =
-    Printf.sprintf "git -C %s %s >/dev/null 2>&1" (Filename.quote repo) args
-  in
-  match Sys.command cmd with
-  | 0 -> ()
-  | code -> Alcotest.failf "git command failed for %s (exit %d)" args code
-
 let add_git_worktree repo ~branch ~name =
   let worktree_path = Filename.concat repo name in
-  git_cmd repo
+  Test_helpers.git_cmd repo
     (Printf.sprintf "worktree add -b %s %s HEAD -q" (Filename.quote branch)
        (Filename.quote worktree_path));
   worktree_path
@@ -1489,7 +1473,7 @@ let test_handle_background_add_show_cancel () =
   with_temp_home (fun home ->
       let repo = Filename.concat home "repo" in
       Unix.mkdir repo 0o755;
-      init_git_repo repo;
+      Test_helpers.init_git_repo repo;
       let add_result =
         Command_bridge.handle
           [ "background"; "add"; "codex"; repo; "Implement"; "the"; "feature" ]
@@ -1522,7 +1506,7 @@ let test_handle_background_wait_and_logs () =
   with_temp_home (fun home ->
       let repo = Filename.concat home "repo" in
       Unix.mkdir repo 0o755;
-      init_git_repo repo;
+      Test_helpers.init_git_repo repo;
       ignore
         (Command_bridge.handle
            [ "background"; "add"; "codex"; repo; "Implement"; "the"; "feature" ]);
@@ -1566,7 +1550,7 @@ let test_handle_background_logs_follow () =
   with_temp_home (fun home ->
       let repo = Filename.concat home "repo" in
       Unix.mkdir repo 0o755;
-      init_git_repo repo;
+      Test_helpers.init_git_repo repo;
       ignore
         (Command_bridge.handle
            [ "background"; "add"; "codex"; repo; "Implement"; "follow"; "test" ]);
@@ -1597,7 +1581,7 @@ let test_handle_background_logs_offset () =
   with_temp_home (fun home ->
       let repo = Filename.concat home "repo" in
       Unix.mkdir repo 0o755;
-      init_git_repo repo;
+      Test_helpers.init_git_repo repo;
       ignore
         (Command_bridge.handle
            [ "background"; "add"; "codex"; repo; "Test"; "offset"; "logs" ]);
@@ -1657,7 +1641,7 @@ let test_handle_subagents_start_list_and_transcript () =
   with_temp_home (fun home ->
       let repo = Filename.concat home "repo" in
       Unix.mkdir repo 0o755;
-      init_git_repo repo;
+      Test_helpers.init_git_repo repo;
       let model = "xiaomi-token-plan-sgp:mimo-v2.5-pro" in
       ignore (Agent_template.init_cache ());
       let clawq_dir = Filename.concat home ".clawq" in
@@ -1774,7 +1758,7 @@ let test_handle_background_native_aliases () =
   with_temp_home (fun home ->
       let repo = Filename.concat home "repo" in
       Unix.mkdir repo 0o755;
-      init_git_repo repo;
+      Test_helpers.init_git_repo repo;
       let start_result =
         Command_bridge.handle
           [
@@ -1825,7 +1809,7 @@ let test_handle_delegate () =
   with_temp_home (fun home ->
       let repo = Filename.concat home "repo" in
       Unix.mkdir repo 0o755;
-      init_git_repo repo;
+      Test_helpers.init_git_repo repo;
       (* Create a fake codex binary so resolve_runner succeeds in CI *)
       let bin_dir = Filename.concat home "bin" in
       Unix.mkdir bin_dir 0o755;
@@ -1884,7 +1868,7 @@ let test_handle_delegate_with_model () =
   with_temp_home (fun home ->
       let repo = Filename.concat home "repo" in
       Unix.mkdir repo 0o755;
-      init_git_repo repo;
+      Test_helpers.init_git_repo repo;
       let bin_dir = Filename.concat home "bin" in
       Unix.mkdir bin_dir 0o755;
       let fake_codex = Filename.concat bin_dir "codex" in
@@ -2300,7 +2284,7 @@ let test_handle_background_wait_with_timeout () =
   with_temp_home (fun home ->
       let repo = Filename.concat home "repo" in
       Unix.mkdir repo 0o755;
-      init_git_repo repo;
+      Test_helpers.init_git_repo repo;
       ignore
         (Command_bridge.handle
            [ "background"; "add"; "codex"; repo; "Implement"; "the"; "feature" ]);
@@ -2336,7 +2320,7 @@ let test_handle_background_resume_and_message () =
   with_temp_home (fun home ->
       let repo = Filename.concat home "repo" in
       Unix.mkdir repo 0o755;
-      init_git_repo repo;
+      Test_helpers.init_git_repo repo;
       git_empty_commit repo;
       ignore
         (Command_bridge.handle

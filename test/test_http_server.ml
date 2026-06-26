@@ -231,7 +231,7 @@ let make_fake_provider_config base_url : Runtime_config.provider_config =
   }
 
 let with_text_provider f =
-  let port = free_port () in
+  let port = Test_helpers.free_port () in
   let callback _conn _req body =
     let open Lwt.Syntax in
     let* _ = Cohttp_lwt.Body.to_string body in
@@ -303,7 +303,7 @@ let compute_github_signature ~secret ~body =
   "sha256=" ^ Digestif.SHA256.(hmac_string ~key:secret body |> to_hex)
 
 let with_fake_github_api callback f =
-  let port = free_port () in
+  let port = Test_helpers.free_port () in
   let stop, stopper = Lwt.wait () in
   let server =
     Cohttp_lwt_unix.Server.create

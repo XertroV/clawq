@@ -507,7 +507,8 @@ let test_stream_process_interrupt_kills_descendants () =
   wait_until_gone 20;
   Alcotest.(check string) "interrupt result" "interrupted" result;
   Alcotest.(check bool)
-    "child process terminated" false (Test_helpers.process_exists child_pid);
+    "child process terminated" false
+    (Test_helpers.process_exists child_pid);
   Sys.remove pid_file
 
 let test_progress_sender_renders_checklist () =

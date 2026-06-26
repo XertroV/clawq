@@ -8,14 +8,6 @@ let contains_substring ~needle haystack =
   in
   nl > 0 && hl >= nl && loop 0
 
-let init_git_repo path =
-  let cmd =
-    Printf.sprintf "git -C %s init -q >/dev/null 2>&1" (Filename.quote path)
-  in
-  match Sys.command cmd with
-  | 0 -> ()
-  | code -> Alcotest.failf "git init failed for %s (exit %d)" path code
-
 let configure_git_identity repo =
   let cmd =
     Printf.sprintf
@@ -28,28 +20,11 @@ let configure_git_identity repo =
   | code ->
       Alcotest.failf "git identity config failed for %s (exit %d)" repo code
 
-let git_cmd repo args =
-  let cmd =
-    Printf.sprintf "git -C %s %s >/dev/null 2>&1" (Filename.quote repo) args
-  in
-  match Sys.command cmd with
-  | 0 -> ()
-  | code -> Alcotest.failf "git command failed (exit %d): %s" code args
-
-let with_temp_dir f =
-  let dir = Filename.temp_file "clawq-wt-test" "" in
-  Sys.remove dir;
-  Unix.mkdir dir 0o755;
-  Fun.protect
-    (fun () -> f dir)
-    ~finally:(fun () ->
-      ignore (Sys.command (Printf.sprintf "rm -rf %s" (Filename.quote dir))))
-
 let with_temp_git_repo f =
-  with_temp_dir (fun dir ->
-      init_git_repo dir;
+  Test_helpers.with_temp_dir (fun dir ->
+      Test_helpers.init_git_repo dir;
       configure_git_identity dir;
-      git_cmd dir "commit --allow-empty -m 'initial' -q";
+      Test_helpers.git_cmd dir "commit --allow-empty -m 'initial' -q";
       f dir)
 
 let fake_task ?(automerge = false) ?(use_worktree = true) ?(merge_status = None)
@@ -126,15 +101,15 @@ let test_merge_success () =
   with_temp_git_repo (fun repo_path ->
       let branch = "test-merge-branch" in
       let worktree_path = repo_path ^ "-wt" in
-      git_cmd repo_path
+      Test_helpers.git_cmd repo_path
         (Printf.sprintf "worktree add -b %s %s" branch
            (Filename.quote worktree_path));
       let file_path = Filename.concat worktree_path "newfile.txt" in
       let oc = open_out file_path in
       output_string oc "hello";
       close_out oc;
-      git_cmd worktree_path "add newfile.txt";
-      git_cmd worktree_path "commit -m 'add newfile' -q";
+      Test_helpers.git_cmd worktree_path "add newfile.txt";
+      Test_helpers.git_cmd worktree_path "commit -m 'add newfile' -q";
       let result =
         Lwt_main.run
           (Worktree_merge.merge_and_cleanup ~repo_path ~worktree_path ~branch)
@@ -158,21 +133,21 @@ let test_merge_conflict () =
   with_temp_git_repo (fun repo_path ->
       let branch = "test-conflict-branch" in
       let worktree_path = repo_path ^ "-wt" in
-      git_cmd repo_path
+      Test_helpers.git_cmd repo_path
         (Printf.sprintf "worktree add -b %s %s" branch
            (Filename.quote worktree_path));
       let file_path_wt = Filename.concat worktree_path "file.txt" in
       let oc = open_out file_path_wt in
       output_string oc "worktree version";
       close_out oc;
-      git_cmd worktree_path "add file.txt";
-      git_cmd worktree_path "commit -m 'wt change' -q";
+      Test_helpers.git_cmd worktree_path "add file.txt";
+      Test_helpers.git_cmd worktree_path "commit -m 'wt change' -q";
       let file_path_main = Filename.concat repo_path "file.txt" in
       let oc = open_out file_path_main in
       output_string oc "main version";
       close_out oc;
-      git_cmd repo_path "add file.txt";
-      git_cmd repo_path "commit -m 'main change' -q";
+      Test_helpers.git_cmd repo_path "add file.txt";
+      Test_helpers.git_cmd repo_path "commit -m 'main change' -q";
       let result =
         Lwt_main.run
           (Worktree_merge.merge_and_cleanup ~repo_path ~worktree_path ~branch)
@@ -186,7 +161,7 @@ let test_merge_conflict () =
       Alcotest.(check bool)
         "worktree still exists" true
         (Sys.file_exists worktree_path);
-      git_cmd repo_path
+      Test_helpers.git_cmd repo_path
         (Printf.sprintf "worktree remove --force %s"
            (Filename.quote worktree_path)))
 
@@ -194,7 +169,7 @@ let test_noop_merge () =
   with_temp_git_repo (fun repo_path ->
       let branch = "test-noop-branch" in
       let worktree_path = repo_path ^ "-wt" in
-      git_cmd repo_path
+      Test_helpers.git_cmd repo_path
         (Printf.sprintf "worktree add -b %s %s" branch
            (Filename.quote worktree_path));
       let result =
@@ -287,15 +262,15 @@ let test_try_automerge_with_db () =
       Background_task.init_schema db;
       let branch = "test-automerge-branch" in
       let worktree_path = repo_path ^ "-wt" in
-      git_cmd repo_path
+      Test_helpers.git_cmd repo_path
         (Printf.sprintf "worktree add -b %s %s" branch
            (Filename.quote worktree_path));
       let file_path = Filename.concat worktree_path "automerge.txt" in
       let oc = open_out file_path in
       output_string oc "automerge content";
       close_out oc;
-      git_cmd worktree_path "add automerge.txt";
-      git_cmd worktree_path "commit -m 'automerge commit' -q";
+      Test_helpers.git_cmd worktree_path "add automerge.txt";
+      Test_helpers.git_cmd worktree_path "commit -m 'automerge commit' -q";
       match
         Background_task.enqueue ~db ~runner:Background_task.Codex
           ~automerge:true ~repo_path ~prompt:"test" ~branch ()
@@ -385,7 +360,7 @@ let test_dirty_worktree_blocks_merge () =
   with_temp_git_repo (fun repo_path ->
       let branch = "test-dirty-branch" in
       let worktree_path = repo_path ^ "-wt" in
-      git_cmd repo_path
+      Test_helpers.git_cmd repo_path
         (Printf.sprintf "worktree add -b %s %s" branch
            (Filename.quote worktree_path));
       (* Stage a file but do NOT commit *)
@@ -393,7 +368,7 @@ let test_dirty_worktree_blocks_merge () =
       let oc = open_out file_path in
       output_string oc "staged content";
       close_out oc;
-      git_cmd worktree_path "add staged.txt";
+      Test_helpers.git_cmd worktree_path "add staged.txt";
       let result =
         Lwt_main.run
           (Worktree_merge.merge_and_cleanup ~repo_path ~worktree_path ~branch)
@@ -412,7 +387,7 @@ let test_dirty_worktree_blocks_merge () =
         "worktree preserved" true
         (Sys.file_exists worktree_path);
       (* Clean up *)
-      git_cmd repo_path
+      Test_helpers.git_cmd repo_path
         (Printf.sprintf "worktree remove --force %s"
            (Filename.quote worktree_path)))
 
@@ -420,7 +395,7 @@ let test_dirty_worktree_unstaged_blocks_merge () =
   with_temp_git_repo (fun repo_path ->
       let branch = "test-unstaged-branch" in
       let worktree_path = repo_path ^ "-wt" in
-      git_cmd repo_path
+      Test_helpers.git_cmd repo_path
         (Printf.sprintf "worktree add -b %s %s" branch
            (Filename.quote worktree_path));
       (* Create a tracked file, commit it, then modify without staging *)
@@ -428,8 +403,8 @@ let test_dirty_worktree_unstaged_blocks_merge () =
       let oc = open_out file_path in
       output_string oc "original";
       close_out oc;
-      git_cmd worktree_path "add modified.txt";
-      git_cmd worktree_path "commit -m 'add modified.txt' -q";
+      Test_helpers.git_cmd worktree_path "add modified.txt";
+      Test_helpers.git_cmd worktree_path "commit -m 'add modified.txt' -q";
       let oc = open_out file_path in
       output_string oc "changed";
       close_out oc;
@@ -448,7 +423,7 @@ let test_dirty_worktree_unstaged_blocks_merge () =
       Alcotest.(check bool)
         "worktree preserved" true
         (Sys.file_exists worktree_path);
-      git_cmd repo_path
+      Test_helpers.git_cmd repo_path
         (Printf.sprintf "worktree remove --force %s"
            (Filename.quote worktree_path)))
 
@@ -492,15 +467,15 @@ let test_merge_updates_working_tree () =
   with_temp_git_repo (fun repo_path ->
       let branch = "test-wt-update" in
       let worktree_path = repo_path ^ "-wt" in
-      git_cmd repo_path
+      Test_helpers.git_cmd repo_path
         (Printf.sprintf "worktree add -b %s %s" branch
            (Filename.quote worktree_path));
       let file_path = Filename.concat worktree_path "wt-file.txt" in
       let oc = open_out file_path in
       output_string oc "from worktree";
       close_out oc;
-      git_cmd worktree_path "add wt-file.txt";
-      git_cmd worktree_path "commit -m 'add wt-file' -q";
+      Test_helpers.git_cmd worktree_path "add wt-file.txt";
+      Test_helpers.git_cmd worktree_path "commit -m 'add wt-file' -q";
       let result =
         Lwt_main.run
           (Worktree_merge.merge_and_cleanup ~repo_path ~worktree_path ~branch)
@@ -529,7 +504,7 @@ let test_completion_pass_requeues_dirty_task () =
       Background_task.init_schema db;
       let branch = "test-cp-dirty" in
       let worktree_path = repo_path ^ "-wt" in
-      git_cmd repo_path
+      Test_helpers.git_cmd repo_path
         (Printf.sprintf "worktree add -b %s %s" branch
            (Filename.quote worktree_path));
       match
@@ -557,7 +532,7 @@ let test_completion_pass_requeues_dirty_task () =
             "merge_status" (Some "completion_pass") task.merge_status;
           let msgs = Background_task.list_queued_messages ~db ~task_id:id in
           Alcotest.(check bool) "has queued message" true (List.length msgs > 0);
-          git_cmd repo_path
+          Test_helpers.git_cmd repo_path
             (Printf.sprintf "worktree remove --force %s"
                (Filename.quote worktree_path)))
 
@@ -567,7 +542,7 @@ let test_completion_pass_requeues_clean_task () =
       Background_task.init_schema db;
       let branch = "test-cp-clean" in
       let worktree_path = repo_path ^ "-wt" in
-      git_cmd repo_path
+      Test_helpers.git_cmd repo_path
         (Printf.sprintf "worktree add -b %s %s" branch
            (Filename.quote worktree_path));
       match
@@ -593,7 +568,7 @@ let test_completion_pass_requeues_clean_task () =
             (Background_task.string_of_status task.status);
           Alcotest.(check (option string))
             "merge_status" (Some "completion_pass") task.merge_status;
-          git_cmd repo_path
+          Test_helpers.git_cmd repo_path
             (Printf.sprintf "worktree remove --force %s"
                (Filename.quote worktree_path)))
 
@@ -603,7 +578,7 @@ let test_completion_pass_non_automerge () =
       Background_task.init_schema db;
       let branch = "test-cp-noam" in
       let worktree_path = repo_path ^ "-wt" in
-      git_cmd repo_path
+      Test_helpers.git_cmd repo_path
         (Printf.sprintf "worktree add -b %s %s" branch
            (Filename.quote worktree_path));
       match
@@ -626,7 +601,7 @@ let test_completion_pass_non_automerge () =
           in
           Alcotest.(check (option string))
             "merge_status" (Some "completion_pass") task.merge_status;
-          git_cmd repo_path
+          Test_helpers.git_cmd repo_path
             (Printf.sprintf "worktree remove --force %s"
                (Filename.quote worktree_path)))
 

@@ -81,11 +81,6 @@ let read_process_output_or_fail ~label cmd =
           Alcotest.failf "%s terminated by signal %d: %s" label signal cmd)
     (fun () -> input_line ic |> String.trim)
 
-let run_command_or_fail ~label cmd =
-  match Sys.command cmd with
-  | 0 -> ()
-  | code -> Alcotest.failf "%s failed (exit %d): %s" label code cmd
-
 let assert_no_drift label =
   let path_drift, shell_drift, tokenizer_drift =
     Tools_builtin.get_drift_counters ()
@@ -2617,22 +2612,22 @@ let test_shell_exec_starts_ci_watch_asynchronously_after_push () =
       let real_git =
         read_process_output_or_fail ~label:"which git" "which git"
       in
-      run_command_or_fail ~label:"git init"
+      Test_helpers.run_command_or_fail ~label:"git init"
         (Printf.sprintf "%s -C %s init -q" real_git (Filename.quote workspace));
-      run_command_or_fail ~label:"git config user.email"
+      Test_helpers.run_command_or_fail ~label:"git config user.email"
         (Printf.sprintf "%s -C %s config user.email test@example.com" real_git
            (Filename.quote workspace));
-      run_command_or_fail ~label:"git config user.name"
+      Test_helpers.run_command_or_fail ~label:"git config user.name"
         (Printf.sprintf "%s -C %s config user.name 'Test User'" real_git
            (Filename.quote workspace));
       let tracked = Filename.concat workspace "tracked.txt" in
       let tracked_oc = open_out tracked in
       output_string tracked_oc "base\n";
       close_out tracked_oc;
-      run_command_or_fail ~label:"git add"
+      Test_helpers.run_command_or_fail ~label:"git add"
         (Printf.sprintf "%s -C %s add tracked.txt" real_git
            (Filename.quote workspace));
-      run_command_or_fail ~label:"git commit"
+      Test_helpers.run_command_or_fail ~label:"git commit"
         (Printf.sprintf "%s -C %s commit -q -m initial" real_git
            (Filename.quote workspace));
       let head_before =
@@ -2722,7 +2717,7 @@ let test_shell_exec_starts_ci_watch_asynchronously_after_push () =
           let tracked_oc = open_out tracked in
           output_string tracked_oc "changed\n";
           close_out tracked_oc;
-          run_command_or_fail ~label:"git commit after push"
+          Test_helpers.run_command_or_fail ~label:"git commit after push"
             (Printf.sprintf "%s -C %s commit -qam after-push" real_git
                (Filename.quote workspace));
           (match !spawned with
@@ -2873,12 +2868,12 @@ let test_git_operations_repo_path_absolute_used_as_cwd () =
       let real_git =
         read_process_output_or_fail ~label:"which git" "which git"
       in
-      run_command_or_fail ~label:"git init"
+      Test_helpers.run_command_or_fail ~label:"git init"
         (Printf.sprintf "%s -C %s init -q" real_git (Filename.quote repo));
-      run_command_or_fail ~label:"git config user.email"
+      Test_helpers.run_command_or_fail ~label:"git config user.email"
         (Printf.sprintf "%s -C %s config user.email test@example.com" real_git
            (Filename.quote repo));
-      run_command_or_fail ~label:"git config user.name"
+      Test_helpers.run_command_or_fail ~label:"git config user.name"
         (Printf.sprintf "%s -C %s config user.name 'Test User'" real_git
            (Filename.quote repo));
       let tool = Tools_builtin.git_operations ~workspace in
