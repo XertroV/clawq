@@ -150,12 +150,13 @@ let fake_provider_response ~user_messages =
   Printf.sprintf "users=%d latest=%s first=%s" count latest first
 
 let start_fake_provider ~port ~stream_seen =
+  let stream_woken = ref false in
   let callback _conn req body =
     let open Lwt.Syntax in
     let* body_text = Cohttp_lwt.Body.to_string body in
-    let json = Yojson.Safe.from_string body_text in
+    let json = try Yojson.Safe.from_string body_text with _ -> `Null in
     let open Yojson.Safe.Util in
-    let messages = json |> member "messages" |> to_list in
+    let messages = try json |> member "messages" |> to_list with _ -> [] in
     let user_messages =
       messages
       |> List.filter_map (fun msg ->
@@ -202,7 +203,10 @@ let start_fake_provider ~port ~stream_seen =
         in
         Cohttp_lwt_unix.Server.respond_string ~status:`OK ~body ()
     | `POST, "/chat/completions", true ->
-        Lwt.wakeup_later stream_seen ();
+        if not !stream_woken then begin
+          stream_woken := true;
+          Lwt.wakeup_later stream_seen ()
+        end;
         let stream, push = Lwt_stream.create () in
         Lwt.async (fun () ->
             let chunk =
