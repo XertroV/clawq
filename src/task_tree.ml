@@ -1,5 +1,54 @@
 include Task_tree_core
 
+let prompt_for_agent_task (task : task) =
+  match task.agent_prompt with
+  | Some prompt when String.trim prompt <> "" -> Ok prompt
+  | _ ->
+      Error
+        (Printf.sprintf
+           "Task %s has no agent_prompt. Add agent_prompt to the task before \
+            starting it as an agent."
+           (display_id task.id))
+
+let enqueue_agent_for_task ~db ~session_key ~repo_path ?(use_worktree = true)
+    (task : task) =
+  match task.agent_task_id with
+  | Some id ->
+      Ok
+        ( id,
+          Printf.sprintf
+            "Task %s already has background task %d. Use background_task_list \
+             or `clawq subagents list` to track it."
+            (display_id task.id) id )
+  | None -> (
+      match prompt_for_agent_task task with
+      | Error _ as err -> err
+      | Ok prompt -> (
+          match
+            Background_task.enqueue ~db ~runner:Background_task.Local
+              ?model:task.agent_model ~repo_path ~prompt ~use_worktree
+              ?agent_name:task.agent_type ~session_key ()
+          with
+          | Error e -> Error e
+          | Ok bg_id -> (
+              match
+                mark_agent_started ~db ~session_key ~id:task.id
+                  ~agent_task_id:bg_id
+              with
+              | Error e -> Error e
+              | Ok () ->
+                  Ok
+                    ( bg_id,
+                      Printf.sprintf
+                        "Queued task agent %d for %s. Use background_task_list \
+                         or `clawq subagents list` to track it."
+                        bg_id (display_id task.id) ))))
+
+let start_ready_autostart_tasks ~db ~session_key ~repo_path =
+  ready_autostart_tasks ~db ~session_key
+  |> List.map (fun task ->
+      enqueue_agent_for_task ~db ~session_key ~repo_path task)
+
 let maybe_purge_deleted_tasks ~db ~config =
   let days = config.Runtime_config.memory.task_tree_purge_after_days in
   if days > 0 then
@@ -416,6 +465,33 @@ let expand_seeds (ops : Yojson.Safe.t list) =
 (* Process a batch of operations *)
 let process_operations ~db ~session_key (ops : Yojson.Safe.t list) =
   let open Yojson.Safe.Util in
+  let string_member json key =
+    try
+      match json |> member key with
+      | `String s when String.trim s <> "" -> Some (String.trim s)
+      | _ -> None
+    with _ -> None
+  in
+  let string_list_member json key =
+    try
+      match json |> member key with
+      | `List values ->
+          Some
+            (List.filter_map
+               (function
+                 | `String s when String.trim s <> "" -> Some (String.trim s)
+                 | _ -> None)
+               values)
+      | `String s when String.trim s <> "" ->
+          Some
+            (String.split_on_char ',' s |> List.map String.trim
+            |> List.filter (fun s -> s <> ""))
+      | _ -> None
+    with _ -> None
+  in
+  let bool_member json key =
+    try Some (json |> member key |> to_bool) with _ -> None
+  in
   match expand_seeds ops with
   | Error e -> Error e
   | Ok ops ->
@@ -477,6 +553,16 @@ let process_operations ~db ~session_key (ops : Yojson.Safe.t list) =
                         try Some (op_json |> member "note" |> to_string)
                         with _ -> None
                       in
+                      let depends_on =
+                        string_list_member op_json "depends_on"
+                      in
+                      let agent_model = string_member op_json "agent_model" in
+                      let agent_type = string_member op_json "agent_type" in
+                      let agent_prompt = string_member op_json "agent_prompt" in
+                      let agent_details =
+                        string_member op_json "agent_details"
+                      in
+                      let autostart = bool_member op_json "autostart" in
                       match title with
                       | None ->
                           Error
@@ -517,6 +603,10 @@ let process_operations ~db ~session_key (ops : Yojson.Safe.t list) =
                           let add_result =
                             do_add ~db ~session_key ~id:custom_id ~parent_id
                               ~title ~status ~note
+                              ~depends_on:(Option.value depends_on ~default:[])
+                              ~agent_model ~agent_type ~agent_prompt
+                              ~agent_details
+                              ~autostart:(Option.value autostart ~default:false)
                           in
                           match add_result with
                           | Ok actual_id ->
@@ -586,6 +676,16 @@ let process_operations ~db ~session_key (ops : Yojson.Safe.t list) =
                         try Some (op_json |> member "note" |> to_string)
                         with _ -> None
                       in
+                      let depends_on =
+                        string_list_member op_json "depends_on"
+                      in
+                      let agent_model = string_member op_json "agent_model" in
+                      let agent_type = string_member op_json "agent_type" in
+                      let agent_prompt = string_member op_json "agent_prompt" in
+                      let agent_details =
+                        string_member op_json "agent_details"
+                      in
+                      let autostart = bool_member op_json "autostart" in
                       let recursive =
                         try op_json |> member "recursive" |> to_bool
                         with _ -> false
@@ -670,7 +770,9 @@ let process_operations ~db ~session_key (ops : Yojson.Safe.t list) =
                                 if !err = None then
                                   match
                                     do_update ~db ~session_key ~id:single_id
-                                      ~status ~note
+                                      ~status ~note ~depends_on ~agent_model
+                                      ~agent_type ~agent_prompt ~agent_details
+                                      ~autostart
                                   with
                                   | Ok () ->
                                       let parts = ref [] in
@@ -686,6 +788,14 @@ let process_operations ~db ~session_key (ops : Yojson.Safe.t list) =
                                           parts :=
                                             Printf.sprintf "note=%s" n :: !parts
                                       | None -> ());
+                                      if
+                                        depends_on <> None
+                                        || agent_model <> None
+                                        || agent_type <> None
+                                        || agent_prompt <> None
+                                        || agent_details <> None
+                                        || autostart <> None
+                                      then parts := "agent_metadata" :: !parts;
                                       Buffer.add_string results
                                         (Printf.sprintf "Updated %s: %s\n"
                                            (display_id single_id)
@@ -951,7 +1061,102 @@ let process_operations ~db ~session_key (ops : Yojson.Safe.t list) =
             Ok (output ^ warning)
       end
 
-let tool ~db ?notify () : Tool.t =
+let start_agent_tool ~db ?default_repo_path () : Tool.t =
+  {
+    name = "task_start_agent";
+    description =
+      "Start one task_tree task as a native/local subagent using the task's \
+       agent metadata. The task must have agent_prompt set. agent_model and \
+       agent_type are copied to the local background task when present.";
+    parameters_schema =
+      `Assoc
+        [
+          ("type", `String "object");
+          ( "properties",
+            `Assoc
+              [
+                ("id", `Assoc [ ("type", `String "string") ]);
+                ( "repo_path",
+                  `Assoc
+                    [
+                      ("type", `String "string");
+                      ( "description",
+                        `String
+                          "Optional repository path. Defaults to the tool \
+                           context cwd or configured workspace." );
+                    ] );
+                ( "use_worktree",
+                  `Assoc
+                    [
+                      ("type", `String "boolean");
+                      ( "description",
+                        `String
+                          "Run the native subagent in a git worktree. Default: \
+                           true." );
+                    ] );
+              ] );
+          ("required", `List [ `String "id" ]);
+          ("additionalProperties", `Bool false);
+        ];
+    invoke =
+      (fun ?context args ->
+        let open Yojson.Safe.Util in
+        let session_key =
+          match context with
+          | Some ctx -> (
+              match ctx.Tool.session_key with Some k -> k | None -> "default")
+          | None -> "default"
+        in
+        let id = try Some (args |> member "id" |> to_string) with _ -> None in
+        let repo_path =
+          try
+            match args |> member "repo_path" with
+            | `String s when String.trim s <> "" -> Some (String.trim s)
+            | _ -> None
+          with _ -> None
+        in
+        let repo_path =
+          match repo_path with
+          | Some _ -> repo_path
+          | None -> (
+              match context with
+              | Some { Tool.effective_cwd = Some cwd; _ } -> Some cwd
+              | _ -> default_repo_path)
+        in
+        let use_worktree =
+          try
+            args |> member "use_worktree" |> to_bool_option
+            |> Option.value ~default:true
+          with _ -> true
+        in
+        match (id, repo_path) with
+        | None, _ ->
+            Lwt.return
+              "Error: parameter \"id\" is required. Provide an existing \
+               task_tree task ID."
+        | _, None ->
+            Lwt.return
+              "Error: repo_path is required. Provide repo_path, invoke the \
+               tool from a session with an effective cwd, or configure a \
+               workspace."
+        | Some id, Some repo_path -> (
+            let tasks = load_tasks ~db ~session_key () in
+            let id = resolve_existing_id ~tasks ~id in
+            match List.find_opt (fun task -> task.id = id) tasks with
+            | None -> Lwt.return ("Error: " ^ not_found_error ~tasks ~id)
+            | Some task -> (
+                match
+                  enqueue_agent_for_task ~db ~session_key ~repo_path
+                    ~use_worktree task
+                with
+                | Ok (_, msg) -> Lwt.return msg
+                | Error msg -> Lwt.return ("Error: " ^ msg))));
+    invoke_stream = None;
+    risk_level = Medium;
+    deferred = false;
+  }
+
+let tool ~db ?default_repo_path ?notify () : Tool.t =
   {
     name = "task_tree";
     description =
@@ -1040,6 +1245,24 @@ let tool ~db ?notify () : Tool.t =
                                             ] );
                                       ] );
                                   ("note", `Assoc [ ("type", `String "string") ]);
+                                  ( "depends_on",
+                                    `Assoc
+                                      [
+                                        ("type", `String "array");
+                                        ( "items",
+                                          `Assoc [ ("type", `String "string") ]
+                                        );
+                                      ] );
+                                  ( "agent_model",
+                                    `Assoc [ ("type", `String "string") ] );
+                                  ( "agent_type",
+                                    `Assoc [ ("type", `String "string") ] );
+                                  ( "agent_prompt",
+                                    `Assoc [ ("type", `String "string") ] );
+                                  ( "agent_details",
+                                    `Assoc [ ("type", `String "string") ] );
+                                  ( "autostart",
+                                    `Assoc [ ("type", `String "boolean") ] );
                                   ( "recursive",
                                     `Assoc [ ("type", `String "boolean") ] );
                                   ( "include_deleted",
@@ -1128,9 +1351,26 @@ let tool ~db ?notify () : Tool.t =
                     | None -> ())
                 | None -> ())
             | None -> ());
-            Lwt.return result
+            let repo_path =
+              match context with
+              | Some { Tool.effective_cwd = Some cwd; _ } -> Some cwd
+              | _ -> default_repo_path
+            in
+            let autostart_output =
+              match repo_path with
+              | None -> ""
+              | Some repo_path -> (
+                  start_ready_autostart_tasks ~db ~session_key ~repo_path
+                  |> List.filter_map (function
+                    | Ok (_, msg) -> Some msg
+                    | Error msg -> Some ("Autostart failed: " ^ msg))
+                  |> function
+                  | [] -> ""
+                  | lines -> "\n" ^ String.concat "\n" lines)
+            in
+            Lwt.return (result ^ autostart_output)
         | Error msg -> Lwt.return ("Error: " ^ msg));
     invoke_stream = None;
-    risk_level = Low;
+    risk_level = Medium;
     deferred = false;
   }

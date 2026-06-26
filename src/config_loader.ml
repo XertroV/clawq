@@ -208,83 +208,9 @@ let parse_config ?(resolve_secrets = true) json =
   in
   let agent_defaults =
     try
-      let ad = json |> member "agent_defaults" in
-      let primary_model =
-        try ad |> member "primary_model" |> to_string
-        with _ -> default.agent_defaults.primary_model
-      in
-      let subagent_default_model =
-        try
-          match ad |> member "subagent_default_model" with
-          | `String s when String.trim s <> "" -> Some (String.trim s)
-          | _ -> None
-        with _ -> default.agent_defaults.subagent_default_model
-      in
-      let system_prompt =
-        try ad |> member "system_prompt" |> to_string
-        with _ -> default.agent_defaults.system_prompt
-      in
-      let max_tool_iterations =
-        try ad |> member "max_tool_iterations" |> to_int
-        with _ -> default.agent_defaults.max_tool_iterations
-      in
-      let tool_search_enabled =
-        try ad |> member "tool_search_enabled" |> to_bool
-        with _ -> default.agent_defaults.tool_search_enabled
-      in
-      let reasoning_effort =
-        try Some (ad |> member "reasoning_effort" |> to_string)
-        with _ -> default.agent_defaults.reasoning_effort
-      in
-      let show_thinking =
-        try ad |> member "show_thinking" |> to_bool
-        with _ -> default.agent_defaults.show_thinking
-      in
-      let drop_thinking =
-        try ad |> member "drop_thinking" |> to_bool
-        with _ -> default.agent_defaults.drop_thinking
-      in
-      let show_tool_calls =
-        try ad |> member "show_tool_calls" |> to_bool
-        with _ -> default.agent_defaults.show_tool_calls
-      in
-      let tool_status_mode =
-        try ad |> member "tool_status_mode" |> to_string
-        with _ -> default.agent_defaults.tool_status_mode
-      in
-      let send_continuation_checkin =
-        try ad |> member "send_continuation_checkin" |> to_bool
-        with _ -> default.agent_defaults.send_continuation_checkin
-      in
-      let autonomous_continuation_delay =
-        try ad |> member "autonomous_continuation_delay" |> to_float
-        with _ -> default.agent_defaults.autonomous_continuation_delay
-      in
-      let autonomous_continuation_enabled =
-        try ad |> member "autonomous_continuation_enabled" |> to_bool
-        with _ -> default.agent_defaults.autonomous_continuation_enabled
-      in
-      let task_tree_notifications =
-        try ad |> member "task_tree_notifications" |> to_bool
-        with _ -> default.agent_defaults.task_tree_notifications
-      in
-      ({
-         primary_model;
-         subagent_default_model;
-         system_prompt;
-         max_tool_iterations;
-         tool_search_enabled;
-         reasoning_effort;
-         show_thinking;
-         drop_thinking;
-         show_tool_calls;
-         tool_status_mode;
-         send_continuation_checkin;
-         autonomous_continuation_delay;
-         autonomous_continuation_enabled;
-         task_tree_notifications;
-       }
-        : Runtime_config.agent_defaults)
+      Config_loader_agent_defaults.parse
+        (json |> member "agent_defaults")
+        ~default:default.agent_defaults
     with _ -> default.agent_defaults
   in
   let workspace =

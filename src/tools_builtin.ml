@@ -1612,7 +1612,10 @@ let register_all ~(config : Runtime_config.t) ~sandbox ?(db = None)
       Background_task.init_schema db;
       Task_tree.init_schema db;
       Plan_pipeline.init_schema db;
-      Tool_registry.register registry (Task_tree.tool ~db ());
+      Tool_registry.register registry
+        (Task_tree.tool ~db ~default_repo_path:workspace ());
+      Tool_registry.register registry
+        (Task_tree.start_agent_tool ~db ~default_repo_path:workspace ());
       Tool_registry.register registry
         (Background_task_tools.enqueue_tool_with_notify ~config
            ~notify_cfg:config.notify ~db ());

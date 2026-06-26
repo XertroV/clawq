@@ -185,6 +185,12 @@ let test_load_invalid_json_returns_default () =
         Runtime_config.default.agent_defaults.primary_model
         cfg.agent_defaults.primary_model)
 
+let test_parse_non_object_root_uses_agent_defaults_default () =
+  let cfg = Config_loader.parse_config (`List []) in
+  Alcotest.(check string)
+    "fallback primary model" Runtime_config.default.agent_defaults.primary_model
+    cfg.agent_defaults.primary_model
+
 let test_parse_legacy_nested_paths () =
   let json =
     Yojson.Safe.from_string
@@ -841,6 +847,33 @@ let test_task_tree_notifications_roundtrip () =
     "task_tree_notifications roundtrip" false
     cfg2.agent_defaults.task_tree_notifications
 
+let test_max_concurrent_native_agents_roundtrip () =
+  let cfg =
+    {
+      Runtime_config.default with
+      agent_defaults =
+        {
+          Runtime_config.default.agent_defaults with
+          max_concurrent_native_agents = Some 3;
+        };
+    }
+  in
+  let json = Runtime_config.to_json cfg in
+  let cfg2 = Config_loader.parse_config json in
+  Alcotest.(check (option int))
+    "max_concurrent_native_agents roundtrip" (Some 3)
+    cfg2.agent_defaults.max_concurrent_native_agents
+
+let test_max_concurrent_native_agents_null_uses_default () =
+  let json =
+    Yojson.Safe.from_string
+      {|{"agent_defaults": {"max_concurrent_native_agents": null}}|}
+  in
+  let cfg = Config_loader.parse_config json in
+  Alcotest.(check (option int))
+    "max_concurrent_native_agents null uses default" None
+    cfg.agent_defaults.max_concurrent_native_agents
+
 let test_to_json_includes_task_tree_purge_after_days () =
   let cfg =
     {
@@ -1077,6 +1110,8 @@ let suite =
       test_parse_telegram_env_secret_resolution;
     Alcotest.test_case "load invalid json returns default" `Quick
       test_load_invalid_json_returns_default;
+    Alcotest.test_case "parse non-object root uses agent defaults default"
+      `Quick test_parse_non_object_root_uses_agent_defaults_default;
     Alcotest.test_case "parse legacy nested paths" `Quick
       test_parse_legacy_nested_paths;
     Alcotest.test_case "backfill replaces type mismatch" `Quick
@@ -1143,6 +1178,10 @@ let suite =
       test_to_json_includes_task_tree_notifications;
     Alcotest.test_case "task_tree_notifications roundtrip" `Quick
       test_task_tree_notifications_roundtrip;
+    Alcotest.test_case "max_concurrent_native_agents roundtrip" `Quick
+      test_max_concurrent_native_agents_roundtrip;
+    Alcotest.test_case "max_concurrent_native_agents null uses default" `Quick
+      test_max_concurrent_native_agents_null_uses_default;
     Alcotest.test_case "to_json includes task_tree_purge_after_days" `Quick
       test_to_json_includes_task_tree_purge_after_days;
     Alcotest.test_case "task_tree_purge_after_days roundtrip" `Quick

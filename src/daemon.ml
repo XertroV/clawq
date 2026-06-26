@@ -1,5 +1,47 @@
 include Daemon_util
 
+let task_tree_tool_with_current_workspace ~current_config ~db ?notify () =
+  Task_tree.tool ~db
+    ~default_repo_path:(Runtime_config.effective_workspace !current_config)
+    ?notify ()
+
+let task_start_agent_tool_with_current_workspace ~current_config ~db () =
+  Task_tree.start_agent_tool ~db
+    ~default_repo_path:(Runtime_config.effective_workspace !current_config)
+    ()
+
+let task_tree_notify_for_session session_manager session_key =
+  match Session.find_registered_notifier session_manager ~key:session_key with
+  | Some notifier ->
+      let connector =
+        if
+          String.length session_key >= 9
+          && String.sub session_key 0 9 = "telegram:"
+        then Format_adapter.Telegram_markdown
+        else if
+          String.length session_key >= 8
+          && String.sub session_key 0 8 = "discord:"
+        then Format_adapter.Discord
+        else if
+          String.length session_key >= 6
+          && String.sub session_key 0 6 = "slack:"
+        then Format_adapter.Slack
+        else Format_adapter.Plain
+      in
+      Some (connector, notifier)
+  | None -> None
+
+let refresh_task_tree_tools_with_current_workspace ~current_config ~db ?notify
+    registry =
+  Tool_registry.replace registry
+    (task_tree_tool_with_current_workspace ~current_config ~db ?notify ());
+  Tool_registry.replace registry
+    (task_start_agent_tool_with_current_workspace ~current_config ~db ())
+
+let current_max_concurrent_native_agents (current_config : Runtime_config.t ref)
+    =
+  !current_config.agent_defaults.max_concurrent_native_agents
+
 let run ~(config : Runtime_config.t) =
   (Lwt.async_exception_hook :=
      fun exn ->
@@ -598,35 +640,17 @@ let run ~(config : Runtime_config.t) =
       Tool_registry.register registry
         (Tools_builtin.ask_user_question ~ask_fn:(Some ask_fn))
   | None -> ());
-  (* Re-register task_tree with channel notification support *)
-  (if !current_config.agent_defaults.task_tree_notifications then
-     match (tool_registry, db) with
-     | Some registry, Some db ->
-         let notify session_key =
-           match
-             Session.find_registered_notifier session_manager ~key:session_key
-           with
-           | Some notifier ->
-               let connector =
-                 if
-                   String.length session_key >= 9
-                   && String.sub session_key 0 9 = "telegram:"
-                 then Format_adapter.Telegram_markdown
-                 else if
-                   String.length session_key >= 8
-                   && String.sub session_key 0 8 = "discord:"
-                 then Format_adapter.Discord
-                 else if
-                   String.length session_key >= 6
-                   && String.sub session_key 0 6 = "slack:"
-                 then Format_adapter.Slack
-                 else Format_adapter.Plain
-               in
-               Some (connector, notifier)
-           | None -> None
-         in
-         Tool_registry.replace registry (Task_tree.tool ~db ~notify ())
-     | _ -> ());
+  (* Re-register task_tree tools with current workspace and optional channel notifications. *)
+  (match (tool_registry, db) with
+  | Some registry, Some db ->
+      let notify =
+        if !current_config.agent_defaults.task_tree_notifications then
+          Some (task_tree_notify_for_session session_manager)
+        else None
+      in
+      refresh_task_tree_tools_with_current_workspace ~current_config ~db ?notify
+        registry
+  | _ -> ());
   let update_lock = Lwt_mutex.create () in
   let update_in_progress = ref false in
   let claim_update () =
@@ -1006,9 +1030,19 @@ let run ~(config : Runtime_config.t) =
                    (Pmodel.to_string new_sc.model)
                    old_sc.threshold_chars new_sc.threshold_chars));
           (match tool_registry with
-          | Some registry ->
+          | Some registry -> (
               refresh_runtime_bound_tools ~config:new_config ~session_manager
-                ~sandbox:!sandbox registry
+                ~sandbox:!sandbox registry;
+              match db with
+              | Some db ->
+                  let notify =
+                    if new_config.agent_defaults.task_tree_notifications then
+                      Some (task_tree_notify_for_session session_manager)
+                    else None
+                  in
+                  refresh_task_tree_tools_with_current_workspace ~current_config
+                    ~db ?notify registry
+              | None -> ())
           | None -> ());
           Lwt.async (fun () ->
               Lwt.catch
@@ -1347,9 +1381,20 @@ let run ~(config : Runtime_config.t) =
                           (Pmodel.to_string new_sc.model)
                           old_sc.threshold_chars new_sc.threshold_chars));
                  (match tool_registry with
-                 | Some registry ->
+                 | Some registry -> (
                      refresh_runtime_bound_tools ~config:new_config
-                       ~session_manager ~sandbox:!sandbox registry
+                       ~session_manager ~sandbox:!sandbox registry;
+                     match db with
+                     | Some db ->
+                         let notify =
+                           if new_config.agent_defaults.task_tree_notifications
+                           then
+                             Some (task_tree_notify_for_session session_manager)
+                           else None
+                         in
+                         refresh_task_tree_tools_with_current_workspace
+                           ~current_config ~db ?notify registry
+                     | None -> ())
                  | None -> ());
                  Lwt.async (fun () ->
                      Lwt.catch
@@ -1599,6 +1644,7 @@ let run ~(config : Runtime_config.t) =
                        (notify_background_task_finished ~session_manager ~config
                           ~db));
                 let () =
+                  let current = !current_config in
                   let augment_env =
                     match runner_tokens with
                     | None -> None
@@ -1609,7 +1655,7 @@ let run ~(config : Runtime_config.t) =
                               Runner_relay.generate_token tokens ~session_key
                                 ~task_id ()
                             in
-                            let port = config.gateway.port in
+                            let port = current.gateway.port in
                             Array.append env
                               [|
                                 "CLAWQ_RUNNER_TOKEN=" ^ token;
@@ -1621,6 +1667,8 @@ let run ~(config : Runtime_config.t) =
                               |])
                   in
                   Background_task.start_queued_with_local_runner ?augment_env
+                    ?max_local_running_tasks:
+                      (current_max_concurrent_native_agents current_config)
                     ~run_turn:(fun
                         ~key
                         ~message

@@ -60,10 +60,11 @@ let process_exists pid =
     true
   with Unix.Unix_error _ -> false
 
-let fake_task ?(status = Background_task.Queued) id =
+let fake_task ?(runner = Background_task.Codex)
+    ?(status = Background_task.Queued) id =
   {
     Background_task.id;
-    runner = Background_task.Codex;
+    runner;
     model = None;
     repo_path = "/tmp/repo";
     prompt = "test prompt";
@@ -1353,6 +1354,23 @@ let test_queued_tasks_ready_to_start_respects_capacity () =
        (fun (task : Background_task.task) -> task.Background_task.id)
        ready)
 
+let test_queued_tasks_ready_to_start_respects_local_capacity () =
+  let tasks =
+    [
+      fake_task ~runner:Background_task.Local ~status:Background_task.Running 1;
+      fake_task ~runner:Background_task.Local 2;
+      fake_task ~runner:Background_task.Codex 3;
+    ]
+  in
+  let ready =
+    Background_task.queued_tasks_ready_to_start ~max_local_running_tasks:1 tasks
+  in
+  Alcotest.(check (list int))
+    "local cap blocks queued local but leaves remote queued" [ 3 ]
+    (List.map
+       (fun (task : Background_task.task) -> task.Background_task.id)
+       ready)
+
 let test_start_queued_respects_max_running_tasks () =
   with_temp_git_repo (fun repo_path ->
       let db = Memory.init ~db_path:":memory:" () in
@@ -1391,6 +1409,62 @@ let test_start_queued_respects_max_running_tasks () =
           Alcotest.(check string)
             "queued task stays queued" "queued"
             (Background_task.string_of_status task.status))
+
+let test_task_start_agent_tool_enqueues_local_background_task () =
+  with_temp_git_repo (fun repo_path ->
+      let db = Memory.init ~db_path:":memory:" () in
+      Task_tree.init_schema db;
+      Background_task.init_schema db;
+      let add_result =
+        Task_tree.process_operations ~db ~session_key:"s1"
+          [
+            `Assoc
+              [
+                ("op", `String "add");
+                ("id", `String "impl");
+                ("title", `String "Implement feature");
+                ("agent_model", `String "openai-codex:gpt-5.4");
+                ("agent_type", `String "coder");
+                ("agent_prompt", `String "Build it.");
+              ];
+          ]
+      in
+      (match add_result with Ok _ -> () | Error e -> Alcotest.fail e);
+      let tool =
+        Task_tree.start_agent_tool ~db ~default_repo_path:repo_path ()
+      in
+      let context =
+        {
+          Tool.session_key = Some "s1";
+          send_progress = None;
+          interrupt_check = None;
+          inject_system_messages = None;
+          effective_cwd = None;
+          request_cwd_change = None;
+        }
+      in
+      let out =
+        Lwt_main.run
+          (tool.invoke ~context
+             (`Assoc [ ("id", `String "impl"); ("use_worktree", `Bool false) ]))
+      in
+      Alcotest.(check bool)
+        "reports queued background task" true
+        (string_contains out "Queued task agent");
+      let bg_tasks = Background_task.list_tasks ~db in
+      Alcotest.(check int) "one background task" 1 (List.length bg_tasks);
+      let bg_task = List.hd bg_tasks in
+      Alcotest.(check string)
+        "local runner" "local"
+        (Background_task.string_of_runner bg_task.runner);
+      Alcotest.(check (option string))
+        "model copied" (Some "openai-codex:gpt-5.4") bg_task.model;
+      Alcotest.(check (option string))
+        "agent copied" (Some "coder") bg_task.agent_name;
+      Alcotest.(check string) "prompt copied" "Build it." bg_task.prompt;
+      let task = List.hd (Task_tree.load_tasks ~db ~session_key:"s1" ()) in
+      Alcotest.(check (option int))
+        "task records background id" (Some bg_task.id) task.agent_task_id)
 
 let test_spawn_task_marks_failed_when_worktree_creation_fails () =
   with_temp_git_repo (fun repo_path ->
@@ -5304,8 +5378,12 @@ let suite =
       test_available_worker_slots_respects_running_tasks;
     Alcotest.test_case "queued tasks ready to start respects capacity" `Quick
       test_queued_tasks_ready_to_start_respects_capacity;
+    Alcotest.test_case "queued tasks ready to start respects local capacity"
+      `Quick test_queued_tasks_ready_to_start_respects_local_capacity;
     Alcotest.test_case "start queued respects max running tasks" `Quick
       test_start_queued_respects_max_running_tasks;
+    Alcotest.test_case "task_start_agent queues local background task" `Quick
+      test_task_start_agent_tool_enqueues_local_background_task;
     Alcotest.test_case "spawn task marks failed when worktree creation fails"
       `Quick test_spawn_task_marks_failed_when_worktree_creation_fails;
     Alcotest.test_case "delegate tool queues task" `Quick

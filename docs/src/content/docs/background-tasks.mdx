@@ -68,6 +68,8 @@ clawq subagents stop 42
 
 These commands use the same background task table as `clawq background`. The compatibility aliases `background start`, `background stop`, `background send`, and `background transcript` route to the same behavior.
 
+Task-tree entries can also carry native-agent execution metadata. The `task_tree` tool accepts `depends_on`, `agent_model`, `agent_type`, `agent_prompt`, `agent_details`, and `autostart` fields on task add/update operations. `task_start_agent` starts a task as a native/local subagent using that metadata. When `autostart` is true, clawq queues the task automatically after every listed dependency is done or cancelled.
+
 ## Worktree Lifecycle
 
 When a task is created with a branch name (or when `delegate` creates one automatically), clawq provisions a git worktree:

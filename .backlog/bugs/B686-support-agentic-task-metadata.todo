@@ -1,14 +1,15 @@
 ---
 claimed_at: "2026-06-25T21:01:08Z"
 claimed_by: cli-user
-completed_at: null
+completed_at: "2026-06-25T21:24:39Z"
 complexity: medium
 depends_on: []
+duration_minutes: 23.529988362633333
 estimate_hours: 1
 id: B686
 priority: high
 started_at: "2026-06-25T21:01:08Z"
-status: in_progress
+status: done
 tags: []
 title: Support agentic task metadata and autostart
 ---

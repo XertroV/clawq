@@ -25,6 +25,13 @@ type task = {
   title : string;
   status : status;
   note : string option;
+  depends_on : string list;
+  agent_model : string option;
+  agent_type : string option;
+  agent_prompt : string option;
+  agent_details : string option;
+  autostart : bool;
+  agent_task_id : int option;
   sort_order : int;
   deleted_at : string option;
 }
@@ -47,6 +54,28 @@ let display_id_collision ~tasks ~id =
   List.find_opt
     (fun task -> task.id <> id && display_id task.id = candidate_display_id)
     tasks
+
+let json_string_list_of_text text =
+  try
+    match Yojson.Safe.from_string text with
+    | `List values ->
+        List.filter_map
+          (function
+            | `String s when String.trim s <> "" -> Some (String.trim s)
+            | _ -> None)
+          values
+    | _ -> []
+  with _ -> []
+
+let text_of_json_string_list values =
+  values |> List.map String.trim
+  |> List.filter (fun s -> s <> "")
+  |> List.map (fun s -> `String s)
+  |> fun values -> Yojson.Safe.to_string (`List values)
+
+let sql_text = function Sqlite3.Data.TEXT s -> Some s | _ -> None
+let sql_int = function Sqlite3.Data.INT n -> Some (Int64.to_int n) | _ -> None
+let sql_bool = function Sqlite3.Data.INT n -> Int64.to_int n <> 0 | _ -> false
 
 let strip_legacy_id_prefix id =
   let id = String.trim id in
@@ -135,6 +164,13 @@ let init_schema db =
     \  title TEXT NOT NULL,\n\
     \  status TEXT NOT NULL DEFAULT 'pending',\n\
     \  note TEXT,\n\
+    \  depends_on TEXT NOT NULL DEFAULT '[]',\n\
+    \  agent_model TEXT,\n\
+    \  agent_type TEXT,\n\
+    \  agent_prompt TEXT,\n\
+    \  agent_details TEXT,\n\
+    \  autostart INTEGER NOT NULL DEFAULT 0,\n\
+    \  agent_task_id INTEGER,\n\
     \  sort_order INTEGER NOT NULL DEFAULT 0,\n\
     \  deleted_at TEXT,\n\
     \  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n\
@@ -160,7 +196,28 @@ let init_schema db =
      )";
   Memory.exec_exn db
     "CREATE INDEX IF NOT EXISTS idx_task_tree_archive_session ON \
-     task_tree_archive (session_key)"
+     task_tree_archive (session_key)";
+  let try_alter sql =
+    match Sqlite3.exec db sql with
+    | Sqlite3.Rc.OK -> ()
+    | Sqlite3.Rc.ERROR
+      when String.starts_with ~prefix:"duplicate column name"
+             (Sqlite3.errmsg db) ->
+        ()
+    | rc ->
+        failwith
+          (Printf.sprintf "SQLite error: %s (sql: %s)" (Sqlite3.Rc.to_string rc)
+             sql)
+  in
+  try_alter
+    "ALTER TABLE task_tree ADD COLUMN depends_on TEXT NOT NULL DEFAULT '[]'";
+  try_alter "ALTER TABLE task_tree ADD COLUMN agent_model TEXT";
+  try_alter "ALTER TABLE task_tree ADD COLUMN agent_type TEXT";
+  try_alter "ALTER TABLE task_tree ADD COLUMN agent_prompt TEXT";
+  try_alter "ALTER TABLE task_tree ADD COLUMN agent_details TEXT";
+  try_alter
+    "ALTER TABLE task_tree ADD COLUMN autostart INTEGER NOT NULL DEFAULT 0";
+  try_alter "ALTER TABLE task_tree ADD COLUMN agent_task_id INTEGER"
 
 let load_tasks ?(include_deleted = false) ~db ~session_key () =
   let deleted_filter =
@@ -169,8 +226,9 @@ let load_tasks ?(include_deleted = false) ~db ~session_key () =
   let sql =
     Printf.sprintf
       "SELECT id, session_key, parent_id, title, status, note, sort_order, \
-       deleted_at FROM task_tree WHERE session_key = ?%s ORDER BY sort_order \
-       ASC, id ASC"
+       deleted_at, depends_on, agent_model, agent_type, agent_prompt, \
+       agent_details, autostart, agent_task_id FROM task_tree WHERE \
+       session_key = ?%s ORDER BY sort_order ASC, id ASC"
       deleted_filter
   in
   let stmt = Sqlite3.prepare db sql in
@@ -182,10 +240,10 @@ let load_tasks ?(include_deleted = false) ~db ~session_key () =
       let results = ref [] in
       while Sqlite3.step stmt = Sqlite3.Rc.ROW do
         let id =
-          match Sqlite3.column stmt 0 with Sqlite3.Data.TEXT s -> s | _ -> ""
+          Sqlite3.column stmt 0 |> sql_text |> Option.value ~default:""
         in
         let sk =
-          match Sqlite3.column stmt 1 with Sqlite3.Data.TEXT s -> s | _ -> ""
+          Sqlite3.column stmt 1 |> sql_text |> Option.value ~default:""
         in
         let parent_id =
           match Sqlite3.column stmt 2 with
@@ -193,7 +251,7 @@ let load_tasks ?(include_deleted = false) ~db ~session_key () =
           | _ -> None
         in
         let title =
-          match Sqlite3.column stmt 3 with Sqlite3.Data.TEXT s -> s | _ -> ""
+          Sqlite3.column stmt 3 |> sql_text |> Option.value ~default:""
         in
         let status =
           match Sqlite3.column stmt 4 with
@@ -201,21 +259,21 @@ let load_tasks ?(include_deleted = false) ~db ~session_key () =
               match status_of_string s with Some st -> st | None -> Pending)
           | _ -> Pending
         in
-        let note =
-          match Sqlite3.column stmt 5 with
-          | Sqlite3.Data.TEXT s -> Some s
-          | _ -> None
-        in
+        let note = Sqlite3.column stmt 5 |> sql_text in
         let sort_order =
-          match Sqlite3.column stmt 6 with
-          | Sqlite3.Data.INT n -> Int64.to_int n
-          | _ -> 0
+          Sqlite3.column stmt 6 |> sql_int |> Option.value ~default:0
         in
-        let deleted_at =
-          match Sqlite3.column stmt 7 with
-          | Sqlite3.Data.TEXT s -> Some s
-          | _ -> None
+        let deleted_at = Sqlite3.column stmt 7 |> sql_text in
+        let depends_on =
+          Sqlite3.column stmt 8 |> sql_text |> Option.value ~default:"[]"
+          |> json_string_list_of_text
         in
+        let agent_model = Sqlite3.column stmt 9 |> sql_text in
+        let agent_type = Sqlite3.column stmt 10 |> sql_text in
+        let agent_prompt = Sqlite3.column stmt 11 |> sql_text in
+        let agent_details = Sqlite3.column stmt 12 |> sql_text in
+        let autostart = Sqlite3.column stmt 13 |> sql_bool in
+        let agent_task_id = Sqlite3.column stmt 14 |> sql_int in
         results :=
           {
             id;
@@ -224,6 +282,13 @@ let load_tasks ?(include_deleted = false) ~db ~session_key () =
             title;
             status;
             note;
+            depends_on;
+            agent_model;
+            agent_type;
+            agent_prompt;
+            agent_details;
+            autostart;
+            agent_task_id;
             sort_order;
             deleted_at;
           }
@@ -236,6 +301,30 @@ let count_tasks ~db ~session_key =
     "SELECT COUNT(*) FROM task_tree WHERE session_key = ? AND deleted_at IS \
      NULL"
     [ Sqlite3.Data.TEXT session_key ]
+
+let dependencies_terminal ~tasks (task : task) =
+  List.for_all
+    (fun dep_id ->
+      let dep_id = resolve_existing_id ~tasks ~id:dep_id in
+      match List.find_opt (fun t -> t.id = dep_id) tasks with
+      | Some dep -> is_terminal dep.status
+      | None -> false)
+    task.depends_on
+
+let ready_autostart_tasks ~db ~session_key =
+  let tasks = load_tasks ~db ~session_key () in
+  tasks
+  |> List.filter (fun (task : task) ->
+      task.status = Pending && task.autostart && task.agent_task_id = None
+      && Option.value
+           (Option.map
+              (fun prompt -> String.trim prompt <> "")
+              task.agent_prompt)
+           ~default:false
+      && dependencies_terminal ~tasks task)
+  |> List.sort (fun a b ->
+      let c = compare a.sort_order b.sort_order in
+      if c <> 0 then c else compare a.id b.id)
 
 let find_active_session_key ~db ~preferred =
   if count_tasks ~db ~session_key:preferred > 0 then Some preferred
@@ -385,11 +474,13 @@ let next_sort_order ~db ~session_key =
         session_key = '%s'"
        (String.concat "''" (String.split_on_char '\'' session_key)))
 
-let insert_task ~db ~session_key ~id ~parent_id ~title ~status ~note =
+let insert_task ~db ~session_key ~id ~parent_id ~title ~status ~note ~depends_on
+    ~agent_model ~agent_type ~agent_prompt ~agent_details ~autostart =
   let sort_order = next_sort_order ~db ~session_key in
   let sql =
     "INSERT INTO task_tree (id, session_key, parent_id, title, status, note, \
-     sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)"
+     depends_on, agent_model, agent_type, agent_prompt, agent_details, \
+     autostart, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
   in
   let stmt = Sqlite3.prepare db sql in
   Fun.protect
@@ -415,7 +506,24 @@ let insert_task ~db ~session_key ~id ~parent_id ~title ~status ~note =
            | None -> Sqlite3.Data.NULL)
           : Sqlite3.Rc.t);
       ignore
-        (Sqlite3.bind stmt 7 (Sqlite3.Data.INT (Int64.of_int sort_order))
+        (Sqlite3.bind stmt 7
+           (Sqlite3.Data.TEXT (text_of_json_string_list depends_on))
+          : Sqlite3.Rc.t);
+      let bind_opt idx = function
+        | Some value when String.trim value <> "" ->
+            ignore
+              (Sqlite3.bind stmt idx (Sqlite3.Data.TEXT value) : Sqlite3.Rc.t)
+        | _ -> ignore (Sqlite3.bind stmt idx Sqlite3.Data.NULL : Sqlite3.Rc.t)
+      in
+      bind_opt 8 agent_model;
+      bind_opt 9 agent_type;
+      bind_opt 10 agent_prompt;
+      bind_opt 11 agent_details;
+      ignore
+        (Sqlite3.bind stmt 12 (Sqlite3.Data.INT (if autostart then 1L else 0L))
+          : Sqlite3.Rc.t);
+      ignore
+        (Sqlite3.bind stmt 13 (Sqlite3.Data.INT (Int64.of_int sort_order))
           : Sqlite3.Rc.t);
       match Sqlite3.step stmt with
       | Sqlite3.Rc.DONE -> Ok ()
@@ -444,6 +552,66 @@ let update_task_status ~db ~session_key ~id ~status =
       | rc ->
           Error
             (Printf.sprintf "SQLite error updating task: %s"
+               (Sqlite3.Rc.to_string rc)))
+
+let update_task_agent_metadata ~db ~session_key ~id ~depends_on ~agent_model
+    ~agent_type ~agent_prompt ~agent_details ~autostart =
+  let sql =
+    "UPDATE task_tree SET depends_on = ?, agent_model = ?, agent_type = ?, \
+     agent_prompt = ?, agent_details = ?, autostart = ?, updated_at = \
+     datetime('now') WHERE session_key = ? AND id = ?"
+  in
+  let stmt = Sqlite3.prepare db sql in
+  Fun.protect
+    ~finally:(fun () -> ignore (Sqlite3.finalize stmt))
+    (fun () ->
+      ignore
+        (Sqlite3.bind stmt 1
+           (Sqlite3.Data.TEXT (text_of_json_string_list depends_on))
+          : Sqlite3.Rc.t);
+      let bind_opt idx = function
+        | Some value when String.trim value <> "" ->
+            ignore
+              (Sqlite3.bind stmt idx (Sqlite3.Data.TEXT value) : Sqlite3.Rc.t)
+        | _ -> ignore (Sqlite3.bind stmt idx Sqlite3.Data.NULL : Sqlite3.Rc.t)
+      in
+      bind_opt 2 agent_model;
+      bind_opt 3 agent_type;
+      bind_opt 4 agent_prompt;
+      bind_opt 5 agent_details;
+      ignore
+        (Sqlite3.bind stmt 6 (Sqlite3.Data.INT (if autostart then 1L else 0L))
+          : Sqlite3.Rc.t);
+      ignore
+        (Sqlite3.bind stmt 7 (Sqlite3.Data.TEXT session_key) : Sqlite3.Rc.t);
+      ignore (Sqlite3.bind stmt 8 (Sqlite3.Data.TEXT id) : Sqlite3.Rc.t);
+      match Sqlite3.step stmt with
+      | Sqlite3.Rc.DONE -> Ok ()
+      | rc ->
+          Error
+            (Printf.sprintf "SQLite error updating task agent metadata: %s"
+               (Sqlite3.Rc.to_string rc)))
+
+let mark_agent_started ~db ~session_key ~id ~agent_task_id =
+  let sql =
+    "UPDATE task_tree SET agent_task_id = ?, updated_at = datetime('now') \
+     WHERE session_key = ? AND id = ?"
+  in
+  let stmt = Sqlite3.prepare db sql in
+  Fun.protect
+    ~finally:(fun () -> ignore (Sqlite3.finalize stmt))
+    (fun () ->
+      ignore
+        (Sqlite3.bind stmt 1 (Sqlite3.Data.INT (Int64.of_int agent_task_id))
+          : Sqlite3.Rc.t);
+      ignore
+        (Sqlite3.bind stmt 2 (Sqlite3.Data.TEXT session_key) : Sqlite3.Rc.t);
+      ignore (Sqlite3.bind stmt 3 (Sqlite3.Data.TEXT id) : Sqlite3.Rc.t);
+      match Sqlite3.step stmt with
+      | Sqlite3.Rc.DONE -> Ok ()
+      | rc ->
+          Error
+            (Printf.sprintf "SQLite error marking task agent started: %s"
                (Sqlite3.Rc.to_string rc)))
 
 let update_task_note ~db ~session_key ~id ~note =
@@ -560,10 +728,31 @@ let render_task_tree tasks =
         let note_str =
           match t.note with Some n -> " (" ^ n ^ ")" | None -> ""
         in
+        let metadata =
+          List.filter_map
+            (fun item -> item)
+            [
+              (match t.agent_type with
+              | Some agent -> Some ("agent=" ^ agent)
+              | None -> None);
+              (if t.autostart then Some "autostart" else None);
+              (match t.depends_on with
+              | [] -> None
+              | deps -> Some ("depends_on=" ^ display_ids deps));
+              (match t.agent_task_id with
+              | Some id -> Some (Printf.sprintf "bg=%d" id)
+              | None -> None);
+            ]
+        in
+        let metadata_str =
+          match metadata with
+          | [] -> ""
+          | items -> " {" ^ String.concat ", " items ^ "}"
+        in
         let deleted_str = if t.deleted_at <> None then " [deleted]" else "" in
         let text =
-          Printf.sprintf "%s %s %s%s%s" (status_icon t.status) (display_id t.id)
-            t.title note_str deleted_str
+          Printf.sprintf "%s %s %s%s%s%s" (status_icon t.status)
+            (display_id t.id) t.title note_str metadata_str deleted_str
         in
         add_wrapped_line buf ~initial_prefix:(prefix ^ connector)
           ~continuation_prefix:child_prefix text;
@@ -1054,7 +1243,8 @@ let format_notification ~connector ~db ~session_key (ops : Yojson.Safe.t list) =
   end
 
 (* Validate and execute add operation *)
-let do_add ~db ~session_key ~id ~parent_id ~title ~status ~note =
+let do_add ~db ~session_key ~id ~parent_id ~title ~status ~note ~depends_on
+    ~agent_model ~agent_type ~agent_prompt ~agent_details ~autostart =
   if String.length title > max_title_length then
     Error
       (Printf.sprintf "Title too long (%d chars, max %d)" (String.length title)
@@ -1130,21 +1320,33 @@ let do_add ~db ~session_key ~id ~parent_id ~title ~status ~note =
                   in
                   match
                     insert_task ~db ~session_key ~id:actual_id ~parent_id ~title
-                      ~status:actual_status ~note
+                      ~status:actual_status ~note ~depends_on ~agent_model
+                      ~agent_type ~agent_prompt ~agent_details ~autostart
                   with
                   | Ok () -> Ok actual_id
                   | Error e -> Error e
                 end)
 
 (* Validate and execute update operation *)
-let do_update ~db ~session_key ~id ~status ~note =
+let do_update ~db ~session_key ~id ~status ~note ~depends_on ~agent_model
+    ~agent_type ~agent_prompt ~agent_details ~autostart =
   let tasks = load_tasks ~db ~session_key () in
   let id = resolve_existing_id ~tasks ~id in
   match List.find_opt (fun t -> t.id = id) tasks with
   | None -> Error (not_found_error ~tasks ~id)
   | Some task -> (
-      match (status, note) with
-      | None, None -> Error "Update requires at least status or note"
+      match
+        ( status,
+          note,
+          depends_on,
+          agent_model,
+          agent_type,
+          agent_prompt,
+          agent_details,
+          autostart )
+      with
+      | None, None, None, None, None, None, None, None ->
+          Error "Update requires at least status, note, or agent metadata"
       | _ ->
           let result = ref (Ok ()) in
           (match status with
@@ -1195,6 +1397,52 @@ let do_update ~db ~session_key ~id ~status ~note =
               | Ok () -> ())
           | Ok (), None -> ()
           | Error _, _ -> ());
+          (match !result with
+          | Error _ -> ()
+          | Ok () -> (
+              match
+                ( depends_on,
+                  agent_model,
+                  agent_type,
+                  agent_prompt,
+                  agent_details,
+                  autostart )
+              with
+              | None, None, None, None, None, None -> ()
+              | _ -> (
+                  let depends_on =
+                    Option.value depends_on ~default:task.depends_on
+                  in
+                  let agent_model =
+                    match agent_model with
+                    | Some _ -> agent_model
+                    | None -> task.agent_model
+                  in
+                  let agent_type =
+                    match agent_type with
+                    | Some _ -> agent_type
+                    | None -> task.agent_type
+                  in
+                  let agent_prompt =
+                    match agent_prompt with
+                    | Some _ -> agent_prompt
+                    | None -> task.agent_prompt
+                  in
+                  let agent_details =
+                    match agent_details with
+                    | Some _ -> agent_details
+                    | None -> task.agent_details
+                  in
+                  let autostart =
+                    Option.value autostart ~default:task.autostart
+                  in
+                  match
+                    update_task_agent_metadata ~db ~session_key ~id ~depends_on
+                      ~agent_model ~agent_type ~agent_prompt ~agent_details
+                      ~autostart
+                  with
+                  | Ok () -> ()
+                  | Error e -> result := Error e)));
           !result)
 
 (* Validate and execute remove operation — soft-deletes instead of hard-deletes *)

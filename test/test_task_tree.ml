@@ -78,6 +78,103 @@ let test_add_custom_string_id () =
   Alcotest.(check int) "one task" 1 (List.length tasks);
   Alcotest.(check string) "custom id" "auth" (List.hd tasks).id
 
+let test_agent_metadata_round_trips () =
+  let db = fresh_db () in
+  let result =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [
+            ("op", `String "add");
+            ("id", `String "impl");
+            ("title", `String "Implement feature");
+            ("depends_on", `List [ `String "design"; `String "tests" ]);
+            ("agent_model", `String "openai-codex:gpt-5.4");
+            ("agent_type", `String "coder");
+            ("agent_prompt", `String "Build the requested feature.");
+            ("agent_details", `String "Keep scope tight.");
+            ("autostart", `Bool true);
+          ];
+      ]
+  in
+  (match result with Ok _ -> () | Error e -> Alcotest.fail e);
+  let task = List.hd (Task_tree.load_tasks ~db ~session_key:"s1" ()) in
+  Alcotest.(check (list string))
+    "dependencies" [ "design"; "tests" ] task.Task_tree.depends_on;
+  Alcotest.(check (option string))
+    "model" (Some "openai-codex:gpt-5.4") task.agent_model;
+  Alcotest.(check (option string)) "agent type" (Some "coder") task.agent_type;
+  Alcotest.(check (option string))
+    "prompt" (Some "Build the requested feature.") task.agent_prompt;
+  Alcotest.(check (option string))
+    "details" (Some "Keep scope tight.") task.agent_details;
+  Alcotest.(check bool) "autostart" true task.autostart;
+  Alcotest.(check (option int)) "not started yet" None task.agent_task_id;
+  let rendered = Task_tree.render_tree ~db ~session_key:"s1" in
+  Alcotest.(check bool)
+    "render shows autostart" true
+    (contains_substring ~needle:"autostart" rendered);
+  Alcotest.(check bool)
+    "render shows agent type" true
+    (contains_substring ~needle:"agent=coder" rendered)
+
+let test_autostart_ready_tasks_wait_for_dependencies () =
+  let db = fresh_db () in
+  let result =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [
+            ("op", `String "add");
+            ("id", `String "prep");
+            ("title", `String "Prepare");
+          ];
+        `Assoc
+          [
+            ("op", `String "add");
+            ("id", `String "impl");
+            ("title", `String "Implement");
+            ("depends_on", `List [ `String "prep" ]);
+            ("agent_prompt", `String "Implement now");
+            ("autostart", `Bool true);
+          ];
+      ]
+  in
+  (match result with Ok _ -> () | Error e -> Alcotest.fail e);
+  Alcotest.(check (list string))
+    "blocked until dependency terminal" []
+    (List.map
+       (fun (task : Task_tree.task) -> task.id)
+       (Task_tree.ready_autostart_tasks ~db ~session_key:"s1"));
+  let result =
+    Task_tree.process_operations ~db ~session_key:"s1"
+      [
+        `Assoc
+          [
+            ("op", `String "update");
+            ("id", `String "prep");
+            ("status", `String "done");
+          ];
+      ]
+  in
+  (match result with Ok _ -> () | Error e -> Alcotest.fail e);
+  Alcotest.(check (list string))
+    "ready after dependency done" [ "impl" ]
+    (List.map
+       (fun (task : Task_tree.task) -> task.id)
+       (Task_tree.ready_autostart_tasks ~db ~session_key:"s1"));
+  (match
+     Task_tree.mark_agent_started ~db ~session_key:"s1" ~id:"impl"
+       ~agent_task_id:42
+   with
+  | Ok () -> ()
+  | Error e -> Alcotest.fail e);
+  Alcotest.(check (list string))
+    "not ready after started" []
+    (List.map
+       (fun (task : Task_tree.task) -> task.id)
+       (Task_tree.ready_autostart_tasks ~db ~session_key:"s1"))
+
 let test_add_depth_auto_nesting () =
   let db = fresh_db () in
   let result =
@@ -738,6 +835,13 @@ let test_tool_invoke_round_trip () =
   Alcotest.(check bool)
     "does not emit github-style issue reference" false
     (contains_substring ~needle:"#1" result)
+
+let test_tool_risk_level_medium_for_autostart () =
+  let db = fresh_db () in
+  let tool_t = Task_tree.tool ~db () in
+  Alcotest.(check bool)
+    "task_tree can autostart agents, so risk is medium" true
+    (tool_t.Tool.risk_level = Tool.Medium)
 
 let test_process_operations_mutation_response_is_concise () =
   let db = fresh_db () in
@@ -3717,6 +3821,10 @@ let suite =
       test_init_schema_idempotent;
     Alcotest.test_case "add root task" `Quick test_add_root_task;
     Alcotest.test_case "add custom string ID" `Quick test_add_custom_string_id;
+    Alcotest.test_case "agent metadata round trips" `Quick
+      test_agent_metadata_round_trips;
+    Alcotest.test_case "autostart waits for dependencies" `Quick
+      test_autostart_ready_tasks_wait_for_dependencies;
     Alcotest.test_case "add depth auto-nesting" `Quick
       test_add_depth_auto_nesting;
     Alcotest.test_case "add explicit parent" `Quick test_add_explicit_parent;
@@ -3753,6 +3861,8 @@ let suite =
     Alcotest.test_case "batch operations" `Quick test_batch_operations;
     Alcotest.test_case "tool invoke round-trip" `Quick
       test_tool_invoke_round_trip;
+    Alcotest.test_case "tool risk level medium for autostart" `Quick
+      test_tool_risk_level_medium_for_autostart;
     Alcotest.test_case "mutation response concise" `Quick
       test_process_operations_mutation_response_is_concise;
     Alcotest.test_case "accepts displayed T id" `Quick

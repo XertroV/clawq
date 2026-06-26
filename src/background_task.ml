@@ -1812,38 +1812,71 @@ let available_worker_slots ?max_running_tasks (tasks : task list) =
       in
       Some (max 0 (max max_running_tasks 0 - running_count))
 
-let queued_tasks_ready_to_start ?max_running_tasks (tasks : task list) :
-    task list =
+let local_worker_slots ?max_local_running_tasks (tasks : task list) =
+  match max_local_running_tasks with
+  | None -> None
+  | Some max_local_running_tasks ->
+      let running_count =
+        List.fold_left
+          (fun acc (task : task) ->
+            if task.runner = Local && task.status = Running then acc + 1
+            else acc)
+          0 tasks
+      in
+      Some (max 0 (max max_local_running_tasks 0 - running_count))
+
+let queued_tasks_ready_to_start ?max_running_tasks ?max_local_running_tasks
+    (tasks : task list) : task list =
   let queued =
     List.filter
       (fun (task : task) ->
         task.status = Queued && not (Hashtbl.mem running task.id))
       tasks
   in
+  let queued =
+    match local_worker_slots ?max_local_running_tasks tasks with
+    | None -> queued
+    | Some local_slots ->
+        let remaining = ref local_slots in
+        List.filter
+          (fun (task : task) ->
+            if task.runner <> Local then true
+            else if !remaining > 0 then begin
+              decr remaining;
+              true
+            end
+            else false)
+          queued
+  in
   match available_worker_slots ?max_running_tasks tasks with
   | None -> queued
   | Some slots -> take slots queued
 
-let start_queued_with_callback_impl ?max_running_tasks ~spawn_task
-    ~on_task_started ~on_task_finished ~db () =
+let start_queued_with_callback_impl ?max_running_tasks ?max_local_running_tasks
+    ~spawn_task ~on_task_started ~on_task_finished ~db () =
   let queued =
-    queued_tasks_ready_to_start ?max_running_tasks (list_tasks ~db)
+    queued_tasks_ready_to_start ?max_running_tasks ?max_local_running_tasks
+      (list_tasks ~db)
   in
   List.iter (spawn_task ~on_task_started ~on_task_finished ~db) queued
 
-let start_queued_with_callback ?max_running_tasks ?augment_env ~on_task_finished
-    ~db ?(on_task_started = fun _ -> Lwt.return_unit) () =
-  start_queued_with_callback_impl ?max_running_tasks
+let start_queued_with_callback ?max_running_tasks ?max_local_running_tasks
+    ?augment_env ~on_task_finished ~db
+    ?(on_task_started = fun _ -> Lwt.return_unit) () =
+  start_queued_with_callback_impl ?max_running_tasks ?max_local_running_tasks
     ~spawn_task:(default_spawn_task ?augment_env)
     ~on_task_started ~on_task_finished ~db ()
 
-let start_queued ?max_running_tasks ?augment_env ~db () =
-  start_queued_with_callback ?max_running_tasks ?augment_env
+let start_queued ?max_running_tasks ?max_local_running_tasks ?augment_env ~db ()
+    =
+  start_queued_with_callback ?max_running_tasks ?max_local_running_tasks
+    ?augment_env
     ~on_task_finished:(fun _ -> Lwt.return_unit)
     ~db ()
 
 let start_queued_with_local_runner ~run_turn ?timeout_seconds ?max_running_tasks
-    ?augment_env ~on_task_finished ~on_task_started ~db () =
+    ?max_local_running_tasks ?augment_env ~on_task_finished ~on_task_started ~db
+    () =
   let spawn ~on_task_started ~on_task_finished ~db (task : task) =
     if task.runner = Local then
       spawn_local_task ?timeout_seconds ~run_turn ~on_task_started
@@ -1852,8 +1885,8 @@ let start_queued_with_local_runner ~run_turn ?timeout_seconds ?max_running_tasks
       default_spawn_task ?augment_env ~on_task_started ~on_task_finished ~db
         task
   in
-  start_queued_with_callback_impl ?max_running_tasks ~spawn_task:spawn
-    ~on_task_started ~on_task_finished ~db ()
+  start_queued_with_callback_impl ?max_running_tasks ?max_local_running_tasks
+    ~spawn_task:spawn ~on_task_started ~on_task_finished ~db ()
 
 let clear_all_tracked () = Hashtbl.clear running
 

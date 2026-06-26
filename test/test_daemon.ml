@@ -157,6 +157,23 @@ let write_file path body =
     ~finally:(fun () -> close_out_noerr oc)
     (fun () -> output_string oc body)
 
+let with_temp_git_repo f =
+  let dir = Filename.temp_file "clawq-daemon-test-repo" "" in
+  Sys.remove dir;
+  Unix.mkdir dir 0o755;
+  let cmd =
+    Printf.sprintf
+      "git -C %s init -q && git -C %s config user.name Test && git -C %s \
+       config user.email t@t && git -C %s commit --allow-empty -m init -q"
+      (Filename.quote dir) (Filename.quote dir) (Filename.quote dir)
+      (Filename.quote dir)
+  in
+  if Sys.command cmd <> 0 then Alcotest.fail "failed to initialize git repo";
+  Fun.protect
+    ~finally:(fun () ->
+      ignore (Sys.command (Printf.sprintf "rm -rf %s" (Filename.quote dir))))
+    (fun () -> f dir)
+
 let test_boot_stage_message_helpers () =
   Alcotest.(check string)
     "start message" "Boot: mcp-setup start"
@@ -2670,6 +2687,125 @@ let test_refresh_runtime_bound_tools_replaces_shell_exec_on_reload () =
     "shell_exec description reflects reloaded workspace policy" true
     (string_contains shell2.Tool.description "Workspace policy")
 
+let test_task_tree_tool_with_current_workspace_autostarts_without_cwd () =
+  with_temp_git_repo (fun repo_path ->
+      let db = Memory.init ~db_path:":memory:" () in
+      Task_tree.init_schema db;
+      Background_task.init_schema db;
+      let current_config =
+        ref { Runtime_config.default with workspace = repo_path }
+      in
+      let notify _session_key =
+        Some (Format_adapter.Plain, fun _text -> Lwt.return_unit)
+      in
+      let tool =
+        Daemon.task_tree_tool_with_current_workspace ~current_config ~db ~notify
+          ()
+      in
+      let context =
+        {
+          Tool.session_key = Some "s1";
+          send_progress = None;
+          interrupt_check = None;
+          inject_system_messages = None;
+          effective_cwd = None;
+          request_cwd_change = None;
+        }
+      in
+      let result =
+        Lwt_main.run
+          (tool.Tool.invoke ~context
+             (`Assoc
+                [
+                  ( "operations",
+                    `List
+                      [
+                        `Assoc
+                          [
+                            ("op", `String "add");
+                            ("id", `String "impl");
+                            ("title", `String "Implement");
+                            ("agent_prompt", `String "Build it");
+                            ("autostart", `Bool true);
+                          ];
+                      ] );
+                ]))
+      in
+      Alcotest.(check bool)
+        "autostart reported queued task" true
+        (string_contains result "Queued task agent");
+      match Background_task.list_tasks ~db with
+      | [ task ] ->
+          Alcotest.(check string)
+            "queued task uses configured workspace" repo_path task.repo_path
+      | tasks ->
+          Alcotest.failf "expected one background task, got %d"
+            (List.length tasks))
+
+let test_refresh_task_tree_tools_replaces_start_agent_workspace_on_reload () =
+  with_temp_git_repo (fun repo1 ->
+      with_temp_git_repo (fun repo2 ->
+          let registry = Tool_registry.create () in
+          let db = Memory.init ~db_path:":memory:" () in
+          Task_tree.init_schema db;
+          Background_task.init_schema db;
+          let current_config =
+            ref { Runtime_config.default with workspace = repo1 }
+          in
+          let session_manager = Session.create ~config:!current_config ~db () in
+          Daemon.refresh_task_tree_tools_with_current_workspace ~current_config
+            ~db registry;
+          ignore
+            (Task_tree.insert_task ~db ~session_key:"default" ~id:"impl"
+               ~parent_id:None ~title:"Implement" ~status:Task_tree.Pending
+               ~note:None ~depends_on:[] ~agent_model:None ~agent_type:None
+               ~agent_prompt:(Some "Build it") ~agent_details:None
+               ~autostart:false);
+          current_config := { !current_config with workspace = repo2 };
+          Session.update_config ~source:"test_reload" session_manager
+            !current_config;
+          Daemon.refresh_task_tree_tools_with_current_workspace ~current_config
+            ~db registry;
+          let tool =
+            Option.get (Tool_registry.find registry "task_start_agent")
+          in
+          let result =
+            Lwt_main.run
+              (tool.Tool.invoke
+                 (`Assoc
+                    [ ("id", `String "impl"); ("use_worktree", `Bool false) ]))
+          in
+          Alcotest.(check bool)
+            "start_agent reported queued task" true
+            (string_contains result "Queued task agent");
+          match Background_task.list_tasks ~db with
+          | [ task ] ->
+              Alcotest.(check string)
+                "queued task uses reloaded workspace" repo2 task.repo_path
+          | tasks ->
+              Alcotest.failf "expected one background task, got %d"
+                (List.length tasks)))
+
+let test_current_max_concurrent_native_agents_reads_reloaded_config () =
+  let config cap =
+    {
+      Runtime_config.default with
+      agent_defaults =
+        {
+          Runtime_config.default.agent_defaults with
+          max_concurrent_native_agents = cap;
+        };
+    }
+  in
+  let current_config = ref (config (Some 1)) in
+  Alcotest.(check (option int))
+    "initial cap" (Some 1)
+    (Daemon.current_max_concurrent_native_agents current_config);
+  current_config := config (Some 3);
+  Alcotest.(check (option int))
+    "reloaded cap" (Some 3)
+    (Daemon.current_max_concurrent_native_agents current_config)
+
 let insert_test_task db =
   let dir = Filename.temp_file "clawq-notify-test" "" in
   Sys.remove dir;
@@ -3013,6 +3149,13 @@ let suite =
       test_session_reset_clears_pending_queue;
     Alcotest.test_case "refresh runtime-bound tools replaces shell_exec" `Quick
       test_refresh_runtime_bound_tools_replaces_shell_exec_on_reload;
+    Alcotest.test_case
+      "task tree notification tool autostarts with current workspace" `Quick
+      test_task_tree_tool_with_current_workspace_autostarts_without_cwd;
+    Alcotest.test_case "task start agent refreshes workspace on reload" `Quick
+      test_refresh_task_tree_tools_replaces_start_agent_workspace_on_reload;
+    Alcotest.test_case "native agent cap reads reloaded config" `Quick
+      test_current_max_concurrent_native_agents_reads_reloaded_config;
     Alcotest.test_case "notify records delivered on success" `Quick
       test_notify_records_delivered_on_success;
     Alcotest.test_case "notify records failed on sender error" `Quick

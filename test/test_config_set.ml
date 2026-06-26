@@ -6,6 +6,15 @@ let check_json msg expected actual =
     (Yojson.Safe.to_string expected)
     (Yojson.Safe.to_string actual)
 
+let string_contains haystack needle =
+  let hay_len = String.length haystack and needle_len = String.length needle in
+  let rec loop i =
+    if i + needle_len > hay_len then false
+    else if String.sub haystack i needle_len = needle then true
+    else loop (i + 1)
+  in
+  needle_len = 0 || loop 0
+
 let test_infer_value () =
   check_json "true" (`Bool true) (Config_set.infer_value "true");
   check_json "false" (`Bool false) (Config_set.infer_value "false");
@@ -369,6 +378,34 @@ let test_get_value_redacted () =
       in
       Alcotest.(check string) "non-secret visible" "gpt-5.4" result2)
 
+let test_set_max_concurrent_native_agents_roundtrip () =
+  with_temp_home (fun home ->
+      let clawq_dir = Filename.concat home ".clawq" in
+      Unix.mkdir clawq_dir 0o755;
+      (match
+         Config_set.set_json_value "agent_defaults.max_concurrent_native_agents"
+           (`Int 3)
+       with
+      | Ok () -> ()
+      | Error e -> Alcotest.fail e);
+      let config_path = Filename.concat clawq_dir "config.json" in
+      let json = Yojson.Safe.from_file config_path in
+      Alcotest.(check int)
+        "max_concurrent_native_agents set" 3
+        Yojson.Safe.Util.(
+          json |> member "agent_defaults"
+          |> member "max_concurrent_native_agents"
+          |> to_int);
+      match
+        Config_set.set_json_value "agent_defaults.max_concurrent_native_agents"
+          (`Int 0)
+      with
+      | Ok () -> Alcotest.fail "expected zero native-agent cap to be rejected"
+      | Error err ->
+          Alcotest.(check bool)
+            "zero cap rejected" true
+            (string_contains err "must be >= 1 or null"))
+
 let test_set_json_value_rejects_section_path () =
   with_temp_home (fun home ->
       let clawq_dir = Filename.concat home ".clawq" in
@@ -582,6 +619,8 @@ let suite =
     Alcotest.test_case "is_secret_path" `Quick test_is_secret_path;
     Alcotest.test_case "redact" `Quick test_redact;
     Alcotest.test_case "get_value_redacted" `Quick test_get_value_redacted;
+    Alcotest.test_case "max_concurrent_native_agents set roundtrip" `Quick
+      test_set_max_concurrent_native_agents_roundtrip;
     Alcotest.test_case "set_value rejects section path" `Quick
       test_set_value_rejects_section_path;
     Alcotest.test_case "set rejects section path" `Quick

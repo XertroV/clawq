@@ -239,6 +239,7 @@ let config_schema =
             ("autonomous_continuation_delay", L);
             ("autonomous_continuation_enabled", L);
             ("task_tree_notifications", L);
+            ("max_concurrent_native_agents", L);
           ] );
       ( "prompt",
         O
@@ -660,6 +661,20 @@ let validate_set_value key json_val =
             (Printf.sprintf
                "Error: connector_history.max_age_days must be >= 1 (got %d)." n)
       | _ -> Error "Error: connector_history.max_age_days must be an integer.")
+  | "agent_defaults.max_concurrent_native_agents" -> (
+      match json_val with
+      | `Null -> Ok ()
+      | `Int n when n >= 1 -> Ok ()
+      | `Int n ->
+          Error
+            (Printf.sprintf
+               "Error: agent_defaults.max_concurrent_native_agents must be >= \
+                1 or null (got %d)."
+               n)
+      | _ ->
+          Error
+            "Error: agent_defaults.max_concurrent_native_agents must be an \
+             integer or null.")
   | _ -> Ok ()
 
 let set_json_value key json_val =

@@ -292,6 +292,11 @@ Native/local subagents resolve models separately: explicit task `--model`, then
 the agent template `model`, then `agent_defaults.subagent_default_model`, then
 the parent/global default.
 
+Set `agent_defaults.max_concurrent_native_agents` to a positive integer to cap
+how many native/local subagents can run at once. Queued native subagents wait
+until an existing native subagent finishes; external runner background tasks are
+not counted against this native-only cap.
+
 All 17 channel types are supported: `telegram`, `discord`, `slack`, `github`, `teams`, `matrix`, `mattermost`, `dingtalk`, `imessage`, `signal`, `irc`, `email`, `whatsapp`, `nostr`, `lark`, `line`, `onebot`.
 
 ### security
