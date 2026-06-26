@@ -20,14 +20,27 @@ const heroGearAlgorithm: (typeof allowedGearAlgorithms)[number] =
     <div class="hero-inner">
 
       <!-- Cover Art -->
-      <div class="cover-frame">
-        <img
-          src="/clawq-cover.webp"
-          alt="Clawq, The Formal AI Assistant -- Mastering Polite Automation and Protocol"
-          width="480"
-          height="480"
-          loading="eager"
-        />
+      <div class="cover-art-wrapper">
+        <button
+          class="cover-fade-btn"
+          type="button"
+          aria-label="Toggle image visibility"
+          title="Toggle image"
+        >
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M1.5 9C1.5 9 4 4 9 4C14 4 16.5 9 16.5 9C16.5 9 14 14 9 14C4 14 1.5 9 1.5 9Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="9" cy="9" r="2.5" stroke="currentColor" stroke-width="1.5"/>
+          </svg>
+        </button>
+        <div class="cover-frame" id="cover-frame">
+          <img
+            src="/clawq-cover.webp"
+            alt="Clawq, The Formal AI Assistant -- Mastering Polite Automation and Protocol"
+            width="480"
+            height="480"
+            loading="eager"
+          />
+        </div>
       </div>
 
       <!-- Title -->
@@ -173,11 +186,18 @@ const heroGearAlgorithm: (typeof allowedGearAlgorithms)[number] =
   }
 
   /* --- Cover Art Frame --- */
+  .cover-art-wrapper {
+    position: relative;
+    max-width: 51.25rem;
+    width: 100%;
+    margin-bottom: 2.5rem;
+  }
+
   .cover-frame {
     /*opacity: 0.05;*/
     max-width: 51.25rem;
     width: 100%;
-    margin-bottom: 2.5rem;
+    margin-bottom: 0;
     position: relative;
     z-index: 4;
     border: 3px solid var(--brass-dark);
@@ -200,6 +220,48 @@ const heroGearAlgorithm: (typeof allowedGearAlgorithms)[number] =
     user-select: none;
     -webkit-user-select: none;
     -webkit-user-drag: none;
+  }
+
+  .cover-frame {
+    transition: opacity 0.8s ease, border-color 0.8s ease;
+  }
+
+  .cover-frame::after {
+    transition: border-color 0.8s ease;
+  }
+
+  .cover-frame.cover-faded {
+    opacity: 0;
+    border-color: transparent;
+  }
+
+  .cover-frame.cover-faded::after {
+    border-color: transparent;
+  }
+
+  .cover-fade-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 10;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 1px solid var(--brass-dark);
+    background: rgba(0, 0, 0, 0.6);
+    color: var(--brass-primary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    opacity: 0.7;
+    transition: opacity 0.2s ease, background-color 0.2s ease;
+  }
+
+  .cover-fade-btn:hover {
+    opacity: 1;
+    background: rgba(0, 0, 0, 0.8);
   }
 
   /* --- Title --- */
@@ -431,6 +493,10 @@ const heroGearAlgorithm: (typeof allowedGearAlgorithms)[number] =
       padding: 4rem 1rem 2rem;
     }
 
+    .cover-art-wrapper {
+      max-width: 30rem;
+    }
+
     .cover-frame {
       max-width: 30rem;
     }
@@ -457,3 +523,13 @@ const heroGearAlgorithm: (typeof allowedGearAlgorithms)[number] =
     }
   }
 </style>
+
+<script>
+  const btn = document.querySelector('.cover-fade-btn');
+  const frame = document.getElementById('cover-frame');
+  if (btn && frame) {
+    btn.addEventListener('click', () => {
+      frame.classList.toggle('cover-faded');
+    });
+  }
+</script>
