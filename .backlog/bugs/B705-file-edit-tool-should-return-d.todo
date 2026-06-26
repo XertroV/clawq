@@ -1,0 +1,19 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B705
+priority: high
+status: pending
+tags: []
+title: file_edit tool should return diagnostic context on "old_text not found" failure
+---
+When file_edit fails because old_text is not found in the file, the tool returns only a bare error string with no diagnostic context. This causes agents to enter guess-and-check loops, repeatedly trying file_edit with slightly different old_text snippets without re-reading the file. The stuck pattern "SameErrorString: error repeated 3 times: Error: old_text not found in file" is a direct consequence.
+
+Suggested fix: On failure, return the line number(s) where the closest partial match (longest common prefix of old_text) was found, or a small context snippet around the best candidate region. This would let the agent self-correct without a full file_read round-trip. Relevant code is in the file_edit tool implementation (likely in src/ for the tool dispatch layer).
+
+Additionally, consider adding a protocol-level rule: after N consecutive file_edit failures on the same file, the agent should be forced to file_read before any further edit attempts.
+
+--
+Auto-filed by clawq postmortem for session github:XertroV/clawq:workflow_run:28214784269 (pattern: SameErrorString: error repeated 3 times: Error: old_text not found in file).
+Postmortem doc: /home/xertrov/.clawq/postmortems/2026-06-26T150224-github:XertroV_clawq:workflow_run:28214784269.md
