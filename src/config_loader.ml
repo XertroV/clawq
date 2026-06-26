@@ -1451,6 +1451,7 @@ let parse_config ?(resolve_secrets = true) json =
       let tts_voice =
         try v |> member "tts_voice" |> to_string with _ -> "alloy"
       in
+      let tts_speed = try v |> member "tts_speed" |> to_float with _ -> 1.0 in
       let audio_dir =
         try v |> member "audio_dir" |> to_string with _ -> Dot_dir.sub "audio"
       in
@@ -1463,6 +1464,7 @@ let parse_config ?(resolve_secrets = true) json =
              tts_provider;
              tts_model;
              tts_voice;
+             tts_speed;
              audio_dir;
            }
             : Runtime_config.voice_config)
