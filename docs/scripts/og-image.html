@@ -283,16 +283,20 @@
       </g>
 
       <!-- ===== Main agents (faint brass halo => tier above satellites, below relay) ===== -->
+      <!-- Each label sits on a small brass nameplate so the near-vertical fan-out link
+           passes cleanly behind it instead of crossing the text. -->
       <g>
         <circle cx="350" cy="360" r="58" fill="url(#relayGlow)" opacity="0.55" />
         <circle cx="350" cy="360" r="38" fill="#13111a" stroke="#c9a84c" stroke-width="2.2" />
         <use href="#gear" x="328" y="338" width="44" height="44" color="#e2c97e" />
-        <text x="350" y="424" class="agent-label">Agent A</text>
+        <rect x="302" y="406" width="96" height="28" rx="5" fill="#13111a" stroke="#8b7332" stroke-width="1" />
+        <text x="350" y="425" class="agent-label">Agent A</text>
 
         <circle cx="850" cy="360" r="58" fill="url(#relayGlow)" opacity="0.55" />
         <circle cx="850" cy="360" r="38" fill="#13111a" stroke="#c9a84c" stroke-width="2.2" />
         <use href="#gear" x="828" y="338" width="44" height="44" color="#e2c97e" />
-        <text x="850" y="424" class="agent-label">Agent B</text>
+        <rect x="802" y="406" width="96" height="28" rx="5" fill="#13111a" stroke="#8b7332" stroke-width="1" />
+        <text x="850" y="425" class="agent-label">Agent B</text>
       </g>
 
       <!-- ===== Relay hub ===== -->
