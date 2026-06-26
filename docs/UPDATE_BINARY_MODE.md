@@ -20,7 +20,7 @@ resolving its real path and matching the install tree, then runs the matching up
 | pnpm     | `pnpm/` or `node_modules/.pnpm`                 | `pnpm add -g @clawq/clawq@latest`    |
 | yarn     | `yarn/global` or `.config/yarn`                 | `yarn global add @clawq/clawq@latest`|
 | bun      | `.bun/` or `bun/install/global`                 | `bun add -g @clawq/clawq@latest`     |
-| Homebrew | `Cellar/clawq`, `homebrew/`, or `.linuxbrew/`   | `brew upgrade clawq`                 |
+| Homebrew | `Cellar/clawq`                                  | `brew upgrade clawq`                 |
 
 Notes:
 

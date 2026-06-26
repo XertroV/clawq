@@ -76,11 +76,7 @@ let classify ~os norm =
     Some Pnpm
   else if has "/yarn/global" || has "/.config/yarn" || has "/.yarn/" then
     Some Yarn
-  else if
-    (not (is_windows os))
-    && (has "/cellar/clawq/" || has "/homebrew/" || has "/.linuxbrew/"
-      || has "/usr/local/cellar/")
-  then Some Homebrew
+  else if (not (is_windows os)) && has "/cellar/clawq/" then Some Homebrew
   else if has "node_modules/@clawq" || has "/lib/node_modules/" then Some Npm
   else None
 

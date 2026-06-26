@@ -304,6 +304,9 @@ let run_pkg_manager_update ~manager ~target_path ~run_command ~send_signal
     ~send_progress ~prepare_restart =
   let open Lwt.Syntax in
   let cwd = Filename.dirname target_path in
+  let resolved_target_path =
+    try Unix.realpath target_path with _ -> target_path
+  in
   let argv = Update_pkg_manager.update_argv manager in
   let* () = send_progress "Starting update..." in
   let* () = send_progress "Mode: pkg" in
@@ -333,7 +336,7 @@ let run_pkg_manager_update ~manager ~target_path ~run_command ~send_signal
         Update_pkg_manager.stable_bin_path (Filename.basename target_path)
       with
       | Some path -> path
-      | None -> target_path
+      | None -> resolved_target_path
     in
     if Sys.file_exists reexec_target then
       Unix.putenv Restart_exec.reexec_path_env reexec_target;
