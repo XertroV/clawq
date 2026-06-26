@@ -264,6 +264,7 @@
   update_pkg_manager
   update_tool
   command_bridge
+  connector_dispatch
   slack
   discord
   ws_client
