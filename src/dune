@@ -227,6 +227,9 @@
   daemon_util
   daemon
   command_bridge_models
+  command_bridge_gateway
+  command_bridge_usage
+  command_bridge_session_fmt
   command_bridge_helpers
   command_bridge_bgargs
   command_bridge_plan
