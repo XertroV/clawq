@@ -43,6 +43,8 @@
   session_debug
   agent_debug
   agent_0_compact
+  agent_1_context
+  agent_2_tools
   agent
   session_core
   session_turn
