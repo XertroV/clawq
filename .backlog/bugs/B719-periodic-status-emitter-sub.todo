@@ -4,7 +4,7 @@ depends_on: [B712]
 estimate_hours: 2
 id: B719
 priority: low
-status: pending
+status: done
 tags: [subagent, tools, monitoring]
 title: Periodic status emitter for running subagents
 ---

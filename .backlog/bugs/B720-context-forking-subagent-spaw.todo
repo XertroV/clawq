@@ -4,7 +4,7 @@ depends_on: [B712]
 estimate_hours: 3
 id: B720
 priority: low
-status: pending
+status: done
 tags: [subagent, tools, architecture]
 title: Context forking for subagent spawn
 ---
