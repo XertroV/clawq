@@ -708,3 +708,4 @@ bugs:
     - file: B711-skill-reload-message-show-usin.todo
     - file: B712-add-native-child-session-subag.todo
     - file: B713-add-a-way-to-send-a-follow-up.todo
+    - file: B714-add-to-help-response-document.todo
