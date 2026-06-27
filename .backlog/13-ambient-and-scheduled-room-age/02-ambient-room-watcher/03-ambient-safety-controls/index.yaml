@@ -13,7 +13,7 @@ tasks:
       file: T001-add-ambient-safety-controls-an.todo
       id: T001
       priority: high
-      status: pending
+      status: done
       tags: []
       title: Enforce ambient policy config and rate limits
     - complexity: medium
