@@ -491,11 +491,15 @@ let handle_event ~(config : Runtime_config.slack_config)
                           ~room_id:channel_id ~requester_id:user_id
                           ~profile_id:binding.profile_id ()
                       in
+                      let title =
+                        Room_request_classifier.title_of_async_cmd cmd_result
+                        |> Option.value ~default:""
+                      in
                       ignore
                         (Task_tree_ops.create_async_cmd_task ~db
-                           ~session_key:key cmd_result ~origin
-                           ?thread_id:thread_ts ~requester:(Some user_id)
-                           ~profile_id:(Some binding.profile_id) ())
+                           ~session_key:key ~title ~origin
+                           ?thread_id:thread_ts ~requester:user_id
+                           ~profile_id:binding.profile_id ())
                   | None -> ())
               | None -> ());
             match cmd_result with

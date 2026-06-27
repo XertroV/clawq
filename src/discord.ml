@@ -739,12 +739,16 @@ let handle_message ~(discord_config : Runtime_config.discord_config)
                       ~requester_id:msg.author_id
                       ~profile_id:binding.profile_id ()
                   in
+                  let title =
+                    Room_request_classifier.title_of_async_cmd cmd_result
+                    |> Option.value ~default:""
+                  in
                   ignore
                     (Task_tree_ops.create_async_cmd_task ~db
-                       ~session_key:key cmd_result ~origin
+                       ~session_key:key ~title ~origin
                        ?thread_id:None
-                       ~requester:(Some msg.author_id)
-                       ~profile_id:(Some binding.profile_id) ())
+                       ~requester:msg.author_id
+                       ~profile_id:binding.profile_id ())
               | None -> ())
           | None -> ());
         match cmd_result with

@@ -35,7 +35,7 @@ let rec classify (result : Slash_commands.result) : classification =
 (** Derive a human-readable title for an [AsyncCommand] result. Returns
     [Some title] for async commands and [None] for everything else. Used to
     create task-tree records when async commands arrive from profiled rooms. *)
-let title_of_async_cmd (result : Slash_commands.result) : string option =
+let rec title_of_async_cmd (result : Slash_commands.result) : string option =
   let open Slash_commands in
   match result with
   | Compact -> Some "Compact session"
