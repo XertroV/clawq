@@ -108,9 +108,11 @@ let test_provider_defs () =
   check "xiaomi" "https://api.xiaomimimo.com/anthropic" "XIAOMI_API_KEY";
   check "xiaomi-token-plan-cn" "https://token-plan-cn.xiaomimimo.com/anthropic"
     "XIAOMI_TOKEN_PLAN_CN_API_KEY";
-  check "xiaomi-token-plan-ams" "https://token-plan-ams.xiaomimimo.com/anthropic"
+  check "xiaomi-token-plan-ams"
+    "https://token-plan-ams.xiaomimimo.com/anthropic"
     "XIAOMI_TOKEN_PLAN_AMS_API_KEY";
-  check "xiaomi-token-plan-sgp" "https://token-plan-sgp.xiaomimimo.com/anthropic"
+  check "xiaomi-token-plan-sgp"
+    "https://token-plan-sgp.xiaomimimo.com/anthropic"
     "XIAOMI_TOKEN_PLAN_SGP_API_KEY"
 
 let test_resolve_no_cross_region_bleed () =

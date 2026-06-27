@@ -9,9 +9,7 @@ let public_api_key =
   try Some (Sys.getenv "XIAOMI_API_KEY") with Not_found -> None
 
 let sgp_api_key = Xiaomi.resolve_api_key "xiaomi-token-plan-sgp"
-
-let any_key_available =
-  public_api_key <> None || sgp_api_key <> None
+let any_key_available = public_api_key <> None || sgp_api_key <> None
 
 (* Resolve the best available key and provider config. Prefers public xiaomi,
    falls back to sgp token plan. Returns (provider_name, provider_config). *)
@@ -35,7 +33,7 @@ let resolve_test_provider () =
               base_url = Some "https://token-plan-sgp.xiaomimimo.com/anthropic";
               kind = Some "xiaomi";
             } )
-      | None -> Alcotest.fail "no Xiaomi API key available" )
+      | None -> Alcotest.fail "no Xiaomi API key available")
 
 (* mimo-v2.5-pro is the flagship — use it for all live tests. It has 1M context,
    131K output, and is the model most likely to be used as primary. *)
@@ -89,13 +87,11 @@ let test_live_simple_completion () =
            Provider_anthropic.complete ~config ~provider ~model:test_model
              ~messages:msgs ())
          (fun exn ->
-           Alcotest.fail
-             ("request failed: " ^ Printexc.to_string exn))
+           Alcotest.fail ("request failed: " ^ Printexc.to_string exn))
      in
      match result with
      | Provider.Text { content; _ } ->
-         Alcotest.(check bool)
-           "has content" true (String.length content > 0);
+         Alcotest.(check bool) "has content" true (String.length content > 0);
          let lower = String.lowercase_ascii (String.trim content) in
          let mentions_four =
            List.exists
@@ -110,8 +106,7 @@ let test_live_simple_completion () =
            (Printf.sprintf "answer mentions 4 (got: %s)" (String.trim content))
            true mentions_four;
          Lwt.return_unit
-     | Provider.ToolCalls _ ->
-         Alcotest.fail "expected Text, got ToolCalls")
+     | Provider.ToolCalls _ -> Alcotest.fail "expected Text, got ToolCalls")
 
 let test_live_single_tool_call () =
   if not any_key_available then Alcotest.skip ();
@@ -175,14 +170,13 @@ let test_live_single_tool_call () =
      match result with
      | Provider.ToolCalls { calls; _ } ->
          Alcotest.(check bool)
-           "at least one tool call" true (List.length calls > 0);
+           "at least one tool call" true
+           (List.length calls > 0);
          let call = List.hd calls in
          Printf.eprintf "tool call: name=%s args=%s id=%s\n%!"
-           call.Provider.function_name call.Provider.arguments
-           call.Provider.id;
+           call.Provider.function_name call.Provider.arguments call.Provider.id;
          Alcotest.(check string)
-           "tool name is get_weather" "get_weather"
-           call.Provider.function_name;
+           "tool name is get_weather" "get_weather" call.Provider.function_name;
          let args =
            try Yojson.Safe.from_string call.arguments with _ -> `Assoc []
          in
@@ -194,11 +188,9 @@ let test_live_single_tool_call () =
          Lwt.return_unit
      | Provider.Text { content; _ } ->
          Alcotest.fail
-           (Printf.sprintf
-              "expected ToolCalls, got Text (len=%d): %s"
+           (Printf.sprintf "expected ToolCalls, got Text (len=%d): %s"
               (String.length content)
-              (if String.length content > 200 then
-                 String.sub content 0 200
+              (if String.length content > 200 then String.sub content 0 200
                else content)))
 
 (* Multi-turn tool call: tool_use → tool_result → follow-up.
@@ -259,8 +251,7 @@ let test_live_multi_turn_tool_call () =
          (fun () ->
            Provider_anthropic.complete ~config ~provider ~model:test_model
              ~messages:msgs ~tools ())
-         (fun exn ->
-           Alcotest.fail ("turn 1 failed: " ^ Printexc.to_string exn))
+         (fun exn -> Alcotest.fail ("turn 1 failed: " ^ Printexc.to_string exn))
      in
      let tc =
        match turn1 with
@@ -269,11 +260,9 @@ let test_live_multi_turn_tool_call () =
            Alcotest.fail "turn 1 returned ToolCalls but empty list"
        | Provider.Text { content; _ } ->
            Alcotest.fail
-             (Printf.sprintf
-                "turn 1 expected ToolCalls, got Text (len=%d): %s"
+             (Printf.sprintf "turn 1 expected ToolCalls, got Text (len=%d): %s"
                 (String.length content)
-                (if String.length content > 200 then
-                   String.sub content 0 200
+                (if String.length content > 200 then String.sub content 0 200
                  else content))
      in
      Printf.eprintf "turn 1: tool=%s args=%s id=%s\n%!" tc.function_name
@@ -304,13 +293,11 @@ let test_live_multi_turn_tool_call () =
          (fun () ->
            Provider_anthropic.complete ~config ~provider ~model:test_model
              ~messages:msgs2 ~tools ())
-         (fun exn ->
-           Alcotest.fail ("turn 2 failed: " ^ Printexc.to_string exn))
+         (fun exn -> Alcotest.fail ("turn 2 failed: " ^ Printexc.to_string exn))
      in
      (match turn2 with
      | Provider.Text { content; _ } ->
-         Printf.eprintf "turn 2: Text (len=%d): %s\n%!"
-           (String.length content)
+         Printf.eprintf "turn 2: Text (len=%d): %s\n%!" (String.length content)
            (if String.length content > 200 then String.sub content 0 200
             else content);
          Alcotest.(check bool)
@@ -347,8 +334,7 @@ let suite =
       test_routing_is_anthropic;
     Alcotest.test_case "live simple completion" `Slow
       test_live_simple_completion;
-    Alcotest.test_case "live single tool call" `Slow
-      test_live_single_tool_call;
+    Alcotest.test_case "live single tool call" `Slow test_live_single_tool_call;
     Alcotest.test_case "live multi-turn tool call (Anthropic endpoint)" `Slow
       test_live_multi_turn_tool_call;
   ]

@@ -459,6 +459,8 @@ let refresh_runtime_bound_tools ~(config : Runtime_config.t)
        ~extra_allowed_paths:config.security.extra_allowed_paths ~sandbox
        ~session_mgr:session_manager ());
   Tool_registry.replace registry
+    (Tools_builtin.models_tool ~config ~session_mgr:session_manager ());
+  Tool_registry.replace registry
     (Tools_builtin.doc_write ~workspace
        ~workspace_files:config.prompt.workspace_files);
   List.iter (Tool_registry.replace registry) (Tools_builtin.bg_shell_tools ());

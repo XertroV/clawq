@@ -2660,6 +2660,49 @@ let test_refresh_runtime_bound_tools_replaces_shell_exec_on_reload () =
     "shell_exec description reflects reloaded workspace policy" true
     (Test_helpers.string_contains shell2.Tool.description "Workspace policy")
 
+let test_refresh_runtime_bound_tools_replaces_models_with_session_mgr () =
+  let registry = Tool_registry.create () in
+  let config =
+    {
+      Runtime_config.default with
+      agent_defaults =
+        {
+          Runtime_config.default.agent_defaults with
+          primary_model = "openai-codex:gpt-5.4";
+        };
+    }
+  in
+  let db = Memory.init ~db_path:":memory:" () in
+  let sandbox =
+    Sandbox.create ~backend:Sandbox.None
+      ~workspace:(Runtime_config.effective_workspace config)
+      ~extra_allowed_paths:config.security.extra_allowed_paths
+      ~workspace_only:config.security.workspace_only ()
+  in
+  Tools_builtin.register_all ~config ~sandbox ~db:(Some db) registry;
+  let session_manager = Session.create ~config ~sandbox ~db () in
+  Session.set_session_model session_manager ~key:"web:b722"
+    ~model:"anthropic:claude-sonnet-4-6";
+  Daemon.refresh_runtime_bound_tools ~config ~session_manager ~sandbox registry;
+  let models = Option.get (Tool_registry.find registry "models") in
+  let context =
+    {
+      Tool.session_key = Some "web:b722";
+      send_progress = None;
+      interrupt_check = None;
+      inject_system_messages = None;
+      effective_cwd = None;
+      request_cwd_change = None;
+    }
+  in
+  let result =
+    Lwt_main.run
+      (models.Tool.invoke ~context (`Assoc [ ("action", `String "get") ]))
+  in
+  Alcotest.(check string)
+    "models get reports active session override"
+    "Current model: anthropic:claude-sonnet-4-6" result
+
 let test_task_tree_tool_with_current_workspace_autostarts_without_cwd () =
   with_temp_git_repo (fun repo_path ->
       let db = Memory.init ~db_path:":memory:" () in
@@ -3124,6 +3167,8 @@ let suite =
       test_session_reset_clears_pending_queue;
     Alcotest.test_case "refresh runtime-bound tools replaces shell_exec" `Quick
       test_refresh_runtime_bound_tools_replaces_shell_exec_on_reload;
+    Alcotest.test_case "refresh runtime-bound tools replaces models" `Quick
+      test_refresh_runtime_bound_tools_replaces_models_with_session_mgr;
     Alcotest.test_case
       "task tree notification tool autostarts with current workspace" `Quick
       test_task_tree_tool_with_current_workspace_autostarts_without_cwd;

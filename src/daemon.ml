@@ -348,13 +348,8 @@ let run ~(config : Runtime_config.t) =
   in
   (match tool_registry with
   | Some registry ->
-      Tool_registry.replace registry
-        (Tools_builtin.shell_exec_with_hooks
-           ~workspace:(Runtime_config.effective_workspace !current_config)
-           ~workspace_only:config.security.workspace_only
-           ~allowed_commands:Tools_builtin.default_shell_allowlist
-           ~extra_allowed_paths:config.security.extra_allowed_paths
-           ~sandbox:!sandbox ~session_mgr:session_manager ())
+      refresh_runtime_bound_tools ~config:!current_config ~session_manager
+        ~sandbox:!sandbox registry
   | None -> ());
   let rich_send_fn =
     Some
