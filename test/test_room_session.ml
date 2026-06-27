@@ -361,14 +361,52 @@ let test_teams_child_thread_key_preserves_encoded_room () =
       Alcotest.(check string) "profile_id" "ops" child.profile_id;
       Alcotest.(check string) "room_id" "team-1:19:abc@thread.v2" child.room_id
 
-let test_child_thread_key_rejects_missing_source () =
-  Alcotest.check_raises "missing thread/source metadata"
-    (Invalid_argument
-       "child_thread_key: thread_id or source_message_id is required")
-    (fun () ->
-      ignore
-        (Room_session.child_thread_key ~profile_id:"vip" ~connector:"slack"
-           ~room_id:"C01" ()))
+let test_slack_child_fallback_key_deterministic () =
+  let key1 =
+    Room_session.child_thread_key ~profile_id:"vip" ~connector:"slack"
+      ~room_id:"C01" ()
+  in
+  let key2 =
+    Room_session.child_thread_key ~profile_id:"vip" ~connector:"slack"
+      ~room_id:"C01" ()
+  in
+  Alcotest.(check string) "same metadata gives same fallback key" key1 key2;
+  match Room_session.parse_child_thread_key key1 with
+  | None -> Alcotest.fail "expected thread-less child key to parse"
+  | Some child ->
+      Alcotest.(check string) "connector" "slack" child.connector;
+      Alcotest.(check string) "profile_id" "vip" child.profile_id;
+      Alcotest.(check string) "room_id" "C01" child.room_id;
+      Alcotest.(check (option string)) "thread_id" None child.thread_id;
+      Alcotest.(check (option string))
+        "source_message_id" None child.source_message_id
+
+let test_teams_child_fallback_key_preserves_encoded_room () =
+  let key =
+    Room_session.child_thread_key ~profile_id:"ops" ~connector:"teams"
+      ~room_id:"team-1:channel-7" ()
+  in
+  match Room_session.parse_child_thread_key key with
+  | None -> Alcotest.fail "expected teams thread-less child key to parse"
+  | Some child ->
+      Alcotest.(check string) "connector" "teams" child.connector;
+      Alcotest.(check string) "profile_id" "ops" child.profile_id;
+      Alcotest.(check string) "room_id" "team-1:channel-7" child.room_id;
+      Alcotest.(check (option string)) "thread_id" None child.thread_id;
+      Alcotest.(check (option string))
+        "source_message_id" None child.source_message_id
+
+let test_child_fallback_key_distinct_from_threaded_key () =
+  let fallback =
+    Room_session.child_thread_key ~profile_id:"vip" ~connector:"slack"
+      ~room_id:"C01" ()
+  in
+  let threaded =
+    Room_session.child_thread_key ~profile_id:"vip" ~connector:"slack"
+      ~room_id:"C01" ~thread_id:"1719000000.000100" ()
+  in
+  Alcotest.(check bool)
+    "fallback key differs from threaded key" true (fallback <> threaded)
 
 (* --- Routine session keys --- *)
 
@@ -453,8 +491,12 @@ let suite =
       test_slack_child_thread_key_changes_with_thread;
     Alcotest.test_case "teams child thread key preserves encoded room" `Quick
       test_teams_child_thread_key_preserves_encoded_room;
-    Alcotest.test_case "child thread key rejects missing source" `Quick
-      test_child_thread_key_rejects_missing_source;
+    Alcotest.test_case "slack child fallback key deterministic" `Quick
+      test_slack_child_fallback_key_deterministic;
+    Alcotest.test_case "teams child fallback key preserves encoded room" `Quick
+      test_teams_child_fallback_key_preserves_encoded_room;
+    Alcotest.test_case "child fallback key distinct from threaded key" `Quick
+      test_child_fallback_key_distinct_from_threaded_key;
     Alcotest.test_case "routine key deterministic" `Quick
       test_routine_key_deterministic;
     Alcotest.test_case "routine key changes with routine id" `Quick
