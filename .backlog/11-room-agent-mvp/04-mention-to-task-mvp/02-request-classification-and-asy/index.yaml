@@ -29,7 +29,8 @@ tasks:
       file: T002-create-tasks-from-explicit-asy.todo
       id: T002
       priority: high
-      status: pending
+      status: done
+      tags: []
       title: Create tasks from explicit async room commands
     - complexity: high
       depends_on:
