@@ -1319,6 +1319,56 @@ let test_handle_cron_list_with_jobs () =
            true
          with Not_found -> false))
 
+let routine_target_text = "profile=42 thread=thread-1 workspace=workspace-1"
+
+let check_contains label expected output =
+  Alcotest.(check bool)
+    label true
+    (Test_helpers.string_contains output expected)
+
+let add_routine_cron_job db ~name =
+  Scheduler.init_schema db;
+  match
+    Scheduler.add_job ~db ~name ~session_key:"room:abc" ~message:"routine msg"
+      ~schedule:"every 1m" ~profile_id:42 ~thread_id:"thread-1"
+      ~routine_workspace_id:"workspace-1" ()
+  with
+  | Ok () -> ()
+  | Error e -> Alcotest.failf "failed to add routine cron job: %s" e
+
+let test_handle_cron_list_shows_routine_target () =
+  with_temp_home (fun home ->
+      let db = session_db home in
+      add_routine_cron_job db ~name:"routine-list";
+      let result = Command_bridge.handle [ "cron"; "list" ] in
+      check_contains "cron list contains job" "routine-list" result;
+      check_contains "cron list contains routine target" routine_target_text
+        result)
+
+let test_handle_cron_show_shows_routine_target () =
+  with_temp_home (fun home ->
+      let db = session_db home in
+      add_routine_cron_job db ~name:"routine-show";
+      let result = Command_bridge.handle [ "cron"; "show"; "routine-show" ] in
+      check_contains "cron show contains routine target label" "Routine target:"
+        result;
+      check_contains "cron show contains routine target" routine_target_text
+        result)
+
+let test_handle_cron_history_shows_routine_target () =
+  with_temp_home (fun home ->
+      let db = session_db home in
+      add_routine_cron_job db ~name:"routine-history";
+      let run_id = Scheduler.record_run_start ~db ~job_name:"routine-history" in
+      Scheduler.record_run_finish ~db ~run_id ~status:"ok"
+        ~result_preview:"done";
+      let result =
+        Command_bridge.handle [ "cron"; "history"; "routine-history" ]
+      in
+      check_contains "cron history contains target column" "TARGET" result;
+      check_contains "cron history contains routine target" routine_target_text
+        result)
+
 let test_handle_cron_runs () =
   with_temp_home (fun _home ->
       let result = Command_bridge.handle [ "cron"; "runs" ] in
@@ -3360,8 +3410,16 @@ let test_rooms_bind_rebinds_different_profile () =
     {"profile_id": "coding", "room": "slack:C1", "active": true}
   ]
 }|});
-      let result =
+      let rejected =
         Command_bridge.handle [ "rooms"; "bind"; "slack:C1"; "review" ]
+      in
+      Alcotest.(check bool)
+        "implicit rebind requires explicit choice" true
+        (Test_helpers.string_contains rejected "--preserve"
+        && Test_helpers.string_contains rejected "--reset");
+      let result =
+        Command_bridge.handle
+          [ "rooms"; "bind"; "slack:C1"; "review"; "--preserve" ]
       in
       Alcotest.(check bool)
         "rebind success mentions room" true
@@ -3445,6 +3503,166 @@ let test_rooms_show_unbound () =
         "show unbound mentions not bound" true
         (Test_helpers.string_contains result "not bound"))
 
+let find_loaded_room_profile id =
+  let cfg = Config_loader.load () in
+  match
+    List.find_opt
+      (fun (p : Runtime_config.room_profile) -> p.id = id)
+      cfg.room_profiles
+  with
+  | Some p -> (cfg, p)
+  | None -> Alcotest.failf "profile %s not found after config reload" id
+
+let binding_fingerprints bindings =
+  bindings
+  |> List.map (fun (b : Runtime_config.room_profile_binding) ->
+      Printf.sprintf "%s|%s|%b" b.profile_id b.room b.active)
+  |> List.sort String.compare
+
+let test_rooms_rename_persists_display_metadata () =
+  with_temp_home (fun home ->
+      Unix.putenv "CLAWQ_ADMIN" "1";
+      write_config_json home
+        (Yojson.Safe.from_string
+           {|{
+  "room_profiles": [
+    {"id": "coding", "model": "gpt-5", "system_prompt": "", "max_tool_iterations": 10}
+  ],
+  "room_profile_bindings": [
+    {"profile_id": "coding", "room": "slack:C1", "active": true}
+  ]
+}|});
+      let original_cfg, original_profile = find_loaded_room_profile "coding" in
+      let original_bindings =
+        binding_fingerprints original_cfg.room_profile_bindings
+      in
+      let result =
+        Command_bridge.handle
+          [ "rooms"; "rename"; "coding"; "My"; "Coding"; "Agent" ]
+      in
+      Alcotest.(check bool)
+        "rename success mentions renamed" true
+        (Test_helpers.string_contains result "renamed");
+      let reloaded_cfg, reloaded_profile = find_loaded_room_profile "coding" in
+      Alcotest.(check string)
+        "stable id unchanged" original_profile.id reloaded_profile.id;
+      Alcotest.(check (option string))
+        "display name persisted" (Some "My Coding Agent")
+        reloaded_profile.display_name;
+      Alcotest.(check (list string))
+        "bindings unchanged" original_bindings
+        (binding_fingerprints reloaded_cfg.room_profile_bindings))
+
+let test_rooms_delete_refuses_active_background_task () =
+  with_temp_home (fun home ->
+      Unix.putenv "CLAWQ_ADMIN" "1";
+      write_config_json home
+        (Yojson.Safe.from_string
+           {|{
+  "room_profiles": [
+    {"id": "coding", "model": "gpt-5", "system_prompt": "", "max_tool_iterations": 10}
+  ],
+  "room_profile_bindings": [
+    {"profile_id": "coding", "room": "slack:C1", "active": true}
+  ]
+}|});
+      let db = session_db home in
+      Background_task.init_schema db;
+      ignore
+        (match
+           Background_task.enqueue ~db ~runner:Background_task.Local
+             ~require_git:false ~use_worktree:false ~repo_path:home
+             ~prompt:"active" ~session_key:"slack:C1" ()
+         with
+        | Ok id -> id
+        | Error msg -> Alcotest.fail msg);
+      let result = Command_bridge.handle [ "rooms"; "delete"; "coding" ] in
+      Alcotest.(check bool)
+        "delete refuses active background task" true
+        (Test_helpers.string_contains result "active"
+        && Test_helpers.string_contains result "--force");
+      let cfg, profile = find_loaded_room_profile "coding" in
+      Alcotest.(check string) "profile remains active" "active" profile.status;
+      Alcotest.(check int)
+        "binding remains" 1
+        (List.length cfg.room_profile_bindings))
+
+let test_rooms_delete_refuses_active_cron_job () =
+  with_temp_home (fun home ->
+      Unix.putenv "CLAWQ_ADMIN" "1";
+      write_config_json home
+        (Yojson.Safe.from_string
+           {|{
+  "room_profiles": [
+    {"id": "coding", "model": "gpt-5", "system_prompt": "", "max_tool_iterations": 10}
+  ],
+  "room_profile_bindings": [
+    {"profile_id": "coding", "room": "slack:C1", "active": true}
+  ]
+}|});
+      let db = session_db home in
+      Scheduler.init_schema db;
+      ignore
+        (match
+           Scheduler.add_job ~db ~name:"daily-code" ~session_key:"slack:C1"
+             ~message:"run" ~schedule:"0 9 * * *" ()
+         with
+        | Ok id -> id
+        | Error msg -> Alcotest.fail msg);
+      let result = Command_bridge.handle [ "rooms"; "delete"; "coding" ] in
+      Alcotest.(check bool)
+        "delete refuses active cron job" true
+        (Test_helpers.string_contains result "active"
+        && Test_helpers.string_contains result "--force");
+      let cfg, profile = find_loaded_room_profile "coding" in
+      Alcotest.(check string) "profile remains active" "active" profile.status;
+      Alcotest.(check int)
+        "binding remains" 1
+        (List.length cfg.room_profile_bindings))
+
+let test_rooms_delete_force_soft_deletes_and_removes_bindings () =
+  with_temp_home (fun home ->
+      Unix.putenv "CLAWQ_ADMIN" "1";
+      write_config_json home
+        (Yojson.Safe.from_string
+           {|{
+  "room_profiles": [
+    {"id": "coding", "model": "gpt-5", "system_prompt": "", "max_tool_iterations": 10}
+  ],
+  "room_profile_bindings": [
+    {"profile_id": "coding", "room": "slack:C1", "active": true}
+  ]
+}|});
+      let db = session_db home in
+      Background_task.init_schema db;
+      Scheduler.init_schema db;
+      ignore
+        (match
+           Background_task.enqueue ~db ~runner:Background_task.Local
+             ~require_git:false ~use_worktree:false ~repo_path:home
+             ~prompt:"active" ~session_key:"slack:C1" ()
+         with
+        | Ok id -> id
+        | Error msg -> Alcotest.fail msg);
+      ignore
+        (match
+           Scheduler.add_job ~db ~name:"daily-code" ~session_key:"slack:C1"
+             ~message:"run" ~schedule:"0 9 * * *" ()
+         with
+        | Ok id -> id
+        | Error msg -> Alcotest.fail msg);
+      let result =
+        Command_bridge.handle [ "rooms"; "delete"; "coding"; "--force" ]
+      in
+      Alcotest.(check bool)
+        "forced delete mentions deleted" true
+        (Test_helpers.string_contains result "deleted");
+      let cfg, profile = find_loaded_room_profile "coding" in
+      Alcotest.(check string) "profile soft-deleted" "deleted" profile.status;
+      Alcotest.(check int)
+        "bindings removed" 0
+        (List.length cfg.room_profile_bindings))
+
 let test_rooms_usage () =
   let result = Command_bridge.handle [ "rooms"; "help" ] in
   Alcotest.(check bool)
@@ -3455,7 +3673,13 @@ let test_rooms_usage () =
     (Test_helpers.string_contains result "bind");
   Alcotest.(check bool)
     "rooms usage mentions unbind" true
-    (Test_helpers.string_contains result "unbind")
+    (Test_helpers.string_contains result "unbind");
+  Alcotest.(check bool)
+    "rooms usage mentions rename" true
+    (Test_helpers.string_contains result "rename");
+  Alcotest.(check bool)
+    "rooms usage mentions delete" true
+    (Test_helpers.string_contains result "delete")
 
 let test_rooms_bind_rejected_without_admin () =
   with_temp_home (fun home ->
@@ -3588,6 +3812,8 @@ let suite =
       test_handle_cron_list_prompt_short;
     Alcotest.test_case "handle cron list with jobs" `Quick
       test_handle_cron_list_with_jobs;
+    Alcotest.test_case "handle cron list shows routine target" `Quick
+      test_handle_cron_list_shows_routine_target;
     Alcotest.test_case "handle cron runs" `Quick test_handle_cron_runs;
     Alcotest.test_case "handle cron history missing job" `Quick
       test_handle_cron_history_missing_job;
@@ -3595,6 +3821,10 @@ let suite =
       test_handle_cron_show_missing;
     Alcotest.test_case "handle cron show existing" `Quick
       test_handle_cron_show_existing;
+    Alcotest.test_case "handle cron show shows routine target" `Quick
+      test_handle_cron_show_shows_routine_target;
+    Alcotest.test_case "handle cron history shows routine target" `Quick
+      test_handle_cron_history_shows_routine_target;
     Alcotest.test_case "handle cron trigger missing" `Quick
       test_handle_cron_trigger_missing;
     Alcotest.test_case "handle cron trigger existing" `Quick
@@ -3716,6 +3946,14 @@ let suite =
       test_rooms_bind_already_bound;
     Alcotest.test_case "rooms bind rebinds different profile" `Quick
       test_rooms_bind_rebinds_different_profile;
+    Alcotest.test_case "rooms rename persists display metadata" `Quick
+      test_rooms_rename_persists_display_metadata;
+    Alcotest.test_case "rooms delete refuses active background task" `Quick
+      test_rooms_delete_refuses_active_background_task;
+    Alcotest.test_case "rooms delete refuses active cron job" `Quick
+      test_rooms_delete_refuses_active_cron_job;
+    Alcotest.test_case "rooms delete force soft deletes and removes bindings"
+      `Quick test_rooms_delete_force_soft_deletes_and_removes_bindings;
     Alcotest.test_case "rooms unbind" `Quick test_rooms_unbind;
     Alcotest.test_case "rooms unbind no binding" `Quick
       test_rooms_unbind_no_binding;
