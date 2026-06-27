@@ -152,6 +152,7 @@ let models_tool ~(config : Runtime_config.t) ?session_mgr () =
      tool response string. Includes a rollback hint so the agent can self-
      recover even after committing. *)
   let do_set ~cfg ~session_key ~model ~provider ~model_id ~fmt ~previous_model =
+    let open Lwt.Syntax in
     let hint =
       match fmt with
       | Models_catalog.Legacy ->
@@ -178,19 +179,25 @@ let models_tool ~(config : Runtime_config.t) ?session_mgr () =
     | Some mgr -> (
         match session_key with
         | Some key ->
-            Session.set_session_model mgr ~key ~model;
-            Printf.sprintf
-              "Model set to: %s (provider: %s)%s%s\n\
-               Previous model: %s\n\
-               Rollback (call this tool again with): %s\n\
-               Persisted for this session across restarts. Use 'models \
-               set-default' to change the global default."
-              model_id provider hint warn previous_model rollback_tool_call
-        | None -> "Error: session key not available; cannot set session model.")
+            let* _compaction =
+              Session.set_session_model_with_compact mgr ~key ~model
+            in
+            Lwt.return
+              (Printf.sprintf
+                 "Model set to: %s (provider: %s)%s%s\n\
+                  Previous model: %s\n\
+                  Rollback (call this tool again with): %s\n\
+                  Persisted for this session across restarts. Use 'models \
+                  set-default' to change the global default."
+                 model_id provider hint warn previous_model rollback_tool_call)
+        | None ->
+            Lwt.return
+              "Error: session key not available; cannot set session model.")
     | None ->
-        "Error: no active session available; session-scoped model changes \
-         require a live session. Use the CLI 'models set-default' command to \
-         change the persistent default."
+        Lwt.return
+          "Error: no active session available; session-scoped model changes \
+           require a live session. Use the CLI 'models set-default' command to \
+           change the persistent default."
   in
   let set_model_lwt ?session_key ?(skip_validation = false) raw_model =
     let open Lwt.Syntax in
@@ -248,19 +255,19 @@ let models_tool ~(config : Runtime_config.t) ?session_mgr () =
                 | Some msg -> Lwt.return ("Error: " ^ msg)
                 | None -> (
                     if skip_validation then
-                      Lwt.return
-                        (do_set ~cfg ~session_key ~model ~provider ~model_id
-                           ~fmt ~previous_model
-                        ^ "\nNote: validation skipped (skip_validation=true).")
+                      Lwt.map
+                        (fun s ->
+                          s ^ "\nNote: validation skipped (skip_validation=true).")
+                        (do_set ~cfg ~session_key ~model ~provider ~model_id ~fmt
+                           ~previous_model)
                     else
                       let* result =
                         Model_validation.validate ~config:cfg ~model ()
                       in
                       match result with
                       | Model_validation.Ok_validated ->
-                          Lwt.return
-                            (do_set ~cfg ~session_key ~model ~provider ~model_id
-                               ~fmt ~previous_model)
+                          do_set ~cfg ~session_key ~model ~provider ~model_id ~fmt
+                            ~previous_model
                       | Model_validation.Error_msg msg ->
                           let rollback_cmd =
                             Printf.sprintf

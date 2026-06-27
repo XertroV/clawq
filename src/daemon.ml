@@ -718,10 +718,15 @@ let run ~(config : Runtime_config.t) =
         match marker with
         | Some marker ->
             Restart_notify.remove ();
-            (match (marker.session_key, marker.model) with
-            | Some key, Some model ->
-                Session.set_session_model session_manager ~key ~model
-            | _ -> ());
+            let open Lwt.Syntax in
+            let* () =
+              match (marker.session_key, marker.model) with
+              | Some key, Some model ->
+                  Session.set_session_model_with_compact session_manager ~key
+                    ~model
+                  |> Lwt.map (fun _ -> ())
+              | _, _ -> Lwt.return_unit
+            in
             let text =
               Printf.sprintf "clawq updated and restarted successfully (%s)."
                 Build_info.version_string

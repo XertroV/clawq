@@ -1586,6 +1586,57 @@ let set_session_model mgr ~key ~model =
   | Some db -> Memory.set_session_model_override ~db ~session_key:key ~model
   | None -> ()
 
+(* B710: Pre-switch context check. Before applying a model switch, check if
+   the new model's context window is smaller than current history usage. If so,
+   force-compact history to fit. Returns [Some compaction_info] if compaction
+   happened, [None] otherwise. *)
+let set_session_model_with_compact mgr ~key ~model =
+  let open Lwt.Syntax in
+  let apply_model agent =
+    let cfg = agent.Agent.config in
+    let agent_defaults = { cfg.agent_defaults with primary_model = model } in
+    agent.Agent.config <- { cfg with agent_defaults };
+    match mgr.db with
+    | Some db -> Memory.set_session_model_override ~db ~session_key:key ~model
+    | None -> ()
+  in
+  (* No mutex: callers are either inside the turn loop (already holds mutex)
+     or in connector handlers where set_session_model is a fast in-memory op.
+     Adding Lwt_mutex.with_lock here would deadlock when called from
+     tools_builtin during an active turn. *)
+  match Hashtbl.find_opt mgr.sessions key with
+  | Some (agent, _, _) ->
+      let* compaction_info =
+        Agent.pre_switch_compact_if_needed agent ~new_model:model ?db:mgr.db ()
+      in
+      (match compaction_info with
+      | Some _ ->
+          (* Compaction happened — mark mid-turn so persistence includes the
+             compacted history, not just new messages. *)
+          agent.Agent.compacted_mid_turn <- true
+      | None -> (
+          let current_tokens =
+            Agent.estimate_history_tokens agent.Agent.history
+          in
+          match
+            Runtime_config.context_window_for_model
+              ~configured_limits:agent.Agent.config.model_context_limits model
+          with
+          | Some new_cw when current_tokens > new_cw ->
+              Logs.warn (fun m ->
+                  m
+                    "B710: Model switch to '%s' may cause context overflow: \
+                     current history is %d tokens, exceeding target context \
+                     window %d, and pre-switch compaction did not run or could \
+                     not compact anything"
+                    model current_tokens new_cw)
+          | _ -> ()));
+      apply_model agent;
+      Lwt.return compaction_info
+  | None ->
+      set_session_model mgr ~key ~model;
+      Lwt.return_none
+
 let get_session_model_override mgr ~key =
   match mgr.db with
   | Some db -> Memory.get_session_model_override ~db ~session_key:key

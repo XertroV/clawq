@@ -1838,10 +1838,12 @@ let handle_webhook ~(config : Runtime_config.teams_config)
                           in
                           send_text text
                       | ModelSet _ | ModelSetForce _ | ModelSetDefault _ ->
-                          send_text
-                            (Slash_commands_model.handle_model_set_action
-                               ~config_source:"teams" ~session_manager ~key
-                               action)
+                          let* text =
+                            Slash_commands_model.handle_model_set_action
+                              ~config_source:"teams" ~session_manager ~key
+                              action
+                          in
+                          send_text text
                       | ModelFav name ->
                           let prefs = Model_preferences.toggle_favorite name in
                           let status =

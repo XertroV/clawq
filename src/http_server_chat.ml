@@ -65,9 +65,11 @@ let handle_model_action ~session_manager ~key ~emit action =
         (Slash_commands.format_model_show ~connector:Format_adapter.Plain
            ~current ~favorites:prefs.favorites ~usage_ranked)
   | ModelSet _ | ModelSetForce _ | ModelSetDefault _ ->
-      emit
-        (Slash_commands_model.handle_model_set_action
-           ~config_source:"gateway_api" ~session_manager ~key action)
+      let* text =
+        Slash_commands_model.handle_model_set_action
+           ~config_source:"gateway_api" ~session_manager ~key action
+      in
+      emit text
   | ModelFav name ->
       let prefs = Model_preferences.toggle_favorite name in
       let status =

@@ -1089,3 +1089,68 @@ let apply_compact_result agent plan ~summary =
         context_window = plan.cp_context_window;
       }
   end
+
+(* B710: Pre-switch context check. When switching to a model whose context
+   window cannot fit the current history, force-compact history first. This
+   prevents context overflow on the new model when possible. Temporarily sets
+   the agent to use the new model for threshold calculation, then restores the
+   original config if no compaction was needed. *)
+let pre_switch_compact_if_needed agent ~new_model ?db ?on_llm_call_debug () =
+  let open Lwt.Syntax in
+  let current_tokens = estimate_history_tokens agent.history in
+  let new_context_window =
+    Runtime_config.context_window_for_model
+      ~configured_limits:agent.config.model_context_limits new_model
+  in
+  match new_context_window with
+  | None ->
+      (* Unknown model context window — skip check, let normal flow handle it *)
+      Lwt.return_none
+  | Some new_cw ->
+      if current_tokens <= new_cw then
+        (* Current usage fits in new window *)
+        Lwt.return_none
+      else begin
+        Logs.info (fun m ->
+            m
+              "B710: Pre-switch compaction needed — current tokens %d exceeds \
+               new model '%s' context window %d"
+              current_tokens new_model new_cw);
+        (* Temporarily set the agent to use the new model so that
+           context_window_for_agent returns the new window during compaction *)
+        let original_config = agent.config in
+        let cfg = agent.config in
+        let ad = { cfg.agent_defaults with primary_model = new_model } in
+        agent.config <- { cfg with agent_defaults = ad };
+        let* result =
+          Lwt.catch
+            (fun () -> force_compact_history agent ?db ?on_llm_call_debug ())
+            (fun exn ->
+              Logs.warn (fun m ->
+                  m "B710: Pre-switch compaction failed: %s"
+                    (Printexc.to_string exn));
+              (* Restore original config on failure *)
+              agent.config <- original_config;
+              Lwt.return_none)
+        in
+        match result with
+        | Some info ->
+            Logs.info (fun m ->
+                m
+                  "B710: Pre-switch compaction complete — %d -> %d tokens \
+                   (window: %d)"
+                  info.pre_tokens info.post_tokens info.context_window);
+            if info.post_tokens > new_cw then
+              Logs.warn (fun m ->
+                  m
+                    "B710: Pre-switch compaction still exceeds new model '%s' \
+                     context window: %d tokens > %d"
+                    new_model info.post_tokens new_cw);
+            (* Keep the new model config — caller will apply it anyway *)
+            Lwt.return_some info
+        | None ->
+            (* Compaction had nothing to do (no messages to compact).
+               Restore original config — caller will apply the switch. *)
+            agent.config <- original_config;
+            Lwt.return_none
+      end

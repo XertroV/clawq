@@ -134,6 +134,7 @@ let () =
        ("typing_indicator", Test_typing_indicator.suite);
        ("telegram_reactions", Test_telegram_reactions.suite);
        ("compaction_flush", Test_compaction_flush.suite);
+       ("b710_pre_switch_compact", Test_b710.suite);
        ("task_tree", Test_task_tree.suite);
        ("plan_pipeline", Test_plan_pipeline.suite);
        ("structured_pipeline", Test_structured_pipeline.suite);

@@ -159,9 +159,16 @@ let run_local_background_turn ~(session_manager : Session.t) ~key ~message
             | Some model when String.trim model <> "" -> Some model
             | _ -> None)
       in
-      (match selected_model with
-      | Some model -> Session.set_session_model session_manager ~key ~model
-      | None -> ());
+      let* () =
+        match selected_model with
+        | Some model ->
+            let open Lwt.Syntax in
+            let* _ =
+              Session.set_session_model_with_compact session_manager ~key ~model
+            in
+            Lwt.return_unit
+        | None -> Lwt.return_unit
+      in
       let done_ = ref false in
       Lwt.async (fun () ->
           let rec poll () =

@@ -658,7 +658,7 @@ let handle_update ~bot_token ~(account : Runtime_config.telegram_account)
                 send_message ~bot_token ~chat_id:update.chat_id ~text
                   ~parse_mode:"HTML" ()
             | ModelSet _ | ModelSetForce _ | ModelSetDefault _ ->
-                let text =
+                let* text =
                   Slash_commands_model.handle_model_set_action
                     ~config_source:"telegram" ~session_manager:session_mgr ~key
                     action

@@ -791,7 +791,7 @@ let handle_message ~(discord_config : Runtime_config.discord_config)
                 send_message_fn ~bot_token:discord_config.bot_token
                   ~channel_id:msg.channel_id ~text
             | ModelSet _ | ModelSetForce _ | ModelSetDefault _ ->
-                let text =
+                let* text =
                   Slash_commands_model.handle_model_set_action
                     ~config_source:"discord" ~session_manager:session_mgr ~key
                     action

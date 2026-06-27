@@ -532,7 +532,7 @@ let handle_event ~(config : Runtime_config.slack_config)
                     in
                     Lwt.return "ok"
                 | ModelSet _ | ModelSetForce _ | ModelSetDefault _ ->
-                    let text =
+                    let* text =
                       Slash_commands_model.handle_model_set_action
                         ~config_source:"slack" ~session_manager ~key action
                     in
