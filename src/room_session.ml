@@ -149,6 +149,7 @@ let channel_and_id key =
   | None -> None
 
 let child_thread_prefix = "__room_child_thread"
+let child_fallback_prefix = "__room_child_fallback"
 let routine_prefix = "__room_routine"
 
 type child_thread = {
@@ -217,21 +218,45 @@ let child_thread_key ?thread_id ?source_message_id ~profile_id ~connector
   let thread_id = nonempty_option thread_id in
   let source_message_id = nonempty_option source_message_id in
   if thread_id = None && source_message_id = None then
-    invalid_arg "child_thread_key: thread_id or source_message_id is required";
-  String.concat ":"
-    [
-      child_thread_prefix;
-      percent_encode connector;
-      percent_encode profile_id;
-      percent_encode room_id;
-      option_to_key_part thread_id;
-      option_to_key_part source_message_id;
-    ]
+    String.concat ":"
+      [
+        child_fallback_prefix;
+        percent_encode connector;
+        percent_encode profile_id;
+        percent_encode room_id;
+      ]
+  else
+    String.concat ":"
+      [
+        child_thread_prefix;
+        percent_encode connector;
+        percent_encode profile_id;
+        percent_encode room_id;
+        option_to_key_part thread_id;
+        option_to_key_part source_message_id;
+      ]
 
 let make_child_thread_key = child_thread_key
 
 let parse_child_thread_key key =
   match String.split_on_char ':' key with
+  | [ prefix; connector; profile_id; room_id ]
+    when prefix = child_fallback_prefix -> (
+      match
+        ( percent_decode connector,
+          percent_decode profile_id,
+          percent_decode room_id )
+      with
+      | Some connector, Some profile_id, Some room_id ->
+          Some
+            {
+              connector;
+              profile_id;
+              room_id;
+              thread_id = None;
+              source_message_id = None;
+            }
+      | _ -> None)
   | [ prefix; connector; profile_id; room_id; thread_id; source_message_id ]
     when prefix = child_thread_prefix -> (
       match
