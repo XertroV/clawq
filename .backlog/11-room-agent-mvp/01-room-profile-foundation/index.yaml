@@ -36,9 +36,9 @@ epics:
       locked: false
       name: Room Admin Surface and Lifecycle
       path: 04-room-admin-surface-and-lifecyc
-      status: pending
+      status: done
 estimate_hours: 28
 id: P11.M1
 locked: false
 name: Room Profile Foundation
-status: pending
+status: done

@@ -4,7 +4,7 @@ estimate_hours: 8
 id: P11.M1.E4
 locked: false
 name: Room Admin Surface and Lifecycle
-status: pending
+status: done
 tasks:
     - complexity: medium
       depends_on:
@@ -26,7 +26,7 @@ tasks:
       file: T002-add-room-workspace-lifecycle-a.todo
       id: T002
       priority: medium
-      status: pending
+      status: done
       tags: []
       title: Add room workspace lifecycle and retention policy
     - complexity: medium

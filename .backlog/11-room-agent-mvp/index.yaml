@@ -12,7 +12,7 @@ milestones:
       locked: false
       name: Room Profile Foundation
       path: 01-room-profile-foundation
-      status: pending
+      status: done
     - complexity: high
       depends_on: []
       description: Apply room profiles during connector turns, propagate effective CWD, establish model/template precedence, and add the P11 privacy guard.
