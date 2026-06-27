@@ -1289,6 +1289,11 @@ let handle_webhook ~(config : Runtime_config.teams_config)
                         Session.runtime_context_block session_manager ~key
                       in
                       send_text text
+                  | Context ->
+                      send_text
+                        (Slash_commands_context.format
+                           ~connector:Format_adapter.Teams
+                           ~session_mgr:session_manager ~session_key:key)
                   | Uptime ->
                       let raw =
                         Daemon_status.daemon_uptime_reply

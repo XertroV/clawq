@@ -31,6 +31,11 @@ let dispatch_common ~session_manager ~key ~emit cmd_result =
       Some
         (let* response = Session.runtime_context_block session_manager ~key in
          emit response)
+  | Slash_commands.Context ->
+      Some
+        (emit
+           (Slash_commands_context.format ~connector:Format_adapter.Plain
+              ~session_mgr:session_manager ~session_key:key))
   | Slash_commands.Uptime ->
       Some
         (emit

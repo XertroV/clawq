@@ -1195,11 +1195,11 @@ let handle_event ~(config : Runtime_config.slack_config)
                     then Session.mark_response_sent session_manager ~key;
                     Lwt.return "ok")
             | ( RegisterAsAdminOtc _ | Reply _ | FormattedReply _ | Help
-              | Menu _ | Reset | RuntimeCtx | Uptime | Status | Thinking _
-              | ShowThinking _ | Heartbeat _ | Debug _ | AgentMenu _
-              | ModelMenu _ | ThinkingMenu | ConfigMenu _ | SkillsMenu _
-              | CostsMenu | BgMenu | Tools | Tasks | TasksFull | Costs _
-              | Session _ | Usage _ | Active | Bg _ | Cron _ | Bl _
+              | Menu _ | Reset | RuntimeCtx | Context | Uptime | Status
+              | Thinking _ | ShowThinking _ | Heartbeat _ | Debug _
+              | AgentMenu _ | ModelMenu _ | ThinkingMenu | ConfigMenu _
+              | SkillsMenu _ | CostsMenu | BgMenu | Tools | Tasks | TasksFull
+              | Costs _ | Session _ | Usage _ | Active | Bg _ | Cron _ | Bl _
               | HeldItems _ | Memories _ | Repo _ ) as r ->
                 let* () = Connector_dispatch.dispatch env r in
                 Lwt.return "ok"

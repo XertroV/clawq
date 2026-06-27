@@ -71,6 +71,7 @@ type result =
   | Help
   | Reset
   | Compact
+  | Context
   | RuntimeCtx
   | Uptime
   | Status
@@ -147,6 +148,11 @@ let commands =
     { name = "help"; description = "Show available commands"; priority = 100 };
     { name = "new"; description = "Start a new conversation"; priority = 95 };
     { name = "status"; description = "Show bot status"; priority = 90 };
+    {
+      name = "context";
+      description = "Show current session and context budget details";
+      priority = 64;
+    };
     {
       name = "model";
       description =

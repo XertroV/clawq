@@ -1473,11 +1473,11 @@ let handle_message ~(discord_config : Runtime_config.discord_config)
                   Session.mark_response_sent session_mgr ~key;
                 Lwt.return_unit)
         | ( RegisterAsAdminOtc _ | Reply _ | FormattedReply _ | Help | Menu _
-          | Reset | RuntimeCtx | Uptime | Status | Thinking _ | ShowThinking _
-          | Heartbeat _ | Debug _ | AgentMenu _ | ModelMenu _ | ThinkingMenu
-          | ConfigMenu _ | SkillsMenu _ | CostsMenu | BgMenu | Tools | Tasks
-          | TasksFull | Costs _ | Session _ | Usage _ | Active | Bg _ | Cron _
-          | Bl _ | HeldItems _ | Memories _ | Repo _ ) as r ->
+          | Reset | RuntimeCtx | Context | Uptime | Status | Thinking _
+          | ShowThinking _ | Heartbeat _ | Debug _ | AgentMenu _ | ModelMenu _
+          | ThinkingMenu | ConfigMenu _ | SkillsMenu _ | CostsMenu | BgMenu
+          | Tools | Tasks | TasksFull | Costs _ | Session _ | Usage _ | Active
+          | Bg _ | Cron _ | Bl _ | HeldItems _ | Memories _ | Repo _ ) as r ->
             Connector_dispatch.dispatch env r
 
 (* Close code classification for reconnect behavior *)

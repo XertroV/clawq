@@ -97,6 +97,9 @@ let dispatch (env : dispatch_env) (result : Slash_commands.result) : unit Lwt.t
   | RuntimeCtx ->
       let* text = Session.runtime_context_block session_mgr ~key in
       env.send_plain text
+  | Context ->
+      env.send_formatted
+        (Slash_commands_context.format ~connector ~session_mgr ~session_key:key)
   | FormattedReply fn ->
       let text = fn connector in
       env.send_formatted text

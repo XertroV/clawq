@@ -27,19 +27,13 @@ let test_messages_roundtrip () =
   let json_str = Yojson.Safe.to_string json in
   let restored = Daemon_util_localturn.messages_of_json_string json_str in
   Alcotest.(check int)
-    "same message count"
-    (List.length parent_msgs)
-    (List.length restored);
+    "same message count" (List.length parent_msgs) (List.length restored);
   List.iter2
     (fun orig got ->
       Alcotest.(check string)
-        "role matches"
-        orig.Provider.role
-        got.Provider.role;
+        "role matches" orig.Provider.role got.Provider.role;
       Alcotest.(check string)
-        "content matches"
-        orig.Provider.content
-        got.Provider.content)
+        "content matches" orig.Provider.content got.Provider.content)
     parent_msgs restored
 
 let test_forked_prefix_no_extra_system () =
@@ -60,13 +54,10 @@ let test_forked_prefix_no_extra_system () =
   (match forked with
   | first :: _ ->
       Alcotest.(check string)
-        "first message is parent's system prompt"
-        "You are a coder agent."
+        "first message is parent's system prompt" "You are a coder agent."
         first.Provider.content;
       Alcotest.(check string)
-        "first message role is system"
-        "system"
-        first.Provider.role
+        "first message role is system" "system" first.Provider.role
   | [] -> Alcotest.fail "expected at least one message in forked history");
   (* No message should contain the old wrapper text *)
   List.iter
@@ -76,10 +67,7 @@ let test_forked_prefix_no_extra_system () =
           (min 30 (String.length m.Provider.content))
         = "The following messages are fr"
       in
-      Alcotest.(check bool)
-        "no wrapper system message"
-        false
-        has_wrapper)
+      Alcotest.(check bool) "no wrapper system message" false has_wrapper)
     forked
 
 let test_forked_then_child_history () =
@@ -104,29 +92,25 @@ let test_forked_then_child_history () =
   List.iter2
     (fun orig got ->
       Alcotest.(check string)
-        "parent msg preserved"
-        orig.Provider.content
-        got.Provider.content)
+        "parent msg preserved" orig.Provider.content got.Provider.content)
     parent_msgs first_three;
   (* Last 2 messages are the child's *)
   let last_two = List.filteri (fun i _ -> i >= 3) combined in
   List.iter2
     (fun orig got ->
       Alcotest.(check string)
-        "child msg preserved"
-        orig.Provider.content
-        got.Provider.content)
+        "child msg preserved" orig.Provider.content got.Provider.content)
     child_db_msgs last_two
 
 let test_empty_snapshot_uses_db_history () =
   (* When context_snapshot is empty or None, only db_history is used *)
   let child_msgs = [ msg ~role:"user" "hello"; msg ~role:"assistant" "hi" ] in
   let empty_forked = Daemon_util_localturn.messages_of_json_string "" in
-  Alcotest.(check int) "empty snapshot yields empty list" 0 (List.length empty_forked);
+  Alcotest.(check int)
+    "empty snapshot yields empty list" 0 (List.length empty_forked);
   let combined = empty_forked @ child_msgs in
   Alcotest.(check int)
-    "combined is just child msgs"
-    (List.length child_msgs)
+    "combined is just child msgs" (List.length child_msgs)
     (List.length combined)
 
 let test_malformed_json_yields_empty () =
@@ -160,12 +144,15 @@ let test_tool_calls_preserved () =
   let restored = Daemon_util_localturn.messages_of_json_string json_str in
   Alcotest.(check int) "3 messages restored" 3 (List.length restored);
   let assistant_msg = List.nth restored 1 in
-  Alcotest.(check int) "tool_calls preserved" 1 (List.length assistant_msg.Provider.tool_calls);
+  Alcotest.(check int)
+    "tool_calls preserved" 1
+    (List.length assistant_msg.Provider.tool_calls);
   let tc = List.hd assistant_msg.Provider.tool_calls in
   Alcotest.(check string) "tool call id" "call_123" tc.Provider.id;
   Alcotest.(check string) "function name" "shell_exec" tc.Provider.function_name;
   let tool_msg = List.nth restored 2 in
-  Alcotest.(check (option string)) "tool_call_id preserved" (Some "call_123") tool_msg.Provider.tool_call_id
+  Alcotest.(check (option string))
+    "tool_call_id preserved" (Some "call_123") tool_msg.Provider.tool_call_id
 
 let suite =
   [

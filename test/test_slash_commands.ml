@@ -21,6 +21,7 @@ let rec result_to_string = function
       "Thinking(Set " ^ level ^ ")"
   | Slash_commands.Compact -> "Compact"
   | Slash_commands.RuntimeCtx -> "RuntimeCtx"
+  | Slash_commands.Context -> "Context"
   | Slash_commands.Uptime -> "Uptime"
   | Slash_commands.ShowThinking Slash_commands.ShowThinkingStatus ->
       "ShowThinking(Status)"
@@ -196,6 +197,7 @@ let rec result_eq a b =
       a = b
   | Slash_commands.Compact, Slash_commands.Compact -> true
   | Slash_commands.RuntimeCtx, Slash_commands.RuntimeCtx -> true
+  | Slash_commands.Context, Slash_commands.Context -> true
   | Slash_commands.Uptime, Slash_commands.Uptime -> true
   | Slash_commands.Status, Slash_commands.Status -> true
   | Slash_commands.ShowThinking a, Slash_commands.ShowThinking b -> a = b
@@ -312,6 +314,10 @@ let test_runtime_ctx () =
     (Slash_commands.handle "/runtime-ctx");
   Alcotest.check result_testable "runtime_ctx" Slash_commands.RuntimeCtx
     (Slash_commands.handle "/runtime_ctx")
+
+let test_context () =
+  Alcotest.check result_testable "context" Slash_commands.Context
+    (Slash_commands.handle "/context")
 
 let test_uptime () =
   Alcotest.check result_testable "uptime" Slash_commands.Uptime
@@ -582,6 +588,14 @@ let test_usage_usage_on_invalid_args () =
         "mentions /usage" true
         (Test_helpers.string_contains text "/usage")
   | None -> Alcotest.fail "expected text reply for usage usage"
+
+let test_context_in_commands_list () =
+  let names =
+    List.map
+      (fun (cmd : Slash_commands.command) -> cmd.name)
+      Slash_commands.commands
+  in
+  Alcotest.(check bool) "context in commands" true (List.mem "context" names)
 
 let test_active () =
   Alcotest.check result_testable "/active" Slash_commands.Active
@@ -2973,6 +2987,7 @@ let suite =
     Alcotest.test_case "handle /new" `Quick test_new;
     Alcotest.test_case "handle /compact" `Quick test_compact;
     Alcotest.test_case "handle /runtime-ctx" `Quick test_runtime_ctx;
+    Alcotest.test_case "handle /context" `Quick test_context;
     Alcotest.test_case "handle /uptime" `Quick test_uptime;
     Alcotest.test_case "handle /status" `Quick test_status;
     Alcotest.test_case "handle /thinking" `Quick test_thinking_show;
@@ -3021,6 +3036,8 @@ let suite =
       test_usage_model_and_provider;
     Alcotest.test_case "/usage invalid args" `Quick
       test_usage_usage_on_invalid_args;
+    Alcotest.test_case "/context in commands list" `Quick
+      test_context_in_commands_list;
     Alcotest.test_case "/active" `Quick test_active;
     Alcotest.test_case "/bg list" `Quick test_bg_list;
     Alcotest.test_case "/bg list explicit" `Quick test_bg_list_explicit;

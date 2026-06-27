@@ -134,6 +134,7 @@
   cost_tracker
   model_discovery
   request_stats
+  slash_commands_context
   slash_commands_sessions
   agent_router
   agent_template

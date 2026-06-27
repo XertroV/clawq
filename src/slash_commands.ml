@@ -26,6 +26,7 @@ let handle ?(skill_names = []) text =
         | "help" -> Help
         | "new" -> Reset
         | "compact" -> Compact
+        | "context" -> Context
         | "runtime-ctx" | "runtime_ctx" -> RuntimeCtx
         | "uptime" -> Uptime
         | "status" -> Status

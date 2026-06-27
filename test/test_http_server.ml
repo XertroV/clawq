@@ -376,6 +376,109 @@ let test_chat_costs_returns_cost_summary () =
         "has all time row" true
         (Test_helpers.string_contains response "All time"))
 
+let test_chat_context_returns_session_context () =
+  let db = Memory.init ~db_path:":memory:" () in
+  Memory.upsert_session_state ~db ~session_key:"web:s" ~turn:"agent"
+    ~channel:"web" ~channel_id:"s" ();
+  Memory.store_message ~db ~session_key:"web:s"
+    (Provider.make_message ~role:"user" ~content:"hello");
+  Request_stats.record ~db ~session_key:"web:s" ~provider:"openai-codex"
+    ~model:"gpt-5.4" ~prompt_tokens:1000 ~completion_tokens:200 ~cost_usd:0.01
+    ~added_prompt_tokens:800 ~cached_tokens:100 ();
+  let config =
+    {
+      Runtime_config.default with
+      agent_defaults =
+        {
+          Runtime_config.default.agent_defaults with
+          primary_model = "openai-codex:gpt-5.4";
+        };
+    }
+  in
+  let session_manager = Session.create ~config ~db () in
+  let req =
+    Cohttp.Request.make ~meth:`POST (Uri.of_string "http://127.0.0.1/chat")
+  in
+  let body =
+    Cohttp_lwt.Body.of_string {|{"session_id":"s","message":"/context"}|}
+  in
+  let resp, body =
+    Lwt_main.run
+      (Http_server.handler ~session_manager ~require_pairing:false
+         ~auth_token:None (Obj.magic ()) req body)
+  in
+  Alcotest.(check int)
+    "ok" 200
+    (Cohttp.Code.code_of_status (Cohttp.Response.status resp));
+  let payload = Yojson.Safe.from_string (body_string body) in
+  let open Yojson.Safe.Util in
+  let response = payload |> member "response" |> to_string in
+  Alcotest.(check bool)
+    "has context heading" true
+    (Test_helpers.string_contains response "Session Context");
+  Alcotest.(check bool)
+    "has session key" true
+    (Test_helpers.string_contains response "web:s");
+  Alcotest.(check bool)
+    "has compaction threshold" true
+    (Test_helpers.string_contains response "Compaction threshold");
+  Alcotest.(check bool)
+    "has estimated context usage" true
+    (Test_helpers.string_contains response "Estimated context usage");
+  Alcotest.(check bool)
+    "has estimated token window" true
+    (Test_helpers.string_contains response "tokens;");
+  Alcotest.(check bool)
+    "has message threshold" true
+    (Test_helpers.string_contains response "Max messages before compaction");
+  Alcotest.(check bool)
+    "has prompt tokens" true
+    (Test_helpers.string_contains response "Prompt tokens")
+
+let test_chat_context_uses_fallback_window_for_unknown_model () =
+  let db = Memory.init ~db_path:":memory:" () in
+  Memory.upsert_session_state ~db ~session_key:"web:s" ~turn:"agent"
+    ~channel:"web" ~channel_id:"s" ();
+  Memory.store_message ~db ~session_key:"web:s"
+    (Provider.make_message ~role:"user" ~content:"hello");
+  let config =
+    {
+      Runtime_config.default with
+      agent_defaults =
+        {
+          Runtime_config.default.agent_defaults with
+          primary_model = "custom:local-experiment";
+        };
+    }
+  in
+  let session_manager = Session.create ~config ~db () in
+  let req =
+    Cohttp.Request.make ~meth:`POST (Uri.of_string "http://127.0.0.1/chat")
+  in
+  let body =
+    Cohttp_lwt.Body.of_string {|{"session_id":"s","message":"/context"}|}
+  in
+  let resp, body =
+    Lwt_main.run
+      (Http_server.handler ~session_manager ~require_pairing:false
+         ~auth_token:None (Obj.magic ()) req body)
+  in
+  Alcotest.(check int)
+    "ok" 200
+    (Cohttp.Code.code_of_status (Cohttp.Response.status resp));
+  let payload = Yojson.Safe.from_string (body_string body) in
+  let open Yojson.Safe.Util in
+  let response = payload |> member "response" |> to_string in
+  Alcotest.(check bool)
+    "has fallback context window" true
+    (Test_helpers.string_contains response "128.0K tokens");
+  Alcotest.(check bool)
+    "has estimated context usage" true
+    (Test_helpers.string_contains response "Estimated context usage");
+  Alcotest.(check bool)
+    "has concrete compaction token threshold" true
+    (Test_helpers.string_contains response "102.4K tokens (80% of window)")
+
 let make_dummy_tool name description =
   {
     Tool.name;
@@ -1609,6 +1712,10 @@ let suite =
       test_chat_help_returns_plain_help;
     Alcotest.test_case "chat costs returns cost summary" `Quick
       test_chat_costs_returns_cost_summary;
+    Alcotest.test_case "chat context returns session context" `Quick
+      test_chat_context_returns_session_context;
+    Alcotest.test_case "chat context uses fallback window for unknown model"
+      `Quick test_chat_context_uses_fallback_window_for_unknown_model;
     Alcotest.test_case "chat tools returns plain tool list" `Quick
       test_chat_tools_returns_plain_tool_list;
     Alcotest.test_case "chat model show returns formatted model summary" `Quick

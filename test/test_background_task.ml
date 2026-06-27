@@ -347,7 +347,7 @@ let test_command_of_task_codex () =
       notification_attempts = 0;
       follow_up_prompt = None;
       description = None;
-    context_snapshot = None;
+      context_snapshot = None;
     }
   in
   Alcotest.(check (array string))
@@ -395,7 +395,7 @@ let test_command_of_task_claude () =
       notification_attempts = 0;
       follow_up_prompt = None;
       description = None;
-    context_snapshot = None;
+      context_snapshot = None;
     }
   in
   Alcotest.(check (array string))
@@ -437,7 +437,7 @@ let test_command_of_task_kimi () =
       notification_attempts = 0;
       follow_up_prompt = None;
       description = None;
-    context_snapshot = None;
+      context_snapshot = None;
     }
   in
   Alcotest.(check (array string))
@@ -479,7 +479,7 @@ let test_command_of_task_kimi_with_model () =
       notification_attempts = 0;
       follow_up_prompt = None;
       description = None;
-    context_snapshot = None;
+      context_snapshot = None;
     }
   in
   Alcotest.(check (array string))
@@ -521,7 +521,7 @@ let test_command_of_task_gemini () =
       notification_attempts = 0;
       follow_up_prompt = None;
       description = None;
-    context_snapshot = None;
+      context_snapshot = None;
     }
   in
   Alcotest.(check (array string))
@@ -563,7 +563,7 @@ let test_command_of_task_gemini_with_model () =
       notification_attempts = 0;
       follow_up_prompt = None;
       description = None;
-    context_snapshot = None;
+      context_snapshot = None;
     }
   in
   Alcotest.(check (array string))
@@ -605,7 +605,7 @@ let test_command_of_task_opencode () =
       notification_attempts = 0;
       follow_up_prompt = None;
       description = None;
-    context_snapshot = None;
+      context_snapshot = None;
     }
   in
   Alcotest.(check (array string))
@@ -647,7 +647,7 @@ let test_command_of_task_opencode_with_model () =
       notification_attempts = 0;
       follow_up_prompt = None;
       description = None;
-    context_snapshot = None;
+      context_snapshot = None;
     }
   in
   Alcotest.(check (array string))
@@ -689,7 +689,7 @@ let test_command_of_task_cursor () =
       notification_attempts = 0;
       follow_up_prompt = None;
       description = None;
-    context_snapshot = None;
+      context_snapshot = None;
     }
   in
   Alcotest.(check (array string))
@@ -731,7 +731,7 @@ let test_command_of_task_cursor_with_model () =
       notification_attempts = 0;
       follow_up_prompt = None;
       description = None;
-    context_snapshot = None;
+      context_snapshot = None;
     }
   in
   Alcotest.(check (array string))
@@ -1862,7 +1862,7 @@ let test_command_of_task_codex_with_model () =
       notification_attempts = 0;
       follow_up_prompt = None;
       description = None;
-    context_snapshot = None;
+      context_snapshot = None;
     }
   in
   Alcotest.(check (array string))
@@ -1912,7 +1912,7 @@ let test_command_of_task_claude_with_model () =
       notification_attempts = 0;
       follow_up_prompt = None;
       description = None;
-    context_snapshot = None;
+      context_snapshot = None;
     }
   in
   Alcotest.(check (array string))
@@ -3594,7 +3594,7 @@ let test_terse_message_dirty_worktree () =
       notification_attempts = 0;
       follow_up_prompt = None;
       description = None;
-    context_snapshot = None;
+      context_snapshot = None;
     }
   in
   let msg = Background_task.terse_finished_message task in

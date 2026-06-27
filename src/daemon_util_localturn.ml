@@ -103,8 +103,7 @@ let run_local_background_turn ~(session_manager : Session.t) ~key ~message
                 match context_snapshot with
                 | Some snapshot when String.trim snapshot <> "" ->
                     let forked = messages_of_json_string snapshot in
-                    if forked = [] then db_history
- else forked @ db_history
+                    if forked = [] then db_history else forked @ db_history
                 | _ -> db_history
               in
               agent.history <- history
