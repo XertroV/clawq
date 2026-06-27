@@ -12,7 +12,7 @@ milestones:
       locked: false
       name: Cron-Integrated Room Routines
       path: 01-cron-integrated-room-routines
-      status: pending
+      status: done
     - complexity: high
       depends_on: []
       description: Opt-in ambient room watcher over scoped connector history and open room tasks, with quiet-hours and rate limits. Depends at leaf level on the connector capability matrix task in M3.
