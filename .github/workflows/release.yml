@@ -42,6 +42,7 @@ jobs:
         run: |
           mkdir -p npm-pkg/bin
           cp _build_opt_speed/default/src/main.exe npm-pkg/bin/clawq
+          chmod +w npm-pkg/bin/clawq
           objcopy --only-keep-debug npm-pkg/bin/clawq npm-pkg/bin/clawq.debug
           chmod -x npm-pkg/bin/clawq.debug
           strip npm-pkg/bin/clawq
