@@ -4,7 +4,7 @@ depends_on: [B712]
 estimate_hours: 1
 id: B718
 priority: medium
-status: done
+status: pending
 tags: [subagent, tools, safety]
 title: Enforce subagent spawn depth limit (max 4)
 ---

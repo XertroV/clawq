@@ -4,7 +4,7 @@ depends_on: [B712]
 estimate_hours: 0.5
 id: B721
 priority: low
-status: done
+status: pending
 tags: [subagent, tools, ux]
 title: Use description field in subagent status display
 ---
