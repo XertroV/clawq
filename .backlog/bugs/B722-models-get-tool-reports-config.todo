@@ -1,0 +1,11 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B722
+priority: high
+status: pending
+tags: []
+title: models get tool reports config default, not session-level model override
+---
+When the model is switched mid-session (e.g. via /model), the 'models get' tool still reports the old global config default instead of the session's actual active model. The daemon log and real routing confirm the new model is being used — only the tool's display is stale. The tool should reflect the session-level override when one is active.
