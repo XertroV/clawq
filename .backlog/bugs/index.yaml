@@ -704,3 +704,4 @@ bugs:
     - file: B707-update-repo-url-and-git-remote.todo
     - file: B708-on-the-website-home-page-add-a.todo
     - file: B709-fuzzy-model-set-matching-show.todo
+    - file: B710-pre-switch-context-check-compa.todo
