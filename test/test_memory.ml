@@ -1824,7 +1824,8 @@ let test_scoped_memory_constraints_and_cascade () =
     (Test_helpers.query_single_int db "SELECT COUNT(*) FROM scoped_memories");
   Alcotest.(check int)
     "memory grants cascade" 0
-    (Test_helpers.query_single_int db "SELECT COUNT(*) FROM memory_grants")
+    (Test_helpers.query_single_int db
+       "SELECT COUNT(*) FROM memory_grants WHERE principal_id = 'u1'")
 
 let test_scoped_memory_schema_migration_and_repair_paths () =
   with_temp_db (fun db_path ->
@@ -1884,6 +1885,96 @@ let test_scoped_memory_double_init_is_idempotent () =
       Alcotest.(check int)
         "schema version current after second init" Memory.schema_version
         (Test_helpers.query_single_int db2 "SELECT version FROM schema_version"))
+
+let legacy_scope_id db =
+  Test_helpers.query_single_int db
+    "SELECT id FROM memory_scopes WHERE kind = 'legacy' AND key = 'core'"
+
+let legacy_grant_capabilities db =
+  let stmt =
+    Sqlite3.prepare db
+      "SELECT capability FROM memory_grants WHERE scope_id = ? ORDER BY \
+       capability"
+  in
+  Fun.protect
+    ~finally:(fun () -> ignore (Sqlite3.finalize stmt))
+    (fun () ->
+      ignore
+        (Sqlite3.bind stmt 1
+           (Sqlite3.Data.INT (Int64.of_int (legacy_scope_id db))));
+      let capabilities = ref [] in
+      while Sqlite3.step stmt = Sqlite3.Rc.ROW do
+        match Sqlite3.column stmt 0 with
+        | Sqlite3.Data.TEXT s -> capabilities := s :: !capabilities
+        | _ -> ()
+      done;
+      List.rev !capabilities)
+
+let test_legacy_memory_scope_seeded_read_only () =
+  let db = Memory.init ~db_path:":memory:" () in
+  Alcotest.(check int)
+    "legacy core scope seeded once" 1
+    (Test_helpers.query_single_int db
+       "SELECT COUNT(*) FROM memory_scopes WHERE kind = 'legacy' AND key = \
+        'core' AND provenance = 'system'");
+  Alcotest.(check (list string))
+    "legacy grants are read/list only" [ "list"; "read" ]
+    (legacy_grant_capabilities db);
+  let legacy_id = legacy_scope_id db in
+  Alcotest.(check bool)
+    "legacy write grant rejected" true
+    (exec_fails db
+       (Printf.sprintf
+          "INSERT INTO memory_grants (scope_id, principal_kind, principal_id, \
+           capability, grantor_kind, grantor_id) VALUES (%d, 'system', \
+           'legacy', 'write', 'system', 'seed')"
+          legacy_id));
+  Alcotest.(check (list string))
+    "failed write grant leaves read/list only" [ "list"; "read" ]
+    (legacy_grant_capabilities db)
+
+let test_legacy_memory_scope_is_idempotent () =
+  with_temp_db (fun db_path ->
+      let db1 = Memory.init ~db_path () in
+      ignore (Sqlite3.db_close db1);
+      let db2 = Memory.init ~db_path () in
+      Alcotest.(check int)
+        "legacy scope not duplicated" 1
+        (Test_helpers.query_single_int db2
+           "SELECT COUNT(*) FROM memory_scopes WHERE kind = 'legacy' AND key = \
+            'core'");
+      Alcotest.(check (list string))
+        "legacy grants not duplicated" [ "list"; "read" ]
+        (legacy_grant_capabilities db2))
+
+let test_legacy_memory_fallback_preserves_existing_reads () =
+  let db = Memory.init ~db_path:":memory:" ~search_enabled:true () in
+  Memory.store_core ~db ~key:"rig:briefing:config"
+    ~content:"legacy briefing memory" ~category:"rig" ();
+  Memory.store_message ~db ~session_key:"s1"
+    (Provider.make_message ~role:"user"
+       ~content:"please search the legacy briefing memory");
+  Alcotest.(check int)
+    "legacy scope does not copy core memories" 0
+    (Test_helpers.query_single_int db "SELECT COUNT(*) FROM scoped_memories");
+  Alcotest.(check bool)
+    "core list reads still work" true
+    (List.exists
+       (fun (key, content, category) ->
+         key = "rig:briefing:config"
+         && content = "legacy briefing memory"
+         && category = "rig")
+       (Memory.list_core ~db ()));
+  Alcotest.(check bool)
+    "core recall still works" true
+    (List.exists
+       (fun (key, _, _) -> key = "rig:briefing:config")
+       (Memory.recall_core ~db ~query:"briefing" ~limit:5));
+  Alcotest.(check bool)
+    "message search still falls back to existing path" true
+    (List.exists
+       (fun (m : Provider.message) -> m.content <> "")
+       (Memory.search ~db ~query:"briefing" ~limit:5 ()))
 
 (* --- room profile API tests --- *)
 
@@ -2235,6 +2326,12 @@ let suite =
       test_scoped_memory_schema_migration_and_repair_paths;
     Alcotest.test_case "scoped memory double init idempotent" `Quick
       test_scoped_memory_double_init_is_idempotent;
+    Alcotest.test_case "legacy memory scope seeded read only" `Quick
+      test_legacy_memory_scope_seeded_read_only;
+    Alcotest.test_case "legacy memory scope idempotent" `Quick
+      test_legacy_memory_scope_is_idempotent;
+    Alcotest.test_case "legacy memory fallback preserves reads" `Quick
+      test_legacy_memory_fallback_preserves_existing_reads;
     Alcotest.test_case "insert and get room profile" `Quick
       test_insert_and_get_room_profile;
     Alcotest.test_case "insert room profile unique constraint" `Quick

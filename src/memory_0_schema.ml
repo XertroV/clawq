@@ -473,7 +473,35 @@ let init_scoped_memory_schema db =
     \     memory_grants(principal_kind, principal_id)";
   exec_exn db
     "CREATE INDEX IF NOT EXISTS idx_memory_grants_capability ON \n\
-    \     memory_grants(scope_id, capability)"
+    \     memory_grants(scope_id, capability)";
+  exec_exn db
+    "CREATE TRIGGER IF NOT EXISTS memory_grants_legacy_read_only_ai BEFORE \n\
+     INSERT ON memory_grants WHEN NEW.capability NOT IN ('list', 'read') AND \n\
+     EXISTS (SELECT 1 FROM memory_scopes WHERE id = NEW.scope_id AND kind = \n\
+     'legacy') BEGIN SELECT RAISE(ABORT, 'legacy memory scope is read-only'); \n\
+     END";
+  exec_exn db
+    "CREATE TRIGGER IF NOT EXISTS memory_grants_legacy_read_only_au BEFORE \n\
+     UPDATE ON memory_grants WHEN NEW.capability NOT IN ('list', 'read') AND \n\
+     EXISTS (SELECT 1 FROM memory_scopes WHERE id = NEW.scope_id AND kind = \n\
+     'legacy') BEGIN SELECT RAISE(ABORT, 'legacy memory scope is read-only'); \n\
+     END";
+  exec_exn db
+    "INSERT OR IGNORE INTO memory_scopes (kind, key, provenance) VALUES \n\
+     ('legacy', 'core', 'system')";
+  exec_exn db
+    "DELETE FROM memory_grants WHERE capability NOT IN ('list', 'read') AND \n\
+     scope_id IN (SELECT id FROM memory_scopes WHERE kind = 'legacy')";
+  exec_exn db
+    "INSERT OR IGNORE INTO memory_grants (scope_id, principal_kind, \n\
+     principal_id, capability, grantor_kind, grantor_id) SELECT id, 'system', \n\
+     'legacy', 'list', 'system', 'seed' FROM memory_scopes WHERE kind = \n\
+     'legacy' AND key = 'core'";
+  exec_exn db
+    "INSERT OR IGNORE INTO memory_grants (scope_id, principal_kind, \n\
+     principal_id, capability, grantor_kind, grantor_id) SELECT id, 'system', \n\
+     'legacy', 'read', 'system', 'seed' FROM memory_scopes WHERE kind = \n\
+     'legacy' AND key = 'core'"
 
 let init_session_repos_schema db =
   exec_exn db
