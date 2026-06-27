@@ -54,6 +54,5 @@ let tick ~db ~(config : Runtime_config.t) () =
           Lwt.return_unit)
         (active_ambient_profiles config))
     (fun exn ->
-      Logs.err (fun m ->
-          m "Ambient watcher error: %s" (Printexc.to_string exn));
+      Logs.err (fun m -> m "Ambient watcher error: %s" (Printexc.to_string exn));
       Lwt.return_unit)

@@ -336,12 +336,14 @@ let test_policy_skip_does_not_poison_material_change () =
       let results2 =
         Lwt_main.run
           (deliver_ambient_followups ~db ~profile:unlimited_profile
-             ~room_id:"room-1" ~stale_items:[ make_stale_item ~id:"2" () ]
+             ~room_id:"room-1"
+             ~stale_items:[ make_stale_item ~id:"2" () ]
              ~hour:13 ~budget_exceeded:false ~supports_ambient:true
              ~send_message:ok_sender ())
       in
       let r = List.hd results2 in
-      Alcotest.(check bool) "previously rate-limited item delivered" true r.acted;
+      Alcotest.(check bool)
+        "previously rate-limited item delivered" true r.acted;
       Alcotest.check
         (Alcotest.option Alcotest.string)
         "no skip reason" None

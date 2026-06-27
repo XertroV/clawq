@@ -254,6 +254,7 @@
   telegram_format
   daemon_util_localturn
   daemon_util
+  ambient_daemon
   daemon
   command_bridge_models
   command_bridge_gateway
