@@ -4,7 +4,7 @@ estimate_hours: 12
 id: P12.M1.E1
 locked: false
 name: Scoped Memory Schema and Migration
-status: pending
+status: done
 tasks:
     - complexity: high
       depends_on:
@@ -23,5 +23,6 @@ tasks:
       file: T002-add-legacy-memory-read-in-plac.todo
       id: T002
       priority: high
-      status: pending
+      status: done
+      tags: []
       title: Add legacy memory read-in-place scope

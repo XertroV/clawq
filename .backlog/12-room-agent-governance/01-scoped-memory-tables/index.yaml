@@ -9,7 +9,7 @@ epics:
       locked: false
       name: Scoped Memory Schema and Migration
       path: 01-scoped-memory-schema-and-migra
-      status: pending
+      status: done
     - complexity: high
       depends_on: []
       description: Actor-context scoped memory APIs and default-deny non-transitive grant resolution.
