@@ -27,7 +27,7 @@ tasks:
       file: T002-add-routine-session-key-and-wo.todo
       id: T002
       priority: high
-      status: pending
+      status: done
       tags: []
       title: Add routine session key and workspace plumbing
     - complexity: medium
