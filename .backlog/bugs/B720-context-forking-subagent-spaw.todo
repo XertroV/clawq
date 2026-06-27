@@ -1,0 +1,37 @@
+---
+complexity: high
+depends_on: [B712]
+estimate_hours: 3
+id: B720
+priority: low
+status: pending
+tags: [subagent, tools, architecture]
+title: Context forking for subagent spawn
+---
+
+## Summary
+
+Add a `fork_context` parameter to the `subagent` tool. When true, the parent's
+conversation history is captured and injected into the child session before its
+first turn, giving the subagent context about what was discussed.
+
+## Implementation
+
+- Add `fork_context` (optional bool) to `subagent` tool schema
+- When `fork_context = true`:
+  1. At spawn time, capture the parent session's conversation history
+     via `Memory.load_history ~db ~session_key:parent_key`
+  2. Serialize the history as JSON
+  3. Store it in a new `context_snapshot TEXT` column on `background_tasks`
+     (ALTER TABLE migration in `background_task_db.ml`)
+  4. In `Daemon_util.run_local_background_turn`, when `agent_name = Some _`,
+     check for `context_snapshot` on the task. If present, deserialize and
+     prepend to the child agent's history before calling `Agent.turn`
+- When `fork_context = false` (default): no change to current behavior
+
+## Acceptance Criteria
+
+- `fork_context: true` causes child session to start with parent's history
+- `fork_context: false` (default) behaves as before
+- Context snapshot is persisted in DB (survives restart)
+- No performance regression for non-forked subagents

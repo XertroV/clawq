@@ -1,0 +1,34 @@
+---
+complexity: medium
+depends_on: [B712]
+estimate_hours: 2
+id: B719
+priority: low
+status: pending
+tags: [subagent, tools, monitoring]
+title: Periodic status emitter for running subagents
+---
+
+## Summary
+
+While any subagent is running, emit a periodic status message (every 30 min)
+to the parent session listing all running agents, runtime, and task status.
+
+## Implementation
+
+- Add a background Lwt loop in `subagent_tool.ml` that:
+  1. Queries `background_tasks` for running tasks with `runner = 'local'`
+     and `use_worktree = 0`
+  2. Groups by `session_key` (parent session)
+  3. For each parent with running subagents, formats a status summary
+  4. Injects the summary into the parent session via `Session.inject_messages`
+     or the `send_message` tool path
+- The loop runs on a 30-min interval (`Lwt_unix.sleep 1800.0`)
+- Only starts when there are running subagents; idles when none
+- The status message format: list of agent IDs, runtime duration, status
+
+## Acceptance Criteria
+
+- Parent session receives status updates every 30 min while subagents run
+- No updates sent when no subagents are running
+- Status message includes all running subagent details

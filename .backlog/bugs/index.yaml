@@ -712,3 +712,7 @@ bugs:
     - file: B715-add-context-slash-command-for.todo
     - file: B716-tool-call-status-stuck-as-runn.todo
     - file: B717-session-model-resets-to-defaul.todo
+    - file: B718-enforce-subagent-spawn-depth.todo
+    - file: B719-periodic-status-emitter-sub.todo
+    - file: B720-context-forking-subagent-spaw.todo
+    - file: B721-use-description-field-in-subag.todo

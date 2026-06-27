@@ -1,0 +1,32 @@
+---
+complexity: low
+depends_on: [B712]
+estimate_hours: 1
+id: B718
+priority: medium
+status: pending
+tags: [subagent, tools, safety]
+title: Enforce subagent spawn depth limit (max 4)
+---
+
+## Summary
+
+Add depth tracking to the `subagent` tool so subagents cannot spawn unlimited
+recursion. Max depth = 4 (matches pi-subagents).
+
+## Implementation
+
+- Add `subagent_depth ~db` helper to `subagent_tool.ml` that walks the
+  `parent_task_id` chain on the `background_tasks` table, counting ancestors
+  where `runner = 'local'` and `use_worktree = 0` (subagent pattern).
+- In `spawn_tool`, call `subagent_depth` using the parent session key to find
+  the current depth. If depth >= 4, return an error string.
+- On spawn, pass `~parent_task_id` to `Background_task.enqueue` so the chain
+  is maintained. This requires resolving the parent task ID from the session
+  key (query `background_tasks` for the most recent task with that session_key).
+
+## Acceptance Criteria
+
+- Subagent at depth 4 cannot spawn further subagents (error returned)
+- Depth chain is queryable via `parent_task_id`
+- Existing tests pass

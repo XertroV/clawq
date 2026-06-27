@@ -1,0 +1,34 @@
+---
+complexity: low
+depends_on: [B712]
+estimate_hours: 0.5
+id: B721
+priority: low
+status: pending
+tags: [subagent, tools, ux]
+title: Use description field in subagent status display
+---
+
+## Summary
+
+The `subagent` tool accepts a `description` parameter but currently ignores it.
+Wire it into the spawn result and task metadata so it appears in status
+messages and notifications.
+
+## Implementation
+
+- In `spawn_tool` invoke: include the description in the return string
+  (e.g. "Spawned subagent task 42 (code review)")
+- In `format_result`: if the task has a `description`-like field, show it in
+  the header. Since `background_tasks` doesn't have a `description` column,
+  we can either:
+  - (a) Add a `description TEXT` column via ALTER TABLE migration, or
+  - (b) Encode it in the `prompt` field prefix (e.g. "[description] actual goal")
+  - (c) Store it in the task's `agent_name` or `follow_up_prompt` field (hacky)
+- Option (a) is cleanest. Add migration, store on enqueue, read in format.
+
+## Acceptance Criteria
+
+- Description appears in spawn result message
+- Description appears in subagent_result output
+- Description visible in `clawq subagents list` output
