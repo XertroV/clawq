@@ -21,7 +21,7 @@ milestones:
       locked: false
       name: Profile Policy and Grants
       path: 02-profile-policy-and-grants
-      status: pending
+      status: done
     - complexity: high
       depends_on: []
       description: Add room/profile budget attribution and enforcement plus redacted room activity ledger.
