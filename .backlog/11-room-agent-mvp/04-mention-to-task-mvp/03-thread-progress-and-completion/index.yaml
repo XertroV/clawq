@@ -4,7 +4,7 @@ estimate_hours: 8
 id: P11.M4.E3
 locked: false
 name: Thread Progress and Completion Delivery
-status: pending
+status: done
 tasks:
     - complexity: medium
       depends_on:
@@ -27,7 +27,7 @@ tasks:
       file: T002-deliver-room-progress-updates.todo
       id: T002
       priority: high
-      status: pending
+      status: done
       tags: []
       title: Deliver Slack/current room progress updates
     - complexity: high
@@ -37,5 +37,6 @@ tasks:
       file: T003-deliver-final-room-completion.todo
       id: T003
       priority: high
-      status: pending
+      status: done
+      tags: []
       title: Deliver final room completion and failure messages

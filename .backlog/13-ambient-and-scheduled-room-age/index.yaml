@@ -12,7 +12,7 @@ milestones:
       locked: false
       name: Cron-Integrated Room Routines
       path: 01-cron-integrated-room-routines
-      status: pending
+      status: done
     - complexity: high
       depends_on: []
       description: Opt-in ambient room watcher over scoped connector history and open room tasks, with quiet-hours and rate limits. Depends at leaf level on the connector capability matrix task in M3.
@@ -21,7 +21,7 @@ milestones:
       locked: false
       name: Ambient Room Watcher
       path: 02-ambient-room-watcher
-      status: pending
+      status: done
     - complexity: medium
       depends_on: []
       description: Connector capability matrix, Teams fast-follow hardening, and operator documentation for room agents. P13.M3.E1 should be completed before M2 ambient history work.

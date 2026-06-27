@@ -27,9 +27,9 @@ epics:
       locked: false
       name: Routine Admin Surface
       path: 03-routine-admin-surface
-      status: pending
+      status: done
 estimate_hours: 24
 id: P13.M1
 locked: false
 name: Cron-Integrated Room Routines
-status: pending
+status: done

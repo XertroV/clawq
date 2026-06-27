@@ -27,7 +27,7 @@ epics:
       locked: false
       name: Thread Progress and Completion Delivery
       path: 03-thread-progress-and-completion
-      status: pending
+      status: done
     - complexity: high
       depends_on: []
       description: Concurrent shared-room messages and daemon-restart replay do not corrupt or duplicate delivery.

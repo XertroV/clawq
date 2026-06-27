@@ -90,6 +90,8 @@
   room_stale_query
   room_watcher_decision
   room_ambient_delivery
+  ambient_inspection
+  room_progress
   memory
   rate_limiter
   scheduler
