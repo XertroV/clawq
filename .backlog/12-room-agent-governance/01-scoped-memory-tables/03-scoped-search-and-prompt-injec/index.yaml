@@ -14,7 +14,7 @@ tasks:
       file: T001-scope-room-search-and-prompt-i.todo
       id: T001
       priority: high
-      status: pending
+      status: done
       tags: []
       title: Add scoped filters to Memory.search
     - complexity: high
