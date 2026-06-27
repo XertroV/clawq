@@ -7,8 +7,9 @@ depends_on:
 estimate_hours: 4
 id: P11.M4.E1.T001
 priority: high
+reason: 'integration: TESTS FAILED (rc=1, new=[''session/84'']):   [OK]          rig                                 4   install prompt content.'
 started_at: null
-status: pending
+status: blocked
 tags: []
 title: Add room origin columns to task tree and background tasks
 ---
