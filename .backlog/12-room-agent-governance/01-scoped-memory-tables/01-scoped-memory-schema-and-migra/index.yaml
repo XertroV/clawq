@@ -13,7 +13,7 @@ tasks:
       file: T001-add-scoped-memory-tables-and-m.todo
       id: T001
       priority: high
-      status: pending
+      status: done
       tags: []
       title: Add scoped memory tables and migration mechanics
     - complexity: medium
