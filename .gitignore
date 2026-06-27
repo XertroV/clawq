@@ -37,4 +37,5 @@ tmp.*
 .worktrees/
 npm-pkg/bin/
 .maint/
+room-agent-campaign/
 

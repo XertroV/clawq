@@ -1,30 +1,193 @@
 ---
-complexity: medium
+complexity: high
 depends_on: []
-estimate_hours: 1
+estimate_hours: 4
 id: B712
 priority: high
 status: pending
-tags: []
-title: Add native child-session subagent tool (spawn subagent in native session, return final message as result)
+tags: [subagent, tools, architecture, native-session]
+title: Native child-session subagent tool with background execution and result retrieval
 ---
-Add a tool that spawns a clawq-native subagent in an isolated child session, runs it to completion, and returns the final assistant message as the tool result.
 
-Design reference: ~/src/pi-subagents (clankercode/pi-subagents on GitHub). The pi-subagents extension exposes:
-- 'Agent' tool: spawn a subagent with goal, model, system prompt, max turns
-- 'get_subagent_result': poll for background agent status/result
-- 'steer_subagent': send mid-run steering messages
+## Summary
 
-The clawq equivalent should:
-1. Create a native child session (stable session key, isolated from parent)
-2. Accept: goal prompt, optional model override, optional system prompt/agent template, optional max turns
-3. Run the child session to completion (or timeout)
-4. Return the final assistant message as the tool result to the parent
-5. Optionally support background mode (fire-and-forget with later poll/result retrieval)
+Add a native `subagent` tool that spawns an agent in an isolated child session,
+runs it in the background, and provides `subagent_result` for bounded result
+retrieval with safeguards against context flooding.
 
-This fills the gap between:
-- 'delegate' (external CLI runners, worktree-bound, not native sessions)
-- 'background_task_enqueue runner=local' (lower-level, task-oriented, not conversational)
-- The new tool: native session, conversational, returns final message, clean parent-child contract
+Design reference: ~/src/pi-subagents (clankercode/pi-subagents on GitHub).
 
-Consider integrating with agent templates (src/agent_template.ml) for role/system prompt configuration.
+## Architecture Decision: Reuse bg_task Infrastructure
+
+The `subagent` tool is a **clean wrapper** over the existing background task
+system (`runner: "local"`, `use_worktree: false`). It calls
+`Background_task.enqueue` under the hood with the right defaults.
+
+This reuses: DB-backed task tracking, `clawq subagents` CLI, cancellation,
+resume/send_message, transcript/log infrastructure, and the daemon scheduler.
+
+The bg_task/delegate tools are **temporarily commented out** from the LLM tool
+registry (not removed) while B712 is the primary interface. The tools still
+exist for CLI and skill usage.
+
+## Reactive Enqueue Signal
+
+Currently the daemon polls for queued tasks every 5 seconds. Add an
+`Lwt_condition` (or similar in-memory signal) that `Background_task.enqueue`
+triggers after INSERT, so the daemon loop wakes immediately. Pattern:
+```
+(* daemon loop *)
+let* () = Lwt.choose [
+  Lwt_condition.wait enqueue_signal;
+  Lwt_unix.sleep 5.0;
+] in
+(* check for queued tasks *)
+```
+The 5s poll is kept as a fallback (CLI or other paths may enqueue without
+signalling the condition). The signal just makes the common case instant.
+
+## YAGNI Cuts
+
+- No summarizer LLM call on subagent finish (skip the
+  `summarize_for_notification` path for subagent tasks)
+- No context forking in v1 (`fork_context` param omitted from schema)
+- No `system_prompt` param — use agent_template or bare default
+- No `max_turns` / `timeout_seconds` — runs until done
+- No 30-min status emitter — parent can poll with `subagent_result`
+- No automerge — `use_worktree=false` means no branch to merge; pass `~automerge:false`
+
+## Tool Surface
+
+### `subagent` (always background)
+
+Spawn a subagent in a new native child session. Always runs in the background.
+Returns immediately with the agent ID and instructions for monitoring.
+
+| Param | Required | Description |
+|-------|----------|-------------|
+| `goal` | yes | The task prompt for the subagent |
+| `model` | no | Override model in `provider:model` format (default: inherit parent's) |
+| `agent_template` | no | Agent template name for role/system-prompt/tools config |
+| `description` | no | Short label (3-5 words) for status messages |
+| ~~`fork_context`~~ | ~~no~~ | ~~Omitted from v1 schema — no context forking~~ |
+
+**Removed from initial design** (use sensible defaults):
+- No `system_prompt` — use agent_template or bare default
+- No `max_turns` — no turn limit; subagent runs until it finishes
+- No `timeout_seconds` — no wall-clock timeout; runs until done
+- No `async` flag — always background; blocking not supported in v1
+- No `fork_context` — no context forking in v1
+- No summarizer LLM on finish — YAGNI
+
+**On spawn, return to parent:**
+- Agent ID (`__subagent:<uuid>`)
+- Session key for live inspection
+- Output log file path
+- Instructions: "Use `subagent_result` to check status. Use
+  `thread_summary(session_id=...)` for a live session summary. Full
+  transcript available at the output log path."
+
+### `subagent_result` (with safeguards)
+
+Check status and retrieve results from a background subagent.
+
+| Param | Required | Description |
+|-------|----------|-------------|
+| `agent_id` | yes | The agent ID returned by `subagent` |
+| `wait` | no | Block until completion, max 110s then re-call (default: false) |
+| `verbose` | no | Include bounded conversation preview (default: false) |
+| `peek` | no | Object: `{ lines?, regex?, after? }` for tail/filter view of live output |
+
+**Safeguards (from pi-subagents):**
+- Result text capped at 20,000 chars (`MAX_RESULT_CHARS`)
+- Verbose conversation preview capped at 20,000 chars (`MAX_VERBOSE_CHARS`)
+- Peek output capped at 20,000 chars and 200 lines (`MAX_PEEK_CHARS`, `MAX_PEEK_LINES`)
+- Truncation always includes: omitted char count + guidance to use peek or output file
+- Output file path always included when available
+
+**Result format:**
+```
+Agent: __subagent:<uuid>
+Status: running|completed|error | Tool uses: N | Tokens: N in / N out | Duration: Xm
+
+<result text or error, truncated if needed>
+
+--- (if truncated)
+Result truncated: omitted N chars. Use peek for targeted retrieval,
+or inspect the output file for the full log. Output: /path/to/log
+```
+
+**Peek semantics** (filter-then-tail):
+- Source precedence: streaming output file (running agents) -> result text (finished)
+- `lines`: last N lines (default 20, max 200)
+- `regex`: filter to matching lines before tail
+- `after`: return all lines after this 1-based line number (for incremental polling)
+- Line numbers are stable across calls (index the full source)
+
+**No status emitter in v1:**
+The 30-min periodic status emitter is cut as YAGNI. Parent can poll status
+with `subagent_result` or inspect via `thread_summary`.
+
+## Session Management
+
+- Session key: `__subagent:<uuid>` (same pattern as `__bg_task:<id>`)
+- Each subagent gets its own conversation history, isolated from parent
+- Output log file: write streaming transcript to a file (like background tasks)
+  so it can be tailed/peeked while running
+- Session history persisted normally — inspectable via `thread_summary`
+
+## Parent Session Tracking
+
+Parent relationship already exists in the bg_task infrastructure:
+- `background_tasks.session_key` — the parent session that spawned the task
+- `background_tasks.parent_task_id` — for task chaining
+
+When spawning a subagent, pass the invoking session's key as `~session_key`.
+To find a subagent's parent: query bg_task for the session_key field.
+
+## Live Inspection of Running Subagents
+
+Parent can use existing tools:
+- `thread_summary(session_id="__subagent:<id>")` — get a session summary
+- `history_search` — search across subagent session content
+- `subagent_result(peek={...})` — tail/filter the live output log
+- Direct file access to the output log path
+
+## Agent Template Integration
+
+- `agent_template` param references templates from `src/agent_template.ml`
+- Template provides: system_prompt, allowed/disallowed tools, default model
+- If no template: minimal default ("You are a helpful assistant. Complete the
+  task and respond with your result.")
+- Subagents inherit parent tool registry by default; template can restrict
+
+## Depth Limit
+
+- Depth limit = 4 (matches pi-subagents)
+- Enforce: track spawn depth per agent; `subagent` tool returns error if depth >= 4
+- Depth passed from parent to child on spawn
+
+## Error Handling
+
+- Subagent crash -> error string returned via `subagent_result`
+- Subagent never throws into parent — always a text result
+
+## Implementation Plan
+
+### Phase 1: Reactive Enqueue Signal
+1. Add `enqueue_signal : unit Lwt_condition.t` to daemon state
+2. Signal it from `Background_task.enqueue` after successful INSERT
+3. Daemon loop uses `Lwt.choose [Lwt_condition.wait signal; Lwt_unix.sleep 5.0]`
+
+### Phase 2: Subagent Tool
+4. **New file**: `src/subagent_tool.ml` — thin wrapper over bg_task infrastructure
+5. `subagent` tool: calls `Background_task.enqueue ~runner:Local ~use_worktree:false
+   ~automerge:false ~repo_path:(cwd) ~prompt:goal ?model ?agent_name:agent_template ()`
+6. `subagent_result` tool: wraps `Background_task.wait_until_terminal` +
+   `Background_task_transcript.render` with peek semantics (lines/regex/after)
+7. Safeguards: 20K char caps, truncation notices, output file path always surfaced
+8. Wire into `src/tools_builtin.ml` — register subagent tools
+9. **Comment out** bg_task/delegate tools from LLM tool registry
+10. **Skip** summarizer LLM for subagent tasks (flag or runner check in on_task_finished)
+11. **Tests**: `test/test_subagent_tool.ml`
+12. **Config**: minimal — just enable/disable
