@@ -4,7 +4,7 @@ estimate_hours: 6
 id: P11.M4.E1
 locked: false
 name: Room Task Origin Binding
-status: pending
+status: done
 tasks:
     - complexity: high
       depends_on:
@@ -14,6 +14,6 @@ tasks:
       file: T001-add-room-origin-columns-to-tas.todo
       id: T001
       priority: high
-      status: blocked
+      status: done
       tags: []
       title: Add room origin columns to task tree and background tasks
