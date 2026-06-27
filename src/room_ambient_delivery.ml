@@ -205,8 +205,10 @@ let deliver_ambient_followups ~db ~profile ~room_id ?thread_id ~stale_items
         in
         let is_suppressed =
           match existing with
-          | Some prev when prev.Room_watcher_decision.fingerprint = fingerprint
-            ->
+          | Some prev
+            when prev.Room_watcher_decision.fingerprint = fingerprint
+                 && prev.Room_watcher_decision.outcome
+                    = Room_watcher_decision.Acted ->
               true
           | _ -> false
         in

@@ -316,6 +316,37 @@ let test_batch_rate_limit_enforced_per_item () =
         "rate limited" (Some "rate_limited")
         (Option.map Room_watcher_decision.skip_reason_to_string skip_reason))
 
+(** Transient policy skips must not suppress a later allowed delivery. *)
+let test_policy_skip_does_not_poison_material_change () =
+  with_db (fun db ->
+      let limited_profile =
+        make_profile ~ambient_enabled:true ~ambient_rate_limit_rph:1 ()
+      in
+      let unlimited_profile = make_profile ~ambient_enabled:true () in
+      let first_batch =
+        [ make_stale_item ~id:"1" (); make_stale_item ~id:"2" () ]
+      in
+      let _results1 =
+        Lwt_main.run
+          (deliver_ambient_followups ~db ~profile:limited_profile
+             ~room_id:"room-1" ~stale_items:first_batch ~hour:12
+             ~budget_exceeded:false ~supports_ambient:true
+             ~send_message:ok_sender ())
+      in
+      let results2 =
+        Lwt_main.run
+          (deliver_ambient_followups ~db ~profile:unlimited_profile
+             ~room_id:"room-1" ~stale_items:[ make_stale_item ~id:"2" () ]
+             ~hour:13 ~budget_exceeded:false ~supports_ambient:true
+             ~send_message:ok_sender ())
+      in
+      let r = List.hd results2 in
+      Alcotest.(check bool) "previously rate-limited item delivered" true r.acted;
+      Alcotest.check
+        (Alcotest.option Alcotest.string)
+        "no skip reason" None
+        (Option.map Room_watcher_decision.skip_reason_to_string r.skip_reason))
+
 (** Delivery should prefer each stale item's own thread id. *)
 let test_delivery_uses_item_thread_id () =
   with_db (fun db ->
@@ -455,6 +486,8 @@ let suite =
       test_material_change_ignores_age_drift;
     Alcotest.test_case "batch rate limit enforced per item" `Quick
       test_batch_rate_limit_enforced_per_item;
+    Alcotest.test_case "policy skip does not poison material-change" `Quick
+      test_policy_skip_does_not_poison_material_change;
     Alcotest.test_case "delivery uses item thread id" `Quick
       test_delivery_uses_item_thread_id;
     Alcotest.test_case "mixed results for multiple items" `Quick
