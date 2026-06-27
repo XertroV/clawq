@@ -18,7 +18,7 @@ epics:
       locked: false
       name: Budget Enforcement
       path: 02-budget-enforcement
-      status: pending
+      status: done
     - complexity: high
       depends_on: []
       description: Redacted room activity ledger with requester/task/tool/model/cost/artifact/status lineage.
@@ -32,4 +32,4 @@ estimate_hours: 36
 id: P12.M3
 locked: false
 name: Budgets and Activity Ledger
-status: pending
+status: done

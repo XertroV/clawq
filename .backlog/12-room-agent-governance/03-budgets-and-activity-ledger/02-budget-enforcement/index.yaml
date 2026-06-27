@@ -4,7 +4,7 @@ estimate_hours: 10
 id: P12.M3.E2
 locked: false
 name: Budget Enforcement
-status: pending
+status: done
 tasks:
     - complexity: high
       depends_on:
@@ -53,5 +53,6 @@ tasks:
       file: T005-add-budget-denial-redaction-an.todo
       id: T005
       priority: high
-      status: pending
+      status: done
+      tags: []
       title: Add budget denial redaction and negative tests

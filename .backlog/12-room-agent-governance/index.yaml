@@ -2,7 +2,7 @@ complexity: medium
 depends_on: []
 estimate_hours: 96
 id: P12
-locked: false
+locked: true
 milestones:
     - complexity: high
       depends_on: []
@@ -30,7 +30,7 @@ milestones:
       locked: false
       name: Budgets and Activity Ledger
       path: 03-budgets-and-activity-ledger
-      status: pending
+      status: done
 name: Room Agent Governance
-status: pending
+status: done
 weeks: 4
