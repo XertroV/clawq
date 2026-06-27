@@ -703,3 +703,4 @@ bugs:
     - file: B706-ensure-implement-room-thread-s.todo
     - file: B707-update-repo-url-and-git-remote.todo
     - file: B708-on-the-website-home-page-add-a.todo
+    - file: B709-fuzzy-model-set-matching-show.todo
