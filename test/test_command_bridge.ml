@@ -3719,6 +3719,98 @@ let test_rooms_bind_rejected_without_admin () =
         "no bindings after rejected unbind" 0
         (List.length cfg2.room_profile_bindings))
 
+let test_rooms_lifecycle_mutations_rejected_without_admin () =
+  with_temp_home (fun home ->
+      write_config_json home
+        (Yojson.Safe.from_string
+           {|{
+  "room_profiles": [
+    {"id": "coding", "model": "gpt-5", "system_prompt": "", "max_tool_iterations": 10}
+  ],
+  "room_profile_bindings": [
+    {"profile_id": "coding", "room": "slack:C1", "active": true}
+  ]
+}|});
+      let rename_result =
+        Command_bridge.handle [ "rooms"; "rename"; "coding"; "New"; "Name" ]
+      in
+      Alcotest.(check bool)
+        "rename rejected mentions admin" true
+        (Test_helpers.string_contains rename_result "admin");
+      let delete_result =
+        Command_bridge.handle [ "rooms"; "delete"; "coding"; "--force" ]
+      in
+      Alcotest.(check bool)
+        "delete rejected mentions admin" true
+        (Test_helpers.string_contains delete_result "admin");
+      let cfg, profile = find_loaded_room_profile "coding" in
+      Alcotest.(check (option string))
+        "display name unchanged" None profile.display_name;
+      Alcotest.(check string) "profile remains active" "active" profile.status;
+      Alcotest.(check int)
+        "binding remains after rejected mutations" 1
+        (List.length cfg.room_profile_bindings))
+
+let test_min_rooms_mutation_paths_disabled () =
+  let cases =
+    [
+      [ "rooms"; "bind"; "slack:C1"; "coding" ];
+      [ "rooms"; "rename"; "coding"; "New Name" ];
+      [ "rooms"; "delete"; "coding"; "--force" ];
+      [ "rooms"; "unbind"; "slack:C1" ];
+    ]
+  in
+  List.iter
+    (fun args ->
+      let result = Command_bridge_min.handle args in
+      Alcotest.(check bool)
+        (String.concat " " args ^ " disabled in minimal build")
+        true
+        (Test_helpers.string_contains result
+           "not available in the minimal build");
+      Alcotest.(check bool)
+        (String.concat " " args ^ " points to full binary")
+        true
+        (Test_helpers.string_contains result "full clawq"))
+    cases
+
+let test_rooms_admin_surfaces_not_agent_or_tool_exposed () =
+  with_temp_home (fun home ->
+      let guest_commands =
+        Slash_commands.visible_commands ~is_admin:false
+        |> List.map (fun (cmd : Slash_commands.command) -> cmd.name)
+      in
+      let admin_commands =
+        Slash_commands.visible_commands ~is_admin:true
+        |> List.map (fun (cmd : Slash_commands.command) -> cmd.name)
+      in
+      Alcotest.(check bool)
+        "rooms absent from guest slash commands" false
+        (List.mem "rooms" guest_commands);
+      Alcotest.(check bool)
+        "rooms absent from admin slash commands" false
+        (List.mem "rooms" admin_commands);
+      (match Slash_commands.handle "/rooms bind slack:C1 coding" with
+      | Slash_commands.NotACommand -> ()
+      | _ -> Alcotest.fail "rooms slash command must not be exposed");
+      let config = { Runtime_config.default with workspace = home } in
+      let registry = Tool_registry.create () in
+      let sandbox =
+        Sandbox.create ~backend:Sandbox.None ~workspace:home
+          ~extra_allowed_paths:[] ~workspace_only:true ()
+      in
+      Tools_builtin.register_all ~config ~sandbox registry;
+      let tool_names =
+        List.map (fun (tool : Tool.t) -> tool.name) registry.tools
+      in
+      List.iter
+        (fun forbidden ->
+          Alcotest.(check bool)
+            (forbidden ^ " absent from built-in tools")
+            false
+            (List.mem forbidden tool_names))
+        [ "rooms"; "room_admin"; "admin" ])
+
 let suite =
   [
     Alcotest.test_case "handle phase2" `Quick test_handle_phase2;
@@ -3962,4 +4054,10 @@ let suite =
     Alcotest.test_case "rooms usage" `Quick test_rooms_usage;
     Alcotest.test_case "rooms bind rejected without admin" `Quick
       test_rooms_bind_rejected_without_admin;
+    Alcotest.test_case "rooms lifecycle rejected without admin" `Quick
+      test_rooms_lifecycle_mutations_rejected_without_admin;
+    Alcotest.test_case "minimal rooms mutation paths disabled" `Quick
+      test_min_rooms_mutation_paths_disabled;
+    Alcotest.test_case "rooms admin surfaces not agent/tool exposed" `Quick
+      test_rooms_admin_surfaces_not_agent_or_tool_exposed;
   ]
