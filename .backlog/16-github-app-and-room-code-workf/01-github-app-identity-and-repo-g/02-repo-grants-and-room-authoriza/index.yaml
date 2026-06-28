@@ -30,7 +30,7 @@ tasks:
       file: T002-intersect-repo-grants-with-cod.todo
       id: T002
       priority: high
-      status: in_progress
+      status: done
       tags: []
       title: Intersect repo grants with codebase and global security policy
     - complexity: high
