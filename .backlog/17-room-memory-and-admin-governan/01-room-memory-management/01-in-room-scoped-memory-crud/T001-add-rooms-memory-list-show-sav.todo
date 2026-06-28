@@ -1,15 +1,16 @@
 ---
 claimed_at: "2026-06-28T15:00:18Z"
 claimed_by: cli-user
-completed_at: null
+completed_at: "2026-06-28T17:30:43Z"
 complexity: high
 depends_on:
     - P14.M1.E2.T001
+duration_minutes: 150.42260434395
 estimate_hours: 3
 id: P17.M1.E1.T001
 priority: high
 started_at: "2026-06-28T15:00:18Z"
-status: in_progress
+status: done
 tags: []
 title: Add rooms memory list show save commands
 ---
