@@ -52,5 +52,6 @@ tasks:
       file: T004-add-explain-access-denial-and.todo
       id: T004
       priority: high
-      status: pending
+      status: in_progress
+      tags: []
       title: Add explain-access denial and redaction tests

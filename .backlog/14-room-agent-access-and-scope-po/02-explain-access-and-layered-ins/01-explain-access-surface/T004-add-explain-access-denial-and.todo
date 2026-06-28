@@ -1,4 +1,7 @@
 ---
+claimed_at: "2026-06-28T23:32:55Z"
+claimed_by: cli-user
+completed_at: null
 complexity: medium
 depends_on:
     - P14.M2.E1.T002
@@ -6,10 +9,9 @@ depends_on:
 estimate_hours: 2
 id: P14.M2.E1.T004
 priority: high
-status: pending
-tags:
-    - access
-    - tests
+started_at: "2026-06-28T23:32:55Z"
+status: in_progress
+tags: []
 title: Add explain-access denial and redaction tests
 ---
 Acceptance: denied tools/repos/credentials/memory scopes are explained without exposing private values or unrelated scopes.

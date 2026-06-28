@@ -40,5 +40,6 @@ tasks:
       file: T003-preserve-project-doc-refresh-b.todo
       id: T003
       priority: high
-      status: pending
+      status: in_progress
+      tags: []
       title: Preserve project-doc refresh behavior with layered prompts

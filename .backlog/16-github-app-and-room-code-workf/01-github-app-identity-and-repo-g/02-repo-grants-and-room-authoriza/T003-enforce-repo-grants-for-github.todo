@@ -1,4 +1,7 @@
 ---
+claimed_at: "2026-06-28T23:32:55Z"
+claimed_by: cli-user
+completed_at: null
 complexity: high
 depends_on:
     - P16.M1.E1.T003
@@ -6,10 +9,9 @@ depends_on:
 estimate_hours: 3
 id: P16.M1.E2.T003
 priority: high
-status: pending
-tags:
-    - github
-    - policy
+started_at: "2026-06-28T23:32:55Z"
+status: in_progress
+tags: []
 title: Enforce repo grants for GitHub and room-triggered work
 ---
 Acceptance: unauthorized repo actions are denied before API calls or runner launch with redacted explanations.

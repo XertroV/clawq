@@ -51,6 +51,6 @@ tasks:
       file: T004-add-scoped-agent-memory-tool-s.todo
       id: T004
       priority: high
-      status: pending
+      status: in_progress
       tags: []
       title: Add scoped agent memory tool support
