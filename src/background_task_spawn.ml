@@ -815,7 +815,7 @@ let launch_room_bg_task ~db ~session_key ~connector ~room_id ~requester_id ~goal
       match
         delegate_enqueue ~db ~context ?notify_cfg ~use_worktree
           ~check_available:true ?preferred_runner ?model:model_override
-          ~default_repo_path ~goal ()
+          ?access_snapshot_id ~default_repo_path ~goal ()
       with
       | Ok (id, _runner, _repo) -> Ok id
       | Error msg -> Error msg)
