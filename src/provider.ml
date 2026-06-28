@@ -2,6 +2,107 @@ include Provider_types
 include Provider_streaming
 include Provider_routing
 
+let parse_openai_compat_response ?(thinking_style = NoThinking) ~model
+    response_body =
+  let open Yojson.Safe.Util in
+  let json =
+    try Ok (Yojson.Safe.from_string response_body)
+    with exn -> Error (Printexc.to_string exn)
+  in
+  match json with
+  | Error msg -> Error ("Failed to parse LLM response JSON: " ^ msg)
+  | Ok json ->
+      let choice =
+        try json |> member "choices" |> index 0 |> member "message"
+        with _ -> `Null
+      in
+      let tool_calls_json =
+        try choice |> member "tool_calls" |> to_list with _ -> []
+      in
+      let resp_model =
+        try json |> member "model" |> to_string with _ -> model
+      in
+      let usage =
+        try
+          let u = json |> member "usage" in
+          let pt = u |> member "prompt_tokens" |> to_int in
+          let ct = u |> member "completion_tokens" |> to_int in
+          let cached =
+            try
+              u
+              |> member "prompt_tokens_details"
+              |> member "cached_tokens" |> to_int
+            with _ -> 0
+          in
+          Some (pt, ct, cached)
+        with _ -> None
+      in
+      if tool_calls_json <> [] then
+        let malformed = ref [] in
+        let calls =
+          List.mapi
+            (fun i tc ->
+              try
+                let id = tc |> member "id" |> to_string in
+                let fn = tc |> member "function" in
+                let function_name = fn |> member "name" |> to_string in
+                let arguments = fn |> member "arguments" |> to_string in
+                Some { id; function_name; arguments }
+              with _ ->
+                malformed := i :: !malformed;
+                Logs.warn (fun m ->
+                    m "LLM response dropped malformed tool_call at index=%d" i);
+                None)
+            tool_calls_json
+          |> List.filter_map (fun x -> x)
+        in
+        if calls = [] then
+          Error
+            (Printf.sprintf
+               "LLM response contained %d malformed tool_call(s); raw: %s"
+               (List.length tool_calls_json)
+               (Yojson.Safe.to_string (`List tool_calls_json)))
+        else
+          Ok
+            (ToolCalls
+               {
+                 calls;
+                 model = resp_model;
+                 usage;
+                 provider_response_items_json =
+                   Some (Yojson.Safe.to_string (`List tool_calls_json));
+                 thinking = None;
+               })
+      else
+        let raw_content =
+          try choice |> member "content" |> to_string with _ -> ""
+        in
+        let content, thinking_text =
+          match thinking_style with
+          | TaggedThinking ->
+              let visible, thought = split_tagged_text raw_content in
+              (visible, if thought = "" then None else Some thought)
+          | ReasoningContent ->
+              let rc =
+                try Some (choice |> member "reasoning_content" |> to_string)
+                with _ -> None
+              in
+              (raw_content, rc)
+          | NoThinking -> (raw_content, None)
+        in
+        if content = "" && raw_content = "" then
+          Error "Failed to extract content from LLM response"
+        else
+          Ok
+            (Text
+               {
+                 content;
+                 model = resp_model;
+                 usage;
+                 provider_response_items_json = None;
+                 thinking = thinking_text;
+               })
+
 let complete ~(config : Runtime_config.t) ~messages ?tools ?session_key
     ?preferred_provider ?quota_states () =
   let open Lwt.Syntax in
@@ -143,102 +244,13 @@ let complete ~(config : Runtime_config.t) ~messages ?tools ?session_key
             (Printf.sprintf "LLM API error (HTTP %d): %s" status response_body)
       end
       else
-        let json =
-          try Ok (Yojson.Safe.from_string response_body)
-          with exn -> Error (Printexc.to_string exn)
-        in
-        match json with
-        | Error msg ->
-            Lwt.fail_with ("Failed to parse LLM response JSON: " ^ msg)
-        | Ok json ->
-            let open Yojson.Safe.Util in
-            let choice =
-              try json |> member "choices" |> index 0 |> member "message"
-              with _ -> `Null
-            in
-            let tool_calls_json =
-              try choice |> member "tool_calls" |> to_list with _ -> []
-            in
-            let resp_model =
-              try json |> member "model" |> to_string with _ -> model
-            in
-            let usage =
-              try
-                let u = json |> member "usage" in
-                let pt = u |> member "prompt_tokens" |> to_int in
-                let ct = u |> member "completion_tokens" |> to_int in
-                let cached =
-                  try
-                    u
-                    |> member "prompt_tokens_details"
-                    |> member "cached_tokens" |> to_int
-                  with _ -> 0
-                in
-                Some (pt, ct, cached)
-              with _ -> None
-            in
-            if tool_calls_json <> [] then
-              let calls =
-                List.mapi
-                  (fun i tc ->
-                    try
-                      let id = tc |> member "id" |> to_string in
-                      let fn = tc |> member "function" in
-                      let function_name = fn |> member "name" |> to_string in
-                      let arguments = fn |> member "arguments" |> to_string in
-                      Some { id; function_name; arguments }
-                    with _ ->
-                      Logs.warn (fun m ->
-                          m
-                            "LLM response dropped malformed tool_call at \
-                             index=%d"
-                            i);
-                      None)
-                  tool_calls_json
-                |> List.filter_map (fun x -> x)
-              in
-              Lwt.return
-                (ToolCalls
-                   {
-                     calls;
-                     model = resp_model;
-                     usage;
-                     provider_response_items_json = None;
-                     thinking = None;
-                   })
-            else
-              let raw_content =
-                try choice |> member "content" |> to_string with _ -> ""
-              in
-              let thinking_style =
-                thinking_style_of_provider ~provider_name provider
-              in
-              let content, thinking_text =
-                match thinking_style with
-                | TaggedThinking ->
-                    let visible, thought = split_tagged_text raw_content in
-                    (visible, if thought = "" then None else Some thought)
-                | ReasoningContent ->
-                    let rc =
-                      try
-                        Some (choice |> member "reasoning_content" |> to_string)
-                      with _ -> None
-                    in
-                    (raw_content, rc)
-                | NoThinking -> (raw_content, None)
-              in
-              if content = "" && raw_content = "" then
-                Lwt.fail_with "Failed to extract content from LLM response"
-              else
-                Lwt.return
-                  (Text
-                     {
-                       content;
-                       model = resp_model;
-                       usage;
-                       provider_response_items_json = None;
-                       thinking = thinking_text;
-                     }))
+        match
+          parse_openai_compat_response
+            ~thinking_style:(thinking_style_of_provider ~provider_name provider)
+            ~model response_body
+        with
+        | Ok response -> Lwt.return response
+        | Error msg -> Lwt.fail_with msg)
 
 let complete_stream ~(config : Runtime_config.t) ~messages ?tools ?session_key
     ?preferred_provider ?quota_states ~on_chunk () =

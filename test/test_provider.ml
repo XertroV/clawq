@@ -963,6 +963,39 @@ let test_sanitize_utf8_message_to_json () =
   Alcotest.(check string)
     "content sanitized in json" "hello\xEF\xBF\xBDworld" content
 
+let test_openai_chat_tool_calls_preserve_raw_payload () =
+  let body =
+    {|{"model":"gpt-test","choices":[{"message":{"tool_calls":[{"id":"call_raw","type":"function","function":{"name":"file_read","arguments":"{\"path\":\"a.ml\"}"}}]}}],"usage":{"prompt_tokens":3,"completion_tokens":4}}|}
+  in
+  match Provider.parse_openai_compat_response ~model:"gpt-test" body with
+  | Ok
+      (Provider.ToolCalls { calls; provider_response_items_json = Some raw; _ })
+    ->
+      Alcotest.(check int) "one call" 1 (List.length calls);
+      let tc = List.hd calls in
+      Alcotest.(check string) "id" "call_raw" tc.id;
+      Alcotest.(check string) "name" "file_read" tc.function_name;
+      Alcotest.(check string) "args" {|{"path":"a.ml"}|} tc.arguments;
+      Alcotest.(check bool)
+        "raw includes original tool call" true
+        (Test_helpers.string_contains raw "call_raw"
+        && Test_helpers.string_contains raw "file_read")
+  | Ok _ -> Alcotest.fail "expected ToolCalls with raw payload"
+  | Error err -> Alcotest.fail ("unexpected parse error: " ^ err)
+
+let test_openai_chat_all_malformed_tool_calls_fail () =
+  let body =
+    {|{"model":"gpt-test","choices":[{"message":{"tool_calls":[{"id":"bad_call","type":"function","function":{"name":"file_read"}}]}}]}|}
+  in
+  match Provider.parse_openai_compat_response ~model:"gpt-test" body with
+  | Error err ->
+      Alcotest.(check bool)
+        "error mentions malformed tool_call" true
+        (Test_helpers.string_contains err "malformed tool_call")
+  | Ok (Provider.ToolCalls { calls; _ }) ->
+      Alcotest.failf "expected parse failure, got %d calls" (List.length calls)
+  | Ok (Provider.Text _) -> Alcotest.fail "expected parse failure, got text"
+
 let suite =
   [
     Alcotest.test_case "strip date suffix + normalize" `Quick
@@ -1086,6 +1119,10 @@ let suite =
       test_sanitize_utf8_empty;
     Alcotest.test_case "sanitize_utf8 in message_to_json" `Quick
       test_sanitize_utf8_message_to_json;
+    Alcotest.test_case "openai chat preserves raw tool_calls" `Quick
+      test_openai_chat_tool_calls_preserve_raw_payload;
+    Alcotest.test_case "openai chat malformed tool_calls fail" `Quick
+      test_openai_chat_all_malformed_tool_calls_fail;
     Alcotest.test_case "zai thinking extra fields enabled" `Quick
       test_zai_thinking_extra_fields_enabled;
     Alcotest.test_case "zai thinking extra fields auto-detect without style"
