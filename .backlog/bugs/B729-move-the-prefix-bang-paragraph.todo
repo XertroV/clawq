@@ -1,0 +1,15 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B729
+priority: high
+status: pending
+tags: []
+title: move the prefix-bang paragraph in /help response to top of help so that it's the most visible thing. Move skills under '/help skills' and move agents under '/help agents'. Both should be referenced at the end of the main help command.
+---
+
+move the prefix-bang paragraph in /help response to top of help so that it's the most visible thing. Move skills under '/help skills' and move agents under '/help agents'. Both should be referenced at the end of the main help command.
+
+
+the prefix-bang paragraph means: "Prefix a message with ! to interrupt current processing in this session and send the rest as a normal message."
