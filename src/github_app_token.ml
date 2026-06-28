@@ -288,3 +288,25 @@ let find_installation_for_repo t ~repo_full_name =
     (fun (inst : Runtime_config.github_app_installation) ->
       inst.repos = [] || List.exists (String.equal repo_full_name) inst.repos)
     t.config.installations
+
+(* ---- Module-level cached instance ---- *)
+
+let app_token : t option ref = ref None
+
+let init_from_config (config : Runtime_config.github_config) =
+  match config.auth with
+  | Runtime_config.GithubPat _ -> app_token := None
+  | Runtime_config.GithubApp app_config -> (
+      match create ~config:app_config () with
+      | Ok tok ->
+          Logs.info (fun m ->
+              m "GitHub App: initialized token cache for app_id %d"
+                app_config.app_id);
+          app_token := Some tok
+      | Error msg ->
+          Logs.err (fun m ->
+              m "GitHub App: failed to initialize token cache: %s" msg);
+          app_token := None)
+
+let resolve_app_token () = !app_token
+let invalidate_all () = app_token := None
