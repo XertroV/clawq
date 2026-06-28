@@ -1,14 +1,16 @@
 ---
+claimed_at: "2026-06-28T11:54:11Z"
+claimed_by: workflow-p14-m1-e2-t002
+completed_at: null
 complexity: high
 depends_on:
     - P14.M1.E2.T001
 estimate_hours: 3
 id: P14.M1.E2.T002
 priority: high
-status: pending
-tags:
-    - access
-    - tests
+started_at: "2026-06-28T11:54:11Z"
+status: in_progress
+tags: []
 title: Add resolver conflict and precedence tests
 ---
 Acceptance: tests cover duplicate bundles, invalid profile/room refs, allow+deny for same tool, workspace-vs-room override, missing memory grants, and no inherited access weakening global security policy.
