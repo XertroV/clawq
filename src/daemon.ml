@@ -67,6 +67,10 @@ let apply_runtime_config_reload
     | None -> ());
     sandbox := make_sandbox new_config;
     current_config := new_config;
+    (* Re-initialize GitHub App token cache on config reload *)
+    (match new_config.channels.github with
+    | Some gc -> Github_app_token.init_from_config gc
+    | None -> Github_app_token.invalidate_all ());
     Session.set_sandbox session_manager !sandbox;
     Session.update_config ~source session_manager new_config;
     Http_debug.sync_config new_config.log;
@@ -110,6 +114,10 @@ let apply_runtime_config_reload
     | _ -> ());
     sandbox := old_sandbox;
     current_config := old_config;
+    (* Restore GitHub App token to match rolled-back config *)
+    (match old_config.channels.github with
+    | Some gc -> Github_app_token.init_from_config gc
+    | None -> Github_app_token.invalidate_all ());
     Session.set_sandbox session_manager old_sandbox;
     Session.update_config ~source session_manager old_config;
     refresh_active_template_tool_registries session_manager;
@@ -909,6 +917,10 @@ let run ~(config : Runtime_config.t) =
         m
           "GitHub channel configured but tunnel is disabled; webhooks may not \
            be reachable");
+  (* Initialize GitHub App token cache if App auth is configured *)
+  (match config.channels.github with
+  | Some gc -> Github_app_token.init_from_config gc
+  | None -> ());
   let github_api_limiter =
     Rate_limiter.create ~rate_per_minute:60 ~burst_multiplier:1.0
   in

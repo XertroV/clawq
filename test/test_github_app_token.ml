@@ -641,8 +641,109 @@ let iso8601_suite =
     Alcotest.test_case "leap year" `Quick iso8601_leap_year;
   ]
 
+(* ---- Module-level init/resolve/invalidate tests ---- *)
+
+let init_from_config_pat_sets_none () =
+  let config : Runtime_config.github_config =
+    {
+      auth = Runtime_config.GithubPat "ghp_test";
+      repos = [];
+      default_model = None;
+    }
+  in
+  Github_app_token.init_from_config config;
+  Alcotest.(check (option string))
+    "PAT auth resolves to None" None
+    (Option.map
+       (fun _tok -> "has_token")
+       (Github_app_token.resolve_app_token ()))
+
+let init_from_config_app_sets_token () =
+  with_test_rsa_key (fun key_path ->
+      let app_config : Runtime_config.github_app_config =
+        {
+          app_id = 55;
+          private_key_path = key_path;
+          webhook_secret = "test";
+          installations =
+            [ { Runtime_config.installation_id = 1; repos = [ "a/b" ] } ];
+        }
+      in
+      let config : Runtime_config.github_config =
+        {
+          auth = Runtime_config.GithubApp app_config;
+          repos = [];
+          default_model = None;
+        }
+      in
+      Github_app_token.init_from_config config;
+      match Github_app_token.resolve_app_token () with
+      | Some tok -> Alcotest.(check int) "app_id" 55 tok.config.app_id
+      | None -> Alcotest.fail "expected Some token after init")
+
+let init_from_config_invalid_key_sets_none () =
+  let app_config : Runtime_config.github_app_config =
+    {
+      app_id = 1;
+      private_key_path = "/nonexistent/key.pem";
+      webhook_secret = "test";
+      installations =
+        [ { Runtime_config.installation_id = 1; repos = [ "a/b" ] } ];
+    }
+  in
+  let config : Runtime_config.github_config =
+    {
+      auth = Runtime_config.GithubApp app_config;
+      repos = [];
+      default_model = None;
+    }
+  in
+  Github_app_token.init_from_config config;
+  Alcotest.(check (option string))
+    "invalid key resolves to None" None
+    (Option.map
+       (fun _tok -> "has_token")
+       (Github_app_token.resolve_app_token ()))
+
+let invalidate_all_clears_token () =
+  with_test_rsa_key (fun key_path ->
+      let app_config : Runtime_config.github_app_config =
+        {
+          app_id = 1;
+          private_key_path = key_path;
+          webhook_secret = "test";
+          installations =
+            [ { Runtime_config.installation_id = 1; repos = [ "a/b" ] } ];
+        }
+      in
+      let config : Runtime_config.github_config =
+        {
+          auth = Runtime_config.GithubApp app_config;
+          repos = [];
+          default_model = None;
+        }
+      in
+      Github_app_token.init_from_config config;
+      Alcotest.(check bool)
+        "token exists before invalidate" true
+        (Option.is_some (Github_app_token.resolve_app_token ()));
+      Github_app_token.invalidate_all ();
+      Alcotest.(check (option string))
+        "token gone after invalidate" None
+        (Option.map
+           (fun _tok -> "has_token")
+           (Github_app_token.resolve_app_token ())))
+
 let integration_suite =
   [
     Alcotest.test_case "Github_api uses app installation token" `Quick
       github_api_with_app_auth_posts_comment;
+    Alcotest.test_case "init_from_config with PAT sets None" `Quick
+      init_from_config_pat_sets_none;
+    Alcotest.test_case "init_from_config with App sets token" `Quick
+      init_from_config_app_sets_token;
+    Alcotest.test_case "init_from_config with invalid key sets None" `Quick
+      init_from_config_invalid_key_sets_none;
+    Alcotest.test_case "invalidate_all clears token" `Quick
+      invalidate_all_clears_token;
   ]
