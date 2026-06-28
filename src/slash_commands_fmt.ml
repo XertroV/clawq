@@ -181,6 +181,11 @@ let commands =
       priority = 49;
     };
     {
+      name = "access";
+      description = "Show what Clawq can access here: /access";
+      priority = 46;
+    };
+    {
       name = "tasks";
       description = "Show task tree (compact): /tasks [full]";
       priority = 4;

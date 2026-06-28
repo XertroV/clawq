@@ -459,6 +459,14 @@ let dispatch (env : dispatch_env) (result : Slash_commands.result) : unit Lwt.t
         | None -> "Room memory commands require a database."
       in
       env.send_formatted text
+  | ExplainAccess ->
+      let cfg = Session.get_config session_mgr in
+      let access_key = room_access_key cfg key in
+      let explanation =
+        Access_explanation.create ~config:cfg ~session_key:access_key ()
+      in
+      let text = Access_explanation.to_text explanation in
+      env.send_formatted (Format_adapter.code_block connector text)
   (* Commands with per-connector behaviour are handled by each connector's own
      match and never routed here; treat as a no-op for totality. *)
   | Compact | Delegate _ | ForkAnd _ | AgentInvoke _ | Debate _ | BashRun _

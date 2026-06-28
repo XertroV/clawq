@@ -198,6 +198,7 @@ let rec result_to_string = function
           ^ (if flags <> [] then "," ^ String.concat "," flags else "")
           ^ ")")
   | Slash_commands.NotACommand -> "NotACommand"
+  | Slash_commands.ExplainAccess -> "ExplainAccess"
 
 let rec result_eq a b =
   match (a, b) with
@@ -3161,6 +3162,18 @@ let test_memories_still_workspace () =
         (Printf.sprintf "Expected Memories(oldest=false page=1), got %s"
            (result_to_string other))
 
+let test_access_handle () =
+  Alcotest.check result_testable "/access" Slash_commands.ExplainAccess
+    (Slash_commands.handle "/access")
+
+let test_access_in_commands_list () =
+  let names =
+    List.map
+      (fun (cmd : Slash_commands.command) -> cmd.name)
+      Slash_commands.commands
+  in
+  Alcotest.(check bool) "/access in commands" true (List.mem "access" names)
+
 let suite =
   [
     Alcotest.test_case "handle /start" `Quick test_start;
@@ -3553,4 +3566,7 @@ let suite =
       test_memory_in_commands_list;
     Alcotest.test_case "/memories still workspace" `Quick
       test_memories_still_workspace;
+    Alcotest.test_case "/access handle" `Quick test_access_handle;
+    Alcotest.test_case "/access in commands list" `Quick
+      test_access_in_commands_list;
   ]

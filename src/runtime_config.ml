@@ -759,7 +759,8 @@ let blocked_by_global_security (cfg : t) pattern =
   in
   not (ws_ok && pattern_ok)
 
-let resolve_effective_access (cfg : t) ~session_key ?room_profile () : effective_access =
+let resolve_effective_access (cfg : t) ~session_key ?room_profile () :
+    effective_access =
   let selected_scopes =
     cfg.access_scopes
     |> List.filter (scope_matches cfg ~session_key)
@@ -773,7 +774,7 @@ let resolve_effective_access (cfg : t) ~session_key ?room_profile () : effective
           access_bundles_for_profile cfg profile
           |> List.map (fun bundle ->
               ("room", "room_profile:" ^ profile.id, bundle))
-    | None ->
+    | None -> (
         match resolve_room_profile cfg ~session_key with
         | None -> []
         | Some profile ->
@@ -781,7 +782,7 @@ let resolve_effective_access (cfg : t) ~session_key ?room_profile () : effective
             else
               access_bundles_for_profile cfg profile
               |> List.map (fun bundle ->
-                  ("room", "room_profile:" ^ profile.id, bundle))
+                  ("room", "room_profile:" ^ profile.id, bundle)))
   in
   let scope_bundles =
     selected_scopes
@@ -908,11 +909,17 @@ let resolve_effective_access (cfg : t) ~session_key ?room_profile () : effective
       (fun (grant : effective_access_item) -> String.equal grant.value repo)
       codebase_grants
   in
+  let repo_path_for_codebase_check repo =
+    if repo_grant_is_local_path repo && not (repo_grant_has_glob_metachar repo)
+    then Path_util.normalize_path repo
+    else repo
+  in
   let repo_grant_covered_by_codebase_grants repo =
     if not has_codebase_grants then true
     else if repo_grant_has_glob_metachar repo then
       repo_grant_exactly_covered_by_codebase_grants repo
     else
+      let repo = repo_path_for_codebase_check repo in
       List.exists
         (fun (grant : effective_access_item) ->
           Path_util.glob_matches_path ~pattern:grant.value repo)

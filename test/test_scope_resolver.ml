@@ -485,7 +485,7 @@ let test_repo_grants_blocked_by_global_security () =
   in
   let cfg = parse json in
   let effective =
-    Runtime_config.resolve_effective_access cfg ~session_key:"slack:C123"
+    Runtime_config.resolve_effective_access cfg ~session_key:"slack:C123" ()
   in
   Alcotest.(check (list string))
     "global security keeps workspace repo grant"
@@ -518,7 +518,7 @@ let test_repo_grants_intersect_codebase_grants () =
   in
   let cfg = parse json in
   let effective =
-    Runtime_config.resolve_effective_access cfg ~session_key:"slack:C123"
+    Runtime_config.resolve_effective_access cfg ~session_key:"slack:C123" ()
   in
   Alcotest.(check (list string))
     "codebase grant keeps covered repo grant"
@@ -527,6 +527,37 @@ let test_repo_grants_intersect_codebase_grants () =
   Alcotest.(check (list string))
     "codebase grant blocks uncovered repo grant"
     [ "/tmp/clawq-scope-root/other/app" ]
+    (repo_grant_repos effective.blocked_repo_grants)
+
+let test_repo_grants_normalize_traversal_before_codebase_intersection () =
+  let json =
+    {|{
+      "workspace": "/tmp/clawq-scope-root",
+      "security": {"workspace_only": true, "allowed_cwd_patterns": ["/tmp/clawq-scope-root/**"]},
+      "access_bundles": [
+        {
+          "id": "repo",
+          "codebase_grants": ["/tmp/clawq-scope-root/allowed/**"],
+          "repo_grants": [
+            {"repo": "/tmp/clawq-scope-root/allowed/../other/app", "capabilities": ["read"]}
+          ]
+        }
+      ],
+      "access_scopes": [
+        {"id": "default", "level": "default", "access_bundle_ids": ["repo"]}
+      ]
+    }|}
+  in
+  let cfg = parse json in
+  let effective =
+    Runtime_config.resolve_effective_access cfg ~session_key:"slack:C123" ()
+  in
+  Alcotest.(check (list string))
+    "traversal repo grant is not effective" []
+    (repo_grant_repos effective.repo_grants);
+  Alcotest.(check (list string))
+    "traversal repo grant is blocked by codebase intersection"
+    [ "/tmp/clawq-scope-root/allowed/../other/app" ]
     (repo_grant_repos effective.blocked_repo_grants)
 
 let test_wildcard_repo_grants_require_exact_codebase_grant () =
@@ -559,7 +590,7 @@ let test_wildcard_repo_grants_require_exact_codebase_grant () =
   in
   let cfg = parse json in
   let effective =
-    Runtime_config.resolve_effective_access cfg ~session_key:"slack:C123"
+    Runtime_config.resolve_effective_access cfg ~session_key:"slack:C123" ()
   in
   Alcotest.(check (list string))
     "codebase grant keeps concrete and exact wildcard repo grants"
@@ -788,6 +819,9 @@ let suite =
       test_repo_grants_blocked_by_global_security;
     Alcotest.test_case "repo grants intersect codebase grants" `Quick
       test_repo_grants_intersect_codebase_grants;
+    Alcotest.test_case
+      "repo grants normalize traversal before codebase intersection" `Quick
+      test_repo_grants_normalize_traversal_before_codebase_intersection;
     Alcotest.test_case "wildcard repo grants require exact codebase grant"
       `Quick test_wildcard_repo_grants_require_exact_codebase_grant;
     Alcotest.test_case "legacy repositories become read-only repo grants" `Quick
