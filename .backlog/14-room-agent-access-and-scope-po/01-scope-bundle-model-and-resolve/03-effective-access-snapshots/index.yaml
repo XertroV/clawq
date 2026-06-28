@@ -40,5 +40,6 @@ tasks:
       file: T003-add-snapshot-immutability-regr.todo
       id: T003
       priority: high
-      status: pending
+      status: in_progress
+      tags: []
       title: Add snapshot immutability regression tests
