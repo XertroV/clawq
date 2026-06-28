@@ -1010,6 +1010,57 @@ let parse_config ?(resolve_secrets = true) json =
             : Runtime_config.access_bundle))
     with _ -> []
   in
+  let access_scope_level_of_string = function
+    | "default" -> Some Runtime_config.Default
+    | "workspace" -> Some Runtime_config.Workspace
+    | "channel" -> Some Runtime_config.Channel
+    | "room" -> Some Runtime_config.Room
+    | _ -> None
+  in
+  let access_scopes =
+    let string_list node key =
+      try node |> member key |> to_list |> List.map to_string with _ -> []
+    in
+    try
+      json |> member "access_scopes" |> to_list
+      |> List.map (fun s ->
+          let id = s |> member "id" |> to_string in
+          let level_raw = try s |> member "level" |> to_string with _ -> "" in
+          let level_opt = access_scope_level_of_string level_raw in
+          let level = Option.value ~default:Runtime_config.Default level_opt in
+          let selector_malformed key =
+            match member key s with `Null | `String _ -> false | _ -> true
+          in
+          let workspace =
+            try Some (s |> member "workspace" |> to_string) with _ -> None
+          in
+          let channel =
+            try Some (s |> member "channel" |> to_string) with _ -> None
+          in
+          let room =
+            try Some (s |> member "room" |> to_string) with _ -> None
+          in
+          let status =
+            if
+              Option.is_none level_opt
+              || selector_malformed "workspace"
+              || selector_malformed "channel"
+              || selector_malformed "room"
+            then "deleted"
+            else try s |> member "status" |> to_string with _ -> "active"
+          in
+          ({
+             id;
+             level;
+             workspace;
+             channel;
+             room;
+             access_bundle_ids = string_list s "access_bundle_ids";
+             status;
+           }
+            : Runtime_config.access_scope))
+    with _ -> []
+  in
   {
     workspace;
     Runtime_config.default_temperature;
@@ -1269,6 +1320,7 @@ let parse_config ?(resolve_secrets = true) json =
          ({ enabled; model; delay_s } : Runtime_config.postmortem_config)
        with _ -> Runtime_config.default_postmortem_config);
     access_bundles;
+    access_scopes;
     room_profiles =
       (try
          json |> member "room_profiles" |> to_list
@@ -1451,6 +1503,42 @@ let validate_room_profiles (cfg : Runtime_config.t) : string list =
               :: !issues)
         p.access_bundle_ids)
     cfg.room_profiles;
+  (* Check scope selector shape and access_bundle_ids references. *)
+  List.iter
+    (fun (scope : Runtime_config.access_scope) ->
+      let issue msg =
+        issues :=
+          Printf.sprintf "access_scopes: scope '%s' %s" scope.id msg :: !issues
+      in
+      (match scope.level with
+      | Default ->
+          if
+            scope.workspace <> None || scope.channel <> None
+            || scope.room <> None
+          then issue "must not set workspace, channel, or room selectors"
+      | Workspace ->
+          if Option.is_none scope.workspace then
+            issue "must set workspace for workspace level";
+          if scope.channel <> None || scope.room <> None then
+            issue "must not set channel or room selectors for workspace level"
+      | Channel ->
+          if Option.is_none scope.channel then
+            issue "must set channel for channel level";
+          if scope.room <> None then
+            issue "must not set room selector for channel level"
+      | Room ->
+          if Option.is_none scope.room then issue "must set room for room level");
+      List.iter
+        (fun bundle_id ->
+          if not (Hashtbl.mem bundles_seen bundle_id) then
+            issues :=
+              Printf.sprintf
+                "access_scopes: scope '%s' references non-existent access \
+                 bundle '%s'"
+                scope.id bundle_id
+              :: !issues)
+        scope.access_bundle_ids)
+    cfg.access_scopes;
   List.rev !issues
 
 (* B697: even with no (or unreadable) config.json, surface zero-config xiaomi
@@ -1519,6 +1607,7 @@ let load ?(path = "") () : Runtime_config.t =
         let access_policy_issues =
           validate_access_bundle_json_shapes json
           @ validate_room_profile_access_bundle_json_shapes json
+          @ validate_access_scope_json_shapes json
           @ validate_room_profiles config
         in
         let config =
@@ -1529,8 +1618,8 @@ let load ?(path = "") () : Runtime_config.t =
               (String.concat "; " access_policy_issues);
             Printf.eprintf
               "WARNING: preserving access_bundles, room_profiles, and \
-               room_profile_bindings, but forcing profile-scoped access to \
-               deny until the access policy is repaired\n\
+               room_profile_bindings, but forcing scoped access to deny until \
+               the access policy is repaired\n\
                %!";
             fail_closed_access_policy config)
           else config

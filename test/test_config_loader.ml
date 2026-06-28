@@ -1230,6 +1230,18 @@ let test_room_profiles_roundtrip () =
           };
         ];
       room_profile_codebase_grants = [ ("test-p", [ "$CLAWQ_WORKSPACE/**" ]) ];
+      access_scopes =
+        [
+          {
+            Runtime_config.id = "room-scope";
+            level = Runtime_config.Room;
+            workspace = Some "~/src/test";
+            channel = Some "slack";
+            room = Some "C123";
+            access_bundle_ids = [ "test-bundle" ];
+            status = "active";
+          };
+        ];
     }
   in
   let json = Runtime_config.to_json cfg in
@@ -1255,7 +1267,24 @@ let test_room_profiles_roundtrip () =
     "codebase grants roundtrip"
     [ "$CLAWQ_WORKSPACE/src/**"; "$CLAWQ_WORKSPACE/**" ]
     (Runtime_config.room_profile_codebase_grants_for_profile cfg2
-       ~profile_id:"test-p")
+       ~profile_id:"test-p");
+  Alcotest.(check int)
+    "access scopes roundtrip" 1
+    (List.length cfg2.access_scopes);
+  let s = List.nth cfg2.access_scopes 0 in
+  Alcotest.(check string) "scope id roundtrip" "room-scope" s.id;
+  Alcotest.(check string)
+    "scope workspace roundtrip" "~/src/test"
+    (Option.value ~default:"" s.workspace);
+  Alcotest.(check string)
+    "scope channel roundtrip" "slack"
+    (Option.value ~default:"" s.channel);
+  Alcotest.(check string)
+    "scope room roundtrip" "C123"
+    (Option.value ~default:"" s.room);
+  Alcotest.(check (list string))
+    "scope bundle ids roundtrip" [ "test-bundle" ] s.access_bundle_ids;
+  Alcotest.(check string) "scope status roundtrip" "active" s.status
 
 let test_room_profile_legacy_fields_compile_to_implicit_bundle () =
   let json =
@@ -1574,6 +1603,145 @@ let test_access_bundle_duplicate_ids_rejects () =
   in
   assert_access_policy_fail_closed json ~warning_substring:"duplicate bundle id"
 
+let test_access_scope_invalid_access_bundle_reference_rejects () =
+  let json =
+    {|{
+      "access_bundles": [
+        {"id": "known", "allowed_tools": ["file_read"]}
+      ],
+      "access_scopes": [
+        {"id": "default", "level": "default", "access_bundle_ids": ["missing"]}
+      ]
+    }|}
+  in
+  with_temp_file json (fun path ->
+      let stderr_output =
+        capture_stderr (fun () ->
+            let cfg = Config_loader.load ~path () in
+            Alcotest.(check int)
+              "access scopes disabled" 0
+              (List.length cfg.access_scopes);
+            let effective =
+              Runtime_config.resolve_effective_access cfg
+                ~session_key:"chat:general"
+            in
+            Alcotest.(check (list string))
+              "invalid scope grants no tools" []
+              (List.map
+                 (fun (item : Runtime_config.effective_access_item) ->
+                   item.value)
+                 effective.allowed_tools))
+      in
+      Alcotest.(check bool)
+        "warns about missing scope access bundle" true
+        (Test_helpers.string_contains stderr_output
+           "access_scopes: scope 'default' references non-existent access \
+            bundle"))
+
+let test_access_scope_malformed_access_bundle_ids_rejects () =
+  let json =
+    {|{
+      "access_bundles": [
+        {"id": "known", "allowed_tools": ["file_read"]}
+      ],
+      "access_scopes": [
+        {"id": "default", "level": "default", "access_bundle_ids": {"id": "known"}}
+      ]
+    }|}
+  in
+  with_temp_file json (fun path ->
+      let stderr_output =
+        capture_stderr (fun () ->
+            let cfg = Config_loader.load ~path () in
+            Alcotest.(check int)
+              "malformed access scopes disabled" 0
+              (List.length cfg.access_scopes))
+      in
+      Alcotest.(check bool)
+        "warns about malformed scope access_bundle_ids" true
+        (Test_helpers.string_contains stderr_output
+           "access_scopes[0].access_bundle_ids"))
+
+let test_access_scope_invalid_level_rejects () =
+  let json =
+    {|{
+      "access_bundles": [
+        {"id": "known", "allowed_tools": ["file_read"]}
+      ],
+      "access_scopes": [
+        {"id": "bad", "level": "planet", "access_bundle_ids": ["known"]}
+      ]
+    }|}
+  in
+  with_temp_file json (fun path ->
+      let stderr_output =
+        capture_stderr (fun () ->
+            let cfg = Config_loader.load ~path () in
+            Alcotest.(check int)
+              "invalid level disables scopes" 0
+              (List.length cfg.access_scopes))
+      in
+      Alcotest.(check bool)
+        "warns about invalid scope level" true
+        (Test_helpers.string_contains stderr_output "access_scopes[0].level"))
+
+let test_access_scope_missing_required_selector_rejects () =
+  let json =
+    {|{
+      "access_bundles": [
+        {"id": "known", "allowed_tools": ["file_read"]}
+      ],
+      "access_scopes": [
+        {"id": "room-missing", "level": "room", "access_bundle_ids": ["known"]}
+      ]
+    }|}
+  in
+  with_temp_file json (fun path ->
+      let stderr_output =
+        capture_stderr (fun () ->
+            let cfg = Config_loader.load ~path () in
+            Alcotest.(check int)
+              "missing selector disables scopes" 0
+              (List.length cfg.access_scopes))
+      in
+      Alcotest.(check bool)
+        "warns about missing room selector" true
+        (Test_helpers.string_contains stderr_output
+           "scope 'room-missing' must set room"))
+
+let test_access_scope_malformed_selector_rejects () =
+  let json =
+    {|{
+      "access_bundles": [
+        {"id": "known", "allowed_tools": ["file_read"]}
+      ],
+      "access_scopes": [
+        {"id": "bad-default", "level": "default", "workspace": 42, "access_bundle_ids": ["known"]}
+      ]
+    }|}
+  in
+  with_temp_file json (fun path ->
+      let stderr_output =
+        capture_stderr (fun () ->
+            let cfg = Config_loader.load ~path () in
+            Alcotest.(check int)
+              "malformed selector disables scopes" 0
+              (List.length cfg.access_scopes);
+            let effective =
+              Runtime_config.resolve_effective_access cfg
+                ~session_key:"slack:C123"
+            in
+            Alcotest.(check (list string))
+              "malformed selector grants no tools" []
+              (List.map
+                 (fun (item : Runtime_config.effective_access_item) ->
+                   item.value)
+                 effective.allowed_tools))
+      in
+      Alcotest.(check bool)
+        "warns about malformed workspace selector" true
+        (Test_helpers.string_contains stderr_output "access_scopes[0].workspace"))
+
 let suite =
   [
     Alcotest.test_case "load warns on invalid port" `Quick
@@ -1709,6 +1877,16 @@ let suite =
       test_access_bundle_malformed_security_fields_reject;
     Alcotest.test_case "access_bundles duplicate ids reject" `Quick
       test_access_bundle_duplicate_ids_rejects;
+    Alcotest.test_case "access_scopes invalid access bundle rejects" `Quick
+      test_access_scope_invalid_access_bundle_reference_rejects;
+    Alcotest.test_case "access_scopes malformed access_bundle_ids rejects"
+      `Quick test_access_scope_malformed_access_bundle_ids_rejects;
+    Alcotest.test_case "access_scopes invalid level rejects" `Quick
+      test_access_scope_invalid_level_rejects;
+    Alcotest.test_case "access_scopes missing selector rejects" `Quick
+      test_access_scope_missing_required_selector_rejects;
+    Alcotest.test_case "access_scopes malformed selector rejects" `Quick
+      test_access_scope_malformed_selector_rejects;
     Alcotest.test_case "default_path returns config.json path" `Quick (fun () ->
         let path = Config_loader.default_path () in
         Alcotest.(check bool)
