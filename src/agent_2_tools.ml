@@ -62,6 +62,16 @@ let log_raw_tool_call_failure sk_tag ?raw_tool_calls_json
         tc.function_name tc.id reason
         (raw_tool_call_data_for_log ?raw_tool_calls_json tc))
 
+let parse_tool_arguments (tc : Provider.tool_call) =
+  try Ok (Yojson.Safe.from_string tc.arguments)
+  with _ ->
+    Error
+      (Printf.sprintf
+         "Error: Tool call '%s' failed to parse arguments as JSON (raw: %s). \
+          Re-emit this tool call with a valid JSON object matching the tool \
+          schema."
+         tc.function_name tc.arguments)
+
 let summarize_history_for_wipe history =
   let lines = ref [] in
   let add line = lines := line :: !lines in
@@ -204,41 +214,35 @@ let execute_tool_calls_stream agent ~db ~audit_enabled ~session_key
           with
           | Some msg -> (tc, Error msg)
           | None -> (
-              match agent.tool_registry with
-              | None -> (tc, Error "Error: no tool registry available")
-              | Some registry -> (
-                  match Tool_registry.find registry tc.function_name with
-                  | None ->
-                      ( tc,
-                        Error
-                          (Printf.sprintf "Error: unknown tool '%s'"
-                             tc.function_name) )
-                  | Some tool -> (
-                      match tc.function_name with
-                      | "tool_search" -> (tc, Ok None)
-                      | _ -> (
-                          let args =
-                            try Yojson.Safe.from_string tc.arguments
-                            with _ ->
-                              Logs.warn (fun m ->
-                                  m
-                                    "Tool call '%s': failed to parse arguments \
-                                     as JSON (raw: %s)"
-                                    tc.function_name tc.arguments);
-                              `Assoc []
-                          in
-                          match
-                            validate_required_with_escalation agent tool args
-                          with
+              match tc.function_name with
+              | "tool_search" -> (tc, Ok None)
+              | _ -> (
+                  match agent.tool_registry with
+                  | None -> (tc, Error "Error: no tool registry available")
+                  | Some registry -> (
+                      match Tool_registry.find registry tc.function_name with
+                      | None ->
+                          ( tc,
+                            Error
+                              (Printf.sprintf "Error: unknown tool '%s'"
+                                 tc.function_name) )
+                      | Some tool -> (
+                          match parse_tool_arguments tc with
                           | Error msg -> (tc, Error msg)
-                          | Ok () -> (
+                          | Ok args -> (
                               match
-                                Skill_invocation_guard.use_skill_loaded_noop
-                                  ~reserved_no_arg_skills ~history:agent.history
-                                  tool args
+                                validate_required_with_escalation agent tool
+                                  args
                               with
-                              | Some response -> (tc, Error response)
-                              | None -> (tc, Ok (Some (tool, args)))))))))
+                              | Error msg -> (tc, Error msg)
+                              | Ok () -> (
+                                  match
+                                    Skill_invocation_guard.use_skill_loaded_noop
+                                      ~reserved_no_arg_skills
+                                      ~history:agent.history tool args
+                                  with
+                                  | Some response -> (tc, Error response)
+                                  | None -> (tc, Ok (Some (tool, args))))))))))
       calls
   in
   let* results =
@@ -509,41 +513,35 @@ let execute_tool_calls agent ~db ~audit_enabled ~session_key
           with
           | Some msg -> (tc, Error msg)
           | None -> (
-              match agent.tool_registry with
-              | None -> (tc, Error "Error: no tool registry available")
-              | Some registry -> (
-                  match Tool_registry.find registry tc.function_name with
-                  | None ->
-                      ( tc,
-                        Error
-                          (Printf.sprintf "Error: unknown tool '%s'"
-                             tc.function_name) )
-                  | Some tool -> (
-                      match tc.function_name with
-                      | "tool_search" -> (tc, Ok None)
-                      | _ -> (
-                          let args =
-                            try Yojson.Safe.from_string tc.arguments
-                            with _ ->
-                              Logs.warn (fun m ->
-                                  m
-                                    "Tool call '%s': failed to parse arguments \
-                                     as JSON (raw: %s)"
-                                    tc.function_name tc.arguments);
-                              `Assoc []
-                          in
-                          match
-                            validate_required_with_escalation agent tool args
-                          with
+              match tc.function_name with
+              | "tool_search" -> (tc, Ok None)
+              | _ -> (
+                  match agent.tool_registry with
+                  | None -> (tc, Error "Error: no tool registry available")
+                  | Some registry -> (
+                      match Tool_registry.find registry tc.function_name with
+                      | None ->
+                          ( tc,
+                            Error
+                              (Printf.sprintf "Error: unknown tool '%s'"
+                                 tc.function_name) )
+                      | Some tool -> (
+                          match parse_tool_arguments tc with
                           | Error msg -> (tc, Error msg)
-                          | Ok () -> (
+                          | Ok args -> (
                               match
-                                Skill_invocation_guard.use_skill_loaded_noop
-                                  ~reserved_no_arg_skills ~history:agent.history
-                                  tool args
+                                validate_required_with_escalation agent tool
+                                  args
                               with
-                              | Some response -> (tc, Error response)
-                              | None -> (tc, Ok (Some (tool, args)))))))))
+                              | Error msg -> (tc, Error msg)
+                              | Ok () -> (
+                                  match
+                                    Skill_invocation_guard.use_skill_loaded_noop
+                                      ~reserved_no_arg_skills
+                                      ~history:agent.history tool args
+                                  with
+                                  | Some response -> (tc, Error response)
+                                  | None -> (tc, Ok (Some (tool, args))))))))))
       calls
   in
   let* results =
@@ -572,13 +570,16 @@ let execute_tool_calls agent ~db ~audit_enabled ~session_key
           let before_active_workspace_files =
             capture_active_workspace_file_state agent
           in
-          let* result_msg =
+          let* result_msg, result_for_status =
             match pre_validation with
             | Error err_msg ->
                 Lwt.return
-                  (Provider.make_tool_result ~tool_call_id:tc.id
-                     ~name:tc.function_name ~content:err_msg)
-            | Ok None -> Lwt.return (resolve_tool_search agent tc)
+                  ( Provider.make_tool_result ~tool_call_id:tc.id
+                      ~name:tc.function_name ~content:err_msg,
+                    err_msg )
+            | Ok None ->
+                let msg = resolve_tool_search agent tc in
+                Lwt.return (msg, msg.Provider.content)
             | Ok (Some ((tool : Tool.t), args)) ->
                 let* result =
                   Lwt.catch
@@ -622,11 +623,14 @@ let execute_tool_calls agent ~db ~audit_enabled ~session_key
                     ()
                 in
                 Lwt.return
-                  (Provider.make_tool_result ~tool_call_id:tc.id
-                     ~name:tc.function_name ~content:result_for_history)
+                  ( Provider.make_tool_result ~tool_call_id:tc.id
+                      ~name:tc.function_name ~content:result_for_history,
+                    result )
           in
           let result = result_msg.Provider.content in
-          let success = not (String.starts_with ~prefix:"Error:" result) in
+          let success =
+            not (String.starts_with ~prefix:"Error:" result_for_status)
+          in
           (* B625: structured is_error stamp; see execute_tool_calls_stream. *)
           let result_msg =
             { result_msg with Provider.is_error = not success }

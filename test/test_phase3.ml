@@ -846,6 +846,113 @@ let test_tool_search_config () =
   Alcotest.(check bool)
     "tool_search_enabled" true config.agent_defaults.tool_search_enabled
 
+let test_execute_tool_search_special_case () =
+  let registry = Tool_registry.create () in
+  let deferred_tool =
+    {
+      Tool.name = "hidden_tool";
+      description = "A deferred searchable tool";
+      parameters_schema =
+        `Assoc [ ("type", `String "object"); ("properties", `Assoc []) ];
+      invoke = (fun ?context:_ _ -> Lwt.return "hidden");
+      invoke_stream = None;
+      risk_level = Tool.Low;
+      deferred = true;
+    }
+  in
+  Tool_registry.register registry deferred_tool;
+  let config =
+    {
+      default_config with
+      agent_defaults =
+        { default_config.agent_defaults with tool_search_enabled = true };
+    }
+  in
+  let agent = Agent.create ~config ~tool_registry:registry () in
+  let call =
+    {
+      Provider.id = "search_call";
+      function_name = "tool_search";
+      arguments = {|{"query":"hidden"}|};
+    }
+  in
+  Lwt_main.run
+    (Agent.execute_tool_calls agent ~db:None ~audit_enabled:false
+       ~session_key:None [ call ]);
+  match agent.history with
+  | result :: _ ->
+      Alcotest.(check string) "tool result role" "tool" result.role;
+      Alcotest.(check (option string))
+        "tool result name" (Some "tool_search") result.name;
+      Alcotest.(check bool)
+        "tool_search output" true
+        (Test_helpers.string_contains result.content "tool_search_output");
+      Alcotest.(check bool)
+        "found hidden tool" true
+        (Test_helpers.string_contains result.content "hidden_tool")
+  | [] -> Alcotest.fail "expected tool_search result in history"
+
+let test_stuck_detector_uses_structured_tool_error () =
+  let tool_error id =
+    {
+      (Provider.make_tool_result ~tool_call_id:id ~name:"shell_exec"
+         ~content:"summarized failure without legacy prefix")
+      with
+      Provider.is_error = true;
+    }
+  in
+  let history = [ tool_error "c3"; tool_error "c2"; tool_error "c1" ] in
+  match Stuck_detector.check ~history ~iteration:3 ~max_iters:10 with
+  | Stuck_detector.Definite signals ->
+      let rendered = Stuck_detector.signals_to_string signals in
+      Alcotest.(check bool)
+        "consecutive structured errors detected" true
+        (Test_helpers.string_contains rendered "ConsecutiveErrors")
+  | Stuck_detector.Clear | Stuck_detector.Suspicious _ ->
+      Alcotest.fail "expected definite stuck signal for structured tool errors"
+
+let test_malformed_tool_arguments_do_not_invoke () =
+  let registry = Tool_registry.create () in
+  let invoked = ref false in
+  let tool =
+    {
+      Tool.name = "needs_json";
+      description = "Requires JSON args";
+      parameters_schema =
+        `Assoc
+          [
+            ("type", `String "object");
+            ( "properties",
+              `Assoc [ ("path", `Assoc [ ("type", `String "string") ]) ] );
+            ("required", `List [ `String "path" ]);
+          ];
+      invoke =
+        (fun ?context:_ _ ->
+          invoked := true;
+          Lwt.return "should not run");
+      invoke_stream = None;
+      risk_level = Tool.Low;
+      deferred = false;
+    }
+  in
+  Tool_registry.register registry tool;
+  let agent = Agent.create ~config:default_config ~tool_registry:registry () in
+  let call =
+    { Provider.id = "bad_args"; function_name = "needs_json"; arguments = "" }
+  in
+  Lwt_main.run
+    (Agent.execute_tool_calls agent ~db:None ~audit_enabled:false
+       ~session_key:None [ call ]);
+  Alcotest.(check bool) "tool not invoked" false !invoked;
+  match agent.history with
+  | result :: _ ->
+      Alcotest.(check bool) "marked error" true result.is_error;
+      Alcotest.(check bool)
+        "parse error surfaced" true
+        (Test_helpers.string_contains result.content
+           "failed to parse arguments as JSON")
+  | [] -> Alcotest.fail "expected error result in history"
+
 let suite =
   [
     Alcotest.test_case "system prompt from config" `Quick
@@ -884,4 +991,10 @@ let suite =
       test_tool_search_no_deferred_omits_search_entry;
     Alcotest.test_case "tool search deferred only" `Quick
       test_tool_search_deferred_only;
+    Alcotest.test_case "tool_search executes special-case" `Quick
+      test_execute_tool_search_special_case;
+    Alcotest.test_case "stuck detector uses structured tool errors" `Quick
+      test_stuck_detector_uses_structured_tool_error;
+    Alcotest.test_case "malformed tool args do not invoke" `Quick
+      test_malformed_tool_arguments_do_not_invoke;
   ]

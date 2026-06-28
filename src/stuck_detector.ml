@@ -16,6 +16,9 @@ let is_error_content content =
   let len = String.length content in
   len >= 6 && String.sub content 0 6 = "Error:"
 
+let is_tool_error (msg : Provider.message) =
+  msg.role = "tool" && (msg.is_error || is_error_content msg.content)
+
 let take n lst =
   let rec aux acc k = function
     | [] -> List.rev acc
@@ -31,7 +34,7 @@ let check_consecutive_errors history =
   let rec scan count last_tool last_err = function
     | [] -> (count, last_tool, last_err)
     | (msg : Provider.message) :: rest ->
-        if msg.role = "tool" && is_error_content msg.content then
+        if is_tool_error msg then
           let tool_name =
             match msg.name with Some n when n <> "" -> n | _ -> "unknown"
           in
@@ -66,7 +69,7 @@ let check_same_error_string history =
   let tbl = Hashtbl.create 8 in
   List.iter
     (fun (msg : Provider.message) ->
-      if msg.role = "tool" && is_error_content msg.content then
+      if is_tool_error msg then
         let key = first_line msg.content in
         let prev = try Hashtbl.find tbl key with Not_found -> 0 in
         Hashtbl.replace tbl key (prev + 1))
