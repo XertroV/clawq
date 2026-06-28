@@ -98,7 +98,7 @@ type result =
   | Repo of repo_action
   | HeldItems of held_items_action
   | Memories of memories_action
-  | RoomsMemory of string list
+  | RoomsMemory of room_memory_action
   | Followup of followup_action
   | DebugDumpChat
   | BashRun of string
@@ -171,6 +171,12 @@ let commands =
     {
       name = "memories";
       description = "List stored memories: /memories [oldest/newest] [page]";
+      priority = 49;
+    };
+    {
+      name = "memory";
+      description =
+        "Room memory: /memory [list/show/save/correct/forget] [args]";
       priority = 49;
     };
     {
