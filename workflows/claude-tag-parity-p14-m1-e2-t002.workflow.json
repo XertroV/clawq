@@ -21,8 +21,12 @@
         {
           "name": "p14-m1-e2-t002-conflict-tests",
           "role": "workflow-implementer",
-          "branch": "workflow/p14-m1-e2-t002-conflict-tests",
-          "worktree": "p14-m1-e2-t002-conflict-tests",
+          "worktree": {
+            "branch": "workflow/p14-m1-e2-t002-conflict-tests",
+            "base": "HEAD",
+            "merge_target": "master",
+            "label": "p14-m1-e2-t002-conflict-tests"
+          },
           "prompt": "Complete claimed backlog task P14.M1.E2.T002. Follow AGENTS.md plus src/test CLAUDE.md where relevant and follow PIRFL: inspect existing resolver implementation/tests, plan narrowly, add tests first where feasible, implement only any tiny production fix needed to make intended behavior pass, review, then fix. Do not run bl commands. Acceptance: tests cover duplicate bundles, invalid profile/room refs, allow+deny for same tool, workspace-vs-room override, missing memory grants, and no inherited access weakening global security policy. Prefer adding focused tests to test/test_scope_resolver.ml and config-loader tests only if loader behavior is implicated. Preserve Clawq casing. Run at least make test-run ARGS=\"test scope_resolver\" and make fmt-check; run make test-run ARGS=\"test config_loader\" if config loader tests change. Commit the work on the branch with a concise message.",
           "write_scope": [
             "test/test_scope_resolver.ml",
