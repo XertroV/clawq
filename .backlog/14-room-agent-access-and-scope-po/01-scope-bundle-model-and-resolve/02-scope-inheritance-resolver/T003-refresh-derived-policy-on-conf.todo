@@ -1,14 +1,16 @@
 ---
+claimed_at: "2026-06-28T12:13:26Z"
+claimed_by: workflow-p14-m1-e2-t003
+completed_at: null
 complexity: high
 depends_on:
     - P14.M1.E2.T001
 estimate_hours: 3
 id: P14.M1.E2.T003
 priority: high
-status: pending
-tags:
-    - access
-    - config
+started_at: "2026-06-28T12:13:26Z"
+status: in_progress
+tags: []
 title: Refresh derived policy on config reload
 ---
 Acceptance: config set, file watcher, and SIGHUP refresh in-memory derived policy; failed reload leaves the last valid policy active; tests cover reload success and failure.
