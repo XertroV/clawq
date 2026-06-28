@@ -29,7 +29,8 @@ tasks:
       file: T002-add-rooms-memory-correct-and-f.todo
       id: T002
       priority: high
-      status: pending
+      status: in_progress
+      tags: []
       title: Add rooms memory correct and forget commands
     - complexity: medium
       depends_on:
