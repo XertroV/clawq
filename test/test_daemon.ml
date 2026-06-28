@@ -3059,6 +3059,172 @@ let invoke_file_read registry path =
   in
   Lwt_main.run (tool.Tool.invoke ~context (`Assoc [ ("path", `String path) ]))
 
+let invoke_send_file registry path =
+  let tool = Option.get (Tool_registry.find registry "send_file") in
+  let context =
+    {
+      Tool.session_key = Some "slack:C123";
+      send_progress = None;
+      interrupt_check = None;
+      inject_system_messages = None;
+      effective_cwd = None;
+      request_cwd_change = None;
+    }
+  in
+  Lwt_main.run (tool.Tool.invoke ~context (`Assoc [ ("path", `String path) ]))
+
+let test_apply_runtime_config_reload_refreshes_send_file_policy_closure () =
+  let root = Filename.temp_file "clawq-reload-send-file" "" in
+  Sys.remove root;
+  Unix.mkdir root 0o755;
+  Fun.protect
+    ~finally:(fun () ->
+      ignore (Sys.command (Printf.sprintf "rm -rf %s" (Filename.quote root))))
+    (fun () ->
+      let workspace = Filename.concat root "workspace" in
+      let extra = Filename.concat root "extra" in
+      Unix.mkdir workspace 0o755;
+      Unix.mkdir extra 0o755;
+      let file_path = Filename.concat extra "note.txt" in
+      let oc = open_out file_path in
+      output_string oc "send file content\n";
+      close_out oc;
+      let config1 =
+        {
+          Runtime_config.default with
+          workspace;
+          security =
+            {
+              Runtime_config.default.security with
+              workspace_only = true;
+              extra_allowed_paths = [];
+            };
+        }
+      in
+      let config2 =
+        {
+          config1 with
+          security = { config1.security with extra_allowed_paths = [ extra ] };
+        }
+      in
+      let sent_texts = ref [] in
+      let rich_uploads = ref 0 in
+      let send_fn =
+        Some
+          (fun ~text ->
+            sent_texts := text :: !sent_texts;
+            Lwt.return_unit)
+      in
+      let rich_send_fn =
+        Some
+          (fun ~session_key:_ _message ->
+            incr rich_uploads;
+            Lwt.return Rich_message.{ message_id = "m1"; callback_ids = [] })
+      in
+      let store_file =
+        Some
+          (fun ~content:_ ~content_type:_ ~filename ->
+            Some ("https://files.example/" ^ filename))
+      in
+      let send_file_runtime : Daemon.send_file_runtime =
+        { send_fn; rich_send_fn; store_file }
+      in
+      let registry = Tool_registry.create () in
+      let sandbox = ref (Daemon.make_sandbox config1) in
+      Tools_builtin.register_all ~config:config1 ~sandbox:!sandbox ~send_fn
+        ~rich_send_fn registry;
+      Tool_registry.replace registry
+        (Tools_builtin.send_file ~workspace
+           ~workspace_only:config1.security.workspace_only
+           ~extra_allowed_paths:config1.security.extra_allowed_paths ~send_fn
+           ~rich_send_fn ~store_file);
+      let current_config = ref config1 in
+      let session_manager =
+        Session.create ~config:config1 ~tool_registry:registry ~sandbox:!sandbox
+          ()
+      in
+      let denied = invoke_send_file registry file_path in
+      Alcotest.(check string)
+        "old send_file closure denies file outside original policy"
+        "Error: path is outside workspace. Use an absolute path within the \
+         workspace, or check 'extra_allowed_paths' in config."
+        denied;
+      (match
+         Daemon.apply_runtime_config_reload ~source:"test_reload"
+           ~current_config ~session_manager ~sandbox ~db:None
+           ~tool_registry:(Some registry) ~send_file_runtime ~new_config:config2
+           ()
+       with
+      | Ok () -> ()
+      | Error msg -> Alcotest.fail msg);
+      let allowed = invoke_send_file registry file_path in
+      Alcotest.(check bool)
+        "reloaded send_file closure allows newly granted extra path" true
+        (Test_helpers.string_contains allowed "File sent: note.txt");
+      Alcotest.(check int) "rich upload callback preserved" 1 !rich_uploads;
+      Alcotest.(check int)
+        "download link callback preserved" 1 (List.length !sent_texts))
+
+let test_apply_runtime_config_reload_late_failure_restores_tool_registry () =
+  let root = Filename.temp_file "clawq-reload-rollback" "" in
+  Sys.remove root;
+  Unix.mkdir root 0o755;
+  Fun.protect
+    ~finally:(fun () ->
+      ignore (Sys.command (Printf.sprintf "rm -rf %s" (Filename.quote root))))
+    (fun () ->
+      let workspace = Filename.concat root "workspace" in
+      let extra = Filename.concat root "extra" in
+      Unix.mkdir workspace 0o755;
+      Unix.mkdir extra 0o755;
+      let file_path = Filename.concat extra "note.txt" in
+      let oc = open_out file_path in
+      output_string oc "should remain denied\n";
+      close_out oc;
+      let config1 =
+        {
+          Runtime_config.default with
+          workspace;
+          security =
+            {
+              Runtime_config.default.security with
+              workspace_only = true;
+              extra_allowed_paths = [];
+            };
+        }
+      in
+      let config2 =
+        {
+          config1 with
+          security = { config1.security with extra_allowed_paths = [ extra ] };
+        }
+      in
+      let registry = Tool_registry.create () in
+      let sandbox = ref (Daemon.make_sandbox config1) in
+      Tools_builtin.register_all ~config:config1 ~sandbox:!sandbox registry;
+      let current_config = ref config1 in
+      let session_manager =
+        Session.create ~config:config1 ~tool_registry:registry ~sandbox:!sandbox
+          ()
+      in
+      let result =
+        Daemon.apply_runtime_config_reload ~source:"test_reload" ~current_config
+          ~session_manager ~sandbox ~db:None ~tool_registry:(Some registry)
+          ~new_config:config2
+          ~after_publish:(fun () -> failwith "synthetic late failure")
+          ()
+      in
+      (match result with
+      | Error msg ->
+          Alcotest.(check bool)
+            "reports late failure" true
+            (Test_helpers.string_contains msg "synthetic late failure")
+      | Ok () -> Alcotest.fail "reload unexpectedly succeeded");
+      let denied = invoke_file_read registry file_path in
+      Alcotest.(check string)
+        "rollback restores old file_read policy closure"
+        "Error: path is outside workspace" denied)
+
 let test_apply_runtime_config_reload_refreshes_file_read_policy_closure () =
   let root = Filename.temp_file "clawq-reload-file-read" "" in
   Sys.remove root;
@@ -3716,8 +3882,12 @@ let suite =
       test_apply_runtime_config_reload_refreshes_access_policy_holders;
     Alcotest.test_case "reload failure keeps last valid access policy" `Quick
       test_apply_runtime_config_reload_failure_preserves_access_policy;
+    Alcotest.test_case "reload late failure restores tool registry" `Quick
+      test_apply_runtime_config_reload_late_failure_restores_tool_registry;
     Alcotest.test_case "reload refreshes file_read policy closure" `Quick
       test_apply_runtime_config_reload_refreshes_file_read_policy_closure;
+    Alcotest.test_case "reload refreshes send_file policy closure" `Quick
+      test_apply_runtime_config_reload_refreshes_send_file_policy_closure;
     Alcotest.test_case "reload refreshes access policy tool closures" `Quick
       test_apply_runtime_config_reload_refreshes_access_policy_tool_closures;
     Alcotest.test_case

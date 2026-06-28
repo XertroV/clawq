@@ -36,13 +36,29 @@ let current_max_concurrent_native_agents (current_config : Runtime_config.t ref)
     =
   !current_config.agent_defaults.max_concurrent_native_agents
 
+let refresh_active_template_tool_registries session_manager =
+  match Session.get_tool_registry session_manager with
+  | None -> ()
+  | Some base_registry ->
+      Hashtbl.iter
+        (fun _ (agent, _, _) ->
+          match (agent.Agent.agent_template, agent.Agent.tool_registry) with
+          | Some tmpl, Some registry ->
+              let refreshed =
+                Agent_template.filter_tool_registry base_registry tmpl
+              in
+              Tool_registry.restore registry (Tool_registry.snapshot refreshed)
+          | _ -> ())
+        session_manager.sessions
+
 let apply_runtime_config_reload
     ?(reconcile_room_profiles =
       fun ~db ~config -> ignore (Memory.reconcile_room_profiles ~db ~config))
-    ~source ~current_config ~session_manager ~sandbox ~db ~tool_registry
-    ~new_config () =
+    ?send_file_runtime ?(after_publish = fun () -> ()) ~source ~current_config
+    ~session_manager ~sandbox ~db ~tool_registry ~new_config () =
   let old_config = !current_config in
   let old_sandbox = !sandbox in
+  let old_registry = Option.map Tool_registry.snapshot tool_registry in
   try
     (* Reconcile room profile config into DB BEFORE publishing new_config so
        that on failure the old config and its derived policies remain active. *)
@@ -67,8 +83,8 @@ let apply_runtime_config_reload
              old_sc.threshold_chars new_sc.threshold_chars));
     (match tool_registry with
     | Some registry -> (
-        refresh_runtime_bound_tools ~config:new_config ~session_manager
-          ~sandbox:!sandbox registry;
+        refresh_runtime_bound_tools ?send_file_runtime ~config:new_config
+          ~session_manager ~sandbox:!sandbox registry;
         match db with
         | Some db ->
             let notify =
@@ -80,6 +96,8 @@ let apply_runtime_config_reload
               ?notify registry
         | None -> ())
     | None -> ());
+    refresh_active_template_tool_registries session_manager;
+    after_publish ();
     Ok ()
   with exn ->
     (* Rollback to old config and sandbox on failure to preserve
@@ -87,10 +105,14 @@ let apply_runtime_config_reload
     Logs.warn (fun m ->
         m "Config reload failed [%s], rolling back to previous config: %s"
           source (Printexc.to_string exn));
+    (match (tool_registry, old_registry) with
+    | Some registry, Some snapshot -> Tool_registry.restore registry snapshot
+    | _ -> ());
     sandbox := old_sandbox;
     current_config := old_config;
     Session.set_sandbox session_manager old_sandbox;
     Session.update_config ~source session_manager old_config;
+    refresh_active_template_tool_registries session_manager;
     Http_debug.sync_config old_config.log;
     Error (Printexc.to_string exn)
 
@@ -470,38 +492,30 @@ let run ~(config : Runtime_config.t) =
                           parse channel from key"
                          session_key))))
   in
+  let channel_send_fn =
+    Some (fun ~text -> Session.notify_channel_sessions session_manager text)
+  in
+  let store_file =
+    Some
+      (fun ~content ~content_type ~filename ->
+        Temp_downloads.download_url
+          (Temp_downloads.add ~content ~content_type ~filename ~ttl_s:3600.0))
+  in
+  let send_file_runtime =
+    { send_fn = channel_send_fn; rich_send_fn; store_file }
+  in
   (match tool_registry with
   | Some registry ->
       Tool_registry.register registry
-        (Tools_builtin.send_message ~rich_send_fn
-           ~send_fn:
-             (Some
-                (fun ~text ->
-                  Session.notify_channel_sessions session_manager text)));
+        (Tools_builtin.send_message ~rich_send_fn ~send_fn:channel_send_fn);
       Tool_registry.register registry
-        (Tools_builtin.send_poll ~rich_send_fn
-           ~send_fn:
-             (Some
-                (fun ~text ->
-                  Session.notify_channel_sessions session_manager text)));
+        (Tools_builtin.send_poll ~rich_send_fn ~send_fn:channel_send_fn);
       Tool_registry.register registry
         (Tools_builtin.send_file
            ~workspace:(Runtime_config.effective_workspace !current_config)
            ~workspace_only:config.security.workspace_only
            ~extra_allowed_paths:config.security.extra_allowed_paths
-           ~rich_send_fn
-           ~send_fn:
-             (Some
-                (fun ~text ->
-                  Session.notify_channel_sessions session_manager text))
-           ~store_file:
-             (Some
-                (fun ~content ~content_type ~filename ->
-                  let token =
-                    Temp_downloads.add ~content ~content_type ~filename
-                      ~ttl_s:3600.0
-                  in
-                  Temp_downloads.download_url token)));
+           ~rich_send_fn ~send_fn:channel_send_fn ~store_file);
       Tool_registry.register registry
         (Tools_builtin.compact_history ~compact_fn:(fun ~session_key ->
              match Hashtbl.find_opt session_manager.sessions session_key with
@@ -1094,7 +1108,8 @@ let run ~(config : Runtime_config.t) =
           let new_config = Config_loader.load () in
           match
             apply_runtime_config_reload ~source:"config_reload" ~current_config
-              ~session_manager ~sandbox ~db ~tool_registry ~new_config ()
+              ~session_manager ~sandbox ~db ~tool_registry ~send_file_runtime
+              ~new_config ()
           with
           | Error msg -> Logs.err (fun m -> m "Config reload failed: %s" msg)
           | Ok () ->
@@ -1420,7 +1435,7 @@ let run ~(config : Runtime_config.t) =
                  match
                    apply_runtime_config_reload ~source:"config_file_watch"
                      ~current_config ~session_manager ~sandbox ~db
-                     ~tool_registry ~new_config ()
+                     ~tool_registry ~send_file_runtime ~new_config ()
                  with
                  | Error msg ->
                      (* Do not advance [last_config_mtime]; retry next cycle. *)

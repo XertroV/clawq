@@ -441,7 +441,17 @@ let handle_heartbeat_response
   end;
   Lwt.return_unit
 
-let refresh_runtime_bound_tools ~(config : Runtime_config.t)
+type send_file_runtime = {
+  send_fn : (text:string -> unit Lwt.t) option;
+  rich_send_fn :
+    (session_key:string -> Rich_message.t -> Rich_message.send_result Lwt.t)
+    option;
+  store_file :
+    (content:string -> content_type:string -> filename:string -> string option)
+    option;
+}
+
+let refresh_runtime_bound_tools ?send_file_runtime ~(config : Runtime_config.t)
     ~(session_manager : Session.t) ~sandbox registry =
   let refresh_optional name ~configured make_tool =
     if configured then Tool_registry.replace registry (make_tool ())
@@ -481,6 +491,13 @@ let refresh_runtime_bound_tools ~(config : Runtime_config.t)
     (Tools_builtin_browser.browser ~workspace_only ~config);
   (* Refresh git operations which depend on workspace *)
   Tool_registry.replace registry (Tools_builtin.git_operations ~workspace);
+  (match (Tool_registry.find registry "send_file", send_file_runtime) with
+  | Some _, Some sf ->
+      Tool_registry.replace registry
+        (Tools_builtin.send_file ~workspace ~workspace_only ~extra_allowed_paths
+           ~send_fn:sf.send_fn ~rich_send_fn:sf.rich_send_fn
+           ~store_file:sf.store_file)
+  | _ -> ());
   Tool_registry.replace registry
     (Tools_builtin.shell_exec_with_hooks ~workspace ~workspace_only
        ~allowed_commands:Tools_builtin.default_shell_allowlist
