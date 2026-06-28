@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "kind": "workflow-plan",
+  "title": "P14.M1.E2.T002 Resolver Conflict Coverage",
+  "summary": "Add resolver conflict and precedence coverage for the scoped access resolver.",
+  "goal": "Complete backlog task P14.M1.E2.T002.",
+  "cwd": "/home/xertrov/src/clawq",
+  "runner": "codex-direct",
+  "model": "gpt-5.5",
+  "sandbox": "workspace-write",
+  "approval": "on-request",
+  "max_agents": 1,
+  "startup_delay": 1.0,
+  "tags": ["clawq", "p14", "scope-resolver", "tests"],
+  "phases": [
+    {
+      "name": "implement",
+      "title": "Implement",
+      "summary": "Add focused resolver conflict and precedence tests.",
+      "jobs": [
+        {
+          "name": "p14-m1-e2-t002-conflict-tests",
+          "role": "workflow-implementer",
+          "branch": "workflow/p14-m1-e2-t002-conflict-tests",
+          "worktree": "p14-m1-e2-t002-conflict-tests",
+          "prompt": "Complete claimed backlog task P14.M1.E2.T002. Follow AGENTS.md plus src/test CLAUDE.md where relevant and follow PIRFL: inspect existing resolver implementation/tests, plan narrowly, add tests first where feasible, implement only any tiny production fix needed to make intended behavior pass, review, then fix. Do not run bl commands. Acceptance: tests cover duplicate bundles, invalid profile/room refs, allow+deny for same tool, workspace-vs-room override, missing memory grants, and no inherited access weakening global security policy. Prefer adding focused tests to test/test_scope_resolver.ml and config-loader tests only if loader behavior is implicated. Preserve Clawq casing. Run at least make test-run ARGS=\"test scope_resolver\" and make fmt-check; run make test-run ARGS=\"test config_loader\" if config loader tests change. Commit the work on the branch with a concise message.",
+          "write_scope": [
+            "test/test_scope_resolver.ml",
+            "test/test_config_loader.ml",
+            "src/runtime_config.ml",
+            "src/config_loader.ml",
+            "src/config_loader_support.ml"
+          ],
+          "timeout_secs": 7200,
+          "failure_retries": 0
+        }
+      ]
+    }
+  ]
+}
