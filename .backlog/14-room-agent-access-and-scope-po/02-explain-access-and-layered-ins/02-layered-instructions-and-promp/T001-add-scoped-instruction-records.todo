@@ -1,0 +1,14 @@
+---
+complexity: high
+depends_on:
+    - P14.M1.E2.T001
+estimate_hours: 3
+id: P14.M2.E2.T001
+priority: high
+status: pending
+tags:
+    - access
+    - prompt
+title: Add scoped instruction records with provenance and edit policy
+---
+Acceptance: instructions carry source scope, author/admin metadata, enabled state, digest, and lock/edit permissions.

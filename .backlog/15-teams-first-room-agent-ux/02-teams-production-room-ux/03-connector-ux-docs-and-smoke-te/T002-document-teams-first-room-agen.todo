@@ -1,0 +1,14 @@
+---
+complexity: medium
+depends_on:
+    - P15.M2.E3.T001
+estimate_hours: 2
+id: P15.M2.E3.T002
+priority: medium
+status: pending
+tags:
+    - docs
+    - teams
+title: Document Teams-first room-agent UX
+---
+Acceptance: docs cover Teams production flow, Slack baseline, progress cards/checklists, fallbacks, delivery observability, and known unsupported connector behavior.

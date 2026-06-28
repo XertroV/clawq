@@ -1,0 +1,14 @@
+---
+complexity: high
+depends_on:
+    - P14.M2.E3.T001
+estimate_hours: 3
+id: P14.M2.E3.T002
+priority: high
+status: pending
+tags:
+    - access
+    - compat
+title: Keep current P11-P13 configs behavior-compatible
+---
+Acceptance: current room profile, tool allow/deny, codebase grant, scoped memory, budget, and routine behavior remains equivalent under the resolver bridge.

@@ -1,0 +1,14 @@
+---
+complexity: medium
+depends_on:
+    - P16.M3.E1.T003
+estimate_hours: 2
+id: P16.M3.E1.T004
+priority: high
+status: pending
+tags:
+    - github
+    - tests
+title: Add triggered run idempotency and denial tests
+---
+Acceptance: one bounded run per SHA unless forced; denied repos, missing grants, and unsupported runners are rejected before work starts.

@@ -1,0 +1,46 @@
+complexity: high
+depends_on:
+    - P16.M2.E1
+estimate_hours: 12
+id: P16.M2.E2
+locked: false
+name: CI and Review Update Reporting
+status: pending
+tasks:
+    - complexity: high
+      depends_on:
+        - P16.M2.E1.T003
+      estimate_hours: 3
+      file: T001-normalize-workflow-run-check-s.todo
+      id: T001
+      priority: high
+      status: pending
+      title: Normalize workflow run check suite and review events
+    - complexity: high
+      depends_on:
+        - P16.M2.E2.T001
+        - P15.M1.E2.T001
+      estimate_hours: 3
+      file: T002-render-ci-and-review-updates-t.todo
+      id: T002
+      priority: high
+      status: pending
+      title: Render CI and review updates through room UX
+    - complexity: medium
+      depends_on:
+        - P16.M2.E2.T002
+      estimate_hours: 3
+      file: T003-add-backoff-dedupe-and-quiet-h.todo
+      id: T003
+      priority: high
+      status: pending
+      title: Add backoff dedupe and quiet-hour policy for GitHub updates
+    - complexity: medium
+      depends_on:
+        - P16.M2.E2.T002
+      estimate_hours: 2
+      file: T004-record-github-update-ledger-ev.todo
+      id: T004
+      priority: high
+      status: pending
+      title: Record GitHub update ledger events

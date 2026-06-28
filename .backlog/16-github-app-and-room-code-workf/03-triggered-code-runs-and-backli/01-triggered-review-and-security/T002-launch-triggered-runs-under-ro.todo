@@ -1,0 +1,15 @@
+---
+complexity: high
+depends_on:
+    - P16.M3.E1.T001
+    - P14.M1.E3.T002
+estimate_hours: 4
+id: P16.M3.E1.T002
+priority: high
+status: pending
+tags:
+    - github
+    - runs
+title: Launch triggered runs under room profile policy
+---
+Acceptance: run prompt includes PR metadata/files, grant snapshot, room/thread origin, budget state, and runner policy. Unauthorized repos/users/rooms fail before runner spawn.

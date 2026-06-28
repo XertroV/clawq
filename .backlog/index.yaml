@@ -154,6 +154,62 @@ phases:
       priority: medium
       status: done
       weeks: 4
+    - depends_on:
+        - P13
+      description: 'Claude Tag parity follow-on: access bundles, default/workspace/channel/room inheritance, effective-access snapshots, layered instructions, and redacted explain-access surfaces. Source plan: docs/ultra-plans/claude-tag-parity-next/.'
+      estimate_hours: 56
+      id: P14
+      locked: false
+      name: Room Agent Access and Scope Policy
+      path: 14-room-agent-access-and-scope-po
+      priority: high
+      status: pending
+      weeks: 4
+    - depends_on:
+        - P14
+      description: 'Teams-first production room-agent UX with Slack as the Claude Tag baseline: shared delivery contracts, progress cards/checklists, durable session records, context capture, and delivery observability.'
+      estimate_hours: 56
+      id: P15
+      locked: false
+      name: Teams-First Room-Agent UX
+      path: 15-teams-first-room-agent-ux
+      priority: high
+      status: pending
+      weeks: 4
+    - depends_on:
+        - P14
+      description: GitHub App/bot identity, global and per-room repo grants, PR subscriptions, CI/review update reporting, triggered review/security runs, and backlinks.
+      estimate_hours: 72
+      id: P16
+      locked: false
+      name: GitHub App and Room Code Workflows
+      path: 16-github-app-and-room-code-workf
+      priority: high
+      status: pending
+      weeks: 5
+    - depends_on:
+        - P14
+      description: Room-scoped memory CRUD/provenance, private/public semantics, pilot setup wizard, governance restrictions, readiness report, and audit export.
+      estimate_hours: 56
+      id: P17
+      locked: false
+      name: Room Memory and Admin Governance
+      path: 17-room-memory-and-admin-governan
+      priority: high
+      status: pending
+      weeks: 4
+    - depends_on:
+        - P14
+        - P16
+      description: Staged credential handle/proxy boundary, explicit egress policy wrappers, room-scoped MCP policy, audit/warn enforcement, and verification follow-up specs without formal proof implementation.
+      estimate_hours: 56
+      id: P18
+      locked: false
+      name: Credential Egress and Verification Boundary
+      path: 18-credential-egress-and-verifica
+      priority: high
+      status: pending
+      weeks: 4
 project: Clawq
 stats:
     blocked: 0

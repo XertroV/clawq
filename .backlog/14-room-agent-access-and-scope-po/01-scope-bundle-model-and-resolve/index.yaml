@@ -1,0 +1,37 @@
+complexity: high
+depends_on: []
+epics:
+    - complexity: high
+      depends_on: []
+      description: Named bundles plus legacy room profile bridge.
+      estimate_hours: 10
+      id: E1
+      locked: false
+      name: Access Bundle Data Model
+      path: 01-access-bundle-data-model
+      status: pending
+    - complexity: high
+      depends_on:
+        - P14.M1.E1
+      description: Resolve default/workspace/channel/room layers deterministically.
+      estimate_hours: 10
+      id: E2
+      locked: false
+      name: Scope Inheritance Resolver
+      path: 02-scope-inheritance-resolver
+      status: pending
+    - complexity: high
+      depends_on:
+        - P14.M1.E2
+      description: Persist immutable execution snapshots for room work.
+      estimate_hours: 8
+      id: E3
+      locked: false
+      name: Effective Access Snapshots
+      path: 03-effective-access-snapshots
+      status: pending
+estimate_hours: 28
+id: P14.M1
+locked: false
+name: Scope Bundle Model and Resolver
+status: pending

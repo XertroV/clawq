@@ -1,0 +1,34 @@
+complexity: high
+depends_on: []
+estimate_hours: 8
+id: P15.M1.E1
+locked: false
+name: Delivery Target and Result Model
+status: pending
+tasks:
+    - complexity: high
+      depends_on: []
+      estimate_hours: 3
+      file: T001-define-shared-room-delivery-ta.todo
+      id: T001
+      priority: high
+      status: pending
+      title: Define shared room delivery target and result types
+    - complexity: high
+      depends_on:
+        - P15.M1.E1.T001
+      estimate_hours: 3
+      file: T002-dispatch-room-progress-through.todo
+      id: T002
+      priority: high
+      status: pending
+      title: Dispatch room progress through connector capabilities
+    - complexity: medium
+      depends_on:
+        - P15.M1.E1.T001
+      estimate_hours: 2
+      file: T003-record-delivery-attempts-in-ro.todo
+      id: T003
+      priority: high
+      status: pending
+      title: Record delivery attempts in room activity ledger

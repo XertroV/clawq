@@ -1,0 +1,39 @@
+complexity: high
+depends_on:
+    - P17.M2.E1
+    - P16.M1.E2
+estimate_hours: 8
+id: P17.M2.E2
+locked: false
+name: GitHub Budget Audit Wizard Checks
+status: pending
+tasks:
+    - complexity: high
+      depends_on:
+        - P16.M1.E2.T004
+        - P17.M2.E1.T001
+      estimate_hours: 3
+      file: T001-validate-github-app-and-repo-g.todo
+      id: T001
+      priority: high
+      status: pending
+      title: Validate GitHub App and repo grants in wizard
+    - complexity: medium
+      depends_on:
+        - P17.M2.E1.T001
+      estimate_hours: 2
+      file: T002-validate-room-budget-and-spend.todo
+      id: T002
+      priority: high
+      status: pending
+      title: Validate room budget and spend warnings in wizard
+    - complexity: high
+      depends_on:
+        - P15.M2.E1.T003
+        - P17.M2.E1.T001
+      estimate_hours: 3
+      file: T003-validate-audit-ledger-and-conn.todo
+      id: T003
+      priority: high
+      status: pending
+      title: Validate audit ledger and connector delivery in wizard

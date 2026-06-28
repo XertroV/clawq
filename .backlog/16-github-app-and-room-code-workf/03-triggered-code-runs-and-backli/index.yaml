@@ -1,0 +1,30 @@
+complexity: high
+depends_on:
+    - P16.M2
+epics:
+    - complexity: high
+      depends_on:
+        - P16.M1.E2
+      description: Room/GitHub triggers launch bounded background work under policy.
+      estimate_hours: 12
+      id: E1
+      locked: false
+      name: Triggered Review and Security Runs
+      path: 01-triggered-review-and-security
+      status: pending
+    - complexity: high
+      depends_on:
+        - P16.M2.E2
+        - P16.M3.E1
+      description: Durable links among room threads, tasks, comments, PRs, and workflow runs.
+      estimate_hours: 12
+      id: E2
+      locked: false
+      name: Bidirectional Backlinks and Provenance
+      path: 02-bidirectional-backlinks-and-pr
+      status: pending
+estimate_hours: 24
+id: P16.M3
+locked: false
+name: Triggered Code Runs and Backlinks
+status: pending

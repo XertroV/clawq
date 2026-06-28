@@ -1,0 +1,14 @@
+---
+complexity: high
+depends_on:
+    - P16.M3.E1.T002
+estimate_hours: 3
+id: P16.M3.E1.T003
+priority: high
+status: pending
+tags:
+    - github
+    - workflow
+title: Wire workflow and security-review triggered run entrypoints
+---
+Acceptance: triggered runs can start configured workflow/agent jobs and report progress/final results back to the originating room.

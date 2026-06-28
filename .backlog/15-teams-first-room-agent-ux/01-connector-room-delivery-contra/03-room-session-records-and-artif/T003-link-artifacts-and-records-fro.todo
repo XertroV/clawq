@@ -1,0 +1,16 @@
+---
+complexity: medium
+depends_on:
+    - P15.M1.E3.T002
+    - P15.M1.E2.T002
+    - P15.M1.E2.T003
+estimate_hours: 2
+id: P15.M1.E3.T003
+priority: high
+status: pending
+tags:
+    - teams
+    - artifacts
+title: Link artifacts and records from Teams and Slack messages
+---
+Acceptance: generated files, PRs, logs, workflow runs, and task records have stable references visible in final connector messages.

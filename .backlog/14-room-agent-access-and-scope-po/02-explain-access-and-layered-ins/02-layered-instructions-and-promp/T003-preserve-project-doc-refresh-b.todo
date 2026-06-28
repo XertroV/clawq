@@ -1,0 +1,15 @@
+---
+complexity: medium
+depends_on:
+    - P14.M2.E2.T002
+estimate_hours: 2
+id: P14.M2.E2.T003
+priority: high
+status: pending
+tags:
+    - access
+    - prompt
+    - tests
+title: Preserve project-doc refresh behavior with layered prompts
+---
+Acceptance: prompt tests prove instruction order, project-doc refresh, and room/workspace/channel layering are deterministic and compatible with existing effective_cwd docs.

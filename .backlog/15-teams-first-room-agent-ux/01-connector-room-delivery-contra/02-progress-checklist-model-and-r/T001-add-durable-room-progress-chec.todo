@@ -1,0 +1,14 @@
+---
+complexity: high
+depends_on:
+    - P15.M1.E1.T001
+estimate_hours: 3
+id: P15.M1.E2.T001
+priority: high
+status: pending
+tags:
+    - teams
+    - progress
+title: Add durable room progress checklist model
+---
+Acceptance: planned/current/blocked/done/final states are appendable, resumable, and renderable without re-running model text; state includes task id, transcript/session links, last update, and delivery state.

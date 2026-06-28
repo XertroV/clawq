@@ -1,0 +1,14 @@
+---
+complexity: high
+depends_on:
+    - P17.M1.E1.T001
+estimate_hours: 3
+id: P17.M1.E1.T002
+priority: high
+status: pending
+tags:
+    - memory
+    - rooms
+title: Add rooms memory correct and forget commands
+---
+Acceptance: corrections preserve old/new provenance; forget redacts or tombstones by default with hard purge admin-only if supported by retention policy.

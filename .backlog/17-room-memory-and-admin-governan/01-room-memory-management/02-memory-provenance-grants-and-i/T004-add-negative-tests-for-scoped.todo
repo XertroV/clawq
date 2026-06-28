@@ -1,0 +1,14 @@
+---
+complexity: high
+depends_on:
+    - P17.M1.E2.T003
+estimate_hours: 3
+id: P17.M1.E2.T004
+priority: high
+status: pending
+tags:
+    - memory
+    - tests
+title: Add negative tests for scoped memory isolation
+---
+Acceptance: Channel A cannot list/recall/correct/forget Channel B memory; private memory never appears in workspace/public scope by default; forgotten content is absent from prompt injection and search.

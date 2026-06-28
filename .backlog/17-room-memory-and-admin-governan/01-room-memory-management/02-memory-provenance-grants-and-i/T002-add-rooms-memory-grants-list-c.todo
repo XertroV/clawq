@@ -1,0 +1,14 @@
+---
+complexity: medium
+depends_on:
+    - P17.M1.E2.T001
+estimate_hours: 3
+id: P17.M1.E2.T002
+priority: high
+status: pending
+tags:
+    - memory
+    - admin
+title: Add rooms memory grants list create revoke
+---
+Acceptance: admins can manage memory grants with friendly room/profile names over existing grant primitives; guests cannot mutate grants or read admin-only provenance.

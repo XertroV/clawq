@@ -1,0 +1,46 @@
+complexity: high
+depends_on:
+    - P15.M1.E1
+estimate_hours: 10
+id: P15.M1.E2
+locked: false
+name: Progress Checklist Model and Renderers
+status: pending
+tasks:
+    - complexity: high
+      depends_on:
+        - P15.M1.E1.T001
+      estimate_hours: 3
+      file: T001-add-durable-room-progress-chec.todo
+      id: T001
+      priority: high
+      status: pending
+      title: Add durable room progress checklist model
+    - complexity: high
+      depends_on:
+        - P15.M1.E2.T001
+      estimate_hours: 3
+      file: T002-implement-teams-progress-adapt.todo
+      id: T002
+      priority: high
+      status: pending
+      title: Implement Teams progress Adaptive Card renderer
+    - complexity: medium
+      depends_on:
+        - P15.M1.E2.T001
+      estimate_hours: 2
+      file: T003-implement-slack-baseline-progr.todo
+      id: T003
+      priority: high
+      status: pending
+      title: Implement Slack baseline progress checklist renderer
+    - complexity: medium
+      depends_on:
+        - P15.M1.E2.T002
+        - P15.M1.E2.T003
+      estimate_hours: 2
+      file: T004-add-progress-renderer-fallback.todo
+      id: T004
+      priority: high
+      status: pending
+      title: Add progress renderer fallback tests

@@ -1,0 +1,36 @@
+complexity: medium
+depends_on:
+    - P18.M3.E1
+estimate_hours: 8
+id: P18.M3.E2
+locked: false
+name: Formal Verification Backlog Hooks
+status: pending
+tasks:
+    - complexity: medium
+      depends_on:
+        - P18.M3.E1.T003
+      estimate_hours: 2
+      file: T001-add-proof-follow-up-backlog-no.todo
+      id: T001
+      priority: medium
+      status: pending
+      title: Add proof follow-up backlog notes for selected invariants
+    - complexity: medium
+      depends_on:
+        - P18.M3.E2.T001
+      estimate_hours: 2
+      file: T002-update-verification-documentat.todo
+      id: T002
+      priority: medium
+      status: pending
+      title: Update verification documentation boundaries
+    - complexity: medium
+      depends_on:
+        - P18.M3.E2.T002
+      estimate_hours: 3
+      file: T003-add-policy-docs-implementation.todo
+      id: T003
+      priority: medium
+      status: pending
+      title: Add policy docs implementation drift check

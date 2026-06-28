@@ -1,0 +1,14 @@
+---
+complexity: medium
+depends_on:
+    - P18.M1.E1.T003
+estimate_hours: 2
+id: P18.M1.E1.T004
+priority: high
+status: pending
+tags:
+    - security
+    - tests
+title: Add prompt log ledger redaction tests for credentials
+---
+Acceptance: representative credential-backed operations prove secrets do not appear in prompts, tool results, audit previews, provider history, room activity metadata, errors, or debug logs.

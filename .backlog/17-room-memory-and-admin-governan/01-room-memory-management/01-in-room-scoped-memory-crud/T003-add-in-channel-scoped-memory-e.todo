@@ -1,0 +1,14 @@
+---
+complexity: medium
+depends_on:
+    - P17.M1.E1.T002
+estimate_hours: 3
+id: P17.M1.E1.T003
+priority: high
+status: pending
+tags:
+    - memory
+    - connectors
+title: Add in-channel scoped memory equivalents
+---
+Acceptance: current-room slash/channel memory operations resolve room_id/profile_id to memory_scope_id, refuse ambiguous or unbound rooms, and obey admin/member policy.

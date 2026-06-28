@@ -1,0 +1,15 @@
+---
+complexity: medium
+depends_on:
+    - P17.M2.E3.T003
+    - P17.M1.E2.T003
+estimate_hours: 2
+id: P17.M2.E3.T004
+priority: high
+status: pending
+tags:
+    - governance
+    - audit
+title: Polish room audit export for governance events
+---
+Acceptance: exports include scope snapshot, memory, GitHub, delivery, setup, and policy events with redacted references.

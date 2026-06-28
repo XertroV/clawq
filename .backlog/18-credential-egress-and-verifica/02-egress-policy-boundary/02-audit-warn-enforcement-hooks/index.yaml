@@ -1,0 +1,49 @@
+complexity: high
+depends_on:
+    - P18.M2.E1
+    - P18.M1.E1
+estimate_hours: 10
+id: P18.M2.E2
+locked: false
+name: Audit Warn Enforcement Hooks
+status: pending
+tasks:
+    - complexity: high
+      depends_on:
+        - P18.M2.E1.T002
+        - P18.M1.E1.T003
+      estimate_hours: 3
+      file: T001-add-policy-aware-http-client-w.todo
+      id: T001
+      priority: high
+      status: pending
+      title: Add policy-aware HTTP client wrapper for explicit tools
+    - complexity: medium
+      depends_on:
+        - P18.M2.E2.T001
+      estimate_hours: 2
+      file: T002-emit-egress-audit-and-ledger-e.todo
+      id: T002
+      priority: high
+      status: pending
+      title: Emit egress audit and ledger events
+    - complexity: high
+      depends_on:
+        - P18.M2.E2.T001
+        - P18.M1.E2.T001
+        - P18.M1.E2.T002
+      estimate_hours: 3
+      file: T003-add-deny-mode-for-wrapped-gith.todo
+      id: T003
+      priority: high
+      status: pending
+      title: Add deny mode for wrapped GitHub and MCP paths
+    - complexity: medium
+      depends_on:
+        - P18.M2.E2.T003
+      estimate_hours: 2
+      file: T004-add-egress-decision-and-redact.todo
+      id: T004
+      priority: high
+      status: pending
+      title: Add egress decision and redaction tests

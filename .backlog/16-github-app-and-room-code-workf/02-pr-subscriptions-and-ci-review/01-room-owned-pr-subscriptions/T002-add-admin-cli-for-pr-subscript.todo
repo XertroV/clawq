@@ -1,0 +1,14 @@
+---
+complexity: medium
+depends_on:
+    - P16.M2.E1.T001
+estimate_hours: 3
+id: P16.M2.E1.T002
+priority: high
+status: pending
+tags:
+    - github
+    - cli
+title: Add admin CLI for PR subscription lifecycle
+---
+Acceptance: admins can create/list/show/disable subscriptions; v1 does not expose subscription mutation to agent tools or slash commands unless explicitly admin-gated.

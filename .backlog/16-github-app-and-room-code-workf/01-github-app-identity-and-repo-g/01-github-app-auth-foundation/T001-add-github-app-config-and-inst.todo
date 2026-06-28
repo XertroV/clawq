@@ -1,0 +1,13 @@
+---
+complexity: high
+depends_on: []
+estimate_hours: 3
+id: P16.M1.E1.T001
+priority: high
+status: pending
+tags:
+    - github
+    - config
+title: Add GitHub App config and installation schema
+---
+Acceptance: config supports app id, installation mapping, private-key reference, webhook secret, and migration coexistence with PAT config. Invalid combinations fail closed.

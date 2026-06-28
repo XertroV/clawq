@@ -1,0 +1,34 @@
+complexity: high
+depends_on: []
+estimate_hours: 10
+id: P14.M1.E1
+locked: false
+name: Access Bundle Data Model
+status: pending
+tasks:
+    - complexity: high
+      depends_on: []
+      estimate_hours: 4
+      file: T001-add-access-bundle-config-and-s.todo
+      id: T001
+      priority: high
+      status: pending
+      title: Add access bundle config and storage types
+    - complexity: high
+      depends_on:
+        - P14.M1.E1.T001
+      estimate_hours: 3
+      file: T002-bridge-legacy-room-profile-pol.todo
+      id: T002
+      priority: high
+      status: pending
+      title: Bridge legacy room profile policy into implicit bundles
+    - complexity: medium
+      depends_on:
+        - P14.M1.E1.T001
+      estimate_hours: 2
+      file: T003-fail-closed-on-invalid-bundle.todo
+      id: T003
+      priority: high
+      status: pending
+      title: Fail closed on invalid bundle references

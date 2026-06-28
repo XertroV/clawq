@@ -1,0 +1,14 @@
+---
+complexity: medium
+depends_on:
+    - P18.M2.E2.T003
+estimate_hours: 2
+id: P18.M2.E2.T004
+priority: high
+status: pending
+tags:
+    - security
+    - tests
+title: Add egress decision and redaction tests
+---
+Acceptance: tests cover host/path/method matches, deny precedence, read-only denial, audit mode, and secret redaction.

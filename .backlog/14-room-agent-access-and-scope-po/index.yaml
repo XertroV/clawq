@@ -1,0 +1,29 @@
+complexity: medium
+depends_on:
+    - P13
+estimate_hours: 56
+id: P14
+locked: false
+milestones:
+    - complexity: high
+      depends_on: []
+      description: Access bundle schema, inheritance resolver, and effective-access snapshots.
+      estimate_hours: 28
+      id: M1
+      locked: false
+      name: Scope Bundle Model and Resolver
+      path: 01-scope-bundle-model-and-resolve
+      status: pending
+    - complexity: high
+      depends_on:
+        - P14.M1
+      description: Redacted access explanation plus layered instruction prompt integration.
+      estimate_hours: 28
+      id: M2
+      locked: false
+      name: Explain Access and Layered Instructions
+      path: 02-explain-access-and-layered-ins
+      status: pending
+name: Room Agent Access and Scope Policy
+status: pending
+weeks: 4

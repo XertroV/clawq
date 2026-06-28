@@ -1,0 +1,15 @@
+---
+complexity: medium
+depends_on:
+    - P18.M2.E1.T002
+    - P14.M2.E1.T001
+estimate_hours: 2
+id: P18.M2.E1.T004
+priority: high
+status: pending
+tags:
+    - security
+    - explain
+title: Show egress rules in explain-access output
+---
+Acceptance: explain-access can show allowed/denied/audit egress rules with redacted credential references.

@@ -1,0 +1,14 @@
+---
+complexity: medium
+depends_on:
+    - P14.M1.E3.T002
+estimate_hours: 2
+id: P14.M1.E3.T003
+priority: high
+status: pending
+tags:
+    - access
+    - tests
+title: Add snapshot immutability regression tests
+---
+Acceptance: tests prove background tasks and routines keep their start-time access view even if config changes before completion.

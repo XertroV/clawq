@@ -1,0 +1,41 @@
+complexity: high
+depends_on:
+    - P14.M1
+epics:
+    - complexity: high
+      depends_on:
+        - P14.M1.E3
+      description: Operator and room-facing introspection over effective access.
+      estimate_hours: 10
+      id: E1
+      locked: false
+      name: Explain Access Surface
+      path: 01-explain-access-surface
+      status: pending
+    - complexity: high
+      depends_on:
+        - P14.M1.E2
+      description: Resolve scoped instructions and feed prompt construction deterministically.
+      estimate_hours: 9
+      id: E2
+      locked: false
+      name: Layered Instructions and Prompt Context
+      path: 02-layered-instructions-and-promp
+      status: pending
+    - complexity: high
+      depends_on:
+        - P14.M1.E3
+        - P14.M2.E1
+        - P14.M2.E2
+      description: Route execution through snapshots without regressing existing behavior.
+      estimate_hours: 9
+      id: E3
+      locked: false
+      name: Enforcement Migration Compatibility
+      path: 03-enforcement-migration-compatib
+      status: pending
+estimate_hours: 28
+id: P14.M2
+locked: false
+name: Explain Access and Layered Instructions
+status: pending

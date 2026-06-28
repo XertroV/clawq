@@ -1,0 +1,15 @@
+---
+complexity: medium
+depends_on:
+    - P16.M1.E2.T003
+    - P14.M2.E1.T001
+estimate_hours: 2
+id: P16.M1.E2.T004
+priority: high
+status: pending
+tags:
+    - github
+    - cli
+title: Expose GitHub grants in rooms show inspect explain-access
+---
+Acceptance: rooms show/inspect/explain-access can explain effective GitHub repos and permissions without leaking credentials.

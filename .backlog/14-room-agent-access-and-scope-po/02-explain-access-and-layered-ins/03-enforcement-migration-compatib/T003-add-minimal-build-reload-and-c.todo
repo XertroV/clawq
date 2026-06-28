@@ -1,0 +1,14 @@
+---
+complexity: medium
+depends_on:
+    - P14.M2.E3.T002
+estimate_hours: 2
+id: P14.M2.E3.T003
+priority: high
+status: pending
+tags:
+    - access
+    - tests
+title: Add minimal-build reload and compatibility tests
+---
+Acceptance: minimal build surfaces disabled messages; daemon runtime state refreshes derived policy after config set/watch/SIGHUP; old config fixtures still pass.

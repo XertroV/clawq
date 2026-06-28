@@ -1,0 +1,14 @@
+---
+complexity: high
+depends_on:
+    - P14.M1.E2.T001
+estimate_hours: 4
+id: P14.M1.E3.T001
+priority: high
+status: pending
+tags:
+    - access
+    - snapshots
+title: Persist effective-access snapshots for executable work
+---
+Acceptance: room turns, background tasks, routines, ambient work, and GitHub-triggered work can record immutable snapshot IDs containing config hash, room/profile IDs, bundle sources, grants, denials, instruction layer digests, and redacted summaries.

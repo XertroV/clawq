@@ -1,0 +1,15 @@
+---
+complexity: medium
+depends_on:
+    - P16.M3.E2.T001
+    - P15.M1.E3.T003
+estimate_hours: 2
+id: P16.M3.E2.T003
+priority: high
+status: pending
+tags:
+    - github
+    - teams
+title: Render room-side backlinks for GitHub actions
+---
+Acceptance: room messages link to PR/check/review comment/workflow artifacts; final/failed updates edit or append predictably.

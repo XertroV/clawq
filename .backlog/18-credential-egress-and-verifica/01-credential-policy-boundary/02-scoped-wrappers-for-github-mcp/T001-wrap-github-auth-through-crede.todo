@@ -1,0 +1,15 @@
+---
+complexity: high
+depends_on:
+    - P18.M1.E1.T003
+    - P16.M1.E1.T003
+estimate_hours: 3
+id: P18.M1.E2.T001
+priority: high
+status: pending
+tags:
+    - security
+    - github
+title: Wrap GitHub auth through credential policy
+---
+Acceptance: GitHub calls obtain credentials through snapshot-scoped handles and deny missing or unauthorized handles before API calls.

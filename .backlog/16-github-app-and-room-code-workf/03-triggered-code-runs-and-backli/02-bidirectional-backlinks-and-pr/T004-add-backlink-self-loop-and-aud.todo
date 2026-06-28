@@ -1,0 +1,15 @@
+---
+complexity: medium
+depends_on:
+    - P16.M3.E2.T002
+    - P16.M3.E2.T003
+estimate_hours: 2
+id: P16.M3.E2.T004
+priority: high
+status: pending
+tags:
+    - github
+    - tests
+title: Add backlink self-loop and audit tests
+---
+Acceptance: bot replies retain clawq markers and do not retrigger; ledger/export can trace which room scope caused external GitHub actions and which GitHub event caused room messages.

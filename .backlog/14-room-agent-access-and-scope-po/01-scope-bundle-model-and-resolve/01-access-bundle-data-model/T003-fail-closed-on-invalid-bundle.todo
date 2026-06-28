@@ -1,0 +1,14 @@
+---
+complexity: medium
+depends_on:
+    - P14.M1.E1.T001
+estimate_hours: 2
+id: P14.M1.E1.T003
+priority: high
+status: pending
+tags:
+    - access
+    - tests
+title: Fail closed on invalid bundle references
+---
+Acceptance: invalid credential, repo, memory, tool, MCP, or instruction references fail config validation or effective resolution before work starts; tests cover missing refs and duplicate IDs.

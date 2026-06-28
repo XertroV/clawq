@@ -1,0 +1,46 @@
+complexity: high
+depends_on:
+    - P17.M1.E1
+estimate_hours: 12
+id: P17.M1.E2
+locked: false
+name: Memory Provenance Grants and Isolation
+status: pending
+tasks:
+    - complexity: high
+      depends_on:
+        - P17.M1.E1.T001
+      estimate_hours: 3
+      file: T001-define-public-private-room-mem.todo
+      id: T001
+      priority: high
+      status: pending
+      title: Define public private room memory semantics
+    - complexity: medium
+      depends_on:
+        - P17.M1.E2.T001
+      estimate_hours: 3
+      file: T002-add-rooms-memory-grants-list-c.todo
+      id: T002
+      priority: high
+      status: pending
+      title: Add rooms memory grants list create revoke
+    - complexity: medium
+      depends_on:
+        - P17.M1.E1.T002
+        - P17.M1.E2.T002
+      estimate_hours: 2
+      file: T003-emit-ledger-events-for-memory.todo
+      id: T003
+      priority: high
+      status: pending
+      title: Emit ledger events for memory mutations and grants
+    - complexity: high
+      depends_on:
+        - P17.M1.E2.T003
+      estimate_hours: 3
+      file: T004-add-negative-tests-for-scoped.todo
+      id: T004
+      priority: high
+      status: pending
+      title: Add negative tests for scoped memory isolation

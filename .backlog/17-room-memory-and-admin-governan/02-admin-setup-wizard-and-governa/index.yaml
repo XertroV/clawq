@@ -1,0 +1,40 @@
+complexity: high
+depends_on:
+    - P17.M1
+    - P16.M1
+epics:
+    - complexity: high
+      depends_on: []
+      description: Idempotent Teams-first wizard with Slack baseline support.
+      estimate_hours: 12
+      id: E1
+      locked: false
+      name: Pilot Room Wizard Core
+      path: 01-pilot-room-wizard-core
+      status: pending
+    - complexity: high
+      depends_on:
+        - P17.M2.E1
+        - P16.M1.E2
+      description: Wizard validation for GitHub, budget, and audit readiness.
+      estimate_hours: 8
+      id: E2
+      locked: false
+      name: GitHub Budget Audit Wizard Checks
+      path: 02-github-budget-audit-wizard-che
+      status: pending
+    - complexity: high
+      depends_on:
+        - P17.M2.E1
+      description: Guest/external policy, invocation restrictions, readiness command, and audit export.
+      estimate_hours: 12
+      id: E3
+      locked: false
+      name: Governance Readiness and Audit Export
+      path: 03-governance-readiness-and-audit
+      status: pending
+estimate_hours: 32
+id: P17.M2
+locked: false
+name: Admin Setup Wizard and Governance Readiness
+status: pending

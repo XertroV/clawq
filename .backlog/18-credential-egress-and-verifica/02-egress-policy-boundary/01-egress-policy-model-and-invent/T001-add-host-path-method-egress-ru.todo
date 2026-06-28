@@ -1,0 +1,14 @@
+---
+complexity: high
+depends_on:
+    - P14.M1.E1.T001
+estimate_hours: 3
+id: P18.M2.E1.T001
+priority: high
+status: pending
+tags:
+    - security
+    - egress
+title: Add host path method egress rule model
+---
+Acceptance: policy supports scheme/host/path/method, allow/deny/audit action, read-only/write labels, and scope attachment. Managed default-deny can be enabled without surprising legacy users.

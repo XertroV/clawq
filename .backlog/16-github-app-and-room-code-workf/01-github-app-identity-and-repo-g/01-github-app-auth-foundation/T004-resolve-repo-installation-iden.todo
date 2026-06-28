@@ -1,0 +1,14 @@
+---
+complexity: medium
+depends_on:
+    - P16.M1.E1.T002
+estimate_hours: 2
+id: P16.M1.E1.T004
+priority: high
+status: pending
+tags:
+    - github
+    - webhooks
+title: Resolve repo installation identity from webhook and API context
+---
+Acceptance: app webhooks prove installation identity; uninstalled repos are denied before PR file fetch, hook execution, or background launch.

@@ -1,0 +1,14 @@
+---
+complexity: high
+depends_on:
+    - P14.M1.E1.T001
+estimate_hours: 3
+id: P14.M1.E1.T002
+priority: high
+status: pending
+tags:
+    - access
+    - compat
+title: Bridge legacy room profile policy into implicit bundles
+---
+Acceptance: existing room_profiles.allowed_tools, denied_tools, room_profile_codebase_grants, scoped memory grants, and system_prompt produce equivalent effective access after migration. Legacy configs load without behavior drift and ambiguous settings produce actionable warnings.

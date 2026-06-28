@@ -1,0 +1,14 @@
+---
+complexity: high
+depends_on:
+    - P16.M1.E1.T002
+estimate_hours: 3
+id: P16.M1.E1.T003
+priority: high
+status: pending
+tags:
+    - github
+    - compat
+title: Route GitHub API auth through App/PAT abstraction
+---
+Acceptance: existing GitHub API calls continue with PAT while App-backed calls use installation tokens and preserve error behavior.

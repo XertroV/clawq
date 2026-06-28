@@ -1,0 +1,15 @@
+---
+complexity: high
+depends_on:
+    - P14.M1.E2.T001
+    - P17.M1.E1.T001
+estimate_hours: 4
+id: P17.M2.E1.T001
+priority: high
+status: pending
+tags:
+    - setup
+    - wizard
+title: Add room-agent pilot wizard plan/apply flow
+---
+Acceptance: wizard can plan/apply room profile, access bundle, memory scope, budget, connector binding, and readiness checks without side effects in plan mode.

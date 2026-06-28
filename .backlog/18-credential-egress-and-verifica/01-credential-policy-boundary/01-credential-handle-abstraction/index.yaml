@@ -1,0 +1,44 @@
+complexity: high
+depends_on: []
+estimate_hours: 10
+id: P18.M1.E1
+locked: false
+name: Credential Handle Abstraction
+status: pending
+tasks:
+    - complexity: medium
+      depends_on: []
+      estimate_hours: 3
+      file: T001-inventory-credential-bearing-c.todo
+      id: T001
+      priority: high
+      status: pending
+      title: Inventory credential-bearing callsites
+    - complexity: high
+      depends_on:
+        - P18.M1.E1.T001
+        - P14.M1.E1.T001
+      estimate_hours: 3
+      file: T002-add-credential-handle-and-prov.todo
+      id: T002
+      priority: high
+      status: pending
+      title: Add credential handle and provider types
+    - complexity: high
+      depends_on:
+        - P18.M1.E1.T002
+      estimate_hours: 3
+      file: T003-add-credential-lease-resolutio.todo
+      id: T003
+      priority: high
+      status: pending
+      title: Add credential lease resolution API
+    - complexity: medium
+      depends_on:
+        - P18.M1.E1.T003
+      estimate_hours: 2
+      file: T004-add-prompt-log-ledger-redactio.todo
+      id: T004
+      priority: high
+      status: pending
+      title: Add prompt log ledger redaction tests for credentials

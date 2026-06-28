@@ -1,0 +1,14 @@
+---
+complexity: medium
+depends_on:
+    - P15.M1.E1.T001
+estimate_hours: 2
+id: P15.M1.E1.T003
+priority: high
+status: pending
+tags:
+    - teams
+    - ledger
+title: Record delivery attempts in room activity ledger
+---
+Acceptance: delivery attempts/failures include connector, room, thread/activity id, task id, and sanitized error; empty/failed Teams sends cannot be logged as success.

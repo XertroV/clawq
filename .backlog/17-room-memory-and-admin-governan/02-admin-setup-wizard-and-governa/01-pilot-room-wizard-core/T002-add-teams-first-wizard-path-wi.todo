@@ -1,0 +1,15 @@
+---
+complexity: medium
+depends_on:
+    - P17.M2.E1.T001
+    - P15.M2.E2.T003
+estimate_hours: 3
+id: P17.M2.E1.T002
+priority: high
+status: pending
+tags:
+    - setup
+    - teams
+title: Add Teams-first wizard path with Slack baseline
+---
+Acceptance: wizard validates a Teams room as primary and supports a Slack comparison path when configured.

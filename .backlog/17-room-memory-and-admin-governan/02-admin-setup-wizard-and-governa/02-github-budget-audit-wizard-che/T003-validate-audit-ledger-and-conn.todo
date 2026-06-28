@@ -1,0 +1,15 @@
+---
+complexity: high
+depends_on:
+    - P15.M2.E1.T003
+    - P17.M2.E1.T001
+estimate_hours: 3
+id: P17.M2.E2.T003
+priority: high
+status: pending
+tags:
+    - setup
+    - audit
+title: Validate audit ledger and connector delivery in wizard
+---
+Acceptance: wizard can simulate or run connector delivery and show ledger, delivery, and audit traces enough to prove visibility/accounting.

@@ -1,0 +1,48 @@
+complexity: high
+depends_on:
+    - P16.M1.E1
+    - P14.M1.E2
+estimate_hours: 12
+id: P16.M1.E2
+locked: false
+name: Repo Grants and Room Authorization
+status: pending
+tasks:
+    - complexity: high
+      depends_on:
+        - P14.M1.E2.T001
+      estimate_hours: 3
+      file: T001-add-global-and-per-room-github.todo
+      id: T001
+      priority: high
+      status: pending
+      title: Add global and per-room GitHub repo grant model
+    - complexity: high
+      depends_on:
+        - P16.M1.E2.T001
+      estimate_hours: 3
+      file: T002-intersect-repo-grants-with-cod.todo
+      id: T002
+      priority: high
+      status: pending
+      title: Intersect repo grants with codebase and global security policy
+    - complexity: high
+      depends_on:
+        - P16.M1.E1.T003
+        - P16.M1.E2.T002
+      estimate_hours: 3
+      file: T003-enforce-repo-grants-for-github.todo
+      id: T003
+      priority: high
+      status: pending
+      title: Enforce repo grants for GitHub and room-triggered work
+    - complexity: medium
+      depends_on:
+        - P16.M1.E2.T003
+        - P14.M2.E1.T001
+      estimate_hours: 2
+      file: T004-expose-github-grants-in-rooms.todo
+      id: T004
+      priority: high
+      status: pending
+      title: Expose GitHub grants in rooms show inspect explain-access

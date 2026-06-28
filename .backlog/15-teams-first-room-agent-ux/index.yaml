@@ -1,0 +1,30 @@
+complexity: medium
+depends_on:
+    - P14
+estimate_hours: 56
+id: P15
+locked: false
+milestones:
+    - complexity: high
+      depends_on:
+        - P14.M1
+      description: Shared delivery target/result vocabulary and progress rendering primitives.
+      estimate_hours: 24
+      id: M1
+      locked: false
+      name: Connector Room Delivery Contract
+      path: 01-connector-room-delivery-contra
+      status: pending
+    - complexity: high
+      depends_on:
+        - P15.M1
+      description: Teams context/thread behavior, interactive controls, and delivery truth.
+      estimate_hours: 32
+      id: M2
+      locked: false
+      name: Teams Production Room UX
+      path: 02-teams-production-room-ux
+      status: pending
+name: Teams-First Room-Agent UX
+status: pending
+weeks: 4

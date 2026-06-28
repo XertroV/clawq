@@ -1,0 +1,43 @@
+complexity: high
+depends_on: []
+estimate_hours: 12
+id: P16.M1.E1
+locked: false
+name: GitHub App Auth Foundation
+status: pending
+tasks:
+    - complexity: high
+      depends_on: []
+      estimate_hours: 3
+      file: T001-add-github-app-config-and-inst.todo
+      id: T001
+      priority: high
+      status: pending
+      title: Add GitHub App config and installation schema
+    - complexity: high
+      depends_on:
+        - P16.M1.E1.T001
+      estimate_hours: 4
+      file: T002-implement-github-app-jwt-and-i.todo
+      id: T002
+      priority: high
+      status: pending
+      title: Implement GitHub App JWT and installation-token cache
+    - complexity: high
+      depends_on:
+        - P16.M1.E1.T002
+      estimate_hours: 3
+      file: T003-route-github-api-auth-through.todo
+      id: T003
+      priority: high
+      status: pending
+      title: Route GitHub API auth through App/PAT abstraction
+    - complexity: medium
+      depends_on:
+        - P16.M1.E1.T002
+      estimate_hours: 2
+      file: T004-resolve-repo-installation-iden.todo
+      id: T004
+      priority: high
+      status: pending
+      title: Resolve repo installation identity from webhook and API context

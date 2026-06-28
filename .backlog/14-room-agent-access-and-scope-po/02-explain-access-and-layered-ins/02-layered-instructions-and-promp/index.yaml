@@ -1,0 +1,36 @@
+complexity: high
+depends_on:
+    - P14.M1.E2
+estimate_hours: 9
+id: P14.M2.E2
+locked: false
+name: Layered Instructions and Prompt Context
+status: pending
+tasks:
+    - complexity: high
+      depends_on:
+        - P14.M1.E2.T001
+      estimate_hours: 3
+      file: T001-add-scoped-instruction-records.todo
+      id: T001
+      priority: high
+      status: pending
+      title: Add scoped instruction records with provenance and edit policy
+    - complexity: high
+      depends_on:
+        - P14.M2.E2.T001
+      estimate_hours: 3
+      file: T002-resolve-layered-instructions-i.todo
+      id: T002
+      priority: high
+      status: pending
+      title: Resolve layered instructions into prompt context
+    - complexity: medium
+      depends_on:
+        - P14.M2.E2.T002
+      estimate_hours: 2
+      file: T003-preserve-project-doc-refresh-b.todo
+      id: T003
+      priority: high
+      status: pending
+      title: Preserve project-doc refresh behavior with layered prompts

@@ -1,0 +1,14 @@
+---
+complexity: medium
+depends_on:
+    - P16.M2.E2.T002
+estimate_hours: 3
+id: P16.M2.E2.T003
+priority: high
+status: pending
+tags:
+    - github
+    - policy
+title: Add backoff dedupe and quiet-hour policy for GitHub updates
+---
+Acceptance: noisy CI churn is coalesced; quiet hours, budget, and policy gates are enforced; denials and skips are inspectable.

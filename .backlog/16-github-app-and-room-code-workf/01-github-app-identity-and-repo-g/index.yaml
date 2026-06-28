@@ -1,0 +1,29 @@
+complexity: high
+depends_on:
+    - P14.M1
+epics:
+    - complexity: high
+      depends_on: []
+      description: GitHub App config, JWT, installation tokens, and PAT compatibility.
+      estimate_hours: 12
+      id: E1
+      locked: false
+      name: GitHub App Auth Foundation
+      path: 01-github-app-auth-foundation
+      status: pending
+    - complexity: high
+      depends_on:
+        - P16.M1.E1
+        - P14.M1.E2
+      description: Global/per-room repo grants integrated with effective access.
+      estimate_hours: 12
+      id: E2
+      locked: false
+      name: Repo Grants and Room Authorization
+      path: 02-repo-grants-and-room-authoriza
+      status: pending
+estimate_hours: 24
+id: P16.M1
+locked: false
+name: GitHub App Identity and Repo Grants
+status: pending

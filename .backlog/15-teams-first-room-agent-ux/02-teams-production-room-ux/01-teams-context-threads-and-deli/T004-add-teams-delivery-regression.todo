@@ -1,0 +1,14 @@
+---
+complexity: medium
+depends_on:
+    - P15.M2.E1.T003
+estimate_hours: 2
+id: P15.M2.E1.T004
+priority: high
+status: pending
+tags:
+    - teams
+    - tests
+title: Add Teams delivery regression tests
+---
+Acceptance: tests cover empty activity id, missing/invalid service_url, card update failure, fallback send, and scheduler/background delivery correlation.

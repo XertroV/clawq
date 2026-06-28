@@ -1,0 +1,14 @@
+---
+complexity: medium
+depends_on:
+    - P18.M2.E2.T001
+estimate_hours: 2
+id: P18.M2.E2.T002
+priority: high
+status: pending
+tags:
+    - security
+    - audit
+title: Emit egress audit and ledger events
+---
+Acceptance: allowed and denied network decisions record redacted host/method/rule/profile/tool/snapshot; credential IDs are aliases, never values.

@@ -1,0 +1,45 @@
+complexity: high
+depends_on: []
+estimate_hours: 10
+id: P18.M2.E1
+locked: false
+name: Egress Policy Model and Inventory
+status: pending
+tasks:
+    - complexity: high
+      depends_on:
+        - P14.M1.E1.T001
+      estimate_hours: 3
+      file: T001-add-host-path-method-egress-ru.todo
+      id: T001
+      priority: high
+      status: pending
+      title: Add host path method egress rule model
+    - complexity: high
+      depends_on:
+        - P18.M2.E1.T001
+      estimate_hours: 3
+      file: T002-implement-pure-egress-policy-e.todo
+      id: T002
+      priority: high
+      status: pending
+      title: Implement pure egress policy evaluator
+    - complexity: medium
+      depends_on:
+        - P18.M2.E1.T001
+      estimate_hours: 3
+      file: T003-inventory-outbound-network-cal.todo
+      id: T003
+      priority: high
+      status: pending
+      title: Inventory outbound network callsites
+    - complexity: medium
+      depends_on:
+        - P18.M2.E1.T002
+        - P14.M2.E1.T001
+      estimate_hours: 2
+      file: T004-show-egress-rules-in-explain-a.todo
+      id: T004
+      priority: high
+      status: pending
+      title: Show egress rules in explain-access output

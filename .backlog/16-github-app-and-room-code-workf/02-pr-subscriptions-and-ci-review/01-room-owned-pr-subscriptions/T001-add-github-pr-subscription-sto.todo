@@ -1,0 +1,14 @@
+---
+complexity: high
+depends_on:
+    - P16.M1.E2.T003
+estimate_hours: 3
+id: P16.M2.E1.T001
+priority: high
+status: pending
+tags:
+    - github
+    - subscriptions
+title: Add GitHub PR subscription storage model
+---
+Acceptance: subscriptions record room/profile, owner/repo, PR selector/event filters, creator, thread, policy snapshot, enabled state, dedupe key, and rate-limit state.

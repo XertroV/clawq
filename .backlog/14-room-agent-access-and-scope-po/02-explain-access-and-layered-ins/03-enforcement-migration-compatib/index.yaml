@@ -1,0 +1,39 @@
+complexity: high
+depends_on:
+    - P14.M1.E3
+    - P14.M2.E1
+    - P14.M2.E2
+estimate_hours: 9
+id: P14.M2.E3
+locked: false
+name: Enforcement Migration Compatibility
+status: pending
+tasks:
+    - complexity: high
+      depends_on:
+        - P14.M1.E3.T002
+        - P14.M2.E2.T002
+      estimate_hours: 4
+      file: T001-route-room-execution-through-e.todo
+      id: T001
+      priority: high
+      status: pending
+      title: Route room execution through effective-access snapshots
+    - complexity: high
+      depends_on:
+        - P14.M2.E3.T001
+      estimate_hours: 3
+      file: T002-keep-current-p11-p13-configs-b.todo
+      id: T002
+      priority: high
+      status: pending
+      title: Keep current P11-P13 configs behavior-compatible
+    - complexity: medium
+      depends_on:
+        - P14.M2.E3.T002
+      estimate_hours: 2
+      file: T003-add-minimal-build-reload-and-c.todo
+      id: T003
+      priority: high
+      status: pending
+      title: Add minimal-build reload and compatibility tests

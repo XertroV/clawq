@@ -1,0 +1,14 @@
+---
+complexity: high
+depends_on:
+    - P17.M2.E1.T001
+estimate_hours: 3
+id: P17.M2.E1.T003
+priority: high
+status: pending
+tags:
+    - setup
+    - wizard
+title: Add idempotent rerun and repair behavior
+---
+Acceptance: partial setup can be rerun safely and reports changed, already-valid, blocked, and manual-repair commands without overwriting unrelated config.

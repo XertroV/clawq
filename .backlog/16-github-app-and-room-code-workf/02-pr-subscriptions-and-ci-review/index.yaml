@@ -1,0 +1,29 @@
+complexity: high
+depends_on:
+    - P16.M1
+epics:
+    - complexity: high
+      depends_on:
+        - P16.M1.E2
+      description: Subscription storage, commands, and webhook routing.
+      estimate_hours: 12
+      id: E1
+      locked: false
+      name: Room-Owned PR Subscriptions
+      path: 01-room-owned-pr-subscriptions
+      status: pending
+    - complexity: high
+      depends_on:
+        - P16.M2.E1
+      description: Normalize and render CI/review events through room UX.
+      estimate_hours: 12
+      id: E2
+      locked: false
+      name: CI and Review Update Reporting
+      path: 02-ci-and-review-update-reporting
+      status: pending
+estimate_hours: 24
+id: P16.M2
+locked: false
+name: PR Subscriptions and CI Review Reporting
+status: pending

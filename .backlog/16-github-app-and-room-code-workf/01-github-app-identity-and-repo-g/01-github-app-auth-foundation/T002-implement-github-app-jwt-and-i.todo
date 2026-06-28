@@ -1,0 +1,14 @@
+---
+complexity: high
+depends_on:
+    - P16.M1.E1.T001
+estimate_hours: 4
+id: P16.M1.E1.T002
+priority: high
+status: pending
+tags:
+    - github
+    - auth
+title: Implement GitHub App JWT and installation-token cache
+---
+Acceptance: installation tokens are minted, cached briefly, scoped to installation/repo, redacted in logs, and covered with mocked GitHub response tests.

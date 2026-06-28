@@ -1,0 +1,14 @@
+---
+complexity: medium
+depends_on:
+    - P14.M2.E3.T002
+estimate_hours: 2
+id: P18.M3.E1.T001
+priority: medium
+status: pending
+tags:
+    - verification
+    - docs
+title: Write scope resolution invariant spec
+---
+Acceptance: spec lists resolver determinism, precedence, conflict, snapshot, and reload invariants with links to runtime tests.

@@ -1,0 +1,38 @@
+complexity: high
+depends_on:
+    - P14.M1
+epics:
+    - complexity: high
+      depends_on: []
+      description: Connector-general delivery contracts for room progress and final messages.
+      estimate_hours: 8
+      id: E1
+      locked: false
+      name: Delivery Target and Result Model
+      path: 01-delivery-target-and-result-mod
+      status: pending
+    - complexity: high
+      depends_on:
+        - P15.M1.E1
+      description: Durable checklist state and Teams/Slack renderers.
+      estimate_hours: 10
+      id: E2
+      locked: false
+      name: Progress Checklist Model and Renderers
+      path: 02-progress-checklist-model-and-r
+      status: pending
+    - complexity: high
+      depends_on:
+        - P15.M1.E2
+      description: Read-only room work records linked from connector UX.
+      estimate_hours: 6
+      id: E3
+      locked: false
+      name: Room Session Records and Artifact Links
+      path: 03-room-session-records-and-artif
+      status: pending
+estimate_hours: 24
+id: P15.M1
+locked: false
+name: Connector Room Delivery Contract
+status: pending

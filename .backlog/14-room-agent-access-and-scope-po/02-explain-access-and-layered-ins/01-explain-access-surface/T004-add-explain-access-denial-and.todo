@@ -1,0 +1,15 @@
+---
+complexity: medium
+depends_on:
+    - P14.M2.E1.T002
+    - P14.M2.E1.T003
+estimate_hours: 2
+id: P14.M2.E1.T004
+priority: high
+status: pending
+tags:
+    - access
+    - tests
+title: Add explain-access denial and redaction tests
+---
+Acceptance: denied tools/repos/credentials/memory scopes are explained without exposing private values or unrelated scopes.

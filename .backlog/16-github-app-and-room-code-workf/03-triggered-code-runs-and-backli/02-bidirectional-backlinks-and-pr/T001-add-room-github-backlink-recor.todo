@@ -1,0 +1,14 @@
+---
+complexity: high
+depends_on:
+    - P16.M2.E2.T004
+estimate_hours: 3
+id: P16.M3.E2.T001
+priority: high
+status: pending
+tags:
+    - github
+    - backlinks
+title: Add room GitHub backlink records
+---
+Acceptance: PR comments, branches, commits, workflow runs, background tasks, room threads, and artifacts can reference each other durably for retries and audit.

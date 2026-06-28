@@ -1,0 +1,14 @@
+---
+complexity: high
+depends_on:
+    - P14.M1.E3.T002
+estimate_hours: 3
+id: P14.M2.E1.T001
+priority: high
+status: pending
+tags:
+    - access
+    - explain
+title: Build redacted effective-access explanation API
+---
+Acceptance: API lists inherited scopes, grants, denied capabilities, active instructions, budget, memory, repos, MCP/skills, domains, and credential handles without secret values.

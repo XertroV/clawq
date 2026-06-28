@@ -1,0 +1,28 @@
+complexity: high
+depends_on:
+    - P14.M1
+epics:
+    - complexity: high
+      depends_on: []
+      description: Room memory save/list/show/correct/forget over scoped memory APIs.
+      estimate_hours: 12
+      id: E1
+      locked: false
+      name: In-Room Scoped Memory CRUD
+      path: 01-in-room-scoped-memory-crud
+      status: pending
+    - complexity: high
+      depends_on:
+        - P17.M1.E1
+      description: Public/private semantics, grant management, provenance, and leak tests.
+      estimate_hours: 12
+      id: E2
+      locked: false
+      name: Memory Provenance Grants and Isolation
+      path: 02-memory-provenance-grants-and-i
+      status: pending
+estimate_hours: 24
+id: P17.M1
+locked: false
+name: Room Memory Management
+status: pending

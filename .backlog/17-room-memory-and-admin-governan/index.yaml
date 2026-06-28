@@ -1,0 +1,31 @@
+complexity: medium
+depends_on:
+    - P14
+estimate_hours: 56
+id: P17
+locked: false
+milestones:
+    - complexity: high
+      depends_on:
+        - P14.M1
+      description: Room-scoped memory CRUD, provenance, and isolation semantics.
+      estimate_hours: 24
+      id: M1
+      locked: false
+      name: Room Memory Management
+      path: 01-room-memory-management
+      status: pending
+    - complexity: high
+      depends_on:
+        - P17.M1
+        - P16.M1
+      description: Pilot setup wizard, readiness report, guest/invocation policy, and audit export.
+      estimate_hours: 32
+      id: M2
+      locked: false
+      name: Admin Setup Wizard and Governance Readiness
+      path: 02-admin-setup-wizard-and-governa
+      status: pending
+name: Room Memory and Admin Governance
+status: pending
+weeks: 4

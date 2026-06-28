@@ -1,0 +1,14 @@
+---
+complexity: medium
+depends_on:
+    - P14.M2.E1.T001
+estimate_hours: 3
+id: P14.M2.E1.T002
+priority: high
+status: pending
+tags:
+    - access
+    - cli
+title: Add rooms explain-access CLI and JSON output
+---
+Acceptance: admins can run rooms explain-access <room_id> with text and --json output; unbound rooms receive actionable explanation; minimal build returns a disabled integration message where applicable.

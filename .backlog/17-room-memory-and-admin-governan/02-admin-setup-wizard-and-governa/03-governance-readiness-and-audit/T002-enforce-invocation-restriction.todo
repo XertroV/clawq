@@ -1,0 +1,14 @@
+---
+complexity: high
+depends_on:
+    - P17.M2.E3.T001
+estimate_hours: 3
+id: P17.M2.E3.T002
+priority: high
+status: pending
+tags:
+    - governance
+    - policy
+title: Enforce invocation restrictions by scope
+---
+Acceptance: role/member/admin rules are checked before room work, routines, memory mutation, and GitHub triggers; denials are explainable and redacted.

@@ -1,0 +1,15 @@
+---
+complexity: high
+depends_on:
+    - P18.M3.E1.T001
+    - P18.M3.E1.T002
+estimate_hours: 3
+id: P18.M3.E1.T003
+priority: medium
+status: pending
+tags:
+    - verification
+    - tests
+title: Add runtime conformance tests for proof candidates
+---
+Acceptance: selected invariants have executable tests before any future proof task is opened; no Coq proof is claimed.

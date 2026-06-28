@@ -1,0 +1,14 @@
+---
+complexity: high
+depends_on:
+    - P14.M1.E3.T001
+estimate_hours: 3
+id: P14.M1.E3.T002
+priority: high
+status: pending
+tags:
+    - access
+    - ledger
+title: Attach snapshots to session task and ledger metadata
+---
+Acceptance: room session/task/routine/ledger records include snapshot references; running work continues with the original snapshot after config changes.

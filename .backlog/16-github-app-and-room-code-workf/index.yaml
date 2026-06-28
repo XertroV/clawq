@@ -1,0 +1,40 @@
+complexity: medium
+depends_on:
+    - P14
+estimate_hours: 72
+id: P16
+locked: false
+milestones:
+    - complexity: high
+      depends_on:
+        - P14.M1
+      description: App installation identity, token exchange, and repo grants.
+      estimate_hours: 24
+      id: M1
+      locked: false
+      name: GitHub App Identity and Repo Grants
+      path: 01-github-app-identity-and-repo-g
+      status: pending
+    - complexity: high
+      depends_on:
+        - P16.M1
+      description: Room-owned subscriptions and actionable GitHub status updates.
+      estimate_hours: 24
+      id: M2
+      locked: false
+      name: PR Subscriptions and CI Review Reporting
+      path: 02-pr-subscriptions-and-ci-review
+      status: pending
+    - complexity: high
+      depends_on:
+        - P16.M2
+      description: Explicit review/security runs and durable room/GitHub backlinks.
+      estimate_hours: 24
+      id: M3
+      locked: false
+      name: Triggered Code Runs and Backlinks
+      path: 03-triggered-code-runs-and-backli
+      status: pending
+name: GitHub App and Room Code Workflows
+status: pending
+weeks: 5

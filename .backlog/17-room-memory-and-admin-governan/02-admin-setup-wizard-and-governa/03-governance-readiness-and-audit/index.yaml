@@ -1,0 +1,47 @@
+complexity: high
+depends_on:
+    - P17.M2.E1
+estimate_hours: 12
+id: P17.M2.E3
+locked: false
+name: Governance Readiness and Audit Export
+status: pending
+tasks:
+    - complexity: high
+      depends_on:
+        - P14.M1.E2.T001
+      estimate_hours: 3
+      file: T001-add-guest-external-room-policy.todo
+      id: T001
+      priority: high
+      status: pending
+      title: Add guest external room policy model
+    - complexity: high
+      depends_on:
+        - P17.M2.E3.T001
+      estimate_hours: 3
+      file: T002-enforce-invocation-restriction.todo
+      id: T002
+      priority: high
+      status: pending
+      title: Enforce invocation restrictions by scope
+    - complexity: medium
+      depends_on:
+        - P17.M2.E2.T003
+        - P17.M2.E3.T002
+      estimate_hours: 3
+      file: T003-add-room-agent-readiness-repor.todo
+      id: T003
+      priority: high
+      status: pending
+      title: Add room-agent readiness report command
+    - complexity: medium
+      depends_on:
+        - P17.M2.E3.T003
+        - P17.M1.E2.T003
+      estimate_hours: 2
+      file: T004-polish-room-audit-export-for-g.todo
+      id: T004
+      priority: high
+      status: pending
+      title: Polish room audit export for governance events

@@ -1,0 +1,15 @@
+---
+complexity: medium
+depends_on:
+    - P15.M1.E2.T002
+    - P15.M1.E2.T003
+estimate_hours: 2
+id: P15.M1.E2.T004
+priority: high
+status: pending
+tags:
+    - teams
+    - tests
+title: Add progress renderer fallback tests
+---
+Acceptance: tests cover Teams card failure fallback, Slack edit failure fallback, and unsupported connector text fallback.

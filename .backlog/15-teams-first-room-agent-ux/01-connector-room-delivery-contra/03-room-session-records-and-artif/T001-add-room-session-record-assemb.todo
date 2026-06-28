@@ -1,0 +1,15 @@
+---
+complexity: high
+depends_on:
+    - P14.M1.E3.T002
+    - P15.M1.E2.T001
+estimate_hours: 3
+id: P15.M1.E3.T001
+priority: high
+status: pending
+tags:
+    - teams
+    - sessions
+title: Add room session record assembler
+---
+Acceptance: record combines task origin, prompt summary, context snapshot refs, connector history refs, transcript refs, request stats, ledger events, policy/profile snapshot, artifacts, and final state.

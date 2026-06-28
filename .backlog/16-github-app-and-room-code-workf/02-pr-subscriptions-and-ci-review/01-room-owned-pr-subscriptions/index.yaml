@@ -1,0 +1,46 @@
+complexity: high
+depends_on:
+    - P16.M1.E2
+estimate_hours: 12
+id: P16.M2.E1
+locked: false
+name: Room-Owned PR Subscriptions
+status: pending
+tasks:
+    - complexity: high
+      depends_on:
+        - P16.M1.E2.T003
+      estimate_hours: 3
+      file: T001-add-github-pr-subscription-sto.todo
+      id: T001
+      priority: high
+      status: pending
+      title: Add GitHub PR subscription storage model
+    - complexity: medium
+      depends_on:
+        - P16.M2.E1.T001
+      estimate_hours: 3
+      file: T002-add-admin-cli-for-pr-subscript.todo
+      id: T002
+      priority: high
+      status: pending
+      title: Add admin CLI for PR subscription lifecycle
+    - complexity: high
+      depends_on:
+        - P16.M2.E1.T001
+        - P15.M1.E1.T001
+      estimate_hours: 4
+      file: T003-dispatch-subscribed-github-eve.todo
+      id: T003
+      priority: high
+      status: pending
+      title: Dispatch subscribed GitHub events into room threads
+    - complexity: medium
+      depends_on:
+        - P16.M2.E1.T003
+      estimate_hours: 2
+      file: T004-add-subscription-lifecycle-and.todo
+      id: T004
+      priority: high
+      status: pending
+      title: Add subscription lifecycle and leak tests

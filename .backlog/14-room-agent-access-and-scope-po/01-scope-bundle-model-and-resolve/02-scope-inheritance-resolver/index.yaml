@@ -1,0 +1,37 @@
+complexity: high
+depends_on:
+    - P14.M1.E1
+estimate_hours: 10
+id: P14.M1.E2
+locked: false
+name: Scope Inheritance Resolver
+status: pending
+tasks:
+    - complexity: high
+      depends_on:
+        - P14.M1.E1.T001
+        - P14.M1.E1.T002
+      estimate_hours: 4
+      file: T001-implement-deterministic-scope.todo
+      id: T001
+      priority: high
+      status: pending
+      title: Implement deterministic scope inheritance resolver
+    - complexity: high
+      depends_on:
+        - P14.M1.E2.T001
+      estimate_hours: 3
+      file: T002-add-resolver-conflict-and-prec.todo
+      id: T002
+      priority: high
+      status: pending
+      title: Add resolver conflict and precedence tests
+    - complexity: high
+      depends_on:
+        - P14.M1.E2.T001
+      estimate_hours: 3
+      file: T003-refresh-derived-policy-on-conf.todo
+      id: T003
+      priority: high
+      status: pending
+      title: Refresh derived policy on config reload

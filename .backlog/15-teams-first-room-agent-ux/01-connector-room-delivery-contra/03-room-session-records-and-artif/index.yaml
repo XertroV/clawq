@@ -1,0 +1,39 @@
+complexity: high
+depends_on:
+    - P15.M1.E2
+estimate_hours: 6
+id: P15.M1.E3
+locked: false
+name: Room Session Records and Artifact Links
+status: pending
+tasks:
+    - complexity: high
+      depends_on:
+        - P14.M1.E3.T002
+        - P15.M1.E2.T001
+      estimate_hours: 3
+      file: T001-add-room-session-record-assemb.todo
+      id: T001
+      priority: high
+      status: pending
+      title: Add room session record assembler
+    - complexity: medium
+      depends_on:
+        - P15.M1.E3.T001
+      estimate_hours: 2
+      file: T002-expose-room-session-record-via.todo
+      id: T002
+      priority: high
+      status: pending
+      title: Expose room session record via CLI or local endpoint
+    - complexity: medium
+      depends_on:
+        - P15.M1.E3.T002
+        - P15.M1.E2.T002
+        - P15.M1.E2.T003
+      estimate_hours: 2
+      file: T003-link-artifacts-and-records-fro.todo
+      id: T003
+      priority: high
+      status: pending
+      title: Link artifacts and records from Teams and Slack messages

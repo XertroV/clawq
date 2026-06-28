@@ -1,0 +1,14 @@
+---
+complexity: high
+depends_on:
+    - P15.M1.E2.T001
+estimate_hours: 3
+id: P15.M1.E2.T002
+priority: high
+status: pending
+tags:
+    - teams
+    - cards
+title: Implement Teams progress Adaptive Card renderer
+---
+Acceptance: room-origin background task shows one evolving Teams card or supported fallback with status, action controls, and artifact links; raw prompts/logs are not shown by default.

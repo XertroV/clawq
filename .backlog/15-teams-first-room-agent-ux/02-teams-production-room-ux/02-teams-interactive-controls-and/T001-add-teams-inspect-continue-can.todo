@@ -1,0 +1,15 @@
+---
+complexity: high
+depends_on:
+    - P15.M1.E2.T002
+    - P15.M2.E1.T001
+estimate_hours: 3
+id: P15.M2.E2.T001
+priority: high
+status: pending
+tags:
+    - teams
+    - cards
+title: Add Teams inspect continue cancel controls
+---
+Acceptance: Teams card actions route through room policy and return clear feedback for allowed, denied, stale, unauthorized, and unsupported states.

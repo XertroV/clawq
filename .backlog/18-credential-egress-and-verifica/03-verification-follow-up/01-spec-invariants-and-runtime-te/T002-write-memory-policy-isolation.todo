@@ -1,0 +1,15 @@
+---
+complexity: medium
+depends_on:
+    - P17.M1.E2.T004
+    - P18.M2.E2.T004
+estimate_hours: 2
+id: P18.M3.E1.T002
+priority: medium
+status: pending
+tags:
+    - verification
+    - docs
+title: Write memory policy isolation invariant spec
+---
+Acceptance: spec lists memory isolation, repo grants, credential non-disclosure, egress default-deny monotonicity, MCP filter soundness, budget, and session lifecycle invariants.

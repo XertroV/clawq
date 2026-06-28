@@ -1,0 +1,14 @@
+---
+complexity: high
+depends_on:
+    - P14.M1.E2.T001
+estimate_hours: 3
+id: P17.M2.E3.T001
+priority: high
+status: pending
+tags:
+    - governance
+    - connectors
+title: Add guest external room policy model
+---
+Acceptance: connectors exposing guest/shared/external metadata can refuse, warn, or require admin override before work starts; unsupported connectors explain unknown status.

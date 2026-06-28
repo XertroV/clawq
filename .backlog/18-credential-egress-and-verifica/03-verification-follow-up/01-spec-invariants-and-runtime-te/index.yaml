@@ -1,0 +1,37 @@
+complexity: medium
+depends_on: []
+estimate_hours: 8
+id: P18.M3.E1
+locked: false
+name: Spec Invariants and Runtime Tests
+status: pending
+tasks:
+    - complexity: medium
+      depends_on:
+        - P14.M2.E3.T002
+      estimate_hours: 2
+      file: T001-write-scope-resolution-invaria.todo
+      id: T001
+      priority: medium
+      status: pending
+      title: Write scope resolution invariant spec
+    - complexity: medium
+      depends_on:
+        - P17.M1.E2.T004
+        - P18.M2.E2.T004
+      estimate_hours: 2
+      file: T002-write-memory-policy-isolation.todo
+      id: T002
+      priority: medium
+      status: pending
+      title: Write memory policy isolation invariant spec
+    - complexity: high
+      depends_on:
+        - P18.M3.E1.T001
+        - P18.M3.E1.T002
+      estimate_hours: 3
+      file: T003-add-runtime-conformance-tests.todo
+      id: T003
+      priority: medium
+      status: pending
+      title: Add runtime conformance tests for proof candidates

@@ -1,0 +1,14 @@
+---
+complexity: high
+depends_on:
+    - P15.M2.E2.T001
+estimate_hours: 3
+id: P15.M2.E2.T002
+priority: high
+status: pending
+tags:
+    - teams
+    - context
+title: Preserve room context through Teams card actions and file consent
+---
+Acceptance: requester, room profile, admin/guest policy, effective snapshot, and thread context survive file consent cards, adaptive-card actions, deferred followups, and background completion.

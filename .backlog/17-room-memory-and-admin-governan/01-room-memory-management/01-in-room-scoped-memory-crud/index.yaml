@@ -1,0 +1,45 @@
+complexity: high
+depends_on: []
+estimate_hours: 12
+id: P17.M1.E1
+locked: false
+name: In-Room Scoped Memory CRUD
+status: pending
+tasks:
+    - complexity: high
+      depends_on:
+        - P14.M1.E2.T001
+      estimate_hours: 3
+      file: T001-add-rooms-memory-list-show-sav.todo
+      id: T001
+      priority: high
+      status: pending
+      title: Add rooms memory list show save commands
+    - complexity: high
+      depends_on:
+        - P17.M1.E1.T001
+      estimate_hours: 3
+      file: T002-add-rooms-memory-correct-and-f.todo
+      id: T002
+      priority: high
+      status: pending
+      title: Add rooms memory correct and forget commands
+    - complexity: medium
+      depends_on:
+        - P17.M1.E1.T002
+      estimate_hours: 3
+      file: T003-add-in-channel-scoped-memory-e.todo
+      id: T003
+      priority: high
+      status: pending
+      title: Add in-channel scoped memory equivalents
+    - complexity: high
+      depends_on:
+        - P17.M1.E1.T001
+        - P14.M1.E3.T002
+      estimate_hours: 3
+      file: T004-add-scoped-agent-memory-tool-s.todo
+      id: T004
+      priority: high
+      status: pending
+      title: Add scoped agent memory tool support

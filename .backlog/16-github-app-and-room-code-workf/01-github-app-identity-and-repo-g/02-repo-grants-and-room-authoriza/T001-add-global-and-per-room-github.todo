@@ -1,0 +1,14 @@
+---
+complexity: high
+depends_on:
+    - P14.M1.E2.T001
+estimate_hours: 3
+id: P16.M1.E2.T001
+priority: high
+status: pending
+tags:
+    - github
+    - access
+title: Add global and per-room GitHub repo grant model
+---
+Acceptance: repo grants attach to bundles/scopes and support read, comment, branch, PR, workflow-read, and workflow-trigger capabilities.

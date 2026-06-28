@@ -1,0 +1,42 @@
+complexity: medium
+depends_on:
+    - P14
+    - P16
+estimate_hours: 56
+id: P18
+locked: false
+milestones:
+    - complexity: high
+      depends_on:
+        - P14.M1
+        - P16.M1
+      description: Credential handle abstraction and scoped wrappers for GitHub/MCP/tools.
+      estimate_hours: 20
+      id: M1
+      locked: false
+      name: Credential Policy Boundary
+      path: 01-credential-policy-boundary
+      status: pending
+    - complexity: high
+      depends_on:
+        - P18.M1
+      description: Default-deny-capable egress model, inventory, and audit/warn hooks.
+      estimate_hours: 20
+      id: M2
+      locked: false
+      name: Egress Policy Boundary
+      path: 02-egress-policy-boundary
+      status: pending
+    - complexity: medium
+      depends_on:
+        - P18.M2
+      description: Runtime invariant specs and future proof hooks without proof implementation.
+      estimate_hours: 16
+      id: M3
+      locked: false
+      name: Verification Follow-Up
+      path: 03-verification-follow-up
+      status: pending
+name: Credential Egress and Verification Boundary
+status: pending
+weeks: 4

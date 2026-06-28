@@ -1,0 +1,15 @@
+---
+complexity: high
+depends_on:
+    - P14.M1.E3.T002
+    - P14.M2.E2.T002
+estimate_hours: 4
+id: P14.M2.E3.T001
+priority: high
+status: pending
+tags:
+    - access
+    - agent
+title: Route room execution through effective-access snapshots
+---
+Acceptance: agent loops, room background tasks, routines, ambient work, memory/search, and policy checks use resolved snapshots rather than ad hoc profile fields.

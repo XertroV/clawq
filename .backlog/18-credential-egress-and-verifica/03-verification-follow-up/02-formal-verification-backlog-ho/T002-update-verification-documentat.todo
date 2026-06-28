@@ -1,0 +1,14 @@
+---
+complexity: medium
+depends_on:
+    - P18.M3.E2.T001
+estimate_hours: 2
+id: P18.M3.E2.T002
+priority: medium
+status: pending
+tags:
+    - verification
+    - docs
+title: Update verification documentation boundaries
+---
+Acceptance: docs distinguish implemented runtime checks, tests, and future formal proof candidates for scope, memory, credential, egress, MCP, and session lifecycle policy.

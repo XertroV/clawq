@@ -1,0 +1,15 @@
+---
+complexity: medium
+depends_on:
+    - P17.M2.E2.T003
+    - P17.M2.E3.T002
+estimate_hours: 3
+id: P17.M2.E3.T003
+priority: high
+status: pending
+tags:
+    - governance
+    - cli
+title: Add room-agent readiness report command
+---
+Acceptance: one command reports connector, scope, memory, GitHub, budget, audit, routine, ambient, and proxy-readiness status with actionable failures.

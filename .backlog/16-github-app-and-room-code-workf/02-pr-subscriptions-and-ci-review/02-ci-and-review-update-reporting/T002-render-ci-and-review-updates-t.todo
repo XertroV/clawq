@@ -1,0 +1,15 @@
+---
+complexity: high
+depends_on:
+    - P16.M2.E2.T001
+    - P15.M1.E2.T001
+estimate_hours: 3
+id: P16.M2.E2.T002
+priority: high
+status: pending
+tags:
+    - github
+    - teams
+title: Render CI and review updates through room UX
+---
+Acceptance: Teams and Slack receive concise updates with repo, PR, SHA, conclusion, actor, failing job links, review state, and action/backlink references.

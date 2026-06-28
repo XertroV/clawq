@@ -1,0 +1,14 @@
+---
+complexity: medium
+depends_on:
+    - P15.M1.E3.T001
+estimate_hours: 2
+id: P15.M1.E3.T002
+priority: high
+status: pending
+tags:
+    - teams
+    - cli
+title: Expose room session record via CLI or local endpoint
+---
+Acceptance: operators can inspect a stable record without public unauthenticated share links; admin-aware redaction is enforced.

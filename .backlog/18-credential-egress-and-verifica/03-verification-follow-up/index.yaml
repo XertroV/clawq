@@ -1,0 +1,28 @@
+complexity: medium
+depends_on:
+    - P18.M2
+epics:
+    - complexity: medium
+      depends_on: []
+      description: Document and test proof candidates.
+      estimate_hours: 8
+      id: E1
+      locked: false
+      name: Spec Invariants and Runtime Tests
+      path: 01-spec-invariants-and-runtime-te
+      status: pending
+    - complexity: medium
+      depends_on:
+        - P18.M3.E1
+      description: Track future proof work without doing it now.
+      estimate_hours: 8
+      id: E2
+      locked: false
+      name: Formal Verification Backlog Hooks
+      path: 02-formal-verification-backlog-ho
+      status: pending
+estimate_hours: 16
+id: P18.M3
+locked: false
+name: Verification Follow-Up
+status: pending

@@ -1,0 +1,46 @@
+complexity: high
+depends_on:
+    - P14.M1.E3
+estimate_hours: 10
+id: P14.M2.E1
+locked: false
+name: Explain Access Surface
+status: pending
+tasks:
+    - complexity: high
+      depends_on:
+        - P14.M1.E3.T002
+      estimate_hours: 3
+      file: T001-build-redacted-effective-acces.todo
+      id: T001
+      priority: high
+      status: pending
+      title: Build redacted effective-access explanation API
+    - complexity: medium
+      depends_on:
+        - P14.M2.E1.T001
+      estimate_hours: 3
+      file: T002-add-rooms-explain-access-cli-a.todo
+      id: T002
+      priority: high
+      status: pending
+      title: Add rooms explain-access CLI and JSON output
+    - complexity: medium
+      depends_on:
+        - P14.M2.E1.T001
+      estimate_hours: 2
+      file: T003-add-room-facing-what-can-you-a.todo
+      id: T003
+      priority: high
+      status: pending
+      title: Add room-facing what-can-you-access command path
+    - complexity: medium
+      depends_on:
+        - P14.M2.E1.T002
+        - P14.M2.E1.T003
+      estimate_hours: 2
+      file: T004-add-explain-access-denial-and.todo
+      id: T004
+      priority: high
+      status: pending
+      title: Add explain-access denial and redaction tests

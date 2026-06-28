@@ -1,0 +1,14 @@
+---
+complexity: medium
+depends_on:
+    - P17.M2.E1.T003
+estimate_hours: 2
+id: P17.M2.E1.T004
+priority: medium
+status: pending
+tags:
+    - docs
+    - setup
+title: Document pilot setup wizard
+---
+Acceptance: docs and llms-full mention the pilot path, Teams-first rollout, Slack baseline, troubleshooting, and minimal-build behavior.

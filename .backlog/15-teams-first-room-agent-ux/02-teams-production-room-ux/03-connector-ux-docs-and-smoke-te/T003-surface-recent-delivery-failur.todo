@@ -1,0 +1,14 @@
+---
+complexity: medium
+depends_on:
+    - P15.M2.E1.T003
+estimate_hours: 2
+id: P15.M2.E3.T003
+priority: high
+status: pending
+tags:
+    - teams
+    - cli
+title: Surface recent delivery failures in room commands
+---
+Acceptance: rooms ledger/readiness/delivery view can diagnose recent Teams delivery failures without reading daemon logs first.

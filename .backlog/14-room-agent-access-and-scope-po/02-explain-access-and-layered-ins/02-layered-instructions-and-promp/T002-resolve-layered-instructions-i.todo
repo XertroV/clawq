@@ -1,0 +1,14 @@
+---
+complexity: high
+depends_on:
+    - P14.M2.E2.T001
+estimate_hours: 3
+id: P14.M2.E2.T002
+priority: high
+status: pending
+tags:
+    - access
+    - prompt
+title: Resolve layered instructions into prompt context
+---
+Acceptance: prompt construction receives deterministic ordered instruction layers: global/default, workspace, channel, room/profile, then existing project docs. Provenance labels are included without duplicating profile system prompts.

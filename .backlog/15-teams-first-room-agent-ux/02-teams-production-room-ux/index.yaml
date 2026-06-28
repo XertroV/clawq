@@ -1,0 +1,41 @@
+complexity: high
+depends_on:
+    - P15.M1
+epics:
+    - complexity: high
+      depends_on:
+        - P15.M1
+      description: Teams room/session mapping, bounded context, and delivery lifecycle.
+      estimate_hours: 12
+      id: E1
+      locked: false
+      name: Teams Context Threads and Delivery Proof
+      path: 01-teams-context-threads-and-deli
+      status: pending
+    - complexity: high
+      depends_on:
+        - P15.M2.E1
+        - P15.M1.E2
+      description: Cards/buttons/commands preserve room policy and user feedback.
+      estimate_hours: 10
+      id: E2
+      locked: false
+      name: Teams Interactive Controls and Native Flow
+      path: 02-teams-interactive-controls-and
+      status: pending
+    - complexity: medium
+      depends_on:
+        - P15.M2.E1
+        - P15.M2.E2
+      description: User/operator coverage for Teams-first and Slack baseline flows.
+      estimate_hours: 8
+      id: E3
+      locked: false
+      name: Connector UX Docs and Smoke Tests
+      path: 03-connector-ux-docs-and-smoke-te
+      status: pending
+estimate_hours: 32
+id: P15.M2
+locked: false
+name: Teams Production Room UX
+status: pending

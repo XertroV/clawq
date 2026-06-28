@@ -1,0 +1,15 @@
+---
+complexity: medium
+depends_on:
+    - P17.M1.E1.T002
+    - P17.M1.E2.T002
+estimate_hours: 2
+id: P17.M1.E2.T003
+priority: high
+status: pending
+tags:
+    - memory
+    - ledger
+title: Emit ledger events for memory mutations and grants
+---
+Acceptance: save/correct/forget/grant changes record actor, channel, thread/message id, timestamp, source, snapshot, and redacted content preview.
