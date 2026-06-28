@@ -12,7 +12,8 @@ tasks:
       file: T001-add-access-bundle-config-and-s.todo
       id: T001
       priority: high
-      status: pending
+      status: in_progress
+      tags: []
       title: Add access bundle config and storage types
     - complexity: high
       depends_on:
@@ -21,7 +22,8 @@ tasks:
       file: T002-bridge-legacy-room-profile-pol.todo
       id: T002
       priority: high
-      status: pending
+      status: in_progress
+      tags: []
       title: Bridge legacy room profile policy into implicit bundles
     - complexity: medium
       depends_on:
@@ -30,5 +32,6 @@ tasks:
       file: T003-fail-closed-on-invalid-bundle.todo
       id: T003
       priority: high
-      status: pending
+      status: in_progress
+      tags: []
       title: Fail closed on invalid bundle references

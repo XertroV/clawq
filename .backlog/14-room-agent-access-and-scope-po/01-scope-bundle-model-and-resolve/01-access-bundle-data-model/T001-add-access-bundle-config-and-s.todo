@@ -1,13 +1,15 @@
 ---
+claimed_at: "2026-06-28T09:35:42Z"
+claimed_by: workflow-p14-m1-e1
+completed_at: null
 complexity: high
 depends_on: []
 estimate_hours: 4
 id: P14.M1.E1.T001
 priority: high
-status: pending
-tags:
-    - access
-    - config
+started_at: "2026-06-28T09:35:42Z"
+status: in_progress
+tags: []
 title: Add access bundle config and storage types
 ---
 Acceptance: bundles can represent tool policy, codebase grants, memory scopes, credential refs, MCP/skill refs, domain refs, and instruction layers without exposing secret values. Existing room profile fields compile into an implicit legacy bundle. Config parse/validation tests cover duplicate bundle IDs and invalid references. Likely files: runtime_config_types.ml, runtime_config.ml, config_loader.ml, access_bundle.ml, tests.

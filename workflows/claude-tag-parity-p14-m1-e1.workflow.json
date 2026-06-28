@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "kind": "workflow-plan",
+  "title": "P14.M1.E1 Access Bundle Data Model",
+  "summary": "Implement the claimed access-bundle data-model tasks in an isolated worktree, review the branch, then merge via workflow merge-lanes after lead verification.",
+  "goal": "Complete P14.M1.E1.T001-T003 for Clawq room-agent access bundles.",
+  "cwd": ".",
+  "runner": "codex-direct",
+  "model": "gpt-5.5",
+  "sandbox": "workspace-write",
+  "approval": "on-request",
+  "max_agents": 1,
+  "startup_delay": 1.0,
+  "tags": ["clawq", "p14", "access-bundle", "pirfl"],
+  "phases": [
+    {
+      "name": "implementation",
+      "title": "Implementation",
+      "summary": "Implement access-bundle config/storage types and legacy bridge.",
+      "jobs": [
+        {
+          "name": "p14-m1-e1-access-bundle",
+          "role": "workflow-implementer",
+          "prompt": "You are implementing claimed Clawq backlog tasks P14.M1.E1.T001, P14.M1.E1.T002, and P14.M1.E1.T003. The lead has already run `bl claim` for these tasks with agent workflow-p14-m1-e1; do not run `bl done` and do not change backlog status. Work in your workflow-created git worktree only. Follow the PIRFL loop explicitly: plan, implement, review your own diff, fix issues, then report. Use TDD: write focused failing tests first where practical, then implement the smallest compatible change. Read AGENTS.md plus relevant src/test CLAUDE.md files before editing. Keep optional integrations out of runtime core unless existing patterns require otherwise. Do not run concurrent dune commands. Scope: add access bundle config/storage types, compile existing room profile allowed_tools/denied_tools/codebase grants/system_prompt into an implicit legacy bundle, and fail closed on invalid bundle references. Preserve legacy behavior. Likely files: src/runtime_config_types.ml, src/runtime_config.ml, src/config_loader.ml, src/dune, new src/access_bundle.ml if useful, test/test_config_loader.ml, test/test_profile_policy.ml, or a new focused test. Verification expectation: at minimum run focused tests for config/access-bundle behavior and formatting check if OCaml formatting changed; if full make test is feasible, run it. Commit your implementation on branch workflow/p14-m1-e1-access-bundle. Final output must include: tasks handled, files changed, tests run/results, commit hash, and any follow-up risks. Do not merge to master; the lead will use workflow merge-lanes after review.",
+          "write_scope": [
+            "src/runtime_config_types.ml",
+            "src/runtime_config.ml",
+            "src/config_loader.ml",
+            "src/dune",
+            "src/access_bundle.ml",
+            "test/test_config_loader.ml",
+            "test/test_profile_policy.ml",
+            "test/test_access_bundle.ml",
+            "docs/ultra-plans/claude-tag-parity-next"
+          ],
+          "worktree": {
+            "branch": "workflow/p14-m1-e1-access-bundle",
+            "base": "HEAD",
+            "merge_target": "master",
+            "owner": "workflow-p14-m1-e1"
+          },
+          "timeout_secs": 21600,
+          "failure_retries": 1
+        }
+      ]
+    },
+    {
+      "name": "review",
+      "title": "Review",
+      "summary": "Review implementation branch before merge.",
+      "jobs": [
+        {
+          "name": "p14-m1-e1-review",
+          "role": "workflow-reviewer",
+          "prompt": "Review the branch workflow/p14-m1-e1-access-bundle against claimed tasks P14.M1.E1.T001-T003. Use Codex gpt-5.5. Inspect `git diff master...workflow/p14-m1-e1-access-bundle`, relevant tests, and the worker summary if available in workflow state. Focus on correctness, compatibility with existing room profiles, fail-closed validation, runtime split, missing tests, and OCaml style. Return findings first, ordered by severity with file/line refs where possible. If clean, say so and list residual risks. Do not edit files.",
+          "write_scope": [],
+          "timeout_secs": 7200,
+          "failure_retries": 1
+        }
+      ]
+    }
+  ]
+}
