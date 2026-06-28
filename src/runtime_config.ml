@@ -562,7 +562,8 @@ let scope_matches (cfg : t) ~session_key (scope : access_scope) =
   let channel_type = channel_type_of_session_key session_key in
   let room =
     match String.index_opt session_key ':' with
-    | Some i -> String.sub session_key (i + 1) (String.length session_key - i - 1)
+    | Some i ->
+        String.sub session_key (i + 1) (String.length session_key - i - 1)
     | None -> session_key
   in
   let workspace = effective_workspace cfg in
@@ -580,7 +581,9 @@ let sort_scopes scopes =
   List.sort
     (fun (a : access_scope) (b : access_scope) ->
       match
-        compare (access_scope_level_rank a.level) (access_scope_level_rank b.level)
+        compare
+          (access_scope_level_rank a.level)
+          (access_scope_level_rank b.level)
       with
       | 0 -> compare a.id b.id
       | n -> n)
@@ -600,8 +603,8 @@ let merge_effective_items items =
     items;
   !order
   |> List.filter_map (fun value ->
-         Hashtbl.find_opt table value
-         |> Option.map (fun provenance -> { value; provenance }))
+      Hashtbl.find_opt table value
+      |> Option.map (fun provenance -> { value; provenance }))
 
 let add_bundle_items ~layer ~source_id ~bundle_id ~field values =
   List.map
@@ -626,10 +629,7 @@ let blocked_by_global_security (cfg : t) pattern =
     let len = String.length pattern in
     let rec first_glob i =
       if i >= len then len
-      else
-        match pattern.[i] with
-        | '*' | '?' -> i
-        | _ -> first_glob (i + 1)
+      else match pattern.[i] with '*' | '?' -> i | _ -> first_glob (i + 1)
     in
     let prefix = String.sub pattern 0 (first_glob 0) in
     let trimmed =
@@ -654,7 +654,9 @@ let blocked_by_global_security (cfg : t) pattern =
       is_prefix_of ~prefix:workspace grant_prefix
       || List.exists
            (fun extra ->
-             let expanded_extra = expand_home extra |> Path_util.normalize_path in
+             let expanded_extra =
+               expand_home extra |> Path_util.normalize_path
+             in
              is_prefix_of ~prefix:expanded_extra grant_prefix)
            cfg.security.extra_allowed_paths
   in
@@ -663,37 +665,43 @@ let blocked_by_global_security (cfg : t) pattern =
     || List.exists
          (fun allowed ->
            let allowed = expand_cwd_pattern ~config:cfg allowed in
-           allowed <> "" && Path_util.glob_matches_path ~pattern:allowed grant_prefix)
+           allowed <> ""
+           && Path_util.glob_matches_path ~pattern:allowed grant_prefix)
          cfg.security.allowed_cwd_patterns
   in
   not (ws_ok && pattern_ok)
 
 let resolve_effective_access (cfg : t) ~session_key : effective_access =
   let selected_scopes =
-    cfg.access_scopes |> List.filter (scope_matches cfg ~session_key) |> sort_scopes
+    cfg.access_scopes
+    |> List.filter (scope_matches cfg ~session_key)
+    |> sort_scopes
   in
   let profile_bundles =
     match resolve_room_profile cfg ~session_key with
     | None -> []
     | Some profile ->
         access_bundles_for_profile cfg profile
-        |> List.map (fun bundle -> ("room", "room_profile:" ^ profile.id, bundle))
+        |> List.map (fun bundle ->
+            ("room", "room_profile:" ^ profile.id, bundle))
   in
   let scope_bundles =
     selected_scopes
     |> List.concat_map (fun scope ->
-           let layer = access_scope_level_label scope.level in
-           scope.access_bundle_ids
-           |> List.filter_map (fun bundle_id ->
-                  find_access_bundle cfg bundle_id
-                  |> Option.map (fun bundle -> (layer, scope.id, bundle))))
+        let layer = access_scope_level_label scope.level in
+        scope.access_bundle_ids
+        |> List.filter_map (fun bundle_id ->
+            find_access_bundle cfg bundle_id
+            |> Option.map (fun bundle -> (layer, scope.id, bundle))))
   in
-  let bundles = scope_bundles @ profile_bundles in
-  let collect field get =
+  let bundles : (string * string * access_bundle) list =
+    scope_bundles @ profile_bundles
+  in
+  let collect field (get : access_bundle -> string list) =
     bundles
-    |> List.concat_map (fun (layer, source_id, bundle) ->
-           add_bundle_items ~layer ~source_id ~bundle_id:bundle.id ~field
-             (get bundle))
+    |> List.concat_map (fun (layer, source_id, (bundle : access_bundle)) ->
+        add_bundle_items ~layer ~source_id ~bundle_id:bundle.id ~field
+          (get bundle))
     |> merge_effective_items
   in
   let denied_tools = collect "denied_tools" (fun b -> b.denied_tools) in

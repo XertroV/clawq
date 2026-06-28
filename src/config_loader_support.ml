@@ -215,6 +215,54 @@ let validate_room_profile_access_bundle_json_shapes json : string list =
   | `Null -> []
   | _ -> [ "room_profiles must be a list" ]
 
+let validate_access_scope_json_shapes json : string list =
+  match Yojson.Safe.Util.member "access_scopes" json with
+  | `List scopes ->
+      scopes
+      |> List.mapi (fun index scope ->
+          match scope with
+          | `Assoc fields ->
+              let level_issues =
+                match List.assoc_opt "level" fields with
+                | None -> []
+                | Some (`String ("default" | "workspace" | "channel" | "room"))
+                  ->
+                    []
+                | Some (`String _) ->
+                    [
+                      Printf.sprintf
+                        "access_scopes[%d].level must be one of default, \
+                         workspace, channel, room"
+                        index;
+                    ]
+                | Some _ ->
+                    [
+                      Printf.sprintf "access_scopes[%d].level must be a string"
+                        index;
+                    ]
+              in
+              let bundle_issues =
+                match List.assoc_opt "access_bundle_ids" fields with
+                | None -> []
+                | Some (`List values)
+                  when List.for_all
+                         (function `String _ -> true | _ -> false)
+                         values ->
+                    []
+                | Some _ ->
+                    [
+                      Printf.sprintf
+                        "access_scopes[%d].access_bundle_ids must be a list of \
+                         strings"
+                        index;
+                    ]
+              in
+              level_issues @ bundle_issues
+          | _ -> [ Printf.sprintf "access_scopes[%d] must be an object" index ])
+      |> List.flatten
+  | `Null -> []
+  | _ -> [ "access_scopes must be a list" ]
+
 let fail_closed_access_bundle_id (cfg : Runtime_config.t) =
   let base = "__invalid_access_policy_validation__" in
   let existing =
@@ -278,6 +326,7 @@ let fail_closed_access_policy (cfg : Runtime_config.t) =
   {
     cfg with
     Runtime_config.room_profiles = profiles @ missing_binding_profiles;
+    access_scopes = [];
   }
 
 (* Migrate the deprecated top-level "default_provider" key into the canonical

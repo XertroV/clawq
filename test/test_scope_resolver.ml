@@ -1,5 +1,7 @@
 let item_values items =
-  List.map (fun (item : Runtime_config.effective_access_item) -> item.value) items
+  List.map
+    (fun (item : Runtime_config.effective_access_item) -> item.value)
+    items
 
 let provenance_labels item =
   List.map
@@ -58,7 +60,10 @@ let test_layers_merge_deterministically_and_deny_wins () =
   in
   Alcotest.(check (list string))
     "room item provenance"
-    [ "room:z-room:allowed_tools"; "room:z-room:access_bundle_ids:room" ]
+    [
+      "room:z-room:allowed_tools";
+      "room:z-room:access_bundle_ids:room:allowed_tools";
+    ]
     (provenance_labels room_item)
 
 let test_global_security_caps_codebase_grants () =
@@ -83,11 +88,11 @@ let test_global_security_caps_codebase_grants () =
     [ "/tmp/clawq-scope-root/src/**" ]
     (item_values effective.codebase_grants);
   Alcotest.(check (list string))
-    "global ceiling blocks outside grant"
-    [ "/tmp/outside/**" ]
+    "global ceiling blocks outside grant" [ "/tmp/outside/**" ]
     (item_values effective.blocked_codebase_grants);
   assert_all_provenance "codebase grant" effective.codebase_grants;
-  assert_all_provenance "blocked codebase grant" effective.blocked_codebase_grants
+  assert_all_provenance "blocked codebase grant"
+    effective.blocked_codebase_grants
 
 let test_memory_grants_are_direct_not_transitive () =
   let json =
@@ -106,8 +111,8 @@ let test_memory_grants_are_direct_not_transitive () =
     Runtime_config.resolve_effective_access cfg ~session_key:"web:general"
   in
   Alcotest.(check (list string))
-    "only direct memory grants are effective"
-    [ "child" ] (item_values effective.memory_grants)
+    "only direct memory grants are effective" [ "child" ]
+    (item_values effective.memory_grants)
 
 let test_legacy_room_profile_bundle_is_room_layer () =
   let json =
@@ -134,14 +139,15 @@ let test_legacy_room_profile_bundle_is_room_layer () =
     Runtime_config.resolve_effective_access cfg ~session_key:"slack:C123"
   in
   Alcotest.(check (list string))
-    "legacy allowed tools remain effective"
-    [ "file_read" ] (item_values effective.allowed_tools);
+    "legacy allowed tools remain effective" [ "file_read" ]
+    (item_values effective.allowed_tools);
   Alcotest.(check (list string))
-    "legacy denied tools remain effective"
-    [ "shell_exec" ] (item_values effective.denied_tools);
+    "legacy denied tools remain effective" [ "shell_exec" ]
+    (item_values effective.denied_tools);
   Alcotest.(check (list string))
     "legacy codebase grants remain effective"
-    [ "/tmp/clawq-scope-root/**" ] (item_values effective.codebase_grants);
+    [ "/tmp/clawq-scope-root/**" ]
+    (item_values effective.codebase_grants);
   let file_read =
     List.find
       (fun (item : Runtime_config.effective_access_item) ->
@@ -152,7 +158,7 @@ let test_legacy_room_profile_bundle_is_room_layer () =
     "legacy profile provenance"
     [
       "room:room_profile:legacy:allowed_tools";
-      "room:room_profile:legacy:access_bundle_ids:__legacy_room_profile:legacy";
+      "room:room_profile:legacy:access_bundle_ids:__legacy_room_profile:legacy:allowed_tools";
     ]
     (provenance_labels file_read)
 

@@ -1035,7 +1035,9 @@ let parse_config ?(resolve_secrets = true) json =
           let channel =
             try Some (s |> member "channel" |> to_string) with _ -> None
           in
-          let room = try Some (s |> member "room" |> to_string) with _ -> None in
+          let room =
+            try Some (s |> member "room" |> to_string) with _ -> None
+          in
           let status =
             try s |> member "status" |> to_string with _ -> "active"
           in
@@ -1493,6 +1495,20 @@ let validate_room_profiles (cfg : Runtime_config.t) : string list =
               :: !issues)
         p.access_bundle_ids)
     cfg.room_profiles;
+  (* Check scope access_bundle_ids reference existing active bundles. *)
+  List.iter
+    (fun (scope : Runtime_config.access_scope) ->
+      List.iter
+        (fun bundle_id ->
+          if not (Hashtbl.mem bundles_seen bundle_id) then
+            issues :=
+              Printf.sprintf
+                "access_scopes: scope '%s' references non-existent access \
+                 bundle '%s'"
+                scope.id bundle_id
+              :: !issues)
+        scope.access_bundle_ids)
+    cfg.access_scopes;
   List.rev !issues
 
 (* B697: even with no (or unreadable) config.json, surface zero-config xiaomi
@@ -1561,6 +1577,7 @@ let load ?(path = "") () : Runtime_config.t =
         let access_policy_issues =
           validate_access_bundle_json_shapes json
           @ validate_room_profile_access_bundle_json_shapes json
+          @ validate_access_scope_json_shapes json
           @ validate_room_profiles config
         in
         let config =
@@ -1571,8 +1588,8 @@ let load ?(path = "") () : Runtime_config.t =
               (String.concat "; " access_policy_issues);
             Printf.eprintf
               "WARNING: preserving access_bundles, room_profiles, and \
-               room_profile_bindings, but forcing profile-scoped access to \
-               deny until the access policy is repaired\n\
+               room_profile_bindings, but forcing scoped access to deny until \
+               the access policy is repaired\n\
                %!";
             fail_closed_access_policy config)
           else config

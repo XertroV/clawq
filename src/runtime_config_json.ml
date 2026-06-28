@@ -1024,7 +1024,8 @@ let to_json ~default_quota_cache_ttl_s ~(default_log_config : log_config)
                    `Assoc
                      ([
                         ("id", `String scope.id);
-                        ("level", `String (access_scope_level_string scope.level));
+                        ( "level",
+                          `String (access_scope_level_string scope.level) );
                         ("status", `String scope.status);
                       ]
                      @ (match scope.workspace with

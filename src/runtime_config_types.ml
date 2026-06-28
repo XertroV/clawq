@@ -554,11 +554,7 @@ type access_scope = {
   status : string;
 }
 
-type access_provenance = {
-  layer : string;
-  source_id : string;
-  field : string;
-}
+type access_provenance = { layer : string; source_id : string; field : string }
 
 type effective_access_item = {
   value : string;
