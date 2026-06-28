@@ -841,6 +841,10 @@ let format_model_fav_confirm ~connector name action =
 
 (* ── Existing format: help ─────────────────────────────────────────────── *)
 
+let help_interrupt_hint =
+  "Prefix a message with ! to interrupt current processing in this session and \
+   send the rest as a normal message."
+
 let format_help_skills_section ~connector (skills : Skills.skill_md_meta list) =
   if skills = [] then ""
   else
@@ -896,8 +900,7 @@ let format_help_with ~connector ~commands ~skills ~agents =
         @ [
             "";
             Format_adapter.escape Format_adapter.Telegram_html
-              "Prefix a message with ! to interrupt the current turn in this \
-               session and send the rest as a normal message.";
+              help_interrupt_hint;
           ])
       ^ skills_section ^ agents_section
   | Format_adapter.Plain ->
@@ -915,13 +918,7 @@ let format_help_with ~connector ~commands ~skills ~agents =
           commands
       in
       String.concat "\n"
-        ([ "Available commands:"; "" ]
-        @ rows
-        @ [
-            "";
-            "Prefix a message with ! to interrupt the current turn in this \
-             session and send the rest as a normal message.";
-          ])
+        ([ "Available commands:"; "" ] @ rows @ [ ""; help_interrupt_hint ])
       ^ skills_section ^ agents_section
   | Format_adapter.Teams ->
       let table_columns =
@@ -939,10 +936,7 @@ let format_help_with ~connector ~commands ~skills ~agents =
       ^ Table_format.render_markdown
           ~escape_cell:(Format_adapter.escape_table_cell Format_adapter.Teams)
           table_columns table_rows
-      ^ "\n\n"
-      ^ "Prefix a message with ! to interrupt the current turn in this session \
-         and send the rest as a normal message." ^ skills_section
-      ^ agents_section
+      ^ "\n\n" ^ help_interrupt_hint ^ skills_section ^ agents_section
   | _ ->
       let command_labels = List.map (fun c -> "/" ^ c.name) commands in
       let command_width =
@@ -959,13 +953,7 @@ let format_help_with ~connector ~commands ~skills ~agents =
       in
       let plain_text =
         String.concat "\n"
-          ([ "Available commands:"; "" ]
-          @ rows
-          @ [
-              "";
-              "Prefix a message with ! to interrupt the current turn in this \
-               session and send the rest as a normal message.";
-            ])
+          ([ "Available commands:"; "" ] @ rows @ [ ""; help_interrupt_hint ])
       in
       Format_adapter.code_block connector
         (plain_text ^ skills_section ^ agents_section)

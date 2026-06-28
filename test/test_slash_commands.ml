@@ -268,6 +268,13 @@ let test_start () =
         (Printf.sprintf "expected FormattedReply, got %s"
            (result_to_string other))
 
+let check_help_interrupt_hint label output =
+  Alcotest.(check bool)
+    (label ^ " help documents bang interrupt")
+    true
+    (Test_helpers.string_contains output
+       "Prefix a message with ! to interrupt current processing")
+
 let test_help () =
   match Slash_commands.handle "/help" with
   | Slash_commands.Help ->
@@ -298,7 +305,8 @@ let test_help () =
       in
       Alcotest.(check bool)
         "does not use markdown table" false contains_markdown_table;
-      Alcotest.(check bool) "contains plain help line" true contains_plain_start
+      Alcotest.(check bool) "contains plain help line" true contains_plain_start;
+      check_help_interrupt_hint "plain" s
   | other ->
       Alcotest.fail
         (Printf.sprintf "expected Help, got %s" (result_to_string other))
@@ -514,7 +522,8 @@ let test_format_help_telegram () =
     (Test_helpers.string_contains output "<b>Available commands:</b>");
   Alcotest.(check bool)
     "telegram uses code formatting" true
-    (Test_helpers.string_contains output "<code>/start</code>")
+    (Test_helpers.string_contains output "<code>/start</code>");
+  check_help_interrupt_hint "telegram" output
 
 let test_whitespace_only () =
   Alcotest.check result_testable "whitespace only" Slash_commands.NotACommand
@@ -1582,7 +1591,8 @@ let test_format_help_discord_code_block () =
     && Test_helpers.string_contains output "```\n");
   Alcotest.(check bool)
     "discord help contains /help" true
-    (Test_helpers.string_contains output "/help")
+    (Test_helpers.string_contains output "/help");
+  check_help_interrupt_hint "discord" output
 
 let test_format_help_slack_code_block () =
   let output =
@@ -1593,7 +1603,8 @@ let test_format_help_slack_code_block () =
     (String.length output > 6 && String.sub output 0 3 = "```");
   Alcotest.(check bool)
     "slack help contains /help" true
-    (Test_helpers.string_contains output "/help")
+    (Test_helpers.string_contains output "/help");
+  check_help_interrupt_hint "slack" output
 
 let test_format_model_usage_empty () =
   let config = Runtime_config.default in
@@ -1831,7 +1842,8 @@ let test_format_help_teams_markdown_table () =
     (Test_helpers.string_contains output "| /help |");
   Alcotest.(check bool)
     "teams help not wrapped in code block" false
-    (String.length output >= 3 && String.sub output 0 3 = "```")
+    (String.length output >= 3 && String.sub output 0 3 = "```");
+  check_help_interrupt_hint "teams" output
 
 let test_format_costs_teams_markdown_table () =
   with_request_stats_db (fun db ->
