@@ -29,7 +29,7 @@ tasks:
       file: T002-add-credential-handle-and-prov.todo
       id: T002
       priority: high
-      status: in_progress
+      status: done
       tags: []
       title: Add credential handle and provider types
     - complexity: high
