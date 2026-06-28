@@ -28,32 +28,82 @@ let collect_tool_result_ids msgs =
       | _ -> acc)
     [] msgs
 
-(* Strip function_call entries from provider_response_items_json whose call_id
-   is not in [kept_ids].  This keeps the raw provider payload consistent with
-   the tool_calls list after integrity stripping. *)
+(* Strip provider raw tool-call entries whose call id is not in [kept_ids].
+   This keeps diagnostic provider payloads consistent with the normalized
+   tool_calls list after integrity stripping. Codex/Responses raw output is a
+   list of function_call items; Anthropic raw output may be a full response body
+   with content[].tool_use blocks. *)
 let strip_provider_items_for_removed_calls provider_json_opt ~kept_ids =
+  let keep_tool_use fields =
+    match List.assoc_opt "id" fields with
+    | Some (`String id) -> List.mem id kept_ids
+    | _ -> true
+  in
+  let keep_function_call fields =
+    match List.assoc_opt "call_id" fields with
+    | Some (`String id) -> List.mem id kept_ids
+    | _ -> true
+  in
+  let content_has_replayable_blocks = function
+    | `List blocks ->
+        List.exists
+          (function
+            | `Assoc fields -> (
+                match List.assoc_opt "type" fields with
+                | Some (`String "tool_use") -> false
+                | _ -> true)
+            | _ -> true)
+          blocks
+    | _ -> true
+  in
   match provider_json_opt with
   | None -> None
   | Some json_str -> (
       try
-        let arr = Yojson.Safe.from_string json_str in
-        let items = match arr with `List items -> items | _ -> [ arr ] in
-        let filtered =
-          List.filter
-            (fun item ->
-              match item with
-              | `Assoc fields -> (
-                  match List.assoc_opt "type" fields with
-                  | Some (`String "function_call") -> (
-                      match List.assoc_opt "call_id" fields with
-                      | Some (`String id) -> List.mem id kept_ids
+        match Yojson.Safe.from_string json_str with
+        | `Assoc fields as obj -> (
+            match List.assoc_opt "content" fields with
+            | Some (`List blocks) ->
+                let filtered_blocks =
+                  List.filter
+                    (function
+                      | `Assoc block_fields -> (
+                          match List.assoc_opt "type" block_fields with
+                          | Some (`String "tool_use") ->
+                              keep_tool_use block_fields
+                          | _ -> true)
+                      | _ -> true)
+                    blocks
+                in
+                if filtered_blocks = blocks then Some json_str
+                else if
+                  not (content_has_replayable_blocks (`List filtered_blocks))
+                then None
+                else
+                  let fields =
+                    ("content", `List filtered_blocks)
+                    :: List.remove_assoc "content" fields
+                  in
+                  Some (Yojson.Safe.to_string (`Assoc fields))
+            | _ -> Some (Yojson.Safe.to_string obj))
+        | `List items ->
+            let filtered =
+              List.filter
+                (fun item ->
+                  match item with
+                  | `Assoc fields -> (
+                      match List.assoc_opt "type" fields with
+                      | Some (`String "function_call") ->
+                          keep_function_call fields
+                      | Some (`String "tool_use") -> keep_tool_use fields
                       | _ -> true)
                   | _ -> true)
-              | _ -> true)
-            items
-        in
-        if List.length filtered = List.length items then Some json_str
-        else Some (Yojson.Safe.to_string (`List filtered))
+                items
+            in
+            if filtered = items then Some json_str
+            else if filtered = [] then None
+            else Some (Yojson.Safe.to_string (`List filtered))
+        | _ -> provider_json_opt
       with _ -> provider_json_opt)
 
 let ensure_tool_group_integrity msgs =

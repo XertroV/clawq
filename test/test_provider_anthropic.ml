@@ -251,6 +251,32 @@ let test_parse_tool_use_response () =
   | Ok (Provider.Text _) -> Alcotest.fail "expected ToolCalls"
   | Error e -> Alcotest.fail ("error: " ^ e)
 
+let test_parse_tool_use_empty_input_response () =
+  let body =
+    {|{"content":[{"type":"tool_use","id":"call-empty","name":"ping","input":{}}],"model":"claude-3","stop_reason":"tool_use"}|}
+  in
+  match Provider_anthropic.parse_anthropic_response body "claude-3" with
+  | Ok (Provider.ToolCalls { calls; _ }) ->
+      Alcotest.(check int) "1 call" 1 (List.length calls);
+      let tc = List.hd calls in
+      Alcotest.(check string) "empty input becomes object" "{}" tc.arguments
+  | Ok (Provider.Text _) -> Alcotest.fail "expected ToolCalls"
+  | Error e -> Alcotest.fail ("error: " ^ e)
+
+let test_parse_multiple_tool_use_response () =
+  let body =
+    {|{"content":[{"type":"tool_use","id":"call-a","name":"file_read","input":{"path":"a.ml"}},{"type":"tool_use","id":"call-b","name":"shell_exec","input":{"command":"pwd"}}],"model":"claude-3","stop_reason":"tool_use"}|}
+  in
+  match Provider_anthropic.parse_anthropic_response body "claude-3" with
+  | Ok (Provider.ToolCalls { calls; _ }) ->
+      Alcotest.(check int) "2 calls" 2 (List.length calls);
+      let a = List.nth calls 0 in
+      let b = List.nth calls 1 in
+      Alcotest.(check string) "a args" {|{"path":"a.ml"}|} a.arguments;
+      Alcotest.(check string) "b args" {|{"command":"pwd"}|} b.arguments
+  | Ok (Provider.Text _) -> Alcotest.fail "expected ToolCalls"
+  | Error e -> Alcotest.fail ("error: " ^ e)
+
 (* B608 regression: Anthropic input_tokens is NEW (uncached); normalize
    to OpenAI-style total prompt tokens so downstream stays consistent. *)
 let test_parse_response_normalizes_cached_to_total () =
@@ -364,6 +390,10 @@ let suite =
       test_parse_response_normalizes_cached_to_total;
     Alcotest.test_case "parse tool use response" `Quick
       test_parse_tool_use_response;
+    Alcotest.test_case "parse empty tool use input" `Quick
+      test_parse_tool_use_empty_input_response;
+    Alcotest.test_case "parse multiple tool use response" `Quick
+      test_parse_multiple_tool_use_response;
     Alcotest.test_case "parse invalid json" `Quick test_parse_invalid_json;
     Alcotest.test_case "parse empty content" `Quick test_parse_empty_content;
     Alcotest.test_case "parse ignores thinking blocks" `Quick
