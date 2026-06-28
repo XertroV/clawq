@@ -621,6 +621,363 @@ let test_scope_info_fields () =
   Alcotest.(check (option string)) "scope room" (Some "C123") scope.room;
   Alcotest.(check (list string)) "scope bundle_ids" [ "b1" ] scope.bundle_ids
 
+let test_unbound_room_explanation () =
+  let json =
+    {|{
+      "workspace": "/tmp/test",
+      "access_bundles": [
+        {"id": "base", "allowed_tools": ["file_read"]}
+      ],
+      "access_scopes": [
+        {"id": "default", "level": "default", "access_bundle_ids": ["base"]}
+      ]
+    }|}
+  in
+  let cfg = parse json in
+  (* Session key for a room that has no matching room-level scope *)
+  let explanation =
+    Access_explanation.create ~config:cfg ~session_key:"slack:UNBOUND" ()
+  in
+  (* Should only have the default scope, not a room scope *)
+  Alcotest.(check int)
+    "1 matching scope (default only)" 1
+    (List.length explanation.scopes);
+  let scope_ids =
+    List.map
+      (fun (si : Access_explanation.scope_info) -> si.id)
+      explanation.scopes
+  in
+  Alcotest.(check bool) "has default scope" true (List.mem "default" scope_ids);
+  Alcotest.(check bool)
+    "no room scope for unbound room" true
+    (not
+       (List.exists
+          (fun (si : Access_explanation.scope_info) -> si.room = Some "UNBOUND")
+          explanation.scopes));
+  (* JSON output must not leak anything about the unbound room *)
+  let json_out = Access_explanation.to_json explanation in
+  let json_str = Yojson.Safe.to_string json_out in
+  Alcotest.(check bool)
+    "json does not mention unbound room" true
+    (not (Test_helpers.string_contains json_str "UNBOUND"))
+
+let test_unbound_room_no_credentials_leaked () =
+  let json =
+    {|{
+      "workspace": "/tmp/test",
+      "credential_handles": [
+        {"id": "room-secret", "provider": {"type": "env_var", "name": "ROOM_SECRET"}, "description": "Room API key"}
+      ],
+      "access_bundles": [
+        {"id": "room-bundle", "allowed_tools": ["room_tool"], "credential_handles": ["room-secret"]}
+      ],
+      "access_scopes": [
+        {"id": "default", "level": "default", "access_bundle_ids": []},
+        {"id": "bound-room", "level": "room", "room": "C123", "access_bundle_ids": ["room-bundle"]}
+      ]
+    }|}
+  in
+  let cfg = parse json in
+  (* Accessing from an unbound room — should NOT see the bound room's creds *)
+  let explanation =
+    Access_explanation.create ~config:cfg ~session_key:"slack:UNBOUND" ()
+  in
+  Alcotest.(check int)
+    "unbound room has no credential handles" 0
+    (List.length explanation.credential_handles);
+  let json_out = Access_explanation.to_json explanation in
+  let json_str = Yojson.Safe.to_string json_out in
+  Alcotest.(check bool)
+    "json does not contain room-secret credential" true
+    (not (Test_helpers.string_contains json_str "room-secret"));
+  Alcotest.(check bool)
+    "json does not contain ROOM_SECRET env var name" true
+    (not (Test_helpers.string_contains json_str "ROOM_SECRET"))
+
+let test_deleted_profile_no_credential_leak () =
+  let json =
+    {|{
+      "workspace": "/tmp/test",
+      "credential_handles": [
+        {"id": "deleted-cred", "provider": {"type": "env_var", "name": "DELETED_SECRET"}, "status": "deleted"},
+        {"id": "active-cred", "provider": {"type": "env_var", "name": "ACTIVE_SECRET"}}
+      ],
+      "access_bundles": [
+        {"id": "b1", "allowed_tools": ["tool_a"], "credential_handles": ["deleted-cred", "active-cred"]}
+      ],
+      "access_scopes": [
+        {"id": "default", "level": "default", "access_bundle_ids": ["b1"]}
+      ]
+    }|}
+  in
+  let cfg = parse json in
+  let explanation =
+    Access_explanation.create ~config:cfg ~session_key:"slack:C123" ()
+  in
+  Alcotest.(check int)
+    "only active credential handle" 1
+    (List.length explanation.credential_handles);
+  let ch = List.hd explanation.credential_handles in
+  Alcotest.(check string) "active cred id" "active-cred" ch.id;
+  let json_out = Access_explanation.to_json explanation in
+  let json_str = Yojson.Safe.to_string json_out in
+  Alcotest.(check bool)
+    "json does not contain deleted-cred id" true
+    (not (Test_helpers.string_contains json_str "deleted-cred"));
+  Alcotest.(check bool)
+    "json does not contain DELETED_SECRET env var name" true
+    (not (Test_helpers.string_contains json_str "DELETED_SECRET"))
+
+let test_encrypted_credential_redaction () =
+  let json =
+    {|{
+      "workspace": "/tmp/test",
+      "credential_handles": [
+        {"id": "enc-cred", "provider": {"type": "encrypted", "cipher_text": "$ENC:dGVzdF9jaXBoZXJ0ZXh0XzEyMzQ1"}, "description": "Encrypted API key"}
+      ],
+      "access_bundles": [
+        {"id": "b1", "credential_handles": ["enc-cred"]}
+      ],
+      "access_scopes": [
+        {"id": "default", "level": "default", "access_bundle_ids": ["b1"]}
+      ]
+    }|}
+  in
+  let cfg = parse json in
+  let explanation =
+    Access_explanation.create ~config:cfg ~session_key:"slack:C123" ()
+  in
+  Alcotest.(check int)
+    "1 credential handle" 1
+    (List.length explanation.credential_handles);
+  let ch = List.hd explanation.credential_handles in
+  Alcotest.(check string) "provider type" "encrypted" ch.provider_type;
+  (* JSON must not contain the cipher_text value *)
+  let json_out = Access_explanation.to_json explanation in
+  let json_str = Yojson.Safe.to_string json_out in
+  Alcotest.(check bool)
+    "json does not contain cipher_text value" true
+    (not (Test_helpers.string_contains json_str "dGVzdF9jaXBoZXJ0ZXh0XzEyMzQ1"));
+  Alcotest.(check bool)
+    "json does not contain ENC prefix" true
+    (not (Test_helpers.string_contains json_str "$ENC:"));
+  (* Text must not contain the cipher_text value *)
+  let text = Access_explanation.to_text explanation in
+  Alcotest.(check bool)
+    "text does not contain cipher_text value" true
+    (not (Test_helpers.string_contains text "dGVzdF9jaXBoZXJ0ZXh0XzEyMzQ1"))
+
+let test_file_credential_redaction () =
+  let json =
+    {|{
+      "workspace": "/tmp/test",
+      "credential_handles": [
+        {"id": "file-cred", "provider": {"type": "file", "path": "/home/user/.secrets/api_key.txt"}, "description": "File-based key"}
+      ],
+      "access_bundles": [
+        {"id": "b1", "credential_handles": ["file-cred"]}
+      ],
+      "access_scopes": [
+        {"id": "default", "level": "default", "access_bundle_ids": ["b1"]}
+      ]
+    }|}
+  in
+  let cfg = parse json in
+  let explanation =
+    Access_explanation.create ~config:cfg ~session_key:"slack:C123" ()
+  in
+  let ch = List.hd explanation.credential_handles in
+  Alcotest.(check string) "provider type" "file" ch.provider_type;
+  (* JSON must not contain the file path *)
+  let json_out = Access_explanation.to_json explanation in
+  let json_str = Yojson.Safe.to_string json_out in
+  Alcotest.(check bool)
+    "json does not contain secret file path" true
+    (not
+       (Test_helpers.string_contains json_str "/home/user/.secrets/api_key.txt"));
+  (* Text must not contain the file path *)
+  let text = Access_explanation.to_text explanation in
+  Alcotest.(check bool)
+    "text does not contain secret file path" true
+    (not (Test_helpers.string_contains text "/home/user/.secrets/api_key.txt"))
+
+let test_env_var_credential_redaction () =
+  let json =
+    {|{
+      "workspace": "/tmp/test",
+      "credential_handles": [
+        {"id": "env-cred", "provider": {"type": "env_var", "name": "AWS_SECRET_ACCESS_KEY"}, "description": "AWS secret"}
+      ],
+      "access_bundles": [
+        {"id": "b1", "credential_handles": ["env-cred"]}
+      ],
+      "access_scopes": [
+        {"id": "default", "level": "default", "access_bundle_ids": ["b1"]}
+      ]
+    }|}
+  in
+  let cfg = parse json in
+  let explanation =
+    Access_explanation.create ~config:cfg ~session_key:"slack:C123" ()
+  in
+  let ch = List.hd explanation.credential_handles in
+  Alcotest.(check string) "provider type" "env_var" ch.provider_type;
+  (* JSON must not contain the env var name *)
+  let json_out = Access_explanation.to_json explanation in
+  let json_str = Yojson.Safe.to_string json_out in
+  Alcotest.(check bool)
+    "json does not contain env var name" true
+    (not (Test_helpers.string_contains json_str "AWS_SECRET_ACCESS_KEY"));
+  Alcotest.(check bool)
+    "json contains credential id" true
+    (Test_helpers.string_contains json_str "env-cred")
+
+let test_inactive_bundle_scope_no_credential_leak () =
+  let json =
+    {|{
+      "workspace": "/tmp/test",
+      "credential_handles": [
+        {"id": "leaked-cred", "provider": {"type": "env_var", "name": "LEAKED_SECRET"}}
+      ],
+      "access_bundles": [
+        {"id": "inactive-bundle", "status": "deleted", "credential_handles": ["leaked-cred"]},
+        {"id": "active-bundle", "allowed_tools": ["tool_a"]}
+      ],
+      "access_scopes": [
+        {"id": "default", "level": "default", "access_bundle_ids": ["active-bundle"]},
+        {"id": "deleted-scope", "level": "room", "room": "C123", "access_bundle_ids": ["inactive-bundle"], "status": "deleted"}
+      ]
+    }|}
+  in
+  let cfg = parse json in
+  let explanation =
+    Access_explanation.create ~config:cfg ~session_key:"slack:C123" ()
+  in
+  Alcotest.(check int)
+    "no credential handles from inactive bundle" 0
+    (List.length explanation.credential_handles);
+  let json_out = Access_explanation.to_json explanation in
+  let json_str = Yojson.Safe.to_string json_out in
+  Alcotest.(check bool)
+    "json does not contain leaked-cred" true
+    (not (Test_helpers.string_contains json_str "leaked-cred"));
+  Alcotest.(check bool)
+    "json does not contain LEAKED_SECRET" true
+    (not (Test_helpers.string_contains json_str "LEAKED_SECRET"))
+
+let test_unauthorized_member_empty_explanation () =
+  let json =
+    {|{
+      "workspace": "/tmp/test",
+      "credential_handles": [
+        {"id": "admin-cred", "provider": {"type": "env_var", "name": "ADMIN_SECRET"}, "description": "Admin API key"}
+      ],
+      "access_bundles": [
+        {"id": "admin-bundle", "allowed_tools": ["admin_tool"], "credential_handles": ["admin-cred"]}
+      ],
+      "access_scopes": [
+        {"id": "admin-only", "level": "room", "room": "ADMIN_ROOM", "access_bundle_ids": ["admin-bundle"]}
+      ]
+    }|}
+  in
+  let cfg = parse json in
+  (* Unauthorized member — session key doesn't match any scope *)
+  let explanation =
+    Access_explanation.create ~config:cfg ~session_key:"slack:UNAUTHORIZED" ()
+  in
+  Alcotest.(check int) "no scopes" 0 (List.length explanation.scopes);
+  Alcotest.(check int)
+    "no allowed tools" 0
+    (List.length explanation.allowed_tools);
+  Alcotest.(check int)
+    "no credential handles" 0
+    (List.length explanation.credential_handles);
+  Alcotest.(check int)
+    "no instructions" 0
+    (List.length explanation.instructions);
+  (* JSON must not leak any credential or admin room info *)
+  let json_out = Access_explanation.to_json explanation in
+  let json_str = Yojson.Safe.to_string json_out in
+  Alcotest.(check bool)
+    "json does not contain admin-cred" true
+    (not (Test_helpers.string_contains json_str "admin-cred"));
+  Alcotest.(check bool)
+    "json does not contain ADMIN_SECRET" true
+    (not (Test_helpers.string_contains json_str "ADMIN_SECRET"));
+  Alcotest.(check bool)
+    "json does not contain admin_tool" true
+    (not (Test_helpers.string_contains json_str "admin_tool"))
+
+let test_mixed_active_deleted_credentials () =
+  let json =
+    {|{
+      "workspace": "/tmp/test",
+      "credential_handles": [
+        {"id": "cred-active", "provider": {"type": "env_var", "name": "ACTIVE_SECRET"}, "description": "Active"},
+        {"id": "cred-deleted", "provider": {"type": "env_var", "name": "DELETED_SECRET"}, "description": "Deleted", "status": "deleted"},
+        {"id": "cred-file", "provider": {"type": "file", "path": "/secret/path"}, "description": "File cred"},
+        {"id": "cred-enc", "provider": {"type": "encrypted", "cipher_text": "$ENC:YWJjMTIz"}, "description": "Enc cred"}
+      ],
+      "access_bundles": [
+        {"id": "b1", "credential_handles": ["cred-active", "cred-deleted", "cred-file", "cred-enc"]}
+      ],
+      "access_scopes": [
+        {"id": "default", "level": "default", "access_bundle_ids": ["b1"]}
+      ]
+    }|}
+  in
+  let cfg = parse json in
+  let explanation =
+    Access_explanation.create ~config:cfg ~session_key:"slack:C123" ()
+  in
+  (* Only 3 active credential handles should be exposed *)
+  Alcotest.(check int)
+    "3 active credential handles" 3
+    (List.length explanation.credential_handles);
+  let exposed_ids =
+    List.map
+      (fun (ci : Access_explanation.credential_info) -> ci.id)
+      explanation.credential_handles
+  in
+  Alcotest.(check bool)
+    "active cred exposed" true
+    (List.mem "cred-active" exposed_ids);
+  Alcotest.(check bool)
+    "file cred exposed" true
+    (List.mem "cred-file" exposed_ids);
+  Alcotest.(check bool)
+    "enc cred exposed" true
+    (List.mem "cred-enc" exposed_ids);
+  Alcotest.(check bool)
+    "deleted cred NOT exposed" false
+    (List.mem "cred-deleted" exposed_ids);
+  (* JSON must not contain any secret values *)
+  let json_out = Access_explanation.to_json explanation in
+  let json_str = Yojson.Safe.to_string json_out in
+  Alcotest.(check bool)
+    "json does not contain ACTIVE_SECRET" true
+    (not (Test_helpers.string_contains json_str "ACTIVE_SECRET"));
+  Alcotest.(check bool)
+    "json does not contain DELETED_SECRET" true
+    (not (Test_helpers.string_contains json_str "DELETED_SECRET"));
+  Alcotest.(check bool)
+    "json does not contain /secret/path" true
+    (not (Test_helpers.string_contains json_str "/secret/path"));
+  Alcotest.(check bool)
+    "json does not contain ENC ciphertext" true
+    (not (Test_helpers.string_contains json_str "$ENC:"));
+  (* Text must not contain any secret values *)
+  let text = Access_explanation.to_text explanation in
+  Alcotest.(check bool)
+    "text does not contain ACTIVE_SECRET" true
+    (not (Test_helpers.string_contains text "ACTIVE_SECRET"));
+  Alcotest.(check bool)
+    "text does not contain DELETED_SECRET" true
+    (not (Test_helpers.string_contains text "DELETED_SECRET"));
+  Alcotest.(check bool)
+    "text does not contain /secret/path" true
+    (not (Test_helpers.string_contains text "/secret/path"))
+
 let test_non_inherited_credentials_not_exposed () =
   let json =
     {|{
@@ -696,4 +1053,22 @@ let suite =
     Alcotest.test_case "scope info fields" `Quick test_scope_info_fields;
     Alcotest.test_case "non-inherited credentials not exposed" `Quick
       test_non_inherited_credentials_not_exposed;
+    Alcotest.test_case "unbound room explanation" `Quick
+      test_unbound_room_explanation;
+    Alcotest.test_case "unbound room no credentials leaked" `Quick
+      test_unbound_room_no_credentials_leaked;
+    Alcotest.test_case "deleted profile no credential leak" `Quick
+      test_deleted_profile_no_credential_leak;
+    Alcotest.test_case "encrypted credential redaction" `Quick
+      test_encrypted_credential_redaction;
+    Alcotest.test_case "file credential redaction" `Quick
+      test_file_credential_redaction;
+    Alcotest.test_case "env var credential redaction" `Quick
+      test_env_var_credential_redaction;
+    Alcotest.test_case "inactive bundle scope no credential leak" `Quick
+      test_inactive_bundle_scope_no_credential_leak;
+    Alcotest.test_case "unauthorized member empty explanation" `Quick
+      test_unauthorized_member_empty_explanation;
+    Alcotest.test_case "mixed active deleted credentials" `Quick
+      test_mixed_active_deleted_credentials;
   ]
