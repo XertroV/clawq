@@ -41,6 +41,27 @@ let room_profile_tool_denial agent ~session_key ~tool_name =
       Runtime_config.room_profile_tool_denial_for_session agent.config
         ~session_key ~tool_name
 
+let normalized_tool_call_json (tc : Provider.tool_call) =
+  `Assoc
+    [
+      ("id", `String tc.id);
+      ("name", `String tc.function_name);
+      ("arguments", `String tc.arguments);
+    ]
+  |> Yojson.Safe.to_string
+
+let raw_tool_call_data_for_log ?raw_tool_calls_json tc =
+  match raw_tool_calls_json with
+  | Some raw when String.trim raw <> "" -> raw
+  | _ -> normalized_tool_call_json tc
+
+let log_raw_tool_call_failure sk_tag ?raw_tool_calls_json
+    (tc : Provider.tool_call) ~reason =
+  Logs.warn (fun m ->
+      m "%sRaw model tool-call data for failed %s (id=%s, reason=%s): %s" sk_tag
+        tc.function_name tc.id reason
+        (raw_tool_call_data_for_log ?raw_tool_calls_json tc))
+
 let summarize_history_for_wipe history =
   let lines = ref [] in
   let add line = lines := line :: !lines in
@@ -101,8 +122,8 @@ let perform_cwd_history_wipe agent =
    modify the same file, accepted in exchange for keeping attribution
    correct. *)
 let execute_tool_calls_stream agent ~db ~audit_enabled ~session_key
-    ?interrupt_check ?on_tool_round_complete ?on_llm_call_debug ~on_chunk calls
-    =
+    ?raw_tool_calls_json ?interrupt_check ?on_tool_round_complete
+    ?on_llm_call_debug ~on_chunk calls =
   let open Lwt.Syntax in
   let sk_tag = match session_key with Some s -> "[" ^ s ^ "] " | None -> "" in
   let notification_promises = ref [] in
@@ -361,9 +382,12 @@ let execute_tool_calls_stream agent ~db ~audit_enabled ~session_key
           if success then
             Logs.info (fun m ->
                 m "%sTool result: %s -> %s" sk_tag tc.function_name preview)
-          else
+          else begin
             Logs.warn (fun m ->
                 m "%sTool error: %s -> %s" sk_tag tc.function_name preview);
+            log_raw_tool_call_failure sk_tag ?raw_tool_calls_json tc
+              ~reason:preview
+          end;
           (* B598: when the model opts in via "forward_to_user": true in the
              tool call args, emit the full result as a ToolOutputDelta first
              so the channel session displays it as its own message before
@@ -426,8 +450,9 @@ let execute_tool_calls_stream agent ~db ~audit_enabled ~session_key
   in
   Lwt.return_unit
 
-let execute_tool_calls agent ~db ~audit_enabled ~session_key ?interrupt_check
-    ?on_tool_round_complete ?on_llm_call_debug calls =
+let execute_tool_calls agent ~db ~audit_enabled ~session_key
+    ?raw_tool_calls_json ?interrupt_check ?on_tool_round_complete
+    ?on_llm_call_debug calls =
   let open Lwt.Syntax in
   let sk_tag = match session_key with Some s -> "[" ^ s ^ "] " | None -> "" in
   let pending_history_wipe = ref false in
@@ -621,9 +646,12 @@ let execute_tool_calls agent ~db ~audit_enabled ~session_key ?interrupt_check
           if success then
             Logs.info (fun m ->
                 m "%sTool result: %s -> %s" sk_tag tc.function_name truncated)
-          else
+          else begin
             Logs.warn (fun m ->
                 m "%sTool error: %s -> %s" sk_tag tc.function_name truncated);
+            log_raw_tool_call_failure sk_tag ?raw_tool_calls_json tc
+              ~reason:truncated
+          end;
           let refresh =
             observe_workspace_refresh agent tc result
               ~before_active_workspace_files

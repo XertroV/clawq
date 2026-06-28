@@ -235,11 +235,19 @@ let test_parse_tool_use_response () =
     {|{"content":[{"type":"tool_use","id":"call-1","name":"file_read","input":{"path":"/tmp"}}],"model":"claude-3","stop_reason":"tool_use","usage":{"input_tokens":10,"output_tokens":5}}|}
   in
   match Provider_anthropic.parse_anthropic_response body "claude-3" with
-  | Ok (Provider.ToolCalls { calls; _ }) ->
+  | Ok (Provider.ToolCalls { calls; provider_response_items_json; _ }) ->
       Alcotest.(check int) "1 call" 1 (List.length calls);
       let tc = List.hd calls in
       Alcotest.(check string) "id" "call-1" tc.id;
-      Alcotest.(check string) "name" "file_read" tc.function_name
+      Alcotest.(check string) "name" "file_read" tc.function_name;
+      let raw =
+        match provider_response_items_json with
+        | Some raw -> raw
+        | None -> Alcotest.fail "expected raw tool-use payload"
+      in
+      Alcotest.(check bool)
+        "raw payload includes original tool input" true
+        (Test_helpers.string_contains raw {|"path":"/tmp"|})
   | Ok (Provider.Text _) -> Alcotest.fail "expected ToolCalls"
   | Error e -> Alcotest.fail ("error: " ^ e)
 

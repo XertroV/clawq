@@ -80,20 +80,27 @@ let parse_anthropic_response body model =
     in
     let thinking = if thinking_text = "" then None else Some thinking_text in
     if stop_reason = "tool_use" then
+      let raw_tool_blocks =
+        List.filter
+          (fun block ->
+            try block |> member "type" |> to_string = "tool_use"
+            with _ -> false)
+          content_list
+      in
       let tool_calls =
         List.filter_map
           (fun block ->
             try
-              let block_type = block |> member "type" |> to_string in
-              if block_type = "tool_use" then
-                let id = block |> member "id" |> to_string in
-                let function_name = block |> member "name" |> to_string in
-                let input = block |> member "input" in
-                let arguments = Yojson.Safe.to_string input in
-                Some { Provider.id; function_name; arguments }
-              else None
+              let id = block |> member "id" |> to_string in
+              let function_name = block |> member "name" |> to_string in
+              let input = block |> member "input" in
+              let arguments = Yojson.Safe.to_string input in
+              Some { Provider.id; function_name; arguments }
             with _ -> None)
-          content_list
+          raw_tool_blocks
+      in
+      let provider_response_items_json =
+        match raw_tool_blocks with [] -> None | _ -> Some body
       in
       if tool_calls <> [] then
         Ok
@@ -102,7 +109,7 @@ let parse_anthropic_response body model =
                calls = tool_calls;
                model = resp_model;
                usage;
-               provider_response_items_json = None;
+               provider_response_items_json;
                thinking;
              })
       else Error "tool_use stop reason but no tool_use blocks found"
@@ -288,6 +295,17 @@ let complete_streaming ~(config : Runtime_config.t)
       let current_tool_id = ref "" in
       let current_tool_name = ref "" in
       let stop_reason = ref "" in
+      let raw_tool_events : Yojson.Safe.t list ref = ref [] in
+      let record_tool_event event_type data_str =
+        raw_tool_events :=
+          !raw_tool_events
+          @ [
+              `Assoc
+                [
+                  ("event", `String event_type); ("data_raw", `String data_str);
+                ];
+            ]
+      in
       let process_event event_type data_str =
         try
           let json = Yojson.Safe.from_string data_str in
@@ -319,11 +337,25 @@ let complete_streaming ~(config : Runtime_config.t)
                 let btype = block |> member "type" |> to_string in
                 current_block_type := btype;
                 if btype = "tool_use" then begin
+                  record_tool_event event_type data_str;
                   (current_tool_id :=
                      try block |> member "id" |> to_string with _ -> "");
                   (current_tool_name :=
                      try block |> member "name" |> to_string with _ -> "");
                   let args_buf = Buffer.create 256 in
+                  (* Some Anthropic-compatible providers embed the complete
+                     tool input in content_block.input and emit no later
+                     input_json_delta events. Preserve that input instead of
+                     producing an empty argument string. *)
+                  (match
+                     try Some (block |> member "input") with _ -> None
+                   with
+                  | Some (`Assoc fields) when fields <> [] ->
+                      Buffer.add_string args_buf
+                        (Yojson.Safe.to_string (`Assoc fields))
+                  | Some (`Assoc _) | Some `Null | None -> ()
+                  | Some other ->
+                      Buffer.add_string args_buf (Yojson.Safe.to_string other));
                   tool_calls_acc :=
                     !tool_calls_acc
                     @ [
@@ -332,13 +364,17 @@ let complete_streaming ~(config : Runtime_config.t)
                           !current_tool_name,
                           args_buf );
                       ];
+                  let arguments =
+                    let s = Buffer.contents args_buf in
+                    if s = "" then None else Some s
+                  in
                   on_chunk
                     (Provider.ToolCallDelta
                        {
                          index = !current_block_index;
                          id = Some !current_tool_id;
                          function_name = Some !current_tool_name;
-                         arguments = None;
+                         arguments;
                        })
                 end
                 else Lwt.return_unit
@@ -365,6 +401,8 @@ let complete_streaming ~(config : Runtime_config.t)
                 end
                 else begin
                   if dtype = "input_json_delta" then begin
+                    if !current_block_type = "tool_use" then
+                      record_tool_event event_type data_str;
                     let partial = delta |> member "partial_json" |> to_string in
                     List.iter
                       (fun (idx, _, _, args_buf) ->
@@ -384,6 +422,8 @@ let complete_streaming ~(config : Runtime_config.t)
                 end
               with _ -> Lwt.return_unit)
           | "content_block_stop" ->
+              if !current_block_type = "tool_use" then
+                record_tool_event event_type data_str;
               current_block_type := "";
               current_block_index := 0;
               Lwt.return_unit
@@ -452,7 +492,12 @@ let complete_streaming ~(config : Runtime_config.t)
         let t = Buffer.contents thinking_acc in
         if t = "" then None else Some t
       in
+      let provider_response_items_json =
+        match !raw_tool_events with
+        | [] -> None
+        | events -> Some (Yojson.Safe.to_string (`List events))
+      in
       Lwt.return
         (Provider.make_stream_result ~tool_calls ~content ~model:final_model
-           ~usage:!usage_acc ~thinking ()))
+           ~usage:!usage_acc ~provider_response_items_json ~thinking ()))
     ()

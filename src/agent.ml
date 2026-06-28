@@ -654,7 +654,8 @@ let turn agent ~user_message ?db ?session_key ?interrupt_check ?inject_messages
         agent.history <- assistant_msg :: agent.history;
         let* () =
           execute_tool_calls agent ~db ~audit_enabled ~session_key
-            ?interrupt_check ?on_tool_round_complete ?on_llm_call_debug calls
+            ?raw_tool_calls_json:provider_response_items_json ?interrupt_check
+            ?on_tool_round_complete ?on_llm_call_debug calls
         in
         (match inject_messages with
         | Some get_msgs ->
@@ -1153,6 +1154,7 @@ let turn_stream agent ~user_message ?db ?session_key ?interrupt_check
             agent.history <- assistant_msg :: agent.history;
             let* () =
               execute_tool_calls_stream agent ~db ~audit_enabled ~session_key
+                ?raw_tool_calls_json:provider_response_items_json
                 ?interrupt_check ?on_tool_round_complete ?on_llm_call_debug
                 ~on_chunk calls
             in
