@@ -32,6 +32,13 @@ let availability_filter_to_string = function
   | Unavailable -> "unavailable"
   | All -> "all"
 
+let default_prompt_cache_ttl_s provider =
+  Model_cache_policy.default_prompt_cache_ttl_s provider
+
+let effective_prompt_cache_ttl_s (m : model_info) =
+  Model_cache_policy.effective_prompt_cache_ttl_s ~provider:m.provider
+    ~model_id:m.id
+
 (* B697: Xiaomi MiMo catalog entries, derived from Xiaomi.catalog_specs so the
    data lives in xiaomi.ml (one source of truth across catalog/pricing/routing).
    All MiMo models are reasoning + tool-capable. *)
@@ -789,6 +796,11 @@ let format_context_window = function
         Printf.sprintf "%.1fM" (float_of_int n /. 1_000_000.0)
       else Printf.sprintf "%dK" (n / 1000)
 
+let format_prompt_cache_ttl_s seconds =
+  if seconds mod 3600 = 0 then Printf.sprintf "%dh" (seconds / 3600)
+  else if seconds mod 60 = 0 then Printf.sprintf "%dm" (seconds / 60)
+  else Printf.sprintf "%ds" seconds
+
 let to_plain_list ?(provider_filter = None) ?(availability = Available)
     ?(db_extras = []) () =
   let filtered =
@@ -808,10 +820,16 @@ let to_plain_list ?(provider_filter = None) ?(availability = Available)
       (fun m ->
         let full = Printf.sprintf "%s:%s" m.provider m.id in
         let ctx = format_context_window m.context_window in
+        let cache =
+          match effective_prompt_cache_ttl_s m with
+          | None -> ""
+          | Some ttl -> " cache " ^ format_prompt_cache_ttl_s ttl
+        in
         let badge_str = format_badges m in
-        if ctx = "" then full
-        else if badge_str = "" then Printf.sprintf "%s (%s)" full ctx
-        else Printf.sprintf "%s (%s%s)" full ctx badge_str)
+        if ctx = "" && cache = "" && badge_str = "" then full
+        else if ctx = "" then
+          Printf.sprintf "%s (%s%s)" full (String.trim cache) badge_str
+        else Printf.sprintf "%s (%s%s%s)" full ctx cache badge_str)
       visible
   in
   let extra_lines =
@@ -856,6 +874,11 @@ let to_json ?(provider_filter = None) ?(availability = Available)
            match m.context_window with
            | None -> fields
            | Some n -> ("context_window", `Int n) :: fields
+         in
+         let fields =
+           match effective_prompt_cache_ttl_s m with
+           | None -> fields
+           | Some n -> ("prompt_cache_ttl_s", `Int n) :: fields
          in
          let fields =
            ("supports_vision", `Bool m.supports_vision)

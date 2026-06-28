@@ -64,16 +64,111 @@ let test_format_context_window () =
   let ctx3 = Models_catalog.format_context_window None in
   Alcotest.(check string) "none" "" ctx3
 
+let test_provider_prompt_cache_ttls () =
+  Alcotest.(check (option int))
+    "openai default prompt cache ttl policy-dependent" None
+    (Models_catalog.default_prompt_cache_ttl_s "openai");
+  Alcotest.(check (option int))
+    "anthropic default prompt cache ttl" (Some 300)
+    (Models_catalog.default_prompt_cache_ttl_s "anthropic");
+  Alcotest.(check (option int))
+    "gemini implicit cache ttl unknown" None
+    (Models_catalog.default_prompt_cache_ttl_s "gemini");
+  Alcotest.(check (option int))
+    "groq provider cache ttl unknown" None
+    (Models_catalog.default_prompt_cache_ttl_s "groq");
+  Alcotest.(check (option int))
+    "unknown provider cache ttl unknown" None
+    (Models_catalog.default_prompt_cache_ttl_s "unknown-provider")
+
+let test_effective_prompt_cache_ttl_omits_policy_dependent_provider_default () =
+  let model =
+    match Models_catalog.find_by_full_name "openai:gpt-5.4" with
+    | Some model -> model
+    | None -> Alcotest.fail "expected openai:gpt-5.4"
+  in
+  Alcotest.(check (option int))
+    "effective ttl omitted when provider default depends on policy" None
+    (Models_catalog.effective_prompt_cache_ttl_s model)
+
+let test_effective_prompt_cache_ttl_uses_provider_default () =
+  let model =
+    match Models_catalog.find_by_full_name "anthropic:claude-sonnet-4-6" with
+    | Some model -> model
+    | None -> Alcotest.fail "expected anthropic:claude-sonnet-4-6"
+  in
+  Alcotest.(check (option int))
+    "effective ttl follows provider" (Some 300)
+    (Models_catalog.effective_prompt_cache_ttl_s model)
+
+let test_effective_prompt_cache_ttl_uses_model_override () =
+  let model =
+    match Models_catalog.find_by_full_name "openai:gpt-5.5" with
+    | Some model -> model
+    | None -> Alcotest.fail "expected openai:gpt-5.5"
+  in
+  Alcotest.(check (option int))
+    "effective ttl uses model override" (Some 86400)
+    (Models_catalog.effective_prompt_cache_ttl_s model)
+
+let test_effective_prompt_cache_ttl_uses_groq_supported_model_override () =
+  let model =
+    match Models_catalog.find_by_full_name "groq:openai/gpt-oss-20b" with
+    | Some model -> model
+    | None -> Alcotest.fail "expected groq:openai/gpt-oss-20b"
+  in
+  Alcotest.(check (option int))
+    "supported Groq model gets documented ttl" (Some 7200)
+    (Models_catalog.effective_prompt_cache_ttl_s model);
+  let unsupported_model =
+    match Models_catalog.find_by_full_name "groq:llama-3.3-70b-versatile" with
+    | Some model -> model
+    | None -> Alcotest.fail "expected groq:llama-3.3-70b-versatile"
+  in
+  Alcotest.(check (option int))
+    "unsupported Groq model omits provider-wide ttl" None
+    (Models_catalog.effective_prompt_cache_ttl_s unsupported_model)
+
 let test_to_plain_list () =
   let list = Models_catalog.to_plain_list () in
   Alcotest.(check bool) "non-empty" true (String.length list > 0);
-  Alcotest.(check bool) "contains anthropic" true (String.contains list 'a')
+  Alcotest.(check bool) "contains anthropic" true (String.contains list 'a');
+  Alcotest.(check bool)
+    "shows openai model" true
+    (Test_helpers.string_contains list "openai:gpt-5.4");
+  let has_anthropic_cache_ttl =
+    Test_helpers.string_contains list "anthropic:claude-sonnet-4-6"
+    && Test_helpers.string_contains list "cache 5m"
+  in
+  Alcotest.(check bool) "shows cache ttl" true has_anthropic_cache_ttl
 
 let test_to_json () =
   let json = Models_catalog.to_json () in
   let open Yojson.Safe.Util in
   let list = json |> to_list in
-  Alcotest.(check bool) "json list non-empty" true (list <> [])
+  Alcotest.(check bool) "json list non-empty" true (list <> []);
+  let anthropic =
+    List.find
+      (fun entry ->
+        entry |> member "provider" |> to_string = "anthropic"
+        && entry |> member "id" |> to_string = "claude-sonnet-4-6")
+      list
+  in
+  Alcotest.(check int)
+    "json prompt cache ttl" 300
+    (anthropic |> member "prompt_cache_ttl_s" |> to_int);
+  let openai =
+    List.find
+      (fun entry ->
+        entry |> member "provider" |> to_string = "openai"
+        && entry |> member "id" |> to_string = "gpt-5.4")
+      list
+  in
+  Alcotest.(check bool)
+    "policy-dependent OpenAI ttl omitted" true
+    (match openai |> member "prompt_cache_ttl_s" with
+    | `Null -> true
+    | _ -> false)
 
 let test_codex_by_provider () =
   let codex = Models_catalog.by_provider "openai-codex" in
@@ -355,6 +450,19 @@ let suite =
     ("providers", `Quick, test_providers_list);
     ("deprecated", `Quick, test_deprecated_models);
     ("format_context_window", `Quick, test_format_context_window);
+    ("provider prompt cache ttls", `Quick, test_provider_prompt_cache_ttls);
+    ( "effective prompt cache ttl omits policy-dependent provider default",
+      `Quick,
+      test_effective_prompt_cache_ttl_omits_policy_dependent_provider_default );
+    ( "effective prompt cache ttl uses provider default",
+      `Quick,
+      test_effective_prompt_cache_ttl_uses_provider_default );
+    ( "effective prompt cache ttl uses model override",
+      `Quick,
+      test_effective_prompt_cache_ttl_uses_model_override );
+    ( "effective prompt cache ttl uses Groq supported model override",
+      `Quick,
+      test_effective_prompt_cache_ttl_uses_groq_supported_model_override );
     ("to_plain_list", `Quick, test_to_plain_list);
     ("to_json", `Quick, test_to_json);
     ("codex by provider", `Quick, test_codex_by_provider);

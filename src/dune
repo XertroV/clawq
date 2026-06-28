@@ -179,6 +179,7 @@
   daemon_status
   benchmark
   debate
+  model_cache_policy
   models_catalog
   model_preferences
   model_validation

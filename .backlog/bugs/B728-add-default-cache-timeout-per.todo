@@ -1,14 +1,15 @@
 ---
 claimed_at: "2026-06-28T06:41:57Z"
 claimed_by: cli-user
-completed_at: null
+completed_at: "2026-06-28T06:54:59Z"
 complexity: medium
 depends_on: []
+duration_minutes: 13.038049866283334
 estimate_hours: 1
 id: B728
 priority: high
 started_at: "2026-06-28T06:41:57Z"
-status: in_progress
+status: done
 tags: []
 title: Add default cache timeout per provider to available models table
 ---

@@ -1,118 +1,118 @@
-provider,model_id,display_name,context_window,supports_vision,supports_reasoning,reasoning_levels,input_price_per_m,output_price_per_m,source_url,notes,date_updated
-anthropic,claude-opus-4-6,"Claude Opus 4.6",200000,true,true,"adaptive:low,medium,high,max",5.00,25.00,https://platform.claude.com/docs/en/about-claude/pricing,"Latest flagship. 1M beta context. 128K max output.",2026-03-10
-anthropic,claude-sonnet-4-6,"Claude Sonnet 4.6",200000,true,true,"adaptive:low,medium,high",3.00,15.00,https://platform.claude.com/docs/en/about-claude/pricing,"1M beta context. 64K max output.",2026-03-10
-anthropic,claude-haiku-4-5,"Claude Haiku 4.5",200000,true,true,"extended",1.00,5.00,https://platform.claude.com/docs/en/about-claude/pricing,"Fastest current model.",2026-03-10
-anthropic,claude-sonnet-4-5,"Claude Sonnet 4.5",200000,true,true,"extended",3.00,15.00,https://platform.claude.com/docs/en/about-claude/pricing,"Legacy.",2026-03-10
-anthropic,claude-opus-4-5,"Claude Opus 4.5",200000,true,true,"extended",5.00,25.00,https://platform.claude.com/docs/en/about-claude/pricing,"Legacy.",2026-03-10
-anthropic,claude-opus-4-1,"Claude Opus 4.1",200000,true,true,"extended",15.00,75.00,https://platform.claude.com/docs/en/about-claude/pricing,"Legacy. 32K max output.",2026-03-10
-anthropic,claude-sonnet-4-0,"Claude Sonnet 4",200000,true,true,"extended",3.00,15.00,https://platform.claude.com/docs/en/about-claude/pricing,"Legacy. 1M beta context.",2026-03-10
-anthropic,claude-opus-4-0,"Claude Opus 4",200000,true,true,"extended",15.00,75.00,https://platform.claude.com/docs/en/about-claude/pricing,"Legacy.",2026-03-10
-anthropic,claude-3-7-sonnet,"Claude 3.7 Sonnet",200000,true,true,"extended",3.00,15.00,https://platform.claude.com/docs/en/about-claude/model-deprecations,"Retired Feb 2026.",2026-03-10
-anthropic,claude-3-5-sonnet,"Claude 3.5 Sonnet v2",200000,true,false,"",3.00,15.00,https://platform.claude.com/docs/en/about-claude/model-deprecations,"Retired Oct 2025.",2026-03-10
-anthropic,claude-3-5-haiku,"Claude 3.5 Haiku",200000,true,false,"",0.80,4.00,https://platform.claude.com/docs/en/about-claude/pricing,"Retired Feb 2026.",2026-03-10
-anthropic,claude-3-opus,"Claude 3 Opus",200000,true,false,"",15.00,75.00,https://platform.claude.com/docs/en/about-claude/model-deprecations,"Retired Jan 2026.",2026-03-10
-anthropic,claude-3-haiku,"Claude 3 Haiku",200000,true,false,"",0.25,1.25,https://platform.claude.com/docs/en/about-claude/pricing,"Deprecated; retiring Apr 2026.",2026-03-10
-openai,gpt-5.5,"GPT-5.5",272000,true,true,"none,low,medium,high,xhigh",5.00,30.00,https://openai.com/api/pricing/,"Flagship Jun 2026; ~2x GPT-5.4 pricing. Codex integration caps context to 272K. >272K = 2x pricing. Cached input 0.50.",2026-06-26
-openai,gpt-5.4,"GPT-5.4",1050000,true,true,"none,low,medium,high,xhigh",2.50,15.00,https://developers.openai.com/api/docs/pricing/,"Latest flagship Mar 2026. 1M context. >272K = 2x pricing.",2026-03-10
-openai,gpt-5.4-pro,"GPT-5.4 Pro",1050000,true,true,"none,low,medium,high,xhigh",30.00,180.00,https://developers.openai.com/api/docs/pricing/,"",2026-03-10
-openai,gpt-5.2,"GPT-5.2",400000,true,true,"none,low,medium,high,xhigh",1.75,14.00,https://developers.openai.com/api/docs/pricing/,"Previous flagship Feb 2026.",2026-03-10
-openai,gpt-5.2-pro,"GPT-5.2 Pro",400000,true,true,"none,low,medium,high,xhigh",21.00,168.00,https://developers.openai.com/api/docs/pricing/,"",2026-03-10
-openai,gpt-5,"GPT-5",400000,true,true,"minimal,low,medium,high",1.25,10.00,https://developers.openai.com/api/docs/pricing/,"Aug 2025 flagship.",2026-03-10
-openai,gpt-5-pro,"GPT-5 Pro",400000,true,true,"minimal,low,medium,high",15.00,120.00,https://developers.openai.com/api/docs/pricing/,"",2026-03-10
-openai,gpt-5-mini,"GPT-5 Mini",400000,true,true,"medium",0.25,2.00,https://developers.openai.com/api/docs/pricing/,"",2026-03-10
-openai,gpt-5-nano,"GPT-5 Nano",400000,true,false,"",0.05,0.40,https://developers.openai.com/api/docs/pricing/,"Cheapest model.",2026-03-10
-openai,gpt-4.1,"GPT-4.1",1000000,true,false,"",2.00,8.00,https://developers.openai.com/api/docs/pricing/,"1M context.",2026-03-10
-openai,gpt-4.1-mini,"GPT-4.1 Mini",1000000,true,false,"",0.40,1.60,https://developers.openai.com/api/docs/pricing/,"1M context.",2026-03-10
-openai,gpt-4.1-nano,"GPT-4.1 Nano",1000000,true,false,"",0.10,0.40,https://developers.openai.com/api/docs/pricing/,"1M context.",2026-03-10
-openai,gpt-4o,"GPT-4o",128000,true,false,"",2.50,10.00,https://developers.openai.com/api/docs/pricing/,"Legacy.",2026-03-10
-openai,gpt-4o-mini,"GPT-4o Mini",128000,true,false,"",0.15,0.60,https://developers.openai.com/api/docs/pricing/,"Legacy.",2026-03-10
-openai,gpt-4-turbo,"GPT-4 Turbo",128000,true,false,"",10.00,30.00,https://openai.com/api/pricing/,"Deprecated/Legacy.",2026-03-10
-openai,o3,"o3",200000,true,true,"low,medium,high",2.00,8.00,https://developers.openai.com/api/docs/pricing/,"",2026-03-10
-openai,o3-pro,"o3 Pro",200000,true,true,"low,medium,high",20.00,80.00,https://developers.openai.com/api/docs/pricing/,"",2026-03-10
-openai,o3-mini,"o3 Mini",200000,true,true,"low,medium,high",1.10,4.40,https://developers.openai.com/api/docs/pricing/,"",2026-03-10
-openai,o4-mini,"o4-mini",200000,true,true,"low,medium,high",1.10,4.40,https://developers.openai.com/api/docs/pricing/,"Latest small reasoning model.",2026-03-10
-openai,o1,"o1",200000,true,true,"low,medium,high",15.00,60.00,https://developers.openai.com/api/docs/pricing/,"Legacy reasoning.",2026-03-10
-openai,o1-pro,"o1 Pro",200000,true,true,"",150.00,600.00,https://developers.openai.com/api/docs/pricing/,"Most expensive.",2026-03-10
-openai,o1-mini,"o1 Mini",128000,false,true,"low,medium,high",3.00,12.00,https://developers.openai.com/api/docs/pricing/,"Deprecated; replaced by o3-mini.",2026-03-10
-openai-codex,gpt-5-codex,"GPT-5-Codex",400000,true,true,"low,medium,high",1.25,10.00,https://developers.openai.com/api/docs/models/gpt-5-codex,"Codex-optimized model.",2026-06-26
-openai-codex,gpt-5.3-codex,"GPT-5.3-Codex",400000,true,true,"low,medium,high",1.25,10.00,https://developers.openai.com/codex/pricing,"Codex CLI model.",2026-06-26
-openai-codex,gpt-5.3-codex-spark,"GPT-5.3-Codex Spark",400000,true,true,"low,medium,high",1.25,10.00,https://developers.openai.com/codex/pricing,"Codex spark model.",2026-06-26
-openai-codex,gpt-5.4,"GPT-5.4 (Codex)",1050000,true,true,"none,low,medium,high,xhigh",2.50,15.00,https://developers.openai.com/codex/pricing,"Codex-supported GPT-5.4.",2026-06-26
-openai-codex,gpt-5.4-mini,"GPT-5.4 Mini (Codex)",1050000,true,true,"none,low,medium,high,xhigh",0.25,2.00,https://developers.openai.com/codex/pricing,"Codex-supported GPT-5.4 mini.",2026-06-26
-openai-codex,gpt-5.5,"GPT-5.5 (Codex)",272000,true,true,"none,low,medium,high,xhigh",1.75,14.00,https://developers.openai.com/codex/pricing,"Codex-supported GPT-5.5.",2026-06-26
-gemini,gemini-2.5-pro,"Gemini 2.5 Pro",1048576,true,true,"budget:0-24576",1.25,10.00,https://ai.google.dev/pricing,"Long context (>200k): $2.50/$15.00",2026-03-10
-gemini,gemini-2.5-flash,"Gemini 2.5 Flash",1048576,true,true,"budget:0-24576",0.30,2.50,https://ai.google.dev/pricing,"",2026-03-10
-gemini,gemini-2.0-flash,"Gemini 2.0 Flash",1048576,true,false,"",0.10,0.40,https://ai.google.dev/pricing,"Deprecated; retiring Jun 2026.",2026-03-10
-gemini,gemini-1.5-pro,"Gemini 1.5 Pro",2097152,true,false,"",1.25,5.00,https://ai.google.dev/pricing,"Long context (>128k): $2.50/$10.00",2026-03-10
-gemini,gemini-1.5-flash,"Gemini 1.5 Flash",1048576,true,false,"",0.075,0.30,https://ai.google.dev/pricing,"Long context (>128k): $0.15/$0.60",2026-03-10
-deepseek,deepseek-chat,"DeepSeek V3.2 Chat",131072,false,false,"",0.28,0.42,https://api-docs.deepseek.com/quick_start/pricing,"Cache hit: $0.028/M input",2026-03-10
-deepseek,deepseek-reasoner,"DeepSeek V3.2 Reasoner",131072,false,true,"",0.28,0.42,https://api-docs.deepseek.com/quick_start/pricing,"Thinking/reasoning mode of V3.2",2026-03-10
-mistral,mistral-large-latest,"Mistral Large 3",262144,true,false,"",0.50,1.50,https://mistral.ai/pricing,"",2026-03-10
-mistral,mistral-medium-latest,"Mistral Medium 3.1",131072,true,false,"",0.40,2.00,https://mistral.ai/pricing,"",2026-03-10
-mistral,mistral-small-latest,"Mistral Small 3.2",131072,true,false,"",0.06,0.18,https://mistral.ai/pricing,"24B params",2026-03-10
-mistral,codestral-latest,"Codestral",262144,false,false,"",0.30,0.90,https://mistral.ai/pricing,"Code-specialized",2026-03-10
-cohere,command-a-03-2025,"Command A",262144,false,false,"",2.50,10.00,https://cohere.com/pricing,"111B params",2026-03-10
-cohere,command-r-plus-08-2024,"Command R+",131072,false,false,"",2.50,10.00,https://cohere.com/pricing,"",2026-03-10
-cohere,command-r-08-2024,"Command R",131072,false,false,"",0.15,0.60,https://cohere.com/pricing,"",2026-03-10
-groq,llama-3.3-70b-versatile,"Llama 3.3 70B",131072,false,false,"",0.59,0.79,https://groq.com/pricing,"",2026-03-10
-groq,llama-3.1-8b-instant,"Llama 3.1 8B",131072,false,false,"",0.05,0.08,https://groq.com/pricing,"",2026-03-10
-groq,meta-llama/llama-4-scout-17b-16e-instruct,"Llama 4 Scout",131072,true,false,"",0.11,0.34,https://groq.com/pricing,"Preview; multimodal",2026-03-10
-groq,meta-llama/llama-4-maverick-17b-128e-instruct,"Llama 4 Maverick",131072,true,false,"",0.20,0.60,https://groq.com/pricing,"Preview; multimodal",2026-03-10
-groq,openai/gpt-oss-20b,"GPT-OSS 20B",131072,false,true,"low,medium,high",0.075,0.30,https://groq.com/pricing,"",2026-03-10
-groq,openai/gpt-oss-120b,"GPT-OSS 120B",131072,false,true,"low,medium,high",0.15,0.60,https://groq.com/pricing,"",2026-03-10
-groq,qwen/qwen3-32b,"Qwen3 32B",131072,false,true,"thinking,non-thinking",0.29,0.59,https://groq.com/pricing,"Preview",2026-03-10
-groq,moonshotai/kimi-k2-instruct-0905,"Kimi K2",262144,false,false,"",1.00,3.00,https://groq.com/pricing,"Preview",2026-03-10
-moonshot,kimi-k2.6,"Kimi K2.6",262144,true,true,"thinking,tools,vision",0.95,4.00,https://platform.kimi.ai/docs/pricing/chat-k26.md,"Current flagship; multimodal; cache-hit \$0.16/M",2026-05-21
-moonshot,kimi-k2.5,"Kimi K2.5",262144,true,true,"thinking,tools",0.60,3.00,https://platform.kimi.ai/docs/pricing/chat-k25.md,"Multimodal; open-source",2026-05-21
-moonshot,kimi-k2-thinking,"Kimi K2 Thinking",262144,false,true,"thinking,tools",0.60,2.50,https://platform.moonshot.ai/docs/pricing/chat,"Reasoning model",2026-05-21
-moonshot,kimi-k2-thinking-turbo,"Kimi K2 Thinking Turbo",262144,false,true,"thinking,tools",1.15,8.00,https://platform.kimi.ai/docs/pricing/chat-k26.md,"Premium turbo tier; ~2x input / 3.2x output vs base k2-thinking",2026-05-21
-moonshot,kimi-k2-0905-preview,"Kimi K2 0905 (preview)",262144,false,false,"tools",0.60,2.50,https://platform.moonshot.ai/docs/pricing/chat,"DEPRECATED: K2 preview series EOL 2026-05-25",2026-05-21
-moonshot,moonshot-v1-128k,"Moonshot V1 128K",131072,false,false,"",2.00,5.00,https://platform.moonshot.ai/docs/pricing/chat,"Legacy",2026-03-10
-kimi_coding,kimi-for-coding,"Kimi for Coding",262144,true,true,"thinking,tools,vision",0.60,2.50,https://www.kimi.com/code/docs/en/,"Stable backend-routed alias; auto-updates to the current coding backend. Use this as the default on the coding endpoint.",2026-06-26
-kimi_coding,kimi-k2.7-code,"Kimi K2.7 Code",262144,true,true,"thinking,tools,vision",0.60,2.50,https://platform.kimi.ai/docs/pricing/chat-k27-code,"Via Kimi coding subscription endpoint",2026-06-26
-kimi_coding,kimi-k2.7-code-highspeed,"Kimi K2.7 Code HighSpeed",262144,true,true,"thinking,tools,vision",1.20,5.00,https://platform.kimi.ai/docs/pricing/chat-k27-code,"Via Kimi coding subscription endpoint",2026-06-26
-kimi_coding,kimi-k2.6,"Kimi K2.6 (Coding)",262144,true,true,"thinking,tools,vision",0.60,2.50,https://www.kimi.com/code/docs/en/,"Via Kimi coding subscription endpoint",2026-05-21
-kimi_coding,kimi-k2.5,"Kimi K2.5 (Coding)",262144,true,true,"thinking,tools",0.60,3.00,https://www.kimi.com/code/docs/en/,"Via Kimi coding subscription endpoint",2026-05-21
-zhipu,glm-5.2,"GLM-5.2",1048576,false,true,"thinking,tools",1.40,4.40,https://docs.z.ai/guides/overview/pricing,"Open-weights, released 2026-06-16; 1M context but API slows past ~500K so runtime caps to 272K. Cached input 0.26.",2026-06-26
-zhipu,glm-5.1,"GLM-5.1",204800,false,false,"thinking,tools",1.40,4.40,https://docs.z.ai/guides/overview/pricing,"Released 2026-04-07; ~204800 token context",2026-05-21
-zhipu,glm-5-turbo,"GLM-5 Turbo",200000,false,false,"thinking,tools",1.20,4.00,https://docs.z.ai/guides/overview/pricing,"High-speed variant; released 2026-03-15",2026-05-21
-zhipu,glm-5,"GLM-5",200000,false,false,"thinking,tools",1.00,3.20,https://docs.z.ai/guides/overview/pricing,"Flagship; 744B params; context bumped to 200k after zai server-side fix",2026-05-21
-zhipu,glm-4.7,"GLM-4.7",200000,false,false,"thinking,tools",0.60,2.20,https://docs.z.ai/guides/overview/pricing,"Open-source; context bumped to 200k",2026-05-21
-zhipu,glm-4.7-flashx,"GLM-4.7 FlashX",200000,false,false,"",0.10,0.20,https://docs.z.ai/guides/overview/pricing,"Fast FlashX variant.",2026-06-26
-zhipu,glm-4.7-flash,"GLM-4.7 Flash",200000,false,false,"",0,0,https://docs.z.ai/guides/overview/pricing,"Free",2026-03-10
-zhipu,glm-4.6,"GLM-4.6",200000,false,false,"thinking,tools",0.60,2.20,https://docs.z.ai/guides/overview/pricing,"Context bumped to 200k after zai server-side fix",2026-05-21
-zhipu,glm-4.6v,"GLM-4.6V",200000,true,false,"",0.30,0.90,https://docs.z.ai/guides/overview/pricing,"Vision",2026-03-10
-zhipu,glm-4.5-x,"GLM-4.5-X",128000,false,false,"thinking,tools",0.80,2.60,https://docs.z.ai/guides/overview/pricing,"Enhanced GLM-4.5 variant.",2026-06-26
-zhipu,glm-4.5-air,"GLM-4.5 Air",128000,false,false,"thinking,tools",0.20,0.80,https://docs.z.ai/guides/overview/pricing,"Efficient GLM-4.5 variant.",2026-06-26
-zhipu,glm-4.5-airx,"GLM-4.5 AirX",128000,false,false,"thinking,tools",0.30,1.20,https://docs.z.ai/guides/overview/pricing,"Fast efficient GLM-4.5 variant.",2026-06-26
-zhipu,glm-4.5,"GLM-4.5",128000,false,false,"",0.60,2.20,https://docs.z.ai/guides/overview/pricing,"",2026-03-10
-zhipu,glm-4.5-flash,"GLM-4.5 Flash",128000,false,false,"",0,0,https://docs.z.ai/guides/overview/pricing,"Free",2026-03-10
-minimax,MiniMax-M3,"MiniMax M3",512000,false,true,"thinking,tools",0.30,1.20,https://platform.minimax.io/docs/guides/pricing-paygo,"512K standard tier; >512K = 2x pricing. Cached input 0.06.",2026-06-26
-minimax,MiniMax-M2.7,"MiniMax M2.7",204800,false,true,"thinking,tools",0.30,1.20,https://platform.minimax.io/docs/guides/pricing-paygo,"Current text model; recursive self-improvement",2026-05-21
-zai_coding,glm-5.2,"GLM-5.2 (Coding)",204800,false,true,"thinking,tools",1.40,4.40,https://docs.z.ai/guides/overview/pricing,"Via Z.ai coding subscription endpoint.",2026-06-26
-zai_coding,glm-5.1,"GLM-5.1 (Coding)",204800,false,true,"thinking,tools",1.40,4.40,https://docs.z.ai/guides/overview/pricing,"Via Z.ai coding subscription endpoint.",2026-06-26
-zai_coding,glm-5-turbo,"GLM-5 Turbo (Coding)",200000,false,true,"thinking,tools",1.20,4.00,https://docs.z.ai/guides/overview/pricing,"Via Z.ai coding subscription endpoint.",2026-06-26
-zai_coding,glm-5,"GLM-5 (Coding)",200000,false,true,"thinking,tools",1.00,3.20,https://docs.z.ai/guides/overview/pricing,"Via Z.ai coding subscription endpoint.",2026-06-26
-zai_coding,glm-4.7,"GLM-4.7 (Coding)",200000,false,true,"thinking,tools",0.60,2.20,https://docs.z.ai/guides/overview/pricing,"Via Z.ai coding subscription endpoint.",2026-06-26
-zai_coding,glm-4.6,"GLM-4.6 (Coding)",200000,false,true,"thinking,tools",0.60,2.20,https://docs.z.ai/guides/overview/pricing,"Via Z.ai coding subscription endpoint.",2026-06-26
-zai_coding,glm-4.5,"GLM-4.5 (Coding)",128000,false,true,"thinking,tools",0.60,2.20,https://docs.z.ai/guides/overview/pricing,"Via Z.ai coding subscription endpoint.",2026-06-26
-minimax,MiniMax-M2.7-highspeed,"MiniMax M2.7-highspeed",204800,false,true,"thinking,tools",0.60,2.40,https://platform.minimax.io/docs/guides/pricing-paygo,"Highspeed variant; 100 tps",2026-05-21
-minimax,MiniMax-M2.5,"MiniMax M2.5",204800,false,true,"thinking,tools",0.30,1.20,https://platform.minimax.io/docs/guides/pricing-paygo,"Legacy text model.",2026-06-26
-minimax,MiniMax-M2.5-highspeed,"MiniMax M2.5-highspeed",204800,false,true,"thinking,tools",0.60,2.40,https://platform.minimax.io/docs/guides/pricing-paygo,"Legacy highspeed text model; 100 tps",2026-06-26
-minimax,MiniMax-M2.1,"MiniMax M2.1",204800,false,true,"thinking,tools",0.30,1.20,https://platform.minimax.io/docs/guides/pricing-paygo,"Legacy text model",2026-05-21
-minimax,MiniMax-M2.1-highspeed,"MiniMax M2.1-highspeed",204800,false,true,"thinking,tools",0.60,2.40,https://platform.minimax.io/docs/guides/pricing-paygo,"Legacy highspeed text model; 100 tps",2026-05-21
-minimax,MiniMax-M2,"MiniMax M2",204800,false,true,"thinking,tools",0.30,1.20,https://platform.minimax.io/docs/guides/pricing-paygo,"Legacy text model; agentic capabilities",2026-05-21
-xiaomi,mimo-v2-flash,"MiMo-V2-Flash",262144,false,true,"thinking,tools",0.10,0.30,https://api.xiaomimimo.com/v1,"Public/API-billing only (not on token-plan); cache-read $0.01/M; deepseek thinking",2026-06-26
-xiaomi,mimo-v2-omni,"MiMo-V2-Omni",262144,true,true,"thinking,tools",0.40,2.00,https://api.xiaomimimo.com/v1,"Vision; token-plan regions cn/ams/sgp; cache-read $0.08/M",2026-06-26
-xiaomi,mimo-v2-pro,"MiMo-V2-Pro",1048576,false,true,"thinking,tools",1.00,3.00,https://api.xiaomimimo.com/v1,"token-plan regions cn/ams/sgp; cache-read $0.20/M",2026-06-26
-xiaomi,mimo-v2.5,"MiMo-V2.5",1048576,true,true,"thinking,tools",0.40,2.00,https://api.xiaomimimo.com/v1,"Vision; token-plan regions cn/ams/sgp; cache-read $0.08/M",2026-06-26
-xiaomi,mimo-v2.5-pro,"MiMo-V2.5-Pro",1048576,false,true,"thinking,tools",1.00,3.00,https://api.xiaomimimo.com/v1,"token-plan regions cn/ams/sgp; cache-read $0.20/M",2026-06-26
-xiaomi,mimo-v2.5-pro-ultraspeed,"MiMo-V2.5-Pro-UltraSpeed",1048576,false,true,"thinking,tools",1.305,2.61,https://api.xiaomimimo.com/v1,"token-plan regions cn/ams/sgp; cache-read $0.0108/M",2026-06-26
-ollama,llama3.3,"Llama 3.3",131072,false,false,"",0,0,https://ollama.com/library,"Local/free",2026-03-10
-ollama,llama3.1,"Llama 3.1",131072,false,false,"",0,0,https://ollama.com/library,"Local/free",2026-03-10
-ollama,qwen3,"Qwen3",131072,false,true,"thinking,non-thinking",0,0,https://ollama.com/library,"Local/free",2026-03-10
-ollama,deepseek-r1,"DeepSeek R1",131072,false,true,"",0,0,https://ollama.com/library,"Local/free",2026-03-10
-ollama,gemma3,"Gemma 3",131072,true,false,"",0,0,https://ollama.com/library,"Local/free; vision",2026-03-10
-ollama,mistral,"Mistral",32768,false,false,"",0,0,https://ollama.com/library,"Local/free",2026-03-10
-ollama,codellama,"CodeLlama",16384,false,false,"",0,0,https://ollama.com/library,"Local/free",2026-03-10
-ollama,phi4,"Phi 4",16384,false,false,"",0,0,https://ollama.com/library,"Local/free",2026-03-10
+provider,model_id,display_name,context_window,prompt_cache_ttl_s,supports_vision,supports_reasoning,reasoning_levels,input_price_per_m,output_price_per_m,source_url,notes,date_updated
+anthropic,claude-opus-4-6,"Claude Opus 4.6",200000,300,true,true,"adaptive:low,medium,high,max",5.00,25.00,https://platform.claude.com/docs/en/about-claude/pricing,"Latest flagship. 1M beta context. 128K max output.",2026-03-10
+anthropic,claude-sonnet-4-6,"Claude Sonnet 4.6",200000,300,true,true,"adaptive:low,medium,high",3.00,15.00,https://platform.claude.com/docs/en/about-claude/pricing,"1M beta context. 64K max output.",2026-03-10
+anthropic,claude-haiku-4-5,"Claude Haiku 4.5",200000,300,true,true,"extended",1.00,5.00,https://platform.claude.com/docs/en/about-claude/pricing,"Fastest current model.",2026-03-10
+anthropic,claude-sonnet-4-5,"Claude Sonnet 4.5",200000,300,true,true,"extended",3.00,15.00,https://platform.claude.com/docs/en/about-claude/pricing,"Legacy.",2026-03-10
+anthropic,claude-opus-4-5,"Claude Opus 4.5",200000,300,true,true,"extended",5.00,25.00,https://platform.claude.com/docs/en/about-claude/pricing,"Legacy.",2026-03-10
+anthropic,claude-opus-4-1,"Claude Opus 4.1",200000,300,true,true,"extended",15.00,75.00,https://platform.claude.com/docs/en/about-claude/pricing,"Legacy. 32K max output.",2026-03-10
+anthropic,claude-sonnet-4-0,"Claude Sonnet 4",200000,300,true,true,"extended",3.00,15.00,https://platform.claude.com/docs/en/about-claude/pricing,"Legacy. 1M beta context.",2026-03-10
+anthropic,claude-opus-4-0,"Claude Opus 4",200000,300,true,true,"extended",15.00,75.00,https://platform.claude.com/docs/en/about-claude/pricing,"Legacy.",2026-03-10
+anthropic,claude-3-7-sonnet,"Claude 3.7 Sonnet",200000,300,true,true,"extended",3.00,15.00,https://platform.claude.com/docs/en/about-claude/model-deprecations,"Retired Feb 2026.",2026-03-10
+anthropic,claude-3-5-sonnet,"Claude 3.5 Sonnet v2",200000,300,true,false,"",3.00,15.00,https://platform.claude.com/docs/en/about-claude/model-deprecations,"Retired Oct 2025.",2026-03-10
+anthropic,claude-3-5-haiku,"Claude 3.5 Haiku",200000,300,true,false,"",0.80,4.00,https://platform.claude.com/docs/en/about-claude/pricing,"Retired Feb 2026.",2026-03-10
+anthropic,claude-3-opus,"Claude 3 Opus",200000,300,true,false,"",15.00,75.00,https://platform.claude.com/docs/en/about-claude/model-deprecations,"Retired Jan 2026.",2026-03-10
+anthropic,claude-3-haiku,"Claude 3 Haiku",200000,300,true,false,"",0.25,1.25,https://platform.claude.com/docs/en/about-claude/pricing,"Deprecated; retiring Apr 2026.",2026-03-10
+openai,gpt-5.5,"GPT-5.5",272000,86400,true,true,"none,low,medium,high,xhigh",5.00,30.00,https://openai.com/api/pricing/,"Flagship Jun 2026; ~2x GPT-5.4 pricing. Codex integration caps context to 272K. >272K = 2x pricing. Cached input 0.50.",2026-06-26
+openai,gpt-5.4,"GPT-5.4",1050000,,true,true,"none,low,medium,high,xhigh",2.50,15.00,https://developers.openai.com/api/docs/pricing/,"Latest flagship Mar 2026. 1M context. >272K = 2x pricing.",2026-03-10
+openai,gpt-5.4-pro,"GPT-5.4 Pro",1050000,,true,true,"none,low,medium,high,xhigh",30.00,180.00,https://developers.openai.com/api/docs/pricing/,"",2026-03-10
+openai,gpt-5.2,"GPT-5.2",400000,,true,true,"none,low,medium,high,xhigh",1.75,14.00,https://developers.openai.com/api/docs/pricing/,"Previous flagship Feb 2026.",2026-03-10
+openai,gpt-5.2-pro,"GPT-5.2 Pro",400000,,true,true,"none,low,medium,high,xhigh",21.00,168.00,https://developers.openai.com/api/docs/pricing/,"",2026-03-10
+openai,gpt-5,"GPT-5",400000,,true,true,"minimal,low,medium,high",1.25,10.00,https://developers.openai.com/api/docs/pricing/,"Aug 2025 flagship.",2026-03-10
+openai,gpt-5-pro,"GPT-5 Pro",400000,,true,true,"minimal,low,medium,high",15.00,120.00,https://developers.openai.com/api/docs/pricing/,"",2026-03-10
+openai,gpt-5-mini,"GPT-5 Mini",400000,,true,true,"medium",0.25,2.00,https://developers.openai.com/api/docs/pricing/,"",2026-03-10
+openai,gpt-5-nano,"GPT-5 Nano",400000,,true,false,"",0.05,0.40,https://developers.openai.com/api/docs/pricing/,"Cheapest model.",2026-03-10
+openai,gpt-4.1,"GPT-4.1",1000000,,true,false,"",2.00,8.00,https://developers.openai.com/api/docs/pricing/,"1M context.",2026-03-10
+openai,gpt-4.1-mini,"GPT-4.1 Mini",1000000,,true,false,"",0.40,1.60,https://developers.openai.com/api/docs/pricing/,"1M context.",2026-03-10
+openai,gpt-4.1-nano,"GPT-4.1 Nano",1000000,,true,false,"",0.10,0.40,https://developers.openai.com/api/docs/pricing/,"1M context.",2026-03-10
+openai,gpt-4o,"GPT-4o",128000,,true,false,"",2.50,10.00,https://developers.openai.com/api/docs/pricing/,"Legacy.",2026-03-10
+openai,gpt-4o-mini,"GPT-4o Mini",128000,,true,false,"",0.15,0.60,https://developers.openai.com/api/docs/pricing/,"Legacy.",2026-03-10
+openai,gpt-4-turbo,"GPT-4 Turbo",128000,,true,false,"",10.00,30.00,https://openai.com/api/pricing/,"Deprecated/Legacy.",2026-03-10
+openai,o3,"o3",200000,,true,true,"low,medium,high",2.00,8.00,https://developers.openai.com/api/docs/pricing/,"",2026-03-10
+openai,o3-pro,"o3 Pro",200000,,true,true,"low,medium,high",20.00,80.00,https://developers.openai.com/api/docs/pricing/,"",2026-03-10
+openai,o3-mini,"o3 Mini",200000,,true,true,"low,medium,high",1.10,4.40,https://developers.openai.com/api/docs/pricing/,"",2026-03-10
+openai,o4-mini,"o4-mini",200000,,true,true,"low,medium,high",1.10,4.40,https://developers.openai.com/api/docs/pricing/,"Latest small reasoning model.",2026-03-10
+openai,o1,"o1",200000,,true,true,"low,medium,high",15.00,60.00,https://developers.openai.com/api/docs/pricing/,"Legacy reasoning.",2026-03-10
+openai,o1-pro,"o1 Pro",200000,,true,true,"",150.00,600.00,https://developers.openai.com/api/docs/pricing/,"Most expensive.",2026-03-10
+openai,o1-mini,"o1 Mini",128000,,false,true,"low,medium,high",3.00,12.00,https://developers.openai.com/api/docs/pricing/,"Deprecated; replaced by o3-mini.",2026-03-10
+openai-codex,gpt-5-codex,"GPT-5-Codex",400000,,true,true,"low,medium,high",1.25,10.00,https://developers.openai.com/api/docs/models/gpt-5-codex,"Codex-optimized model.",2026-06-26
+openai-codex,gpt-5.3-codex,"GPT-5.3-Codex",400000,,true,true,"low,medium,high",1.25,10.00,https://developers.openai.com/codex/pricing,"Codex CLI model.",2026-06-26
+openai-codex,gpt-5.3-codex-spark,"GPT-5.3-Codex Spark",400000,,true,true,"low,medium,high",1.25,10.00,https://developers.openai.com/codex/pricing,"Codex spark model.",2026-06-26
+openai-codex,gpt-5.4,"GPT-5.4 (Codex)",1050000,,true,true,"none,low,medium,high,xhigh",2.50,15.00,https://developers.openai.com/codex/pricing,"Codex-supported GPT-5.4.",2026-06-26
+openai-codex,gpt-5.4-mini,"GPT-5.4 Mini (Codex)",1050000,,true,true,"none,low,medium,high,xhigh",0.25,2.00,https://developers.openai.com/codex/pricing,"Codex-supported GPT-5.4 mini.",2026-06-26
+openai-codex,gpt-5.5,"GPT-5.5 (Codex)",272000,86400,true,true,"none,low,medium,high,xhigh",1.75,14.00,https://developers.openai.com/codex/pricing,"Codex-supported GPT-5.5.",2026-06-26
+gemini,gemini-2.5-pro,"Gemini 2.5 Pro",1048576,,true,true,"budget:0-24576",1.25,10.00,https://ai.google.dev/pricing,"Long context (>200k): $2.50/$15.00",2026-03-10
+gemini,gemini-2.5-flash,"Gemini 2.5 Flash",1048576,,true,true,"budget:0-24576",0.30,2.50,https://ai.google.dev/pricing,"",2026-03-10
+gemini,gemini-2.0-flash,"Gemini 2.0 Flash",1048576,,true,false,"",0.10,0.40,https://ai.google.dev/pricing,"Deprecated; retiring Jun 2026.",2026-03-10
+gemini,gemini-1.5-pro,"Gemini 1.5 Pro",2097152,,true,false,"",1.25,5.00,https://ai.google.dev/pricing,"Long context (>128k): $2.50/$10.00",2026-03-10
+gemini,gemini-1.5-flash,"Gemini 1.5 Flash",1048576,,true,false,"",0.075,0.30,https://ai.google.dev/pricing,"Long context (>128k): $0.15/$0.60",2026-03-10
+deepseek,deepseek-chat,"DeepSeek V3.2 Chat",131072,,false,false,"",0.28,0.42,https://api-docs.deepseek.com/quick_start/pricing,"Cache hit: $0.028/M input",2026-03-10
+deepseek,deepseek-reasoner,"DeepSeek V3.2 Reasoner",131072,,false,true,"",0.28,0.42,https://api-docs.deepseek.com/quick_start/pricing,"Thinking/reasoning mode of V3.2",2026-03-10
+mistral,mistral-large-latest,"Mistral Large 3",262144,,true,false,"",0.50,1.50,https://mistral.ai/pricing,"",2026-03-10
+mistral,mistral-medium-latest,"Mistral Medium 3.1",131072,,true,false,"",0.40,2.00,https://mistral.ai/pricing,"",2026-03-10
+mistral,mistral-small-latest,"Mistral Small 3.2",131072,,true,false,"",0.06,0.18,https://mistral.ai/pricing,"24B params",2026-03-10
+mistral,codestral-latest,"Codestral",262144,,false,false,"",0.30,0.90,https://mistral.ai/pricing,"Code-specialized",2026-03-10
+cohere,command-a-03-2025,"Command A",262144,,false,false,"",2.50,10.00,https://cohere.com/pricing,"111B params",2026-03-10
+cohere,command-r-plus-08-2024,"Command R+",131072,,false,false,"",2.50,10.00,https://cohere.com/pricing,"",2026-03-10
+cohere,command-r-08-2024,"Command R",131072,,false,false,"",0.15,0.60,https://cohere.com/pricing,"",2026-03-10
+groq,llama-3.3-70b-versatile,"Llama 3.3 70B",131072,,false,false,"",0.59,0.79,https://groq.com/pricing,"",2026-03-10
+groq,llama-3.1-8b-instant,"Llama 3.1 8B",131072,,false,false,"",0.05,0.08,https://groq.com/pricing,"",2026-03-10
+groq,meta-llama/llama-4-scout-17b-16e-instruct,"Llama 4 Scout",131072,,true,false,"",0.11,0.34,https://groq.com/pricing,"Preview; multimodal",2026-03-10
+groq,meta-llama/llama-4-maverick-17b-128e-instruct,"Llama 4 Maverick",131072,,true,false,"",0.20,0.60,https://groq.com/pricing,"Preview; multimodal",2026-03-10
+groq,openai/gpt-oss-20b,"GPT-OSS 20B",131072,7200,false,true,"low,medium,high",0.075,0.30,https://groq.com/pricing,"",2026-03-10
+groq,openai/gpt-oss-120b,"GPT-OSS 120B",131072,7200,false,true,"low,medium,high",0.15,0.60,https://groq.com/pricing,"",2026-03-10
+groq,qwen/qwen3-32b,"Qwen3 32B",131072,,false,true,"thinking,non-thinking",0.29,0.59,https://groq.com/pricing,"Preview",2026-03-10
+groq,moonshotai/kimi-k2-instruct-0905,"Kimi K2",262144,,false,false,"",1.00,3.00,https://groq.com/pricing,"Preview",2026-03-10
+moonshot,kimi-k2.6,"Kimi K2.6",262144,,true,true,"thinking,tools,vision",0.95,4.00,https://platform.kimi.ai/docs/pricing/chat-k26.md,"Current flagship; multimodal; cache-hit \$0.16/M",2026-05-21
+moonshot,kimi-k2.5,"Kimi K2.5",262144,,true,true,"thinking,tools",0.60,3.00,https://platform.kimi.ai/docs/pricing/chat-k25.md,"Multimodal; open-source",2026-05-21
+moonshot,kimi-k2-thinking,"Kimi K2 Thinking",262144,,false,true,"thinking,tools",0.60,2.50,https://platform.moonshot.ai/docs/pricing/chat,"Reasoning model",2026-05-21
+moonshot,kimi-k2-thinking-turbo,"Kimi K2 Thinking Turbo",262144,,false,true,"thinking,tools",1.15,8.00,https://platform.kimi.ai/docs/pricing/chat-k26.md,"Premium turbo tier; ~2x input / 3.2x output vs base k2-thinking",2026-05-21
+moonshot,kimi-k2-0905-preview,"Kimi K2 0905 (preview)",262144,,false,false,"tools",0.60,2.50,https://platform.moonshot.ai/docs/pricing/chat,"DEPRECATED: K2 preview series EOL 2026-05-25",2026-05-21
+moonshot,moonshot-v1-128k,"Moonshot V1 128K",131072,,false,false,"",2.00,5.00,https://platform.moonshot.ai/docs/pricing/chat,"Legacy",2026-03-10
+kimi_coding,kimi-for-coding,"Kimi for Coding",262144,,true,true,"thinking,tools,vision",0.60,2.50,https://www.kimi.com/code/docs/en/,"Stable backend-routed alias; auto-updates to the current coding backend. Use this as the default on the coding endpoint.",2026-06-26
+kimi_coding,kimi-k2.7-code,"Kimi K2.7 Code",262144,,true,true,"thinking,tools,vision",0.60,2.50,https://platform.kimi.ai/docs/pricing/chat-k27-code,"Via Kimi coding subscription endpoint",2026-06-26
+kimi_coding,kimi-k2.7-code-highspeed,"Kimi K2.7 Code HighSpeed",262144,,true,true,"thinking,tools,vision",1.20,5.00,https://platform.kimi.ai/docs/pricing/chat-k27-code,"Via Kimi coding subscription endpoint",2026-06-26
+kimi_coding,kimi-k2.6,"Kimi K2.6 (Coding)",262144,,true,true,"thinking,tools,vision",0.60,2.50,https://www.kimi.com/code/docs/en/,"Via Kimi coding subscription endpoint",2026-05-21
+kimi_coding,kimi-k2.5,"Kimi K2.5 (Coding)",262144,,true,true,"thinking,tools",0.60,3.00,https://www.kimi.com/code/docs/en/,"Via Kimi coding subscription endpoint",2026-05-21
+zhipu,glm-5.2,"GLM-5.2",1048576,,false,true,"thinking,tools",1.40,4.40,https://docs.z.ai/guides/overview/pricing,"Open-weights, released 2026-06-16; 1M context but API slows past ~500K so runtime caps to 272K. Cached input 0.26.",2026-06-26
+zhipu,glm-5.1,"GLM-5.1",204800,,false,false,"thinking,tools",1.40,4.40,https://docs.z.ai/guides/overview/pricing,"Released 2026-04-07; ~204800 token context",2026-05-21
+zhipu,glm-5-turbo,"GLM-5 Turbo",200000,,false,false,"thinking,tools",1.20,4.00,https://docs.z.ai/guides/overview/pricing,"High-speed variant; released 2026-03-15",2026-05-21
+zhipu,glm-5,"GLM-5",200000,,false,false,"thinking,tools",1.00,3.20,https://docs.z.ai/guides/overview/pricing,"Flagship; 744B params; context bumped to 200k after zai server-side fix",2026-05-21
+zhipu,glm-4.7,"GLM-4.7",200000,,false,false,"thinking,tools",0.60,2.20,https://docs.z.ai/guides/overview/pricing,"Open-source; context bumped to 200k",2026-05-21
+zhipu,glm-4.7-flashx,"GLM-4.7 FlashX",200000,,false,false,"",0.10,0.20,https://docs.z.ai/guides/overview/pricing,"Fast FlashX variant.",2026-06-26
+zhipu,glm-4.7-flash,"GLM-4.7 Flash",200000,,false,false,"",0,0,https://docs.z.ai/guides/overview/pricing,"Free",2026-03-10
+zhipu,glm-4.6,"GLM-4.6",200000,,false,false,"thinking,tools",0.60,2.20,https://docs.z.ai/guides/overview/pricing,"Context bumped to 200k after zai server-side fix",2026-05-21
+zhipu,glm-4.6v,"GLM-4.6V",200000,,true,false,"",0.30,0.90,https://docs.z.ai/guides/overview/pricing,"Vision",2026-03-10
+zhipu,glm-4.5-x,"GLM-4.5-X",128000,,false,false,"thinking,tools",0.80,2.60,https://docs.z.ai/guides/overview/pricing,"Enhanced GLM-4.5 variant.",2026-06-26
+zhipu,glm-4.5-air,"GLM-4.5 Air",128000,,false,false,"thinking,tools",0.20,0.80,https://docs.z.ai/guides/overview/pricing,"Efficient GLM-4.5 variant.",2026-06-26
+zhipu,glm-4.5-airx,"GLM-4.5 AirX",128000,,false,false,"thinking,tools",0.30,1.20,https://docs.z.ai/guides/overview/pricing,"Fast efficient GLM-4.5 variant.",2026-06-26
+zhipu,glm-4.5,"GLM-4.5",128000,,false,false,"",0.60,2.20,https://docs.z.ai/guides/overview/pricing,"",2026-03-10
+zhipu,glm-4.5-flash,"GLM-4.5 Flash",128000,,false,false,"",0,0,https://docs.z.ai/guides/overview/pricing,"Free",2026-03-10
+minimax,MiniMax-M3,"MiniMax M3",512000,,false,true,"thinking,tools",0.30,1.20,https://platform.minimax.io/docs/guides/pricing-paygo,"512K standard tier; >512K = 2x pricing. Cached input 0.06.",2026-06-26
+minimax,MiniMax-M2.7,"MiniMax M2.7",204800,,false,true,"thinking,tools",0.30,1.20,https://platform.minimax.io/docs/guides/pricing-paygo,"Current text model; recursive self-improvement",2026-05-21
+zai_coding,glm-5.2,"GLM-5.2 (Coding)",204800,,false,true,"thinking,tools",1.40,4.40,https://docs.z.ai/guides/overview/pricing,"Via Z.ai coding subscription endpoint.",2026-06-26
+zai_coding,glm-5.1,"GLM-5.1 (Coding)",204800,,false,true,"thinking,tools",1.40,4.40,https://docs.z.ai/guides/overview/pricing,"Via Z.ai coding subscription endpoint.",2026-06-26
+zai_coding,glm-5-turbo,"GLM-5 Turbo (Coding)",200000,,false,true,"thinking,tools",1.20,4.00,https://docs.z.ai/guides/overview/pricing,"Via Z.ai coding subscription endpoint.",2026-06-26
+zai_coding,glm-5,"GLM-5 (Coding)",200000,,false,true,"thinking,tools",1.00,3.20,https://docs.z.ai/guides/overview/pricing,"Via Z.ai coding subscription endpoint.",2026-06-26
+zai_coding,glm-4.7,"GLM-4.7 (Coding)",200000,,false,true,"thinking,tools",0.60,2.20,https://docs.z.ai/guides/overview/pricing,"Via Z.ai coding subscription endpoint.",2026-06-26
+zai_coding,glm-4.6,"GLM-4.6 (Coding)",200000,,false,true,"thinking,tools",0.60,2.20,https://docs.z.ai/guides/overview/pricing,"Via Z.ai coding subscription endpoint.",2026-06-26
+zai_coding,glm-4.5,"GLM-4.5 (Coding)",128000,,false,true,"thinking,tools",0.60,2.20,https://docs.z.ai/guides/overview/pricing,"Via Z.ai coding subscription endpoint.",2026-06-26
+minimax,MiniMax-M2.7-highspeed,"MiniMax M2.7-highspeed",204800,,false,true,"thinking,tools",0.60,2.40,https://platform.minimax.io/docs/guides/pricing-paygo,"Highspeed variant; 100 tps",2026-05-21
+minimax,MiniMax-M2.5,"MiniMax M2.5",204800,,false,true,"thinking,tools",0.30,1.20,https://platform.minimax.io/docs/guides/pricing-paygo,"Legacy text model.",2026-06-26
+minimax,MiniMax-M2.5-highspeed,"MiniMax M2.5-highspeed",204800,,false,true,"thinking,tools",0.60,2.40,https://platform.minimax.io/docs/guides/pricing-paygo,"Legacy highspeed text model; 100 tps",2026-06-26
+minimax,MiniMax-M2.1,"MiniMax M2.1",204800,,false,true,"thinking,tools",0.30,1.20,https://platform.minimax.io/docs/guides/pricing-paygo,"Legacy text model",2026-05-21
+minimax,MiniMax-M2.1-highspeed,"MiniMax M2.1-highspeed",204800,,false,true,"thinking,tools",0.60,2.40,https://platform.minimax.io/docs/guides/pricing-paygo,"Legacy highspeed text model; 100 tps",2026-05-21
+minimax,MiniMax-M2,"MiniMax M2",204800,,false,true,"thinking,tools",0.30,1.20,https://platform.minimax.io/docs/guides/pricing-paygo,"Legacy text model; agentic capabilities",2026-05-21
+xiaomi,mimo-v2-flash,"MiMo-V2-Flash",262144,,false,true,"thinking,tools",0.10,0.30,https://api.xiaomimimo.com/v1,"Public/API-billing only (not on token-plan); cache-read $0.01/M; deepseek thinking",2026-06-26
+xiaomi,mimo-v2-omni,"MiMo-V2-Omni",262144,,true,true,"thinking,tools",0.40,2.00,https://api.xiaomimimo.com/v1,"Vision; token-plan regions cn/ams/sgp; cache-read $0.08/M",2026-06-26
+xiaomi,mimo-v2-pro,"MiMo-V2-Pro",1048576,,false,true,"thinking,tools",1.00,3.00,https://api.xiaomimimo.com/v1,"token-plan regions cn/ams/sgp; cache-read $0.20/M",2026-06-26
+xiaomi,mimo-v2.5,"MiMo-V2.5",1048576,,true,true,"thinking,tools",0.40,2.00,https://api.xiaomimimo.com/v1,"Vision; token-plan regions cn/ams/sgp; cache-read $0.08/M",2026-06-26
+xiaomi,mimo-v2.5-pro,"MiMo-V2.5-Pro",1048576,,false,true,"thinking,tools",1.00,3.00,https://api.xiaomimimo.com/v1,"token-plan regions cn/ams/sgp; cache-read $0.20/M",2026-06-26
+xiaomi,mimo-v2.5-pro-ultraspeed,"MiMo-V2.5-Pro-UltraSpeed",1048576,,false,true,"thinking,tools",1.305,2.61,https://api.xiaomimimo.com/v1,"token-plan regions cn/ams/sgp; cache-read $0.0108/M",2026-06-26
+ollama,llama3.3,"Llama 3.3",131072,,false,false,"",0,0,https://ollama.com/library,"Local/free",2026-03-10
+ollama,llama3.1,"Llama 3.1",131072,,false,false,"",0,0,https://ollama.com/library,"Local/free",2026-03-10
+ollama,qwen3,"Qwen3",131072,,false,true,"thinking,non-thinking",0,0,https://ollama.com/library,"Local/free",2026-03-10
+ollama,deepseek-r1,"DeepSeek R1",131072,,false,true,"",0,0,https://ollama.com/library,"Local/free",2026-03-10
+ollama,gemma3,"Gemma 3",131072,,true,false,"",0,0,https://ollama.com/library,"Local/free; vision",2026-03-10
+ollama,mistral,"Mistral",32768,,false,false,"",0,0,https://ollama.com/library,"Local/free",2026-03-10
+ollama,codellama,"CodeLlama",16384,,false,false,"",0,0,https://ollama.com/library,"Local/free",2026-03-10
+ollama,phi4,"Phi 4",16384,,false,false,"",0,0,https://ollama.com/library,"Local/free",2026-03-10
