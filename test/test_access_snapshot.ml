@@ -1,5 +1,12 @@
 let parse json = Config_loader.parse_config (Yojson.Safe.from_string json)
 
+let string_contains haystack needle =
+  let re = Str.regexp_string needle in
+  try
+    ignore (Str.search_forward re haystack 0);
+    true
+  with Not_found -> false
+
 let test_create_snapshot_basic () =
   let json =
     {|{
@@ -423,6 +430,42 @@ let test_bundle_sources_include_non_tool_fields () =
   Alcotest.(check bool)
     "bundle source includes non-tool fields" true
     (List.mem "rich" bundle_ids)
+
+let test_blocked_repo_grants_counted_and_sourced () =
+  let json =
+    {|{
+      "workspace": "/tmp/test-snap",
+      "security": {"workspace_only": true, "allowed_cwd_patterns": ["/tmp/test-snap/**"]},
+      "access_bundles": [
+        {
+          "id": "repo-policy",
+          "repo_grants": [
+            {"repo": "/tmp/test-snap/app", "capabilities": ["read"]},
+            {"repo": "/tmp/outside/app", "capabilities": ["read"]}
+          ]
+        }
+      ],
+      "access_scopes": [
+        {"id": "default", "level": "default", "access_bundle_ids": ["repo-policy"]}
+      ]
+    }|}
+  in
+  let cfg = parse json in
+  let snap =
+    Access_snapshot.create ~config:cfg ~work_type:Room_turn
+      ~session_key:"slack:C1" ()
+  in
+  Alcotest.(check bool)
+    "summary counts blocked repo grants" true
+    (string_contains snap.redacted_summary "repo_grants:1+1");
+  let bundle_ids =
+    List.map
+      (fun (s : Access_snapshot.bundle_source) -> s.bundle_id)
+      snap.bundle_sources
+  in
+  Alcotest.(check bool)
+    "bundle source includes blocked repo grant source" true
+    (List.mem "repo-policy" bundle_ids)
 
 let test_instruction_digests_recorded () =
   let json =
@@ -1311,6 +1354,8 @@ let suite =
       test_bundle_sources_extracted;
     Alcotest.test_case "bundle_sources include non-tool fields" `Quick
       test_bundle_sources_include_non_tool_fields;
+    Alcotest.test_case "blocked repo grants counted and sourced" `Quick
+      test_blocked_repo_grants_counted_and_sourced;
     Alcotest.test_case "instruction_digests recorded" `Quick
       test_instruction_digests_recorded;
     Alcotest.test_case "export json" `Quick test_export_json;

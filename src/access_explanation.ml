@@ -31,6 +31,8 @@ type t = {
   mcp_servers : item_explanation list;
   skills : item_explanation list;
   repositories : item_explanation list;
+  repo_grants : item_explanation list;
+  blocked_repo_grants : item_explanation list;
   domains : item_explanation list;
   credential_handles : credential_info list;
   instructions : string list;
@@ -91,13 +93,16 @@ let generate_summary (explanation : t) : string =
   let deny_count = List.length explanation.denied_tools in
   let grant_count = List.length explanation.codebase_grants in
   let blocked_count = List.length explanation.blocked_codebase_grants in
+  let repo_grant_count = List.length explanation.repo_grants in
+  let blocked_repo_grant_count = List.length explanation.blocked_repo_grants in
   Printf.sprintf
-    "tools:%d/%d grants:%d+%d servers:%d skills:%d repos:%d domains:%d \
-     credentials:%d instructions:%d"
+    "tools:%d/%d grants:%d+%d servers:%d skills:%d repos:%d repo_grants:%d+%d \
+     domains:%d credentials:%d instructions:%d"
     tool_count deny_count grant_count blocked_count
     (List.length explanation.mcp_servers)
     (List.length explanation.skills)
     (List.length explanation.repositories)
+    repo_grant_count blocked_repo_grant_count
     (List.length explanation.domains)
     (List.length explanation.credential_handles)
     (List.length explanation.instructions)
@@ -138,6 +143,9 @@ let create ~(config : Runtime_config.t) ~session_key () : t =
       mcp_servers = List.map item_to_explanation access.mcp_servers;
       skills = List.map item_to_explanation access.skills;
       repositories = List.map item_to_explanation access.repositories;
+      repo_grants = List.map item_to_explanation access.repo_grants;
+      blocked_repo_grants =
+        List.map item_to_explanation access.blocked_repo_grants;
       domains = List.map item_to_explanation access.domains;
       credential_handles = inherited_credential_handles;
       instructions = instruction_texts;
@@ -205,6 +213,11 @@ let to_json (explanation : t) : Yojson.Safe.t =
       ("skills", `List (List.map item_explanation_to_json explanation.skills));
       ( "repositories",
         `List (List.map item_explanation_to_json explanation.repositories) );
+      ( "repo_grants",
+        `List (List.map item_explanation_to_json explanation.repo_grants) );
+      ( "blocked_repo_grants",
+        `List
+          (List.map item_explanation_to_json explanation.blocked_repo_grants) );
       ("domains", `List (List.map item_explanation_to_json explanation.domains));
       ( "credential_handles",
         `List (List.map credential_info_to_json explanation.credential_handles)
@@ -313,6 +326,22 @@ let to_text (explanation : t) : string =
     List.iter
       (fun ie -> add (Printf.sprintf "  - %s" (format_item_with_sources ie)))
       explanation.repositories;
+    add ""
+  end;
+  (* Repo grants *)
+  if explanation.repo_grants <> [] then begin
+    add "Repo Grants:";
+    List.iter
+      (fun ie -> add (Printf.sprintf "  - %s" (format_item_with_sources ie)))
+      explanation.repo_grants;
+    add ""
+  end;
+  (* Blocked repo grants *)
+  if explanation.blocked_repo_grants <> [] then begin
+    add "Blocked Repo Grants:";
+    List.iter
+      (fun ie -> add (Printf.sprintf "  - %s" (format_item_with_sources ie)))
+      explanation.blocked_repo_grants;
     add ""
   end;
   (* Domains *)

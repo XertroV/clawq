@@ -816,19 +816,20 @@ let resolve_effective_access (cfg : t) ~session_key : effective_access =
         (* Explicit repo_grants *)
         List.iter
           (fun (rg : repo_grant) ->
+            let repo = expand_cwd_pattern ~config:cfg rg.repo in
             let existing_caps, existing_prov =
-              Option.value ~default:([], [])
-                (Hashtbl.find_opt repo_table rg.repo)
+              Option.value ~default:([], []) (Hashtbl.find_opt repo_table repo)
             in
-            if not (Hashtbl.mem repo_table rg.repo) then
-              repo_order := !repo_order @ [ rg.repo ];
-            Hashtbl.replace repo_table rg.repo
+            if not (Hashtbl.mem repo_table repo) then
+              repo_order := !repo_order @ [ repo ];
+            Hashtbl.replace repo_table repo
               ( unique_strings (existing_caps @ rg.capabilities),
                 existing_prov @ [ provenance_entry ] ))
           bundle.repo_grants;
         (* Legacy repositories: only if repo not already covered *)
         List.iter
-          (fun repo ->
+          (fun raw_repo ->
+            let repo = expand_cwd_pattern ~config:cfg raw_repo in
             if not (Hashtbl.mem repo_table repo) then begin
               repo_order := !repo_order @ [ repo ];
               Hashtbl.add repo_table repo ([ Read ], [ provenance_entry ])
@@ -871,10 +872,42 @@ let resolve_effective_access (cfg : t) ~session_key : effective_access =
         { item with value = expand_cwd_pattern ~config:cfg item.value })
       codebase_items
   in
+  let has_codebase_grants = codebase_items <> [] in
   let codebase_grants, blocked_codebase_grants =
     List.partition
       (fun item -> not (blocked_by_global_security cfg item.value))
       codebase_items
+  in
+  let repo_path_for_grant_item (item : effective_access_item) =
+    match repo_grant_of_json_string item.value with
+    | Some rg -> expand_cwd_pattern ~config:cfg rg.repo
+    | None -> item.value
+  in
+  let repo_grant_is_local_path repo =
+    let repo = String.trim repo in
+    repo <> ""
+    && (repo.[0] = '/'
+       || repo.[0] = '~'
+       || repo.[0] = '$'
+       || String.starts_with ~prefix:"./" repo
+       || String.starts_with ~prefix:"../" repo)
+  in
+  let repo_grant_covered_by_codebase_grants repo =
+    (not has_codebase_grants)
+    || List.exists
+         (fun (grant : effective_access_item) ->
+           Path_util.glob_matches_path ~pattern:grant.value repo)
+         codebase_grants
+  in
+  let repo_grant_allowed item =
+    let repo = repo_path_for_grant_item item in
+    let blocked_by_global =
+      repo_grant_is_local_path repo && blocked_by_global_security cfg repo
+    in
+    (not blocked_by_global) && repo_grant_covered_by_codebase_grants repo
+  in
+  let repo_grants, blocked_repo_grants =
+    List.partition repo_grant_allowed (collect_repo_grants ())
   in
   (* Collect instruction records with provenance. Only enabled instructions
      are resolved into effective_access; disabled ones are preserved in the
@@ -915,7 +948,8 @@ let resolve_effective_access (cfg : t) ~session_key : effective_access =
     mcp_servers = collect "mcp_servers" (fun b -> b.mcp_servers);
     skills = collect "skills" (fun b -> b.skills);
     repositories = collect "repositories" (fun b -> b.repositories);
-    repo_grants = collect_repo_grants ();
+    repo_grants;
+    blocked_repo_grants;
     domains = collect "domains" (fun b -> b.domains);
     credential_handles =
       collect "credential_handles" (fun b -> b.credential_handles);

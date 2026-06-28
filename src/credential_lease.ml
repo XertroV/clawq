@@ -260,14 +260,14 @@ let resolve_snapshot_lease ~(config : Runtime_config.t)
 let resolve_snapshot_env_lease ~(config : Runtime_config.t)
     ~(snapshot : Access_snapshot.t) ~(handle_id : string) ~(env_name : string) :
     (lease, resolution_error) result =
-  resolve_scoped_env_lease ~config ~allowed_handle_ids:snapshot.credential_handles
-    ~handle_id ~env_name
+  resolve_scoped_env_lease ~config
+    ~allowed_handle_ids:snapshot.credential_handles ~handle_id ~env_name
 
 let resolve_snapshot_url_lease ~(config : Runtime_config.t)
     ~(snapshot : Access_snapshot.t) ~(handle_id : string) :
     (lease, resolution_error) result =
-  resolve_scoped_url_lease ~config ~allowed_handle_ids:snapshot.credential_handles
-    ~handle_id
+  resolve_scoped_url_lease ~config
+    ~allowed_handle_ids:snapshot.credential_handles ~handle_id
 
 let apply_headers (lease : lease) f =
   let headers =

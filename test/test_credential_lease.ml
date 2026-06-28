@@ -290,7 +290,8 @@ let test_prompt_not_supported () =
   | Error Credential_lease.Prompt_not_supported -> ()
   | Error _ -> fail "wrong error type"
 
-let effective_access_with_credentials credential_handles : Runtime_config.effective_access =
+let effective_access_with_credentials credential_handles :
+    Runtime_config.effective_access =
   let credential_handles =
     List.map
       (fun value ->
@@ -306,6 +307,7 @@ let effective_access_with_credentials credential_handles : Runtime_config.effect
     skills = [];
     repositories = [];
     repo_grants = [];
+    blocked_repo_grants = [];
     domains = [];
     credential_handles;
     instructions = [];
@@ -323,7 +325,9 @@ let test_scoped_lease_denies_unlisted_handle_before_provider_resolution () =
       status = "active";
     }
   in
-  let config = { Runtime_config.default with credential_handles = [ handle ] } in
+  let config =
+    { Runtime_config.default with credential_handles = [ handle ] }
+  in
   Unix.putenv "CLAWQ_TEST_BLOCKED_CREDENTIAL" "";
   match
     Credential_lease.resolve_scoped_lease ~config ~allowed_handle_ids:[]

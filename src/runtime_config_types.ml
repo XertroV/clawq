@@ -564,10 +564,7 @@ type credential_handle = {
     snapshots, logs, the ledger, or worker sandboxes. Only the handle ID is
     referenced by access bundles and effective access. *)
 
-type instruction_edit_policy =
-  | Locked
-  | Admin_only
-  | Open
+type instruction_edit_policy = Locked | Admin_only | Open
 
 let instruction_edit_policy_to_string = function
   | Locked -> "locked"
@@ -706,7 +703,10 @@ type effective_access = {
       (** Legacy repository names (read-only). *)
   repo_grants : effective_access_item list;
       (** Repository grants with capabilities. Each value is a JSON object
-          string: {"repo":"owner/repo","capabilities":[...]}. *)
+          string containing [repo] and [capabilities] fields. *)
+  blocked_repo_grants : effective_access_item list;
+      (** Repository grants requested by matching scopes but blocked by global
+          security policy or by the effective codebase-grant ceiling. *)
   domains : effective_access_item list;
   credential_handles : effective_access_item list;
   instructions : effective_access_item list;

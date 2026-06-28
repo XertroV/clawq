@@ -1,5 +1,24 @@
 let parse json = Config_loader.parse_config (Yojson.Safe.from_string json)
 
+let item_values items =
+  List.map (fun (ie : Access_explanation.item_explanation) -> ie.value) items
+
+let repo_grant_repos items =
+  List.filter_map
+    (fun (ie : Access_explanation.item_explanation) ->
+      try
+        let open Yojson.Safe.Util in
+        Some (Yojson.Safe.from_string ie.value |> member "repo" |> to_string)
+      with _ -> None)
+    items
+
+let string_contains haystack needle =
+  let re = Str.regexp_string needle in
+  try
+    ignore (Str.search_forward re haystack 0);
+    true
+  with Not_found -> false
+
 let test_create_basic_explanation () =
   let json =
     {|{
@@ -190,6 +209,54 @@ let test_blocked_codebase_grants () =
   Alcotest.(check bool)
     "has blocked codebase grant" true
     (List.length explanation.blocked_codebase_grants > 0)
+
+let test_repo_grants_in_json_and_text () =
+  let json =
+    {|{
+      "workspace": "/tmp/test",
+      "security": {"workspace_only": true, "allowed_cwd_patterns": ["/tmp/test/**"]},
+      "access_bundles": [
+        {
+          "id": "b1",
+          "codebase_grants": ["/tmp/test/allowed/**"],
+          "repo_grants": [
+            {"repo": "/tmp/test/allowed/app", "capabilities": ["read"]},
+            {"repo": "/tmp/test/blocked/app", "capabilities": ["read"]}
+          ]
+        }
+      ],
+      "access_scopes": [
+        {"id": "default", "level": "default", "access_bundle_ids": ["b1"]}
+      ]
+    }|}
+  in
+  let cfg = parse json in
+  let explanation =
+    Access_explanation.create ~config:cfg ~session_key:"slack:C123" ()
+  in
+  Alcotest.(check (list string))
+    "allowed repo grants"
+    [ "/tmp/test/allowed/app" ]
+    (repo_grant_repos explanation.repo_grants);
+  Alcotest.(check (list string))
+    "blocked repo grants"
+    [ "/tmp/test/blocked/app" ]
+    (repo_grant_repos explanation.blocked_repo_grants);
+  let json_out = Access_explanation.to_json explanation in
+  let open Yojson.Safe.Util in
+  Alcotest.(check int)
+    "json repo_grants" 1
+    (json_out |> member "repo_grants" |> to_list |> List.length);
+  Alcotest.(check int)
+    "json blocked_repo_grants" 1
+    (json_out |> member "blocked_repo_grants" |> to_list |> List.length);
+  let text = Access_explanation.to_text explanation in
+  Alcotest.(check bool)
+    "text contains Repo Grants" true
+    (string_contains text "Repo Grants");
+  Alcotest.(check bool)
+    "text contains Blocked Repo Grants" true
+    (string_contains text "Blocked Repo Grants")
 
 let test_to_json_structure () =
   let json =
@@ -611,6 +678,8 @@ let suite =
     Alcotest.test_case "provenance tracked" `Quick test_provenance_tracked;
     Alcotest.test_case "blocked codebase grants" `Quick
       test_blocked_codebase_grants;
+    Alcotest.test_case "repo grants in json and text" `Quick
+      test_repo_grants_in_json_and_text;
     Alcotest.test_case "to_json structure" `Quick test_to_json_structure;
     Alcotest.test_case "to_text readable" `Quick test_to_text_readable;
     Alcotest.test_case "empty config" `Quick test_empty_config;
