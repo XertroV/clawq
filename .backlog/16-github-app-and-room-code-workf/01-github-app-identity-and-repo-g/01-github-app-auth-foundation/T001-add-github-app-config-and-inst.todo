@@ -1,14 +1,15 @@
 ---
 claimed_at: "2026-06-28T15:00:18Z"
 claimed_by: cli-user
-completed_at: null
+completed_at: "2026-06-28T16:45:02Z"
 complexity: high
 depends_on: []
+duration_minutes: 104.74725730645
 estimate_hours: 3
 id: P16.M1.E1.T001
 priority: high
 started_at: "2026-06-28T15:00:18Z"
-status: in_progress
+status: done
 tags: []
 title: Add GitHub App config and installation schema
 ---
