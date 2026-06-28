@@ -1,14 +1,16 @@
 ---
+claimed_at: "2026-06-28T18:35:40Z"
+claimed_by: cli-user
+completed_at: null
 complexity: medium
 depends_on:
     - P17.M1.E1.T002
 estimate_hours: 3
 id: P17.M1.E1.T003
 priority: high
-status: pending
-tags:
-    - memory
-    - connectors
+started_at: "2026-06-28T18:35:40Z"
+status: in_progress
+tags: []
 title: Add in-channel scoped memory equivalents
 ---
 Acceptance: current-room slash/channel memory operations resolve room_id/profile_id to memory_scope_id, refuse ambiguous or unbound rooms, and obey admin/member policy.
