@@ -612,6 +612,179 @@ let test_codex_stream_backfill_only_missing () =
         "tc1 backfilled args" {|{"command":"pwd"}|} tc1.arguments
   | _ -> Alcotest.fail "Expected ToolCalls response"
 
+let test_codex_stream_accepts_final_arguments_done () =
+  let sse json = "data: " ^ Yojson.Safe.to_string json ^ "\n\n" in
+  let chunks =
+    [
+      sse
+        (`Assoc
+           [
+             ("type", `String "response.output_item.added");
+             ("output_index", `Int 0);
+             ( "item",
+               `Assoc
+                 [
+                   ("type", `String "function_call");
+                   ("call_id", `String "call_done");
+                   ("name", `String "file_read");
+                 ] );
+           ]);
+      sse
+        (`Assoc
+           [
+             ("type", `String "response.function_call_arguments.done");
+             ("output_index", `Int 0);
+             ("arguments", `String {|{"path":"done.ml"}|});
+           ]);
+      sse
+        (`Assoc
+           [
+             ("type", `String "response.completed");
+             ( "response",
+               `Assoc
+                 [
+                   ("model", `String "codex-mini");
+                   ( "usage",
+                     `Assoc
+                       [ ("input_tokens", `Int 10); ("output_tokens", `Int 5) ]
+                   );
+                   ( "output",
+                     `List
+                       [
+                         `Assoc
+                           [
+                             ("type", `String "function_call");
+                             ("call_id", `String "call_done");
+                             ("name", `String "file_read");
+                             ("arguments", `String {|{"path":"done.ml"}|});
+                           ];
+                       ] );
+                 ] );
+           ]);
+    ]
+  in
+  let stream = Lwt_stream.of_list chunks in
+  let result =
+    Lwt_main.run
+      (Provider_openai_codex.process_stream stream ~on_chunk:(fun _ ->
+           Lwt.return_unit))
+  in
+  match result with
+  | Provider.ToolCalls { calls; _ } ->
+      Alcotest.(check int) "1 tool call" 1 (List.length calls);
+      let tc = List.hd calls in
+      Alcotest.(check string) "id" "call_done" tc.id;
+      Alcotest.(check string) "name" "file_read" tc.function_name;
+      Alcotest.(check string) "final args" {|{"path":"done.ml"}|} tc.arguments
+  | _ -> Alcotest.fail "Expected ToolCalls response"
+
+let test_codex_stream_completed_output_repairs_partial_arguments () =
+  let sse json = "data: " ^ Yojson.Safe.to_string json ^ "\n\n" in
+  let chunks =
+    [
+      sse
+        (`Assoc
+           [
+             ("type", `String "response.output_item.added");
+             ("output_index", `Int 0);
+             ( "item",
+               `Assoc
+                 [
+                   ("type", `String "function_call");
+                   ("call_id", `String "call_partial");
+                   ("name", `String "file_read");
+                 ] );
+           ]);
+      sse
+        (`Assoc
+           [
+             ("type", `String "response.function_call_arguments.delta");
+             ("output_index", `Int 0);
+             ("delta", `String {|{"path":|});
+           ]);
+      sse
+        (`Assoc
+           [
+             ("type", `String "response.completed");
+             ( "response",
+               `Assoc
+                 [
+                   ("model", `String "codex-mini");
+                   ( "usage",
+                     `Assoc
+                       [ ("input_tokens", `Int 10); ("output_tokens", `Int 5) ]
+                   );
+                   ( "output",
+                     `List
+                       [
+                         `Assoc
+                           [
+                             ("type", `String "function_call");
+                             ("call_id", `String "call_partial");
+                             ("name", `String "file_read");
+                             ("arguments", `String {|{"path":"complete.ml"}|});
+                           ];
+                       ] );
+                 ] );
+           ]);
+    ]
+  in
+  let stream = Lwt_stream.of_list chunks in
+  let result =
+    Lwt_main.run
+      (Provider_openai_codex.process_stream stream ~on_chunk:(fun _ ->
+           Lwt.return_unit))
+  in
+  match result with
+  | Provider.ToolCalls { calls; _ } ->
+      Alcotest.(check int) "1 tool call" 1 (List.length calls);
+      let tc = List.hd calls in
+      Alcotest.(check string)
+        "completed response repairs partial args" {|{"path":"complete.ml"}|}
+        tc.arguments
+  | _ -> Alcotest.fail "Expected ToolCalls response"
+
+let test_codex_stream_failed_event_fails () =
+  let sse json = "data: " ^ Yojson.Safe.to_string json ^ "\n\n" in
+  let chunks =
+    [
+      sse
+        (`Assoc
+           [
+             ("type", `String "response.failed");
+             ( "response",
+               `Assoc
+                 [
+                   ("status", `String "failed");
+                   ( "error",
+                     `Assoc
+                       [
+                         ("code", `String "server_error");
+                         ("message", `String "tool stream failed");
+                       ] );
+                 ] );
+           ]);
+    ]
+  in
+  let stream = Lwt_stream.of_list chunks in
+  match
+    Lwt_main.run
+      (Lwt.catch
+         (fun () ->
+           let open Lwt.Syntax in
+           let* _ =
+             Provider_openai_codex.process_stream stream ~on_chunk:(fun _ ->
+                 Lwt.return_unit)
+           in
+           Lwt.return_none)
+         (fun exn -> Lwt.return_some (Printexc.to_string exn)))
+  with
+  | Some msg ->
+      Alcotest.(check bool)
+        "error mentions failed event" true
+        (Test_helpers.string_contains msg "response.failed")
+  | None -> Alcotest.fail "expected response.failed to fail the stream"
+
 let test_codex_message_to_input_replays_raw_output_items () =
   (* reasoning items are passed through for replay (id stripped);
      function_call items are kept *)
@@ -809,6 +982,12 @@ let suite =
       test_codex_stream_no_duplicate_tool_calls;
     Alcotest.test_case "codex stream backfill only missing" `Quick
       test_codex_stream_backfill_only_missing;
+    Alcotest.test_case "codex stream accepts final arguments done" `Quick
+      test_codex_stream_accepts_final_arguments_done;
+    Alcotest.test_case "codex stream repairs partial arguments" `Quick
+      test_codex_stream_completed_output_repairs_partial_arguments;
+    Alcotest.test_case "codex stream failed event fails" `Quick
+      test_codex_stream_failed_event_fails;
     Alcotest.test_case "codex message replays raw output items" `Quick
       test_codex_message_to_input_replays_raw_output_items;
     Alcotest.test_case "codex stream preserves response output items" `Quick

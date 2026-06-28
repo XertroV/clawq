@@ -155,7 +155,14 @@ let test_sanitize_message_strips_metadata () =
   | `Assoc fields -> (
       let keys = List.map fst fields |> List.sort String.compare in
       Alcotest.(check (list string))
-        "message becomes role+content" [ "content"; "role" ] keys;
+        "message preserves input-valid fields"
+        [ "content"; "phase"; "role" ]
+        keys;
+      Alcotest.(check string)
+        "phase preserved" "final_answer"
+        (match List.assoc "phase" fields with
+        | `String phase -> phase
+        | _ -> Alcotest.fail "expected phase string");
       (* Check content parts are also sanitized *)
       let content =
         match List.assoc "content" fields with `List l -> l | _ -> []

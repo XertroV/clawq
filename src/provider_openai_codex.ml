@@ -67,7 +67,13 @@ let sanitize_input_item item =
             | Some other -> other
             | None -> `List []
           in
-          Some (`Assoc [ ("role", `String role); ("content", content) ])
+          let sanitized = [ ("role", `String role); ("content", content) ] in
+          let sanitized =
+            match List.assoc_opt "phase" fields with
+            | Some (`String phase) -> sanitized @ [ ("phase", `String phase) ]
+            | _ -> sanitized
+          in
+          Some (`Assoc sanitized)
       | "reasoning" ->
           (* Pass reasoning items through for replay — needed for Responses API
              correctness. Strip server-assigned id to avoid 404 with store=false. *)
@@ -547,6 +553,12 @@ let provider_response_items_json response_json =
   try Some (Yojson.Safe.to_string (response_json |> member "output"))
   with _ -> None
 
+let valid_json_object_string s =
+  try
+    ignore (Yojson.Safe.from_string s);
+    true
+  with _ -> false
+
 let process_stream stream ~on_chunk =
   let open Lwt.Syntax in
   let content_acc = Buffer.create 1024 in
@@ -644,6 +656,34 @@ let process_stream stream ~on_chunk =
              arguments = (if delta = "" then None else Some delta);
            })
     end
+    else if
+      event_type = "response.function_call_arguments.done"
+      || event_type = "response.tool_call_arguments.done"
+    then begin
+      let idx = try json |> member "output_index" |> to_int with _ -> 0 in
+      let arguments =
+        try json |> member "arguments" |> to_string
+        with _ -> ( try json |> member "delta" |> to_string with _ -> "")
+      in
+      let call_id, name, buf =
+        match Hashtbl.find_opt tool_buffers idx with
+        | Some triple -> triple
+        | None ->
+            let fresh = ("", "", Buffer.create (String.length arguments)) in
+            Hashtbl.add tool_buffers idx fresh;
+            fresh
+      in
+      Buffer.clear buf;
+      Buffer.add_string buf arguments;
+      on_chunk
+        (Provider.ToolCallDelta
+           {
+             index = idx;
+             id = (if call_id = "" then None else Some call_id);
+             function_name = (if name = "" then None else Some name);
+             arguments = (if arguments = "" then None else Some arguments);
+           })
+    end
     else if event_type = "response.completed" || event_type = "response.done"
     then begin
       let response_json = json |> member "response" in
@@ -664,20 +704,24 @@ let process_stream stream ~on_chunk =
             try item |> member "type" |> to_string with _ -> ""
           in
           if item_type = "function_call" || item_type = "tool_call" then
+            let call_id =
+              try item |> member "call_id" |> to_string
+              with _ -> ( try item |> member "id" |> to_string with _ -> "")
+            in
+            let name = try item |> member "name" |> to_string with _ -> "" in
+            let args =
+              try item |> member "arguments" |> to_string with _ -> ""
+            in
             match Hashtbl.find_opt tool_buffers arr_idx with
-            | Some (_, _, buf) when Buffer.length buf > 0 -> ()
-            | _ ->
+            | Some (existing_call_id, existing_name, buf)
+              when Buffer.length buf > 0
+                   && valid_json_object_string (Buffer.contents buf) ->
                 let call_id =
-                  try item |> member "call_id" |> to_string
-                  with _ -> (
-                    try item |> member "id" |> to_string with _ -> "")
+                  if existing_call_id = "" then call_id else existing_call_id
                 in
-                let name =
-                  try item |> member "name" |> to_string with _ -> ""
-                in
-                let args =
-                  try item |> member "arguments" |> to_string with _ -> ""
-                in
+                let name = if existing_name = "" then name else existing_name in
+                Hashtbl.replace tool_buffers arr_idx (call_id, name, buf)
+            | _ ->
                 let buf = Buffer.create (String.length args) in
                 Buffer.add_string buf args;
                 Hashtbl.replace tool_buffers arr_idx (call_id, name, buf))
@@ -690,6 +734,11 @@ let process_stream stream ~on_chunk =
       response_items_json_acc := provider_response_items_json response_json;
       on_chunk Provider.Done
     end
+    else if event_type = "response.failed" || event_type = "response.incomplete"
+    then
+      Lwt.fail_with
+        (Printf.sprintf "OpenAI Codex stream %s: %s" event_type
+           (Yojson.Safe.to_string json))
     else Lwt.return_unit
   in
   let buffer = Buffer.create 256 in
