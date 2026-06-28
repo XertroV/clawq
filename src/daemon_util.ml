@@ -452,12 +452,15 @@ let refresh_runtime_bound_tools ~(config : Runtime_config.t)
   refresh_optional "transcribe" ~configured:(config.stt <> None) (fun () ->
       Tools_builtin.transcribe ~config);
   let workspace = Runtime_config.effective_workspace config in
+  let workspace_only = config.security.workspace_only in
+  let extra_allowed_paths = config.security.extra_allowed_paths in
   Tool_registry.replace registry
-    (Tools_builtin.shell_exec_with_hooks ~workspace
-       ~workspace_only:config.security.workspace_only
+    (Tools_builtin.shell_exec_with_hooks ~workspace ~workspace_only
        ~allowed_commands:Tools_builtin.default_shell_allowlist
-       ~extra_allowed_paths:config.security.extra_allowed_paths ~sandbox
-       ~session_mgr:session_manager ());
+       ~extra_allowed_paths ~sandbox ~session_mgr:session_manager ());
+  Tool_registry.replace registry
+    (Tools_builtin.change_working_dir ~config ~workspace ~workspace_only
+       ~extra_allowed_paths);
   Tool_registry.replace registry
     (Tools_builtin.models_tool ~config ~session_mgr:session_manager ());
   (match Session.get_db session_manager with
