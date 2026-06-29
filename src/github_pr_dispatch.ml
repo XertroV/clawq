@@ -92,6 +92,62 @@ let format_pr_event_notification ~(event : Github_webhook.parsed_event)
         run.html_url
   | _ -> ""
 
+let format_ci_summary (ci : Github_webhook.ci_summary) action =
+  let kind_str =
+    match ci.kind with
+    | `CheckRun -> "Check run"
+    | `CheckSuite -> "Check suite"
+    | `WorkflowRun -> "Workflow"
+  in
+  let label = if ci.name <> "" then Printf.sprintf ": %s" ci.name else "" in
+  let conclusion_str =
+    if ci.conclusion <> "" then ci.conclusion else ci.status
+  in
+  Printf.sprintf
+    "%s **%s%s** %s\nRepository: %s/%s\nStatus: %s | Conclusion: %s\nURL: %s"
+    (match ci.kind with
+    | `WorkflowRun -> "\xE2\x9A\x99\xEF\xB8\x8F"
+    | _ -> "\xF0\x9F\x94\xA7")
+    kind_str label action ci.owner ci.repo ci.status conclusion_str ci.html_url
+
+let format_review_summary (review : Github_webhook.review_summary) =
+  let state_emoji =
+    match review.state with
+    | Github_webhook.Approved -> "\xE2\x9C\x85"
+    | Github_webhook.ChangesRequested -> "\xF0\x9F\x94\xB4"
+    | Github_webhook.Commented -> "\xF0\x9F\x92\xAC"
+    | Github_webhook.Dismissed -> "\xF0\x9F\x9A\xAB"
+    | Github_webhook.Pending -> "\xE2\x8F\xB3"
+    | Github_webhook.Unknown_review_state _ -> "\xF0\x9F\x93\x8C"
+  in
+  Printf.sprintf
+    "%s **PR review #%d** by @%s\nRepository: %s/%s\nState: %s\nURL: %s"
+    state_emoji review.pr_number review.reviewer review.owner review.repo
+    review.raw_state review.html_url
+
+let format_mergeability_change = function
+  | Github_webhook.MergeableStateChanged { mergeable } ->
+      Some (Printf.sprintf "Mergeable: %s" (if mergeable then "yes" else "no"))
+  | Github_webhook.LabelsChanged { added; removed } ->
+      let parts = [] in
+      let parts =
+        if added <> [] then
+          ("Labels added: " ^ String.concat ", " added) :: parts
+        else parts
+      in
+      let parts =
+        if removed <> [] then
+          ("Labels removed: " ^ String.concat ", " removed) :: parts
+        else parts
+      in
+      if parts = [] then None else Some (String.concat "; " (List.rev parts))
+  | Github_webhook.ReviewDecisionChanged { decision } ->
+      Some (Printf.sprintf "Review decision: %s" decision)
+  | Github_webhook.ChecksStatusChanged { total; passed; failed; pending } ->
+      Some
+        (Printf.sprintf "Checks: %d total, %d passed, %d failed, %d pending"
+           total passed failed pending)
+
 (** Map a GitHub webhook event type to a subscription notification preference
     key. Returns [None] if the event type doesn't match any preference. *)
 let event_type_to_preference_key (event : Github_webhook.parsed_event) =

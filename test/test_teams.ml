@@ -1562,8 +1562,7 @@ let test_edit_activity_empty_text_short_circuits () =
       Lwt_main.run
         (Teams.edit_activity ~config:cfg
            ~service_url:"https://smba.trafficmanager.net/au/test/"
-           ~conversation_id:"19:test@thread.v2" ~activity_id:"act-1" ~text:""
-           ());
+           ~conversation_id:"19:test@thread.v2" ~activity_id:"act-1" ~text:"" ());
       false
     with Failure _ -> true
   in

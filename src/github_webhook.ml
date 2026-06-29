@@ -87,6 +87,290 @@ type parsed_event =
   | WorkflowRun of workflow_run_event
   | Ignored
 
+type ci_summary = {
+  kind : [ `CheckRun | `CheckSuite | `WorkflowRun ];
+  name : string;
+  status : string;
+  conclusion : string;
+  owner : string;
+  repo : string;
+  pr_number : int option;
+  html_url : string;
+}
+(** Normalized CI summary: stable typed representation of check_run,
+    check_suite, and workflow_run events. *)
+
+(** Normalized review summary: stable typed representation of
+    pull_request_review events with state classification. *)
+type review_state =
+  | Approved
+  | ChangesRequested
+  | Commented
+  | Dismissed
+  | Pending
+  | Unknown_review_state of string
+
+type review_summary = {
+  state : review_state;
+  raw_state : string;
+  reviewer : string;
+  body : string;
+  owner : string;
+  repo : string;
+  pr_number : int;
+  html_url : string;
+}
+
+(** Mergeability-relevant change detected from PR events. *)
+type mergeability_change =
+  | MergeableStateChanged of { mergeable : bool }
+  | LabelsChanged of { added : string list; removed : string list }
+  | ReviewDecisionChanged of { decision : string }
+  | ChecksStatusChanged of {
+      total : int;
+      passed : int;
+      failed : int;
+      pending : int;
+    }
+
+(** Summarize a CI event into a normalized [ci_summary]. Returns [None] if the
+    event is not a CI event. *)
+let ci_summary_of_event event =
+  match event with
+  | CheckRun e ->
+      Some
+        {
+          kind = `CheckRun;
+          name = e.name;
+          status = e.status;
+          conclusion = e.conclusion;
+          owner = e.owner;
+          repo = e.repo;
+          pr_number = e.pr_number;
+          html_url = e.html_url;
+        }
+  | CheckSuite e ->
+      Some
+        {
+          kind = `CheckSuite;
+          name = "";
+          status = e.status;
+          conclusion = e.conclusion;
+          owner = e.owner;
+          repo = e.repo;
+          pr_number = e.pr_number;
+          html_url = e.html_url;
+        }
+  | WorkflowRun e ->
+      Some
+        {
+          kind = `WorkflowRun;
+          name = e.name;
+          status = e.status;
+          conclusion = e.conclusion;
+          owner = e.owner;
+          repo = e.repo;
+          pr_number = e.pr_number;
+          html_url = e.html_url;
+        }
+  | PullRequest _ | IssueComment _ | PrReviewComment _ | PullRequestReview _
+  | Ignored ->
+      None
+
+(** Parse a raw GitHub review state string into a normalized [review_state]. *)
+let parse_review_state = function
+  | "approved" -> Approved
+  | "changes_requested" -> ChangesRequested
+  | "commented" -> Commented
+  | "dismissed" -> Dismissed
+  | "pending" -> Pending
+  | other -> Unknown_review_state other
+
+(** Summarize a review event into a normalized [review_summary]. Returns [None]
+    if the event is not a review event. *)
+let review_summary_of_event event =
+  match event with
+  | PullRequestReview e ->
+      Some
+        {
+          state = parse_review_state e.state;
+          raw_state = e.state;
+          reviewer = e.review_author;
+          body = e.body;
+          owner = e.owner;
+          repo = e.repo;
+          pr_number = e.pr_number;
+          html_url = e.html_url;
+        }
+  | PrReviewComment e ->
+      Some
+        {
+          state = Commented;
+          raw_state = "commented";
+          reviewer = e.comment_author;
+          body = e.comment_body;
+          owner = e.owner;
+          repo = e.repo;
+          pr_number = e.pr_number;
+          html_url = e.html_url;
+        }
+  | PullRequest _ | IssueComment _ | CheckRun _ | CheckSuite _ | WorkflowRun _
+  | Ignored ->
+      None
+
+(** Detect mergeability-relevant changes from a PR webhook event. Returns a list
+    of detected changes (may be empty if no mergeability signal is present). *)
+let detect_mergeability_changes ~event_type ~body =
+  try
+    let json = Yojson.Safe.from_string body in
+    let open Yojson.Safe.Util in
+    match event_type with
+    | "pull_request" ->
+        let action = try json |> member "action" |> to_string with _ -> "" in
+        let changes = json |> member "changes" in
+        let detected = ref [] in
+        (* Detect label changes - handle both formats: *)
+        (* 1. GitHub "labeled"/"unlabeled" action with top-level label *)
+        (match action with
+        | "labeled" -> (
+            try
+              let label = json |> member "label" in
+              let name = label |> member "name" |> to_string in
+              if name <> "" then
+                detected :=
+                  LabelsChanged { added = [ name ]; removed = [] } :: !detected
+            with _ -> ())
+        | "unlabeled" -> (
+            try
+              let label = json |> member "label" in
+              let name = label |> member "name" |> to_string in
+              if name <> "" then
+                detected :=
+                  LabelsChanged { added = []; removed = [ name ] } :: !detected
+            with _ -> ())
+        | _ -> (
+            (* 2. Changes-based format *)
+            try
+              let labels = changes |> member "labels" in
+              let added =
+                labels |> member "added" |> to_list
+                |> List.filter_map (fun j ->
+                    try Some (j |> member "name" |> to_string) with _ -> None)
+              in
+              let removed =
+                labels |> member "removed" |> to_list
+                |> List.filter_map (fun j ->
+                    try Some (j |> member "name" |> to_string) with _ -> None)
+              in
+              if added <> [] || removed <> [] then
+                detected := LabelsChanged { added; removed } :: !detected
+            with _ -> ()));
+        (* Detect mergeable state changes on synchronize/edit *)
+        (match action with
+        | "synchronize" | "edited" -> (
+            let pr = json |> member "pull_request" in
+            try
+              let mergeable = pr |> member "mergeable" |> to_bool in
+              detected := MergeableStateChanged { mergeable } :: !detected
+            with _ -> ())
+        | _ -> ());
+        (* Detect review decision changes *)
+        (try
+           let pr = json |> member "pull_request" in
+           let decision = pr |> member "review_decision" |> to_string_option in
+           match decision with
+           | Some d when d <> "" ->
+               detected := ReviewDecisionChanged { decision = d } :: !detected
+           | _ -> ()
+         with _ -> ());
+        List.rev !detected
+    | "check_run" | "check_suite" | "workflow_run" ->
+        (* CI events can indicate checks status changes *)
+        let detected = ref [] in
+        (match event_type with
+        | "check_run" ->
+            let check_run = json |> member "check_run" in
+            let status =
+              try check_run |> member "status" |> to_string with _ -> ""
+            in
+            if status = "completed" then begin
+              let conclusion =
+                try check_run |> member "conclusion" |> to_string with _ -> ""
+              in
+              let passed = if conclusion = "success" then 1 else 0 in
+              let failed =
+                if conclusion = "failure" || conclusion = "timed_out" then 1
+                else 0
+              in
+              detected :=
+                ChecksStatusChanged { total = 1; passed; failed; pending = 0 }
+                :: !detected
+            end
+            else if
+              status = "in_progress" || status = "queued"
+              || status = "requested"
+            then
+              detected :=
+                ChecksStatusChanged
+                  { total = 1; passed = 0; failed = 0; pending = 1 }
+                :: !detected
+        | "check_suite" ->
+            let cs = json |> member "check_suite" in
+            let status =
+              try cs |> member "status" |> to_string with _ -> ""
+            in
+            if status = "completed" then begin
+              let conclusion =
+                try cs |> member "conclusion" |> to_string with _ -> ""
+              in
+              let passed = if conclusion = "success" then 1 else 0 in
+              let failed =
+                if conclusion = "failure" || conclusion = "timed_out" then 1
+                else 0
+              in
+              detected :=
+                ChecksStatusChanged { total = 1; passed; failed; pending = 0 }
+                :: !detected
+            end
+            else if
+              status = "in_progress" || status = "requested"
+              || status = "queued"
+            then
+              detected :=
+                ChecksStatusChanged
+                  { total = 1; passed = 0; failed = 0; pending = 1 }
+                :: !detected
+        | "workflow_run" ->
+            let wr = json |> member "workflow_run" in
+            let status =
+              try wr |> member "status" |> to_string with _ -> ""
+            in
+            if status = "completed" then begin
+              let conclusion =
+                try wr |> member "conclusion" |> to_string with _ -> ""
+              in
+              let passed = if conclusion = "success" then 1 else 0 in
+              let failed =
+                if conclusion = "failure" || conclusion = "timed_out" then 1
+                else 0
+              in
+              detected :=
+                ChecksStatusChanged { total = 1; passed; failed; pending = 0 }
+                :: !detected
+            end
+            else if
+              status = "in_progress" || status = "requested"
+              || status = "queued"
+            then
+              detected :=
+                ChecksStatusChanged
+                  { total = 1; passed = 0; failed = 0; pending = 1 }
+                :: !detected
+        | _ -> ());
+        List.rev !detected
+    | _ -> []
+  with _ -> []
+
 let verify_signature ~secret ~body ~signature_header =
   let prefix = "sha256=" in
   let prefix_len = String.length prefix in
@@ -115,7 +399,7 @@ let parse_event ~event_type ~body =
         let action = try json |> member "action" |> to_string with _ -> "" in
         match action with
         | "opened" | "edited" | "reopened" | "synchronize" | "ready_for_review"
-        | "closed" ->
+        | "closed" | "review_requested" | "review_request_removed" ->
             let pr = json |> member "pull_request" in
             let pr_number = try pr |> member "number" |> to_int with _ -> 0 in
             let pr_title =
