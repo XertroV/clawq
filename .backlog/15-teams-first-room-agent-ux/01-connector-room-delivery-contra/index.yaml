@@ -19,7 +19,7 @@ epics:
       locked: false
       name: Progress Checklist Model and Renderers
       path: 02-progress-checklist-model-and-r
-      status: pending
+      status: done
     - complexity: high
       depends_on:
         - P15.M1.E2
