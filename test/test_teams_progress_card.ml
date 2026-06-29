@@ -481,6 +481,61 @@ let test_blocked_item_fallback_no_secrets () =
     "no token" false
     (Test_helpers.string_contains text "Bearer")
 
+let test_delivery_failed_secret_not_in_teams_card () =
+  let items =
+    [
+      make_item ~id:1 ~title:"Auth step" ~state:Blocked
+        ~delivery_state:
+          (Delivery_failed "password=abc123 token=Bearer secret-key") ();
+    ]
+  in
+  let card =
+    Teams_progress_card.build_card ~task_id:1 ~task_label:"T" ~items ()
+  in
+  let json_str = Yojson.Safe.to_string card in
+  Alcotest.(check bool)
+    "no password in card" false
+    (Test_helpers.string_contains json_str "password=abc123");
+  Alcotest.(check bool)
+    "no token in card" false
+    (Test_helpers.string_contains json_str "token=Bearer");
+  Alcotest.(check bool)
+    "no secret-key in card" false
+    (Test_helpers.string_contains json_str "secret-key")
+
+let test_delivery_failed_secret_not_in_slack_mrkdwn () =
+  let items =
+    [
+      make_item ~id:1 ~title:"Deploy step" ~state:Blocked
+        ~delivery_state:(Delivery_failed "api_key=xyz789 credential=leaked") ();
+    ]
+  in
+  let msg = Slack_progress_checklist.render_checklist ~task_label:"T" items in
+  Alcotest.(check bool)
+    "no api_key in slack" false
+    (Test_helpers.string_contains msg "api_key=xyz789");
+  Alcotest.(check bool)
+    "no credential in slack" false
+    (Test_helpers.string_contains msg "credential=leaked")
+
+let test_delivery_failed_secret_not_in_fallback_text () =
+  let items =
+    [
+      make_item ~id:1 ~title:"Review step" ~state:Blocked
+        ~delivery_state:(Delivery_failed "Bearer eyJhbGciOiJIUzI1NiJ9 secret")
+        ();
+    ]
+  in
+  let text =
+    Teams_progress_card.build_fallback_text ~task_label:"T" ~items ()
+  in
+  Alcotest.(check bool)
+    "no Bearer in fallback" false
+    (Test_helpers.string_contains text "eyJhbGciOiJIUzI1NiJ9");
+  Alcotest.(check bool)
+    "no secret in fallback" false
+    (Test_helpers.string_contains text "secret")
+
 (** {1 Empty checklist tests} *)
 
 let test_build_card_empty_checklist () =
@@ -882,6 +937,12 @@ let suite =
       test_blocked_item_generic_indicator_only;
     Alcotest.test_case "blocked item fallback no secrets" `Quick
       test_blocked_item_fallback_no_secrets;
+    Alcotest.test_case "delivery failed secret not in teams card" `Quick
+      test_delivery_failed_secret_not_in_teams_card;
+    Alcotest.test_case "delivery failed secret not in slack mrkdwn" `Quick
+      test_delivery_failed_secret_not_in_slack_mrkdwn;
+    Alcotest.test_case "delivery failed secret not in fallback text" `Quick
+      test_delivery_failed_secret_not_in_fallback_text;
     Alcotest.test_case "build card empty checklist" `Quick
       test_build_card_empty_checklist;
     Alcotest.test_case "build update card empty checklist" `Quick
