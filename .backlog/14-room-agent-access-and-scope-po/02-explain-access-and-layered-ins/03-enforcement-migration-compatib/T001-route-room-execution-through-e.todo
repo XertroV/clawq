@@ -1,4 +1,7 @@
 ---
+claimed_at: "2026-06-29T01:24:01Z"
+claimed_by: cli-user
+completed_at: null
 complexity: high
 depends_on:
     - P14.M1.E3.T002
@@ -6,10 +9,9 @@ depends_on:
 estimate_hours: 4
 id: P14.M2.E3.T001
 priority: high
-status: pending
-tags:
-    - access
-    - agent
+started_at: "2026-06-29T01:24:01Z"
+status: in_progress
+tags: []
 title: Route room execution through effective-access snapshots
 ---
 Acceptance: agent loops, room background tasks, routines, ambient work, memory/search, and policy checks use resolved snapshots rather than ad hoc profile fields.
