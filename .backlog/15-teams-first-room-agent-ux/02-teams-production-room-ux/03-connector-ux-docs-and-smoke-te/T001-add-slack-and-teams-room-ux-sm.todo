@@ -1,16 +1,17 @@
 ---
 claimed_at: "2026-06-29T16:11:45Z"
 claimed_by: cli-user
-completed_at: null
+completed_at: "2026-06-29T16:27:20Z"
 complexity: high
 depends_on:
     - P15.M2.E2.T003
     - P15.M1.E2.T003
+duration_minutes: 15.5869584211
 estimate_hours: 3
 id: P15.M2.E3.T001
 priority: high
 started_at: "2026-06-29T16:11:45Z"
-status: in_progress
+status: done
 tags: []
 title: Add Slack and Teams room UX smoke tests
 ---
