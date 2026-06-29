@@ -22,7 +22,7 @@ epics:
       locked: false
       name: GitHub Budget Audit Wizard Checks
       path: 02-github-budget-audit-wizard-che
-      status: pending
+      status: done
     - complexity: high
       depends_on:
         - P17.M2.E1
