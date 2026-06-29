@@ -1,4 +1,7 @@
 ---
+claimed_at: "2026-06-29T16:54:35Z"
+claimed_by: cli-user
+completed_at: null
 complexity: high
 depends_on:
     - P16.M3.E1.T001
@@ -6,10 +9,9 @@ depends_on:
 estimate_hours: 4
 id: P16.M3.E1.T002
 priority: high
-status: pending
-tags:
-    - github
-    - runs
+started_at: "2026-06-29T16:54:35Z"
+status: in_progress
+tags: []
 title: Launch triggered runs under room profile policy
 ---
 Acceptance: run prompt includes PR metadata/files, grant snapshot, room/thread origin, budget state, and runner policy. Unauthorized repos/users/rooms fail before runner spawn.

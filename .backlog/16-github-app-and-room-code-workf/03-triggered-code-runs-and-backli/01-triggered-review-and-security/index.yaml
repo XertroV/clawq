@@ -31,7 +31,8 @@ tasks:
       file: T002-launch-triggered-runs-under-ro.todo
       id: T002
       priority: high
-      status: pending
+      status: in_progress
+      tags: []
       title: Launch triggered runs under room profile policy
     - complexity: high
       depends_on:

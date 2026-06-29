@@ -32,7 +32,8 @@ tasks:
       file: T002-document-teams-first-room-agen.todo
       id: T002
       priority: medium
-      status: pending
+      status: in_progress
+      tags: []
       title: Document Teams-first room-agent UX
     - complexity: medium
       depends_on:
