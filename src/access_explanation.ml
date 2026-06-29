@@ -225,7 +225,7 @@ let egress_rule_explanation_to_json (er : egress_rule_explanation) :
     [
       ("host", `String er.host);
       ("path", match er.path with Some p -> `String p | None -> `Null);
-      ("method_", match er.method_ with Some m -> `String m | None -> `Null);
+      ("method", match er.method_ with Some m -> `String m | None -> `Null);
       ( "action",
         `String (Runtime_config.egress_rule_action_to_string er.action) );
       ( "log_policy",

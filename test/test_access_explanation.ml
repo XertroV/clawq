@@ -909,7 +909,7 @@ let test_egress_rules_json_output () =
         {
           "id": "b1",
           "egress_rules": [
-            {"host": "api.example.com", "path": "/v1/*", "method_": "GET", "action": "allow", "log_policy": "log"},
+            {"host": "api.example.com", "path": "/v1/*", "method": "GET", "action": "allow", "log_policy": "log"},
             {"host": "*", "action": "deny", "log_policy": "no_log"}
           ]
         }
@@ -932,11 +932,20 @@ let test_egress_rules_json_output () =
     "first rule host" "api.example.com"
     (first |> member "host" |> to_string);
   Alcotest.(check string)
+    "first rule path" "/v1/*"
+    (first |> member "path" |> to_string);
+  Alcotest.(check string)
+    "first rule method" "GET"
+    (first |> member "method" |> to_string);
+  Alcotest.(check string)
     "first rule action" "allow"
     (first |> member "action" |> to_string);
   Alcotest.(check string)
     "first rule log_policy" "log"
     (first |> member "log_policy" |> to_string);
+  Alcotest.(check int)
+    "first rule index" 0
+    (first |> member "index" |> to_int);
   let second = List.nth rules 1 in
   Alcotest.(check string)
     "second rule host" "*"
@@ -946,7 +955,10 @@ let test_egress_rules_json_output () =
     (second |> member "action" |> to_string);
   Alcotest.(check string)
     "second rule log_policy" "no_log"
-    (second |> member "log_policy" |> to_string)
+    (second |> member "log_policy" |> to_string);
+  Alcotest.(check int)
+    "second rule index" 1
+    (second |> member "index" |> to_int)
 
 let test_egress_rules_text_output () =
   let json =
@@ -956,7 +968,7 @@ let test_egress_rules_text_output () =
         {
           "id": "b1",
           "egress_rules": [
-            {"host": "api.example.com", "path": "/v1/*", "method_": "GET", "action": "allow", "log_policy": "log"},
+            {"host": "api.example.com", "path": "/v1/*", "method": "GET", "action": "allow", "log_policy": "log"},
             {"host": "*", "action": "deny", "log_policy": "no_log"}
           ]
         }
@@ -977,6 +989,12 @@ let test_egress_rules_text_output () =
   Alcotest.(check bool)
     "text contains api.example.com" true
     (Test_helpers.string_contains text "api.example.com");
+  Alcotest.(check bool)
+    "text contains GET" true
+    (Test_helpers.string_contains text "GET");
+  Alcotest.(check bool)
+    "text contains /v1/*" true
+    (Test_helpers.string_contains text "/v1/*");
   Alcotest.(check bool)
     "text contains allow" true
     (Test_helpers.string_contains text "-> allow");
@@ -1047,21 +1065,35 @@ let test_egress_rules_priority_order () =
       "workspace": "/tmp/test",
       "access_bundles": [
         {
-          "id": "base",
+          "id": "default-bundle",
           "egress_rules": [
-            {"host": "*", "action": "deny", "log_policy": "log"}
+            {"host": "default.example.com", "action": "deny", "log_policy": "log"}
           ]
         },
         {
-          "id": "room",
+          "id": "workspace-bundle",
           "egress_rules": [
-            {"host": "api.example.com", "action": "allow", "log_policy": "no_log"}
+            {"host": "workspace.example.com", "action": "allow", "log_policy": "log"}
+          ]
+        },
+        {
+          "id": "channel-bundle",
+          "egress_rules": [
+            {"host": "channel.example.com", "action": "allow", "log_policy": "no_log"}
+          ]
+        },
+        {
+          "id": "room-bundle",
+          "egress_rules": [
+            {"host": "room.example.com", "action": "allow", "log_policy": "no_log"}
           ]
         }
       ],
       "access_scopes": [
-        {"id": "default", "level": "default", "access_bundle_ids": ["base"]},
-        {"id": "room-scope", "level": "room", "room": "C123", "access_bundle_ids": ["room"]}
+        {"id": "default", "level": "default", "access_bundle_ids": ["default-bundle"]},
+        {"id": "workspace-scope", "level": "workspace", "workspace": "/tmp/test", "access_bundle_ids": ["workspace-bundle"]},
+        {"id": "channel-scope", "level": "channel", "channel": "slack", "access_bundle_ids": ["channel-bundle"]},
+        {"id": "room-scope", "level": "room", "room": "C123", "access_bundle_ids": ["room-bundle"]}
       ]
     }|}
   in
@@ -1070,17 +1102,22 @@ let test_egress_rules_priority_order () =
     Access_explanation.create ~config:cfg ~session_key:"slack:C123" ()
   in
   Alcotest.(check int)
-    "2 egress rules" 2
+    "4 egress rules" 4
     (List.length explanation.egress_rules);
-  (* Room-level rules should come first (higher priority) *)
-  let first = List.hd explanation.egress_rules in
-  Alcotest.(check string)
-    "room rule first" "api.example.com" first.host;
-  Alcotest.(check int) "room rule index" 0 first.index;
-  let second = List.nth explanation.egress_rules 1 in
-  Alcotest.(check string)
-    "default rule second" "*" second.host;
-  Alcotest.(check int) "default rule index" 1 second.index
+  (* Priority order: room > channel > workspace > default *)
+  let rules = explanation.egress_rules in
+  let hosts = List.map (fun (r : Access_explanation.egress_rule_explanation) -> r.host) rules in
+  Alcotest.(check (list string))
+    "priority order: room, channel, workspace, default"
+    [ "room.example.com"; "channel.example.com"; "workspace.example.com"; "default.example.com" ]
+    hosts;
+  (* Verify indices are sequential *)
+  List.iteri
+    (fun idx (rule : Access_explanation.egress_rule_explanation) ->
+      Alcotest.(check int)
+        (Printf.sprintf "rule %d index" idx)
+        idx rule.index)
+    rules
 
 let test_no_matching_scope_no_leak () =
   let json =
