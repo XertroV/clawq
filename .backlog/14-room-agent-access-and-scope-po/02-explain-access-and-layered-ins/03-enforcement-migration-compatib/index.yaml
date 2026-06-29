@@ -33,7 +33,8 @@ tasks:
       file: T002-keep-current-p11-p13-configs-b.todo
       id: T002
       priority: high
-      status: pending
+      status: done
+      tags: []
       title: Keep current P11-P13 configs behavior-compatible
     - complexity: medium
       depends_on:
@@ -42,5 +43,6 @@ tasks:
       file: T003-add-minimal-build-reload-and-c.todo
       id: T003
       priority: high
-      status: pending
+      status: in_progress
+      tags: []
       title: Add minimal-build reload and compatibility tests

@@ -31,7 +31,8 @@ tasks:
       file: T002-expose-room-session-record-via.todo
       id: T002
       priority: high
-      status: pending
+      status: in_progress
+      tags: []
       title: Expose room session record via CLI or local endpoint
     - complexity: medium
       depends_on:

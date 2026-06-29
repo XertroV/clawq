@@ -1,14 +1,16 @@
 ---
+claimed_at: "2026-06-29T02:20:20Z"
+claimed_by: cli-user
+completed_at: null
 complexity: medium
 depends_on:
     - P17.M1.E2.T001
 estimate_hours: 3
 id: P17.M1.E2.T002
 priority: high
-status: pending
-tags:
-    - memory
-    - admin
+started_at: "2026-06-29T02:20:20Z"
+status: in_progress
+tags: []
 title: Add rooms memory grants list create revoke
 ---
 Acceptance: admins can manage memory grants with friendly room/profile names over existing grant primitives; guests cannot mutate grants or read admin-only provenance.

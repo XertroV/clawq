@@ -40,7 +40,7 @@ tasks:
       file: T003-inventory-outbound-network-cal.todo
       id: T003
       priority: high
-      status: pending
+      status: in_progress
       tags: []
       title: Inventory outbound network callsites
     - complexity: medium
