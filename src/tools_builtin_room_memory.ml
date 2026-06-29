@@ -1,12 +1,12 @@
 (** Agent tools for room-scoped memory operations.
 
-    These tools allow agents to list, search, save, correct, and forget
-    memories scoped to the current room. Each tool automatically resolves
-    the room context from the session key and enforces access control. *)
+    These tools allow agents to list, search, save, correct, and forget memories
+    scoped to the current room. Each tool automatically resolves the room
+    context from the session key and enforces access control. *)
 
-(** Resolve room_id from session context. Tries multiple strategies:
-    1. Direct channel_id from DB session
-    2. Room_id parsed from session_key format "channel:room-id" *)
+(** Resolve room_id from session context. Tries multiple strategies: 1. Direct
+    channel_id from DB session 2. Room_id parsed from session_key format
+    "channel:room-id" *)
 let resolve_room_id_for_context ~db (context : Tool.invoke_context) =
   match context.session_key with
   | None -> None
@@ -26,11 +26,45 @@ let resolve_room_id_for_context ~db (context : Tool.invoke_context) =
               if String.trim room_id <> "" then Some room_id else None
           | _ -> None))
 
-(** Ensure a memory scope exists for the room. Creates one if needed and
-    the room has a profile binding. Returns [Ok scope] or [Error msg]. *)
+(** Ensure a memory scope exists for the room. Creates one if needed and the
+    room has a profile binding. Backfills missing owner if scope exists but
+    profile_id is None and a binding exists. Returns [Ok scope] or [Error msg].
+*)
 let ensure_room_scope ~db ~room_id =
   match Memory.get_scope_by_kind_key ~db ~kind:"room" ~key:room_id with
-  | Some scope -> Ok scope
+  | Some scope -> (
+      (* Backfill missing owner if binding exists *)
+      match Memory.get_room_profile_binding ~db ~room_id with
+      | Some binding -> (
+          match scope.profile_id with
+          | Some _ -> Ok scope
+          | None ->
+              (* Backfill: update scope with binding's profile_id *)
+              let stmt =
+                Sqlite3.prepare db
+                  "UPDATE memory_scopes SET profile_id = ?, updated_at = \
+                   datetime('now') WHERE id = ? AND profile_id IS NULL"
+              in
+              Fun.protect
+                ~finally:(fun () -> ignore (Sqlite3.finalize stmt))
+                (fun () ->
+                  ignore
+                    (Sqlite3.bind stmt 1
+                       (Sqlite3.Data.INT (Int64.of_int binding.profile_id)));
+                  ignore
+                    (Sqlite3.bind stmt 2
+                       (Sqlite3.Data.INT (Int64.of_int scope.id)));
+                  match Sqlite3.step stmt with
+                  | Sqlite3.Rc.DONE -> ()
+                  | rc ->
+                      failwith
+                        (Printf.sprintf
+                           "backfill room memory scope owner failed: %s"
+                           (Sqlite3.Rc.to_string rc)));
+              Ok
+                (Option.value ~default:scope
+                   (Memory.get_scope ~db ~id:scope.id)))
+      | None -> Ok scope)
   | None -> (
       match Memory.get_room_profile_binding ~db ~room_id with
       | Some binding ->
@@ -40,17 +74,19 @@ let ensure_room_scope ~db ~room_id =
       | None ->
           Error
             (Printf.sprintf
-               "No memory scope or profile binding found for room '%s'. Bind \
-                a room profile first."
+               "No memory scope or profile binding found for room '%s'. Bind a \
+                room profile first."
                room_id))
 
-(** Check if the principal has the required capability for the room scope. *)
+(** Check if the principal has the required capability for the room scope.
+    Supports: 1. Owner (bound profile owns scope) 2. Profile grant to bound
+    profile 3. Direct room grant when no profile binding *)
 let check_room_access ~db ~room_id ~capability =
   match ensure_room_scope ~db ~room_id with
   | Error _ as err -> err
   | Ok scope -> (
       match Memory.get_room_profile_binding ~db ~room_id with
-      | Some binding -> (
+      | Some binding ->
           let is_owner =
             match scope.profile_id with
             | Some pid -> pid = binding.profile_id
@@ -68,12 +104,19 @@ let check_room_access ~db ~room_id ~capability =
               Error
                 (Printf.sprintf
                    "Access denied: room '%s' does not have '%s' capability."
-                   room_id capability))
+                   room_id capability)
       | None ->
-          Error
-            (Printf.sprintf
-               "No profile binding for room '%s'. Cannot verify access."
-               room_id))
+          (* No profile binding: check direct room grant *)
+          let grants =
+            Memory.resolve_grants ~db ~scope_id:scope.id ~principal_kind:"room"
+              ~principal_id:room_id
+          in
+          if List.mem capability grants then Ok scope
+          else
+            Error
+              (Printf.sprintf
+                 "Access denied: room '%s' does not have '%s' capability."
+                 room_id capability))
 
 (** Clip memory content for preview in tool responses. *)
 let clip_content content max_len =
@@ -126,37 +169,43 @@ let room_memory_list ~db =
             | Some room_id -> (
                 match check_room_access ~db ~room_id ~capability:"list" with
                 | Error msg -> Lwt.return ("Error: " ^ msg)
-                | Ok _scope ->
+                | Ok _scope -> (
                     let open Yojson.Safe.Util in
-                    let limit =
+                    let limit_result =
                       try
-                        min 100 (max 1 (_args |> member "limit" |> to_int))
-                      with _ -> 20
+                        let v = _args |> member "limit" |> to_int in
+                        if v < 1 || v > 100 then
+                          Error "Error: limit must be between 1 and 100."
+                        else Ok v
+                      with _ -> Ok 20
                     in
-                    let memories =
-                      Memory.query_scoped_memories ~db ~scope_kind:"room"
-                        ~scope_key:room_id ~limit ()
-                    in
-                    if memories = [] then
-                      Lwt.return
-                        (Printf.sprintf
-                           "No memories found for this room (%s)." room_id)
-                    else
-                      let lines =
-                        List.map
-                          (fun (m : Memory_types.scoped_memory) ->
-                            let preview =
-                              match m.content with
-                              | Some c -> clip_content c 80
-                              | None -> "(empty)"
-                            in
-                            Printf.sprintf "#%d [%s] %s (updated: %s)" m.id
-                              m.reference preview m.updated_at)
-                          memories
-                      in
-                      Lwt.return
-                        (Printf.sprintf "Room memories (%s):\n%s" room_id
-                           (String.concat "\n" lines)))));
+                    match limit_result with
+                    | Error msg -> Lwt.return msg
+                    | Ok limit ->
+                        let memories =
+                          Memory.query_scoped_memories ~db ~scope_kind:"room"
+                            ~scope_key:room_id ~limit ()
+                        in
+                        if memories = [] then
+                          Lwt.return
+                            (Printf.sprintf
+                               "No memories found for this room (%s)." room_id)
+                        else
+                          let lines =
+                            List.map
+                              (fun (m : Memory_types.scoped_memory) ->
+                                let preview =
+                                  match m.content with
+                                  | Some c -> clip_content c 80
+                                  | None -> "(empty)"
+                                in
+                                Printf.sprintf "#%d [%s] %s (updated: %s)" m.id
+                                  m.reference preview m.updated_at)
+                              memories
+                          in
+                          Lwt.return
+                            (Printf.sprintf "Room memories (%s):\n%s" room_id
+                               (String.concat "\n" lines))))));
     invoke_stream = None;
     risk_level = Tool.Low;
     deferred = false;
@@ -175,15 +224,16 @@ let room_memory_show ~db =
                 `Assoc
                   [
                     ("type", `String "integer");
-                    ("description", `String "ID of the memory to show (required)");
+                    ( "description",
+                      `String "ID of the memory to show (required)" );
                   ] );
             ] );
         ("required", `List [ `String "memory_id" ]);
       ]
   in
   let param_err detail =
-    Tool.make_param_error ~tool_name:"room_memory_show" ~parameters_schema:schema
-      ~detail
+    Tool.make_param_error ~tool_name:"room_memory_show"
+      ~parameters_schema:schema ~detail
   in
   {
     Tool.name = "room_memory_show";
@@ -211,24 +261,24 @@ let room_memory_show ~db =
                     let memory_id =
                       try args |> member "memory_id" |> to_int with _ -> -1
                     in
-                    if memory_id < 0 then
-                      Lwt.return (param_err "memory_id must be a positive integer")
+                    if memory_id <= 0 then
+                      Lwt.return
+                        (param_err "memory_id must be a positive integer")
                     else
                       match Memory.get_scoped_memory ~db ~id:memory_id with
                       | None ->
                           Lwt.return
                             (Printf.sprintf "Memory #%d not found." memory_id)
                       | Some m
-                        when m.scope_kind <> "room"
-                             || m.scope_key <> room_id ->
+                        when m.scope_kind <> "room" || m.scope_key <> room_id ->
                           Lwt.return
                             (Printf.sprintf
-                               "Memory #%d does not belong to this room." memory_id)
+                               "Memory #%d does not belong to this room."
+                               memory_id)
                       | Some m ->
                           let lines = ref [] in
                           let add s = lines := s :: !lines in
-                          add
-                            (Printf.sprintf "Room:       %s" room_id);
+                          add (Printf.sprintf "Room:       %s" room_id);
                           add (Printf.sprintf "ID:         %d" m.id);
                           add (Printf.sprintf "Reference:  %s" m.reference);
                           add (Printf.sprintf "Provenance: %s" m.provenance);
@@ -249,8 +299,7 @@ let room_memory_show ~db =
                                   add (Printf.sprintf "Reason:     %s" r))
                                 m.redaction_reason
                           | None -> ());
-                          Lwt.return
-                            (String.concat "\n" (List.rev !lines))))));
+                          Lwt.return (String.concat "\n" (List.rev !lines))))));
     invoke_stream = None;
     risk_level = Tool.Low;
     deferred = false;
@@ -286,16 +335,16 @@ let room_memory_save ~db =
       ]
   in
   let param_err detail =
-    Tool.make_param_error ~tool_name:"room_memory_save" ~parameters_schema:schema
-      ~detail
+    Tool.make_param_error ~tool_name:"room_memory_save"
+      ~parameters_schema:schema ~detail
   in
   {
     Tool.name = "room_memory_save";
     description =
-      "Save or update a memory for the current room. If a memory with the \
-       same reference already exists, it will be updated (upsert). Use this \
-       when the user tells you something to remember about this room, or when \
-       you derive a stable fact specific to this room.";
+      "Save or update a memory for the current room. If a memory with the same \
+       reference already exists, it will be updated (upsert). Use this when \
+       the user tells you something to remember about this room, or when you \
+       derive a stable fact specific to this room.";
     parameters_schema = schema;
     invoke =
       (fun ?context args ->
@@ -333,9 +382,8 @@ let room_memory_save ~db =
                       Lwt.catch
                         (fun () ->
                           let m =
-                            Memory.upsert_scoped_memory ~db
-                              ~scope_id:scope.id ~reference ~content
-                              ~provenance ()
+                            Memory.upsert_scoped_memory ~db ~scope_id:scope.id
+                              ~reference ~content ~provenance ()
                           in
                           Lwt.return
                             (Printf.sprintf
@@ -370,7 +418,8 @@ let room_memory_correct ~db =
                 `Assoc
                   [
                     ("type", `String "string");
-                    ("description", `String "New content for the memory (required)");
+                    ( "description",
+                      `String "New content for the memory (required)" );
                   ] );
             ] );
         ("required", `List [ `String "memory_id"; `String "content" ]);
@@ -402,7 +451,7 @@ let room_memory_correct ~db =
             | Some room_id -> (
                 match check_room_access ~db ~room_id ~capability:"write" with
                 | Error msg -> Lwt.return ("Error: " ^ msg)
-                | Ok _scope ->
+                | Ok _scope -> (
                     let open Yojson.Safe.Util in
                     let memory_id =
                       try args |> member "memory_id" |> to_int with _ -> -1
@@ -410,7 +459,7 @@ let room_memory_correct ~db =
                     let content =
                       try args |> member "content" |> to_string with _ -> ""
                     in
-                    if memory_id < 0 then
+                    if memory_id <= 0 then
                       Lwt.return
                         (param_err "memory_id must be a positive integer")
                     else if content = "" then
@@ -423,8 +472,7 @@ let room_memory_correct ~db =
                           Lwt.return
                             (Printf.sprintf "Memory #%d not found." memory_id)
                       | Some m
-                        when m.scope_kind <> "room"
-                             || m.scope_key <> room_id ->
+                        when m.scope_kind <> "room" || m.scope_key <> room_id ->
                           Lwt.return
                             (Printf.sprintf
                                "Memory #%d does not belong to this room."
@@ -449,8 +497,9 @@ let room_memory_correct ~db =
                               Lwt.return
                                 (Printf.sprintf
                                    "Corrected memory #%d '%s' for room %s.\n\
-                                    Old provenance preserved in correction trail."
-                                   updated.id updated.reference room_id)))));
+                                    Old provenance preserved in correction \
+                                    trail."
+                                   updated.id updated.reference room_id))))));
     invoke_stream = None;
     risk_level = Tool.Low;
     deferred = false;
@@ -477,7 +526,9 @@ let room_memory_forget ~db =
                   [
                     ("type", `String "string");
                     ( "description",
-                      `String "Optional reason for forgetting (default: 'agent request')" );
+                      `String
+                        "Optional reason for forgetting (default: 'agent \
+                         request')" );
                   ] );
             ] );
         ("required", `List [ `String "memory_id" ]);
@@ -509,7 +560,7 @@ let room_memory_forget ~db =
             | Some room_id -> (
                 match check_room_access ~db ~room_id ~capability:"write" with
                 | Error msg -> Lwt.return ("Error: " ^ msg)
-                | Ok _scope ->
+                | Ok _scope -> (
                     let open Yojson.Safe.Util in
                     let memory_id =
                       try args |> member "memory_id" |> to_int with _ -> -1
@@ -518,7 +569,7 @@ let room_memory_forget ~db =
                       try args |> member "reason" |> to_string
                       with _ -> "agent request"
                     in
-                    if memory_id < 0 then
+                    if memory_id <= 0 then
                       Lwt.return
                         (param_err "memory_id must be a positive integer")
                     else
@@ -527,16 +578,15 @@ let room_memory_forget ~db =
                           Lwt.return
                             (Printf.sprintf "Memory #%d not found." memory_id)
                       | Some m
-                        when m.scope_kind <> "room"
-                             || m.scope_key <> room_id ->
+                        when m.scope_kind <> "room" || m.scope_key <> room_id ->
                           Lwt.return
                             (Printf.sprintf
                                "Memory #%d does not belong to this room."
                                memory_id)
                       | Some m when m.redacted_at <> None ->
                           Lwt.return
-                            (Printf.sprintf
-                               "Memory #%d is already redacted." memory_id)
+                            (Printf.sprintf "Memory #%d is already redacted."
+                               memory_id)
                       | Some _ ->
                           if
                             Memory.redact_scoped_memory ~db ~id:memory_id
@@ -549,8 +599,8 @@ let room_memory_forget ~db =
                           else
                             Lwt.return
                               (Printf.sprintf
-                                 "Error: failed to redact memory #%d."
-                                 memory_id))));
+                                 "Error: failed to redact memory #%d." memory_id)
+                    ))));
     invoke_stream = None;
     risk_level = Tool.Low;
     deferred = false;
