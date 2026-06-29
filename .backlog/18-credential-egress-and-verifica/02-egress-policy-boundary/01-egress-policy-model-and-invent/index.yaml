@@ -19,7 +19,8 @@ tasks:
       file: T001-add-host-path-method-egress-ru.todo
       id: T001
       priority: high
-      status: pending
+      status: in_progress
+      tags: []
       title: Add host path method egress rule model
     - complexity: high
       depends_on:
