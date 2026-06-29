@@ -12,7 +12,7 @@ milestones:
       locked: false
       name: Credential Policy Boundary
       path: 01-credential-policy-boundary
-      status: pending
+      status: done
     - complexity: high
       depends_on:
         - P18.M1
