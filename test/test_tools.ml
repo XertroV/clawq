@@ -493,6 +493,9 @@ let test_send_message_uses_send_fn_over_send_progress () =
              effective_cwd = None;
              request_cwd_change = None;
              egress_rules = [];
+             snapshot_id = None;
+             profile_id = None;
+             egress_audit_db = None;
            }
          (`Assoc [ ("text", `String "status update") ]))
   in
@@ -554,6 +557,9 @@ let test_send_message_with_buttons_rich_notifier () =
              effective_cwd = None;
              request_cwd_change = None;
              egress_rules = [];
+             snapshot_id = None;
+             profile_id = None;
+             egress_audit_db = None;
            }
          (`Assoc
             [
@@ -646,6 +652,9 @@ let test_send_message_plain_text_via_rich_notifier () =
              effective_cwd = None;
              request_cwd_change = None;
              egress_rules = [];
+             snapshot_id = None;
+             profile_id = None;
+             egress_audit_db = None;
            }
          (`Assoc [ ("text", `String "plain text update") ]))
   in
@@ -707,6 +716,9 @@ let test_send_poll_rich_notifier () =
              effective_cwd = None;
              request_cwd_change = None;
              egress_rules = [];
+             snapshot_id = None;
+             profile_id = None;
+             egress_audit_db = None;
            }
          (`Assoc
             [
@@ -946,6 +958,9 @@ let test_send_file_with_content () =
              effective_cwd = None;
              request_cwd_change = None;
              egress_rules = [];
+             snapshot_id = None;
+             profile_id = None;
+             egress_audit_db = None;
            }
          (`Assoc
             [
@@ -2359,6 +2374,9 @@ let test_shell_exec_interrupts_running_process () =
                    effective_cwd = None;
                    request_cwd_change = None;
                    egress_rules = [];
+                   snapshot_id = None;
+                   profile_id = None;
+                   egress_audit_db = None;
                  }
                (`Assoc [ ("command", `String "sleep 10") ])
            in
@@ -2425,6 +2443,9 @@ let test_shell_exec_interrupt_moves_to_background () =
                    effective_cwd = None;
                    request_cwd_change = None;
                    egress_rules = [];
+                   snapshot_id = None;
+                   profile_id = None;
+                   egress_audit_db = None;
                  }
                (`Assoc [ ("command", `String command) ])
            in
@@ -2552,6 +2573,9 @@ let test_shell_exec_injects_session_id_env () =
           effective_cwd = None;
           request_cwd_change = None;
           egress_rules = [];
+          snapshot_id = None;
+          profile_id = None;
+          egress_audit_db = None;
         }
       in
       let result =
@@ -2769,6 +2793,9 @@ let test_shell_exec_starts_ci_watch_asynchronously_after_push () =
               effective_cwd = None;
               request_cwd_change = None;
               egress_rules = [];
+              snapshot_id = None;
+              profile_id = None;
+              egress_audit_db = None;
             }
           in
           let result =
@@ -2862,6 +2889,9 @@ let test_shell_exec_cd_prefix_push_uses_cd_repo_path () =
               effective_cwd = None;
               request_cwd_change = None;
               egress_rules = [];
+              snapshot_id = None;
+              profile_id = None;
+              egress_audit_db = None;
             }
           in
           let command = Printf.sprintf "cd %s && git push" repo in
@@ -3008,6 +3038,9 @@ let room_profile_cwd_context changed_to =
     effective_cwd = None;
     request_cwd_change = Some (fun path _wipe -> changed_to := Some path);
     egress_rules = [];
+    snapshot_id = None;
+    profile_id = None;
+    egress_audit_db = None;
   }
 
 let with_extra_dir base name f =
@@ -3061,6 +3094,9 @@ let test_change_working_dir_basic () =
           request_cwd_change =
             Some (fun path _wipe -> cwd_changed_to := Some path);
           egress_rules = [];
+          snapshot_id = None;
+          profile_id = None;
+          egress_audit_db = None;
         }
       in
       let result =
@@ -3093,6 +3129,9 @@ let test_change_working_dir_rejects_unmatched_pattern () =
           effective_cwd = None;
           request_cwd_change = Some (fun _ _ -> ());
           egress_rules = [];
+          snapshot_id = None;
+          profile_id = None;
+          egress_audit_db = None;
         }
       in
       let result =
@@ -3124,6 +3163,9 @@ let test_change_working_dir_allows_matching_pattern () =
           effective_cwd = None;
           request_cwd_change = Some (fun _ _ -> cwd_changed := true);
           egress_rules = [];
+          snapshot_id = None;
+          profile_id = None;
+          egress_audit_db = None;
         }
       in
       let result =
@@ -3255,6 +3297,9 @@ let test_change_working_dir_rejects_nonexistent () =
           effective_cwd = None;
           request_cwd_change = Some (fun _ _ -> ());
           egress_rules = [];
+          snapshot_id = None;
+          profile_id = None;
+          egress_audit_db = None;
         }
       in
       let result =
@@ -3286,6 +3331,9 @@ let test_change_working_dir_rejects_file () =
           effective_cwd = None;
           request_cwd_change = Some (fun _ _ -> ());
           egress_rules = [];
+          snapshot_id = None;
+          profile_id = None;
+          egress_audit_db = None;
         }
       in
       let result =
@@ -3336,6 +3384,9 @@ let test_file_read_uses_effective_cwd () =
           effective_cwd = Some sub;
           request_cwd_change = None;
           egress_rules = [];
+          snapshot_id = None;
+          profile_id = None;
+          egress_audit_db = None;
         }
       in
       let result =
@@ -3385,6 +3436,9 @@ let test_shell_exec_uses_effective_cwd () =
           effective_cwd = Some sub;
           request_cwd_change = None;
           egress_rules = [];
+          snapshot_id = None;
+          profile_id = None;
+          egress_audit_db = None;
         }
       in
       let result =
@@ -3410,6 +3464,9 @@ let test_list_dir_uses_effective_cwd () =
           effective_cwd = Some sub;
           request_cwd_change = None;
           egress_rules = [];
+          snapshot_id = None;
+          profile_id = None;
+          egress_audit_db = None;
         }
       in
       let result = Lwt_main.run (tool.Tool.invoke ~context (`Assoc [])) in
@@ -3481,6 +3538,9 @@ let test_models_tool_set_accepts_db_only_provider_qualified_model () =
       effective_cwd = None;
       request_cwd_change = None;
       egress_rules = [];
+      snapshot_id = None;
+      profile_id = None;
+      egress_audit_db = None;
     }
   in
   let result =
@@ -3514,6 +3574,9 @@ let test_models_tool_set_rejects_unavailable_cached_model () =
       effective_cwd = None;
       request_cwd_change = None;
       egress_rules = [];
+      snapshot_id = None;
+      profile_id = None;
+      egress_audit_db = None;
     }
   in
   let result =
@@ -3548,6 +3611,9 @@ let test_models_tool_set_rejects_ambiguous_plain_with_skip_validation () =
       effective_cwd = None;
       request_cwd_change = None;
       egress_rules = [];
+      snapshot_id = None;
+      profile_id = None;
+      egress_audit_db = None;
     }
   in
   let result =
@@ -3589,6 +3655,9 @@ let test_models_tool_set_canonicalizes_unique_plain_with_skip_validation () =
       effective_cwd = None;
       request_cwd_change = None;
       egress_rules = [];
+      snapshot_id = None;
+      profile_id = None;
+      egress_audit_db = None;
     }
   in
   let result =
@@ -3624,6 +3693,9 @@ let test_models_tool_set_rejects_plain_catalog_deprecated_cached_model () =
       effective_cwd = None;
       request_cwd_change = None;
       egress_rules = [];
+      snapshot_id = None;
+      profile_id = None;
+      egress_audit_db = None;
     }
   in
   let result =

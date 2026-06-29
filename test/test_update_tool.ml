@@ -274,6 +274,9 @@ let test_update_tool_writes_restart_marker_from_session_context () =
              effective_cwd = None;
              request_cwd_change = None;
              egress_rules = [];
+             snapshot_id = None;
+             profile_id = None;
+             egress_audit_db = None;
            }
          (`Assoc [ ("mode", `String "git") ]))
   in
@@ -315,6 +318,9 @@ let test_update_tool_does_not_pin_model_without_explicit_override () =
              effective_cwd = None;
              request_cwd_change = None;
              egress_rules = [];
+             snapshot_id = None;
+             profile_id = None;
+             egress_audit_db = None;
            }
          (`Assoc [ ("mode", `String "git") ]))
   in

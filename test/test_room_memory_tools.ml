@@ -25,6 +25,9 @@ let make_context ~session_key =
     effective_cwd = None;
     request_cwd_change = None;
     egress_rules = [];
+    snapshot_id = None;
+    profile_id = None;
+    egress_audit_db = None;
   }
 
 (** Helper to register room memory tools and return a registry. *)
@@ -432,6 +435,9 @@ let test_room_memory_requires_session_context () =
       effective_cwd = None;
       request_cwd_change = None;
       egress_rules = [];
+      snapshot_id = None;
+      profile_id = None;
+      egress_audit_db = None;
     }
   in
   let result =

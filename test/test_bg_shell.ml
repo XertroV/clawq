@@ -43,6 +43,9 @@ let test_basic_detach () =
                    effective_cwd = None;
                    request_cwd_change = None;
                    egress_rules = [];
+                   snapshot_id = None;
+                   profile_id = None;
+                   egress_audit_db = None;
                  }
                (`Assoc [ ("command", `String "echo hello; sleep 0.5") ])
            in
@@ -96,6 +99,9 @@ let test_status_running () =
                    effective_cwd = None;
                    request_cwd_change = None;
                    egress_rules = [];
+                   snapshot_id = None;
+                   profile_id = None;
+                   egress_audit_db = None;
                  }
                (`Assoc [ ("command", `String "sleep 0.15") ])
            in
@@ -156,6 +162,9 @@ let test_result_windowed () =
                    effective_cwd = None;
                    request_cwd_change = None;
                    egress_rules = [];
+                   snapshot_id = None;
+                   profile_id = None;
+                   egress_audit_db = None;
                  }
                (`Assoc
                   [
@@ -219,6 +228,9 @@ let test_exit_code_captured () =
                    effective_cwd = None;
                    request_cwd_change = None;
                    egress_rules = [];
+                   snapshot_id = None;
+                   profile_id = None;
+                   egress_audit_db = None;
                  }
                (`Assoc [ ("command", `String "sleep 0.1; exit 42") ])
            in
@@ -277,6 +289,9 @@ let test_result_while_running () =
                    effective_cwd = None;
                    request_cwd_change = None;
                    egress_rules = [];
+                   snapshot_id = None;
+                   profile_id = None;
+                   egress_audit_db = None;
                  }
                (`Assoc [ ("command", `String "sleep 1") ])
            in

@@ -263,6 +263,9 @@ let test_skill_interrupt_kills_descendants () =
                        effective_cwd = None;
                        request_cwd_change = None;
                        egress_rules = [];
+                       snapshot_id = None;
+                       profile_id = None;
+                       egress_audit_db = None;
                      }
                    (`Assoc [])
                in
@@ -737,6 +740,9 @@ let test_use_skill_tool_found () =
       effective_cwd = None;
       request_cwd_change = None;
       egress_rules = [];
+      snapshot_id = None;
+      profile_id = None;
+      egress_audit_db = None;
     }
   in
   let result =
@@ -1048,6 +1054,9 @@ let test_use_skill_with_injection () =
       effective_cwd = None;
       request_cwd_change = None;
       egress_rules = [];
+      snapshot_id = None;
+      profile_id = None;
+      egress_audit_db = None;
     }
   in
   let result =

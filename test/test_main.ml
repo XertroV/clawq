@@ -81,6 +81,7 @@ let () =
        ("config_loader", Test_config_loader.suite);
        ("egress_rules", Test_egress_rules.suite);
        ("egress_evaluator", Test_egress_evaluator.suite);
+       ("egress_audit", Test_egress_audit.suite);
        ("credential_handles", Test_credential_handles.suite);
        ("credential_lease", Test_credential_lease.suite);
        ("builtin_credential_lease", Test_builtin_credential_lease.suite);

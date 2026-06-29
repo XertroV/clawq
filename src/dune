@@ -116,6 +116,7 @@
   task_tree
   migrate
   audit
+  egress_audit
   access_snapshot
   access_explanation
   credential_lease
