@@ -29,6 +29,7 @@ type wizard_state = {
   token_limit : int;
   cost_limit_usd : float;
   budget_reset_period : string;
+  connector_type : string;
   connector_room : string;
   connector_active : bool;
 }
@@ -53,6 +54,7 @@ let default_state : wizard_state =
     token_limit = 0;
     cost_limit_usd = 0.0;
     budget_reset_period = "monthly";
+    connector_type = "teams";
     connector_room = "";
     connector_active = true;
   }
@@ -98,6 +100,164 @@ let validate_budget_period s =
   match s with
   | "daily" | "weekly" | "monthly" | "yearly" -> Ok s
   | _ -> Error "Period must be: daily, weekly, monthly, or yearly."
+
+(* -- Connector detection ----------------------------------------------- *)
+
+(** [connector_is_configured cfg name] checks if the named connector has usable
+    credentials configured (not just an empty stanza). *)
+let connector_is_configured (cfg : Runtime_config.t) = function
+  | "teams" -> (
+      match cfg.channels.teams with
+      | Some t -> t.app_id <> "" && t.app_secret <> ""
+      | None -> false)
+  | "slack" -> (
+      match cfg.channels.slack with
+      | Some s -> s.bot_token <> "" && s.signing_secret <> ""
+      | None -> false)
+  | "discord" -> Option.is_some cfg.channels.discord
+  | "telegram" -> Option.is_some cfg.channels.telegram
+  | _ -> false
+
+let configured_connectors (cfg : Runtime_config.t) =
+  [ "teams"; "slack"; "discord"; "telegram" ]
+  |> List.filter (connector_is_configured cfg)
+
+let default_connector (cfg : Runtime_config.t) =
+  if connector_is_configured cfg "teams" then "teams"
+  else match configured_connectors cfg with c :: _ -> c | [] -> "teams"
+
+(* -- Connector-specific room validation -------------------------------- *)
+
+let validate_teams_room_id s =
+  if s = "" then Error "Teams room ID cannot be empty."
+  else if String.length s < 3 then
+    Error "Teams room ID seems too short (expected conversation ID)."
+  else if
+    not
+      ((String.length s >= 3 && s.[0] = '1' && s.[1] = '9' && s.[2] = ':')
+      || String.length s >= 14
+         && String.sub s (String.length s - 14) 14 = "@thread.tacv2")
+  then Error "Teams room ID should start with 19: or contain @thread.tacv2."
+  else Ok s
+
+let validate_slack_room_id s =
+  if s = "" then Error "Slack channel ID cannot be empty."
+  else if String.length s < 2 then
+    Error
+      "Slack channel ID seems too short (expected C..., G..., D..., or #name)."
+  else
+    let first = s.[0] in
+    if first = 'C' || first = 'G' || first = 'D' || first = '#' then Ok s
+    else
+      Error
+        "Slack channel ID should start with C (public), G (private), D (DM), \
+         or # (channel name)."
+
+let validate_room_id_for_connector connector room_id =
+  match connector with
+  | "teams" -> validate_teams_room_id room_id
+  | "slack" -> validate_slack_room_id room_id
+  | _ -> if room_id = "" then Error "Room ID cannot be empty." else Ok room_id
+
+(* -- Teams vs Slack capability comparison ------------------------------- *)
+
+type comparison_row = {
+  feature : string;
+  teams_value : string;
+  slack_value : string;
+}
+
+let compare_teams_vs_slack () : comparison_row list =
+  let tc = Connector_capabilities.teams in
+  let sc = Connector_capabilities.slack in
+  let yes_no b = if b then "Yes" else "No" in
+  let edit_str = function
+    | Connector_capabilities.Edit_in_place -> "In-place"
+    | Delete_and_resend -> "Delete+resend"
+    | No_edit -> "None"
+  in
+  let thread_str = function
+    | Connector_capabilities.Native_thread_replies -> "Native"
+    | Thread_like_replies -> "Thread-like"
+    | No_thread_replies -> "None"
+  in
+  [
+    {
+      feature = "Edit messages";
+      teams_value = edit_str tc.can_edit;
+      slack_value = edit_str sc.can_edit;
+    };
+    {
+      feature = "Delete messages";
+      teams_value = yes_no tc.can_delete;
+      slack_value = yes_no sc.can_delete;
+    };
+    {
+      feature = "Reactions";
+      teams_value = yes_no tc.can_react;
+      slack_value = yes_no sc.can_react;
+    };
+    {
+      feature = "Typing indicator";
+      teams_value = yes_no tc.can_type;
+      slack_value = yes_no sc.can_type;
+    };
+    {
+      feature = "Status updates";
+      teams_value = yes_no tc.can_show_status;
+      slack_value = yes_no sc.can_show_status;
+    };
+    {
+      feature = "File sending";
+      teams_value = yes_no tc.can_send_files;
+      slack_value = yes_no sc.can_send_files;
+    };
+    {
+      feature = "Adaptive Cards";
+      teams_value = yes_no tc.can_send_cards;
+      slack_value = yes_no sc.can_send_cards;
+    };
+    {
+      feature = "Buttons";
+      teams_value = yes_no tc.can_send_buttons;
+      slack_value = yes_no sc.can_send_buttons;
+    };
+    {
+      feature = "Thread replies";
+      teams_value = thread_str tc.thread_replies;
+      slack_value = thread_str sc.thread_replies;
+    };
+    {
+      feature = "Rich questions";
+      teams_value = yes_no (Connector_capabilities.supports_rich_questions tc);
+      slack_value = yes_no (Connector_capabilities.supports_rich_questions sc);
+    };
+    {
+      feature = "Max message length";
+      teams_value = string_of_int tc.max_message_length;
+      slack_value = string_of_int sc.max_message_length;
+    };
+  ]
+
+let display_capability_comparison () =
+  let open Setup_common in
+  let rows = compare_teams_vs_slack () in
+  Printf.printf "\n%s\n" (bold "=== Teams vs Slack Capability Comparison ===");
+  Printf.printf "\n";
+  Printf.printf "  %-22s  %-16s  %-16s\n" "Feature" "Teams" "Slack";
+  Printf.printf "  %-22s  %-16s  %-16s\n" (String.make 22 '-')
+    (String.make 16 '-') (String.make 16 '-');
+  List.iter
+    (fun (r : comparison_row) ->
+      Printf.printf "  %-22s  %-16s  %-16s\n" r.feature r.teams_value
+        r.slack_value)
+    rows;
+  Printf.printf "\n";
+  Printf.printf "  %s\n"
+    (dim "Teams: Adaptive Cards, rich questions, file consent, typing.");
+  Printf.printf "  %s\n"
+    (dim "Slack: reactions, native threads, ambient history capture.");
+  Printf.printf "\n"
 
 (* ── Plan generation ────────────────────────────────────────────── *)
 
@@ -171,11 +331,23 @@ let generate_plan ~(cfg : Runtime_config.t) ~(state : wizard_state) :
          state.cost_limit_usd state.budget_reset_period);
 
   (* Connector binding *)
-  if state.connector_room <> "" then
+  if state.connector_room <> "" then begin
+    let connector_label =
+      match state.connector_type with
+      | "teams" -> "Teams"
+      | "slack" -> "Slack"
+      | "discord" -> "Discord"
+      | "telegram" -> "Telegram"
+      | c -> c
+    in
+    add "Connector"
+      (if state.connector_type = "teams" then "primary" else "bind")
+      connector_label;
     add "Connector Binding"
       (if state.connector_active then "bind" else "bind-inactive")
       (Printf.sprintf "room=%s, active=%b" state.connector_room
-         state.connector_active);
+         state.connector_active)
+  end;
 
   List.rev !items
 
@@ -212,10 +384,40 @@ let run_readiness_checks ~(cfg : Runtime_config.t) ~(state : wizard_state) :
      else Printf.sprintf "Missing: %s" (String.concat ", " missing_bundles));
 
   (* Check connector room format *)
-  add "Connector Room"
-    (state.connector_room = "" || String.length state.connector_room > 0)
-    (if state.connector_room = "" then "No connector configured"
-     else Printf.sprintf "Room: %s" state.connector_room);
+  if state.connector_room <> "" then begin
+    let cfg_connectors = configured_connectors cfg in
+    let connector_available = List.mem state.connector_type cfg_connectors in
+    add "Connector Available"
+      (state.connector_type = "" || connector_available)
+      (if state.connector_type = "" then "No connector specified"
+       else if connector_available then
+         Printf.sprintf "%s configured" state.connector_type
+       else
+         Printf.sprintf "%s not configured (available: %s)" state.connector_type
+           (if cfg_connectors = [] then "none"
+            else String.concat ", " cfg_connectors))
+  end;
+
+  let room_valid =
+    if state.connector_room = "" then true
+    else
+      match
+        validate_room_id_for_connector state.connector_type state.connector_room
+      with
+      | Ok _ -> true
+      | Error _ -> false
+  in
+  let room_msg =
+    if state.connector_room = "" then "No connector configured"
+    else
+      match
+        validate_room_id_for_connector state.connector_type state.connector_room
+      with
+      | Ok _ ->
+          Printf.sprintf "%s room: %s" state.connector_type state.connector_room
+      | Error e -> e
+  in
+  add "Connector Room" room_valid room_msg;
 
   (* Check budget consistency *)
   add "Budget"
@@ -663,12 +865,57 @@ let run_wizard () =
           | Error e -> Printf.printf "  Warning: %s\n" e);
 
           (* Connector binding *)
-          Printf.printf "\nConnector binding (empty to skip):\n";
-          let connector_room =
+          Printf.printf "\nConnector binding:\n";
+          let available = configured_connectors cfg in
+          let has_teams = List.mem "teams" available in
+          let has_slack = List.mem "slack" available in
+          let def_conn = default_connector cfg in
+          Printf.printf "  %s\n"
+            (Setup_common.dim
+               (Printf.sprintf "Available: %s (default: %s)"
+                  (if available = [] then "none"
+                   else String.concat ", " available)
+                  def_conn));
+          let connector_type =
             Setup_common.prompt_string
-              ~prompt:"Room ID (e.g., C12345, conv-abc)"
+              ~prompt:"Connector type (teams/slack/discord/telegram)"
+              ~default:def_conn ()
+          in
+          state := { !state with connector_type };
+          if connector_type <> "teams" && has_teams then
+            Printf.printf "  %s\n"
+              (Setup_common.yellow
+                 (Printf.sprintf
+                    "Note: Teams is configured but you chose '%s'. Teams \
+                     supports Adaptive Cards, rich questions, and typing \
+                     indicators."
+                    connector_type));
+          if connector_type = "teams" && has_slack then begin
+            Printf.printf "\n  %s\n"
+              (Setup_common.cyan
+                 "Slack is also configured. Showing capability comparison:");
+            display_capability_comparison ();
+            Printf.printf "  %s\n"
+              (Setup_common.dim
+                 "Teams is recommended for rich interactions (cards, buttons, \
+                  file consent).")
+          end;
+          let room_prompt =
+            match connector_type with
+            | "teams" -> "Teams conversation ID (e.g., 19:xxx@thread.tacv2)"
+            | "slack" -> "Slack channel ID (e.g., C12345 or #general)"
+            | _ -> "Room ID (e.g., C12345, conv-abc)"
+          in
+          let connector_room =
+            Setup_common.prompt_string ~prompt:room_prompt
               ~default:!state.connector_room ()
           in
+          (match
+             validate_room_id_for_connector connector_type connector_room
+           with
+          | Error e ->
+              Printf.printf "  %s\n" (Setup_common.yellow ("Warning: " ^ e))
+          | Ok _ -> ());
           state := { !state with connector_room };
           if connector_room <> "" then begin
             let active =
@@ -718,7 +965,8 @@ let run_plan ~(profile_id : string) ~(model : string) ~(system_prompt : string)
     ~(max_tool_iterations : int) ~(allowed_tools : string list)
     ~(denied_tools : string list) ~(access_bundle_ids : string list)
     ~(token_limit : int) ~(cost_limit_usd : float) ~(reset_period : string)
-    ~(connector_room : string) ~(connector_active : bool) () =
+    ~(connector_type : string) ~(connector_room : string)
+    ~(connector_active : bool) () =
   let cfg = Command_bridge_helpers.get_config () in
   let state : wizard_state =
     {
@@ -735,12 +983,17 @@ let run_plan ~(profile_id : string) ~(model : string) ~(system_prompt : string)
       token_limit;
       cost_limit_usd;
       budget_reset_period = reset_period;
+      connector_type;
       connector_room;
       connector_active;
     }
   in
   let plan = generate_plan ~cfg ~state in
   display_plan plan;
+  if connector_type = "teams" then begin
+    let has_slack = connector_is_configured cfg "slack" in
+    if has_slack then display_capability_comparison ()
+  end;
   let checks = run_readiness_checks ~cfg ~state in
   let all_ready = display_readiness checks in
   if all_ready then "Plan is ready. All readiness checks passed."
@@ -786,7 +1039,7 @@ let run args =
          [--system-prompt P]\n\
         \       [--max-iters N] [--allowed-tools T1,T2] [--denied-tools T1,T2]\n\
         \       [--access-bundles B1,B2] [--token-limit N] [--cost-limit F]\n\
-        \       [--reset-period P] [--room R] [--inactive]"
+        \       [--reset-period P] [--connector C] [--room R] [--inactive]"
       else
         let max_iters_str = get_flag "--max-iters" "25" in
         match int_of_string_opt max_iters_str with
@@ -818,9 +1071,11 @@ let run args =
             let reset_period = get_flag "--reset-period" "monthly" in
             let connector_room = get_flag "--room" "" in
             let connector_active = not (List.mem "--inactive" flags) in
+            let connector_type = get_flag "--connector" "teams" in
             run_plan ~profile_id ~model ~system_prompt ~max_tool_iterations
               ~allowed_tools ~denied_tools ~access_bundle_ids ~token_limit
-              ~cost_limit_usd ~reset_period ~connector_room ~connector_active ()
+              ~cost_limit_usd ~reset_period ~connector_type ~connector_room
+              ~connector_active ()
         | Some _ ->
             Printf.sprintf
               "Error: --max-iters must be between 1 and 1000, got '%s'."
@@ -849,7 +1104,7 @@ let run args =
             \       [--max-iters N] [--allowed-tools T1,T2] [--denied-tools \
              T1,T2]\n\
             \       [--access-bundles B1,B2] [--token-limit N] [--cost-limit F]\n\
-            \       [--reset-period P] [--room R] [--inactive]"
+            \       [--reset-period P] [--connector C] [--room R] [--inactive]"
           else
             let cfg = Command_bridge_helpers.get_config () in
             let db = Command_bridge_helpers.get_db () in
@@ -885,6 +1140,7 @@ let run args =
                 let reset_period = get_flag "--reset-period" "monthly" in
                 let connector_room = get_flag "--room" "" in
                 let connector_active = not (List.mem "--inactive" flags) in
+                let connector_type = get_flag "--connector" "teams" in
                 let state : wizard_state =
                   {
                     profile_id;
@@ -900,6 +1156,7 @@ let run args =
                     token_limit;
                     cost_limit_usd;
                     budget_reset_period = reset_period;
+                    connector_type;
                     connector_room;
                     connector_active;
                   }
@@ -940,6 +1197,7 @@ let run args =
       \  --cost-limit F           Cost budget limit (USD)\n\
       \  --reset-period P         Budget reset period \
        (daily/weekly/monthly/yearly)\n\
+      \  --connector C            Connector type (teams/slack/discord/telegram)\n\
       \  --room R                 Room/channel ID (e.g., C12345, conv-abc)\n\
       \  --inactive               Create binding as inactive\n\n\
        Note: When using plan/apply modes from the command line, you may need\n\
