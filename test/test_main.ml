@@ -248,6 +248,12 @@ let () =
     @ [ ("held_items", Test_held_items.suite) ]
     @ [ ("repo_manager", Test_repo_manager.suite) ]
     @ Test_github.suites
+    @ [
+        ("github_ci_summary", Test_github_normalized.ci_summary_suite);
+        ("github_review_summary", Test_github_normalized.review_summary_suite);
+        ("github_mergeability", Test_github_normalized.mergeability_suite);
+        ("github_parse_review", Test_github_normalized.parse_review_suite);
+      ]
     @ [ ("github_app_config", Test_github_app_config.suite) ]
     @ [ ("github_app_token", Test_github_app_token.suite) ]
     @ [ ("github_pr_subscriptions", Test_github_pr_subscriptions.suite) ]
