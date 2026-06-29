@@ -156,6 +156,9 @@ let test_empty_questions_error () =
            effective_cwd = None;
            request_cwd_change = None;
            egress_rules = [];
+           snapshot_id = None;
+           profile_id = None;
+           egress_audit_db = None;
          }
      in
      let open Lwt.Syntax in
@@ -221,6 +224,9 @@ let test_multi_question_sequential () =
          effective_cwd = None;
          request_cwd_change = None;
          egress_rules = [];
+         snapshot_id = None;
+         profile_id = None;
+         egress_audit_db = None;
        }
      in
      let* result = tool.Tool.invoke ~context:ctx args in

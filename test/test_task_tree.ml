@@ -818,6 +818,9 @@ let test_tool_invoke_round_trip () =
       effective_cwd = None;
       request_cwd_change = None;
       egress_rules = [];
+      snapshot_id = None;
+      profile_id = None;
+      egress_audit_db = None;
     }
   in
   let result = Lwt_main.run (tool_t.invoke ~context:ctx args) in
@@ -2392,6 +2395,9 @@ let test_tool_notify_called_on_success () =
       effective_cwd = None;
       request_cwd_change = None;
       egress_rules = [];
+      snapshot_id = None;
+      profile_id = None;
+      egress_audit_db = None;
     }
   in
   let result = Lwt_main.run (tool_t.invoke ~context:ctx args) in
@@ -2434,6 +2440,9 @@ let test_tool_notify_not_called_on_error () =
       effective_cwd = None;
       request_cwd_change = None;
       egress_rules = [];
+      snapshot_id = None;
+      profile_id = None;
+      egress_audit_db = None;
     }
   in
   let result = Lwt_main.run (tool_t.invoke ~context:ctx args) in
@@ -2463,6 +2472,9 @@ let test_tool_no_notify_when_none () =
       effective_cwd = None;
       request_cwd_change = None;
       egress_rules = [];
+      snapshot_id = None;
+      profile_id = None;
+      egress_audit_db = None;
     }
   in
   let result = Lwt_main.run (tool_t.invoke ~context:ctx args) in

@@ -3,6 +3,21 @@ include Tools_builtin_fs
 include Tools_builtin_memory
 include Tools_builtin_room_memory
 
+(** Build an egress audit context from the tool invoke context. *)
+let make_audit_context (context : Tool.invoke_context option) :
+    Policy_http_client.audit_context =
+  match context with
+  | Some c ->
+      {
+        db = c.Tool.egress_audit_db;
+        session_key = c.Tool.session_key;
+        snapshot_id = c.Tool.snapshot_id;
+        tool_name = None;
+        profile_id = c.Tool.profile_id;
+        credential_handle_ids = [];
+      }
+  | None -> Policy_http_client.no_audit
+
 let is_path_allowed ~workspace ~workspace_only ~extra_allowed_paths path =
   if not workspace_only then true
   else is_path_within_allowed_roots ~workspace ~extra_allowed_paths path
@@ -746,6 +761,10 @@ let http_get ~workspace_only =
         let rules =
           match context with Some c -> c.Tool.egress_rules | None -> []
         in
+        let audit = make_audit_context context in
+        let audit =
+          { audit with Policy_http_client.tool_name = Some "http_get" }
+        in
         if url = "" then
           Lwt.return (param_err "parameter 'url' must be a non-empty string")
         else if workspace_only && not (is_localhost_url url) then
@@ -756,7 +775,7 @@ let http_get ~workspace_only =
             (fun () ->
               let open Lwt.Syntax in
               let* result =
-                Policy_http_client.get ~rules ~uri:url ~headers:[]
+                Policy_http_client.get ~rules ~uri:url ~headers:[] ~audit ()
               in
               match result with
               | Error err ->

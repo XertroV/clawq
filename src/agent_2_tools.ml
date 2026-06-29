@@ -345,6 +345,12 @@ let execute_tool_calls_stream agent ~db ~audit_enabled ~session_key
                                 agent.effective_cwd <- Some new_cwd;
                                 if wipe then pending_history_wipe := true);
                           egress_rules;
+                          snapshot_id = agent.access_snapshot_id;
+                          profile_id =
+                            (match agent.access_snapshot with
+                            | Some snap -> snap.Access_snapshot.profile_id
+                            | None -> None);
+                          egress_audit_db = db;
                         }
                       in
                       match tool.invoke_stream with
@@ -632,6 +638,12 @@ let execute_tool_calls agent ~db ~audit_enabled ~session_key
                                 agent.effective_cwd <- Some new_cwd;
                                 if wipe then pending_history_wipe := true);
                           egress_rules;
+                          snapshot_id = agent.access_snapshot_id;
+                          profile_id =
+                            (match agent.access_snapshot with
+                            | Some snap -> snap.Access_snapshot.profile_id
+                            | None -> None);
+                          egress_audit_db = db;
                         }
                       in
                       tool.invoke ~context args)

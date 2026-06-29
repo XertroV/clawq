@@ -403,6 +403,9 @@ let test_compact_history_tool () =
       effective_cwd = None;
       request_cwd_change = None;
       egress_rules = [];
+      snapshot_id = None;
+      profile_id = None;
+      egress_audit_db = None;
     }
   in
   let result = Lwt_main.run (tool.invoke ~context:ctx (`Assoc [])) in

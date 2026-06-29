@@ -1,4 +1,4 @@
-let schema_version = 41
+let schema_version = 42
 
 let exec_exn db sql =
   match Sqlite3.exec db sql with
@@ -472,6 +472,7 @@ let init_room_profile_bindings_schema db =
     \   )"
 
 let init_room_activity_ledger_schema db = Room_activity_ledger.init_schema db
+let init_egress_audit_schema db = Egress_audit.init_schema db
 
 let repair_room_profile_tables db =
   let profiles_modern = column_exists db "room_profiles" "name" in
@@ -684,6 +685,7 @@ let ensure_all_tables db =
   init_room_profiles_schema db;
   init_room_profile_bindings_schema db;
   init_room_activity_ledger_schema db;
+  init_egress_audit_schema db;
   Room_progress_checklist.init_schema db;
   Room_budget.init_schema db;
   init_scoped_memory_schema db;
@@ -870,6 +872,7 @@ let migrate_step db v =
          DEFAULT 'public' CHECK (visibility IN ('public', 'private', 'team'))";
       init_scoped_memory_schema db
   | 40 -> Github_pr_subscriptions.init_schema db
+  | 41 -> init_egress_audit_schema db
   | n -> failwith (Printf.sprintf "Unknown migration step from version %d" n)
 
 (* Idempotent column repair for databases that reached the current schema
@@ -913,6 +916,7 @@ let repair_missing_columns db =
      request_stats(profile_id, requested_at)";
   init_connector_history_schema db;
   init_room_activity_ledger_schema db;
+  init_egress_audit_schema db;
   Room_progress_checklist.init_schema db;
   Room_budget.init_schema db;
   repair_room_profile_tables db;

@@ -2883,6 +2883,9 @@ let test_refresh_runtime_bound_tools_replaces_models_with_session_mgr () =
       effective_cwd = None;
       request_cwd_change = None;
       egress_rules = [];
+      snapshot_id = None;
+      profile_id = None;
+      egress_audit_db = None;
     }
   in
   let result =
@@ -3047,6 +3050,9 @@ let invoke_change_working_dir registry path =
       request_cwd_change =
         Some (fun path wipe -> cwd_change := Some (path, wipe));
       egress_rules = [];
+      snapshot_id = None;
+      profile_id = None;
+      egress_audit_db = None;
     }
   in
   let result =
@@ -3065,6 +3071,9 @@ let invoke_file_read registry path =
       effective_cwd = None;
       request_cwd_change = None;
       egress_rules = [];
+      snapshot_id = None;
+      profile_id = None;
+      egress_audit_db = None;
     }
   in
   Lwt_main.run (tool.Tool.invoke ~context (`Assoc [ ("path", `String path) ]))
@@ -3080,6 +3089,9 @@ let invoke_send_file registry path =
       effective_cwd = None;
       request_cwd_change = None;
       egress_rules = [];
+      snapshot_id = None;
+      profile_id = None;
+      egress_audit_db = None;
     }
   in
   Lwt_main.run (tool.Tool.invoke ~context (`Assoc [ ("path", `String path) ]))
@@ -3365,6 +3377,9 @@ let test_task_tree_tool_with_current_workspace_autostarts_without_cwd () =
           effective_cwd = None;
           request_cwd_change = None;
           egress_rules = [];
+          snapshot_id = None;
+          profile_id = None;
+          egress_audit_db = None;
         }
       in
       let result =

@@ -43,6 +43,7 @@
   test_discord_gateway
   test_egress_rules
   test_egress_evaluator
+  test_egress_audit
   test_email
   test_format_adapter
   test_github

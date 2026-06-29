@@ -1,6 +1,21 @@
 open Tools_builtin_util
 open Tools_builtin_io
 
+(** Build an egress audit context from the tool invoke context. *)
+let make_audit_context (context : Tool.invoke_context option) :
+    Policy_http_client.audit_context =
+  match context with
+  | Some c ->
+      {
+        db = c.Tool.egress_audit_db;
+        session_key = c.Tool.session_key;
+        snapshot_id = c.Tool.snapshot_id;
+        tool_name = None;
+        profile_id = c.Tool.profile_id;
+        credential_handle_ids = [];
+      }
+  | None -> Policy_http_client.no_audit
+
 let http_request ~workspace_only =
   let schema =
     `Assoc
@@ -83,6 +98,10 @@ let http_request ~workspace_only =
         let rules =
           match context with Some c -> c.Tool.egress_rules | None -> []
         in
+        let audit = make_audit_context context in
+        let audit =
+          { audit with Policy_http_client.tool_name = Some "http_request" }
+        in
         if url = "" then
           Lwt.return (param_err "parameter 'url' must be a non-empty string")
         else if workspace_only && not (is_localhost_url url) then
@@ -95,13 +114,18 @@ let http_request ~workspace_only =
                 match meth with
                 | "POST" ->
                     Policy_http_client.post_json ~rules ~uri:url ~headers ~body
+                      ~audit ()
                 | "PUT" ->
                     Policy_http_client.put_json ~rules ~uri:url ~headers ~body
+                      ~audit ()
                 | "PATCH" ->
                     Policy_http_client.patch_json ~rules ~uri:url ~headers ~body
+                      ~audit ()
                 | "DELETE" ->
                     Policy_http_client.delete ~rules ~uri:url ~headers ~body
-                | "GET" | _ -> Policy_http_client.get ~rules ~uri:url ~headers
+                      ~audit ()
+                | "GET" | _ ->
+                    Policy_http_client.get ~rules ~uri:url ~headers ~audit ()
               in
               match result with
               | Ok (status, resp_body) ->
@@ -281,6 +305,10 @@ let web_fetch ~workspace_only =
         let rules =
           match context with Some c -> c.Tool.egress_rules | None -> []
         in
+        let audit = make_audit_context context in
+        let audit =
+          { audit with Policy_http_client.tool_name = Some "web_fetch" }
+        in
         if url = "" then
           Lwt.return (param_err "parameter 'url' must be a non-empty string")
         else if workspace_only && not (is_localhost_url url) then
@@ -290,7 +318,7 @@ let web_fetch ~workspace_only =
             (fun () ->
               let open Lwt.Syntax in
               let* result =
-                Policy_http_client.get ~rules ~uri:url ~headers:[]
+                Policy_http_client.get ~rules ~uri:url ~headers:[] ~audit ()
               in
               match result with
               | Error err ->

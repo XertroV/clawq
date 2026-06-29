@@ -206,7 +206,7 @@ let test_post_json_allowed () =
         Lwt_main.run
           (Policy_http_client.post_json ~rules:allow_all_rules
              ~uri:(Printf.sprintf "http://127.0.0.1:%d/test" port)
-             ~headers:[] ~body:"{}")
+             ~headers:[] ~body:"{}" ())
       in
       let status, body = check_ok "post_json allowed" result in
       Alcotest.(check int) "status" 200 status;
@@ -216,7 +216,7 @@ let test_post_json_denied () =
   let result =
     Lwt_main.run
       (Policy_http_client.post_json ~rules:deny_all_rules
-         ~uri:"http://blocked.example.com/api" ~headers:[] ~body:"{}")
+         ~uri:"http://blocked.example.com/api" ~headers:[] ~body:"{}" ())
   in
   let _err = check_denied "post_json denied" result in
   (* Verify the HTTP call was never made by checking that the error is a
@@ -232,7 +232,7 @@ let test_get_allowed () =
         Lwt_main.run
           (Policy_http_client.get ~rules:allow_all_rules
              ~uri:(Printf.sprintf "http://127.0.0.1:%d/greet" port)
-             ~headers:[])
+             ~headers:[] ())
       in
       let status, body = check_ok "get allowed" result in
       Alcotest.(check int) "status" 200 status;
@@ -242,7 +242,7 @@ let test_get_denied () =
   let result =
     Lwt_main.run
       (Policy_http_client.get ~rules:deny_all_rules
-         ~uri:"http://blocked.example.com/data" ~headers:[])
+         ~uri:"http://blocked.example.com/data" ~headers:[] ())
   in
   let err = check_denied "get denied" result in
   Alcotest.(check string) "host" "blocked.example.com" err.host
@@ -256,7 +256,7 @@ let test_put_json_allowed () =
         Lwt_main.run
           (Policy_http_client.put_json ~rules:allow_all_rules
              ~uri:(Printf.sprintf "http://127.0.0.1:%d/item" port)
-             ~headers:[] ~body:"{\"id\":1}")
+             ~headers:[] ~body:"{\"id\":1}" ())
       in
       let status, body = check_ok "put_json allowed" result in
       Alcotest.(check int) "status" 200 status;
@@ -266,7 +266,7 @@ let test_put_json_denied () =
   let result =
     Lwt_main.run
       (Policy_http_client.put_json ~rules:deny_all_rules
-         ~uri:"http://blocked.example.com/item" ~headers:[] ~body:"{}")
+         ~uri:"http://blocked.example.com/item" ~headers:[] ~body:"{}" ())
   in
   let _err = check_denied "put_json denied" result in
   Alcotest.(check bool) "is policy error" true true
@@ -299,14 +299,15 @@ let test_selective_rules () =
         Lwt_main.run
           (Policy_http_client.get ~rules
              ~uri:(Printf.sprintf "http://127.0.0.1:%d/data" port)
-             ~headers:[])
+             ~headers:[] ())
       in
       let status, _ = check_ok "localhost allowed" r1 in
       Alcotest.(check int) "status" 200 status);
   (* Denied: example.com matches catch-all deny *)
   let r2 =
     Lwt_main.run
-      (Policy_http_client.get ~rules ~uri:"http://example.com/data" ~headers:[])
+      (Policy_http_client.get ~rules ~uri:"http://example.com/data" ~headers:[]
+         ())
   in
   let err = check_denied "example.com denied" r2 in
   Alcotest.(check string) "host" "example.com" err.host;
