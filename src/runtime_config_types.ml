@@ -30,6 +30,10 @@ type provider_config = {
   max_output_tokens : int option;
       (* Per-provider max output tokens override. When None, providers fall
          back to their built-in default (typically 8192). *)
+  quota_cache_ttl_s : int option;
+      (* Per-provider quota cache TTL override in seconds. When None, falls
+         back to the global quota_cache_ttl_s. Useful for rate-limited
+         providers (e.g. Kimi at 1800s). *)
 }
 
 let default_provider_config : provider_config =
@@ -50,6 +54,7 @@ let default_provider_config : provider_config =
     prompt_cache_retention = Some "24h";
     http_timeout_s = None;
     max_output_tokens = None;
+    quota_cache_ttl_s = None;
   }
 
 type agent_defaults = {

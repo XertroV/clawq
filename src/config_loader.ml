@@ -192,6 +192,17 @@ let parse_config ?(resolve_secrets = true) json =
                 | `Float f -> Some (int_of_float f)
                 | _ -> None)
           in
+          let quota_cache_ttl_s =
+            with_default
+              ("providers." ^ name ^ ".quota_cache_ttl_s")
+              None
+              (fun () ->
+                match v |> member "quota_cache_ttl_s" with
+                | `Null -> None
+                | `Int i -> Some i
+                | `Float f -> Some (int_of_float f)
+                | _ -> None)
+          in
           ( name,
             ({
                api_key;
@@ -210,6 +221,7 @@ let parse_config ?(resolve_secrets = true) json =
                prompt_cache_retention;
                http_timeout_s;
                max_output_tokens;
+               quota_cache_ttl_s;
              }
               : Runtime_config.provider_config) ))
     with exn ->

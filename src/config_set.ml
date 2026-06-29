@@ -20,6 +20,7 @@ let provider_schema =
       ("quota_credentials_file", L);
       ("quota_threshold", L);
       ("quota_check_enabled", L);
+      ("quota_cache_ttl_s", L);
       ( "codex_oauth",
         O
           [

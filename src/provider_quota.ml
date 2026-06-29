@@ -334,6 +334,15 @@ let get_cached name =
       let age = Unix.gettimeofday () -. pq.fetched_at in
       if age < !cache_ttl_s then Some pq else None
 
+(* Like get_cached but with an explicit TTL override. *)
+let get_cached_with_ttl ~ttl_s name =
+  ensure_loaded_from_db ();
+  match Hashtbl.find_opt cache name with
+  | None -> None
+  | Some pq ->
+      let age = Unix.gettimeofday () -. pq.fetched_at in
+      if age < float_of_int ttl_s then Some pq else None
+
 let get_all_cached () =
   ensure_loaded_from_db ();
   let now = Unix.gettimeofday () in
@@ -683,9 +692,8 @@ let fetch_codex ~provider_name ~credentials_file ?account_id () =
 
 (* Z.ai quota via monitor API.
    Uses raw api_key — NO "Bearer " prefix. *)
-let fetch_zai ~api_key () =
+let fetch_zai ~provider_name ~api_key () =
   let open Lwt.Syntax in
-  let provider_name = "zai" in
   if api_key = "" then make_unknown provider_name "not_configured"
   else
     let uri = "https://api.z.ai/api/monitor/usage/quota/limit" in
@@ -872,9 +880,8 @@ let parse_kimi_body ~now body =
       | `Monthly when monthly = None -> (session, weekly, Some w)
       | _ -> (session, weekly, monthly))
 
-let fetch_kimi ~api_key () =
+let fetch_kimi ~provider_name ~api_key () =
   let open Lwt.Syntax in
-  let provider_name = "kimi" in
   if api_key = "" then make_unknown provider_name "not_configured"
   else
     let uri = "https://api.kimi.com/coding/v1/usages" in
@@ -1066,50 +1073,60 @@ let fetch_for_provider ~(config : Runtime_config.provider_config) ~name () =
   let open Lwt.Syntax in
   if not config.quota_check_enabled then make_unknown name "not_configured"
   else
-    let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
-    let lname = String.lowercase_ascii name in
-    let lkind =
-      Option.value ~default:"" config.kind |> String.lowercase_ascii
+    (* B732: respect per-provider cache TTL to avoid rate limits *)
+    let effective_ttl_s =
+      match config.quota_cache_ttl_s with
+      | Some t -> t
+      | None -> int_of_float !cache_ttl_s
     in
-    let lurl =
-      Option.value ~default:"" config.base_url |> String.lowercase_ascii
-    in
-    let auto_cred_path dir file =
-      match config.quota_credentials_file with
-      | Some f -> f
-      | None -> Filename.concat (Filename.concat home dir) file
-    in
-    let is_anthropic =
-      lkind = "anthropic" || lname = "anthropic"
-      || String.length config.api_key >= 7
-         && String.sub config.api_key 0 7 = "sk-ant-"
-    in
-    let is_codex =
-      lkind = "openai-codex" || lkind = "codex" || lname = "codex"
-      || lname = "openai-codex"
-    in
-    let is_zai =
-      lname = "zai" || lname = "zai_coding" || string_has_substring lurl "z.ai"
-    in
-    let is_kimi =
-      lname = "kimi" || lname = "kimi_coding" || lname = "kimi-code"
-      || string_has_substring lurl "kimi"
-    in
-    let is_cursor = lname = "cursor" in
-    if is_anthropic then
-      fetch_anthropic ~provider_name:name
-        ~credentials_file:(auto_cred_path ".claude" ".credentials.json")
-        ()
-    else if is_codex then
-      fetch_codex ~provider_name:name
-        ~credentials_file:(auto_cred_path ".codex" "auth.json")
-        ()
-    else if is_zai then fetch_zai ~api_key:config.api_key ()
-    else if is_kimi then
-      let api_key = config.api_key in
-      fetch_kimi ~api_key ()
-    else if is_cursor then fetch_cursor ()
-    else make_unknown name "no_api"
+    match get_cached_with_ttl ~ttl_s:effective_ttl_s name with
+    | Some cached -> Lwt.return cached
+    | None ->
+        let home = try Sys.getenv "HOME" with Not_found -> "/tmp" in
+        let lname = String.lowercase_ascii name in
+        let lkind =
+          Option.value ~default:"" config.kind |> String.lowercase_ascii
+        in
+        let lurl =
+          Option.value ~default:"" config.base_url |> String.lowercase_ascii
+        in
+        let auto_cred_path dir file =
+          match config.quota_credentials_file with
+          | Some f -> f
+          | None -> Filename.concat (Filename.concat home dir) file
+        in
+        let is_anthropic =
+          lkind = "anthropic" || lname = "anthropic"
+          || String.length config.api_key >= 7
+             && String.sub config.api_key 0 7 = "sk-ant-"
+        in
+        let is_codex =
+          lkind = "openai-codex" || lkind = "codex" || lname = "codex"
+          || lname = "openai-codex"
+        in
+        let is_zai =
+          lname = "zai" || lname = "zai_coding"
+          || string_has_substring lurl "z.ai"
+        in
+        let is_kimi =
+          lname = "kimi" || lname = "kimi_coding" || lname = "kimi-code"
+          || string_has_substring lurl "kimi"
+        in
+        let is_cursor = lname = "cursor" in
+        if is_anthropic then
+          fetch_anthropic ~provider_name:name
+            ~credentials_file:(auto_cred_path ".claude" ".credentials.json")
+            ()
+        else if is_codex then
+          fetch_codex ~provider_name:name
+            ~credentials_file:(auto_cred_path ".codex" "auth.json")
+            ()
+        else if is_zai then fetch_zai ~provider_name:name ~api_key:config.api_key ()
+        else if is_kimi then
+          let api_key = config.api_key in
+          fetch_kimi ~provider_name:name ~api_key ()
+        else if is_cursor then fetch_cursor ()
+        else make_unknown name "no_api"
 
 (* Refresh all configured providers and return updated quota list. *)
 let refresh_all ~(config : Runtime_config.t) () =
