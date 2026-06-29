@@ -866,6 +866,259 @@ let test_inactive_bundle_scope_no_credential_leak () =
     "json does not contain LEAKED_SECRET" true
     (not (Test_helpers.string_contains json_str "LEAKED_SECRET"))
 
+let test_egress_rules_in_explanation () =
+  let json =
+    {|{
+      "workspace": "/tmp/test",
+      "access_bundles": [
+        {
+          "id": "b1",
+          "allowed_tools": ["tool_a"],
+          "egress_rules": [
+            {"host": "api.example.com", "action": "allow", "log_policy": "log"},
+            {"host": "*.blocked.com", "action": "deny", "log_policy": "no_log"}
+          ]
+        }
+      ],
+      "access_scopes": [
+        {"id": "default", "level": "default", "access_bundle_ids": ["b1"]}
+      ]
+    }|}
+  in
+  let cfg = parse json in
+  let explanation =
+    Access_explanation.create ~config:cfg ~session_key:"slack:C123" ()
+  in
+  Alcotest.(check int)
+    "2 egress rules" 2
+    (List.length explanation.egress_rules);
+  let first = List.hd explanation.egress_rules in
+  Alcotest.(check string)
+    "first rule host" "api.example.com" first.host;
+  Alcotest.(check int) "first rule index" 0 first.index;
+  let second = List.nth explanation.egress_rules 1 in
+  Alcotest.(check string)
+    "second rule host" "*.blocked.com" second.host;
+  Alcotest.(check int) "second rule index" 1 second.index
+
+let test_egress_rules_json_output () =
+  let json =
+    {|{
+      "workspace": "/tmp/test",
+      "access_bundles": [
+        {
+          "id": "b1",
+          "egress_rules": [
+            {"host": "api.example.com", "path": "/v1/*", "method": "GET", "action": "allow", "log_policy": "log"},
+            {"host": "*", "action": "deny", "log_policy": "no_log"}
+          ]
+        }
+      ],
+      "access_scopes": [
+        {"id": "default", "level": "default", "access_bundle_ids": ["b1"]}
+      ]
+    }|}
+  in
+  let cfg = parse json in
+  let explanation =
+    Access_explanation.create ~config:cfg ~session_key:"slack:C123" ()
+  in
+  let json_out = Access_explanation.to_json explanation in
+  let open Yojson.Safe.Util in
+  let rules = json_out |> member "egress_rules" |> to_list in
+  Alcotest.(check int) "json has 2 egress rules" 2 (List.length rules);
+  let first = List.hd rules in
+  Alcotest.(check string)
+    "first rule host" "api.example.com"
+    (first |> member "host" |> to_string);
+  Alcotest.(check string)
+    "first rule path" "/v1/*"
+    (first |> member "path" |> to_string);
+  Alcotest.(check string)
+    "first rule method" "GET"
+    (first |> member "method" |> to_string);
+  Alcotest.(check string)
+    "first rule action" "allow"
+    (first |> member "action" |> to_string);
+  Alcotest.(check string)
+    "first rule log_policy" "log"
+    (first |> member "log_policy" |> to_string);
+  Alcotest.(check int)
+    "first rule index" 0
+    (first |> member "index" |> to_int);
+  let second = List.nth rules 1 in
+  Alcotest.(check string)
+    "second rule host" "*"
+    (second |> member "host" |> to_string);
+  Alcotest.(check string)
+    "second rule action" "deny"
+    (second |> member "action" |> to_string);
+  Alcotest.(check string)
+    "second rule log_policy" "no_log"
+    (second |> member "log_policy" |> to_string);
+  Alcotest.(check int)
+    "second rule index" 1
+    (second |> member "index" |> to_int)
+
+let test_egress_rules_text_output () =
+  let json =
+    {|{
+      "workspace": "/tmp/test",
+      "access_bundles": [
+        {
+          "id": "b1",
+          "egress_rules": [
+            {"host": "api.example.com", "path": "/v1/*", "method": "GET", "action": "allow", "log_policy": "log"},
+            {"host": "*", "action": "deny", "log_policy": "no_log"}
+          ]
+        }
+      ],
+      "access_scopes": [
+        {"id": "default", "level": "default", "access_bundle_ids": ["b1"]}
+      ]
+    }|}
+  in
+  let cfg = parse json in
+  let explanation =
+    Access_explanation.create ~config:cfg ~session_key:"slack:C123" ()
+  in
+  let text = Access_explanation.to_text explanation in
+  Alcotest.(check bool)
+    "text contains Egress Rules" true
+    (Test_helpers.string_contains text "Egress Rules");
+  Alcotest.(check bool)
+    "text contains api.example.com" true
+    (Test_helpers.string_contains text "api.example.com");
+  Alcotest.(check bool)
+    "text contains GET" true
+    (Test_helpers.string_contains text "GET");
+  Alcotest.(check bool)
+    "text contains /v1/*" true
+    (Test_helpers.string_contains text "/v1/*");
+  Alcotest.(check bool)
+    "text contains allow" true
+    (Test_helpers.string_contains text "-> allow");
+  Alcotest.(check bool)
+    "text contains deny" true
+    (Test_helpers.string_contains text "-> deny");
+  Alcotest.(check bool)
+    "text contains log policy" true
+    (Test_helpers.string_contains text "(log: log)")
+
+let test_egress_rules_summary () =
+  let json =
+    {|{
+      "workspace": "/tmp/test",
+      "access_bundles": [
+        {
+          "id": "b1",
+          "allowed_tools": ["tool_a"],
+          "egress_rules": [
+            {"host": "api.example.com", "action": "allow", "log_policy": "log"},
+            {"host": "*", "action": "deny", "log_policy": "no_log"}
+          ]
+        }
+      ],
+      "access_scopes": [
+        {"id": "default", "level": "default", "access_bundle_ids": ["b1"]}
+      ]
+    }|}
+  in
+  let cfg = parse json in
+  let explanation =
+    Access_explanation.create ~config:cfg ~session_key:"slack:C123" ()
+  in
+  Alcotest.(check bool)
+    "summary contains egress_rules count" true
+    (Test_helpers.string_contains explanation.summary "egress_rules:2")
+
+let test_egress_rules_empty () =
+  let json =
+    {|{
+      "workspace": "/tmp/test",
+      "access_bundles": [
+        {"id": "b1", "allowed_tools": ["tool_a"]}
+      ],
+      "access_scopes": [
+        {"id": "default", "level": "default", "access_bundle_ids": ["b1"]}
+      ]
+    }|}
+  in
+  let cfg = parse json in
+  let explanation =
+    Access_explanation.create ~config:cfg ~session_key:"slack:C123" ()
+  in
+  Alcotest.(check int)
+    "no egress rules" 0
+    (List.length explanation.egress_rules);
+  Alcotest.(check bool)
+    "summary shows egress_rules:0" true
+    (Test_helpers.string_contains explanation.summary "egress_rules:0");
+  let json_out = Access_explanation.to_json explanation in
+  let open Yojson.Safe.Util in
+  let rules = json_out |> member "egress_rules" |> to_list in
+  Alcotest.(check int) "json has empty egress rules" 0 (List.length rules)
+
+let test_egress_rules_priority_order () =
+  let json =
+    {|{
+      "workspace": "/tmp/test",
+      "access_bundles": [
+        {
+          "id": "default-bundle",
+          "egress_rules": [
+            {"host": "default.example.com", "action": "deny", "log_policy": "log"}
+          ]
+        },
+        {
+          "id": "workspace-bundle",
+          "egress_rules": [
+            {"host": "workspace.example.com", "action": "allow", "log_policy": "log"}
+          ]
+        },
+        {
+          "id": "channel-bundle",
+          "egress_rules": [
+            {"host": "channel.example.com", "action": "allow", "log_policy": "no_log"}
+          ]
+        },
+        {
+          "id": "room-bundle",
+          "egress_rules": [
+            {"host": "room.example.com", "action": "allow", "log_policy": "no_log"}
+          ]
+        }
+      ],
+      "access_scopes": [
+        {"id": "default", "level": "default", "access_bundle_ids": ["default-bundle"]},
+        {"id": "workspace-scope", "level": "workspace", "workspace": "/tmp/test", "access_bundle_ids": ["workspace-bundle"]},
+        {"id": "channel-scope", "level": "channel", "channel": "slack", "access_bundle_ids": ["channel-bundle"]},
+        {"id": "room-scope", "level": "room", "room": "C123", "access_bundle_ids": ["room-bundle"]}
+      ]
+    }|}
+  in
+  let cfg = parse json in
+  let explanation =
+    Access_explanation.create ~config:cfg ~session_key:"slack:C123" ()
+  in
+  Alcotest.(check int)
+    "4 egress rules" 4
+    (List.length explanation.egress_rules);
+  (* Priority order: room > channel > workspace > default *)
+  let rules = explanation.egress_rules in
+  let hosts = List.map (fun (r : Access_explanation.egress_rule_explanation) -> r.host) rules in
+  Alcotest.(check (list string))
+    "priority order: room, channel, workspace, default"
+    [ "room.example.com"; "channel.example.com"; "workspace.example.com"; "default.example.com" ]
+    hosts;
+  (* Verify indices are sequential *)
+  List.iteri
+    (fun idx (rule : Access_explanation.egress_rule_explanation) ->
+      Alcotest.(check int)
+        (Printf.sprintf "rule %d index" idx)
+        idx rule.index)
+    rules
+
 let test_no_matching_scope_no_leak () =
   let json =
     {|{
@@ -1072,4 +1325,14 @@ let suite =
       test_no_matching_scope_no_leak;
     Alcotest.test_case "mixed active deleted credentials" `Quick
       test_mixed_active_deleted_credentials;
+    Alcotest.test_case "egress rules in explanation" `Quick
+      test_egress_rules_in_explanation;
+    Alcotest.test_case "egress rules json output" `Quick
+      test_egress_rules_json_output;
+    Alcotest.test_case "egress rules text output" `Quick
+      test_egress_rules_text_output;
+    Alcotest.test_case "egress rules summary" `Quick test_egress_rules_summary;
+    Alcotest.test_case "egress rules empty" `Quick test_egress_rules_empty;
+    Alcotest.test_case "egress rules priority order" `Quick
+      test_egress_rules_priority_order;
   ]
