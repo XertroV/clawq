@@ -52,5 +52,6 @@ tasks:
       file: T004-expose-github-grants-in-rooms.todo
       id: T004
       priority: high
-      status: pending
+      status: in_progress
+      tags: []
       title: Expose GitHub grants in rooms show inspect explain-access

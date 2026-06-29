@@ -52,5 +52,6 @@ tasks:
       file: T004-add-progress-renderer-fallback.todo
       id: T004
       priority: high
-      status: pending
+      status: in_progress
+      tags: []
       title: Add progress renderer fallback tests

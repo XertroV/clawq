@@ -1,14 +1,16 @@
 ---
+claimed_at: "2026-06-29T00:43:37Z"
+claimed_by: cli-user
+completed_at: null
 complexity: high
 depends_on:
     - P17.M1.E1.T001
 estimate_hours: 3
 id: P17.M1.E2.T001
 priority: high
-status: pending
-tags:
-    - memory
-    - policy
+started_at: "2026-06-29T00:43:37Z"
+status: in_progress
+tags: []
 title: Define public private room memory semantics
 ---
 Acceptance: private room memory is room-only; public room memory is room-only unless explicit workspace grant; thread/routine inherit parent room; no transitive grants.
