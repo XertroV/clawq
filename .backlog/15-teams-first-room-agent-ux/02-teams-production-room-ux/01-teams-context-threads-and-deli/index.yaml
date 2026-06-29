@@ -11,7 +11,7 @@ stats:
     in_progress: 0
     pending: 4
     total: 4
-status: pending
+status: done
 tasks:
     - complexity: high
       depends_on:
@@ -53,5 +53,6 @@ tasks:
       file: T004-add-teams-delivery-regression.todo
       id: T004
       priority: high
-      status: pending
+      status: done
+      tags: []
       title: Add Teams delivery regression tests

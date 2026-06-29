@@ -22,7 +22,8 @@ tasks:
       file: T001-add-teams-inspect-continue-can.todo
       id: T001
       priority: high
-      status: pending
+      status: done
+      tags: []
       title: Add Teams inspect continue cancel controls
     - complexity: high
       depends_on:
@@ -31,7 +32,8 @@ tasks:
       file: T002-preserve-room-context-through.todo
       id: T002
       priority: high
-      status: pending
+      status: in_progress
+      tags: []
       title: Preserve room context through Teams card actions and file consent
     - complexity: medium
       depends_on:

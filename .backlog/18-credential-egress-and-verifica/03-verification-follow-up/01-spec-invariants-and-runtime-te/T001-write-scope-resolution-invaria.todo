@@ -1,14 +1,17 @@
 ---
+claimed_at: "2026-06-29T13:19:43Z"
+claimed_by: cli-user
+completed_at: "2026-06-29T13:38:44Z"
 complexity: medium
 depends_on:
     - P14.M2.E3.T002
+duration_minutes: 19.018268913583334
 estimate_hours: 2
 id: P18.M3.E1.T001
 priority: medium
-status: pending
-tags:
-    - verification
-    - docs
+started_at: "2026-06-29T13:19:43Z"
+status: done
+tags: []
 title: Write scope resolution invariant spec
 ---
 Acceptance: spec lists resolver determinism, precedence, conflict, snapshot, and reload invariants with links to runtime tests.

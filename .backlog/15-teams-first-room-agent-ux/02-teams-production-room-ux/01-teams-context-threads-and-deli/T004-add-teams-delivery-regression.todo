@@ -1,14 +1,17 @@
 ---
+claimed_at: "2026-06-29T13:19:43Z"
+claimed_by: cli-user
+completed_at: "2026-06-29T13:36:34Z"
 complexity: medium
 depends_on:
     - P15.M2.E1.T003
+duration_minutes: 16.862711228466665
 estimate_hours: 2
 id: P15.M2.E1.T004
 priority: high
-status: pending
-tags:
-    - teams
-    - tests
+started_at: "2026-06-29T13:19:43Z"
+status: done
+tags: []
 title: Add Teams delivery regression tests
 ---
 Acceptance: tests cover empty activity id, missing/invalid service_url, card update failure, fallback send, and scheduler/background delivery correlation.
