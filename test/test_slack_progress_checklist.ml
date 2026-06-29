@@ -351,6 +351,39 @@ let test_overall_icon_all_done () =
     "done icon" true
     (Test_helpers.string_contains summary "\xE2\x9C\x85")
 
+(** {1 Integration function tests} *)
+
+let test_format_for_room_progress () =
+  let items =
+    [
+      make_item ~id:1 ~title:"Step one" ~state:Done ();
+      make_item ~id:2 ~title:"Step two" ~state:Current ();
+    ]
+  in
+  let msg =
+    Slack_progress_checklist.format_for_room_progress
+      ~task_label:"Build feature" items
+  in
+  Alcotest.(check bool)
+    "has task label" true
+    (Test_helpers.string_contains msg "*Build feature*");
+  Alcotest.(check bool)
+    "has completion ratio" true
+    (Test_helpers.string_contains msg "1/2 done")
+
+let test_format_final_for_room_progress () =
+  let items = [ make_item ~id:1 ~title:"Done" ~state:Final () ] in
+  let msg =
+    Slack_progress_checklist.format_final_for_room_progress ~task_label:"Task"
+      ~summary:"All good" ~task_status:"succeeded" items
+  in
+  Alcotest.(check bool)
+    "has check mark" true
+    (Test_helpers.string_contains msg "\xE2\x9C\x85");
+  Alcotest.(check bool)
+    "has summary" true
+    (Test_helpers.string_contains msg "All good")
+
 let suite =
   [
     Alcotest.test_case "render item done" `Quick test_render_item_done;
@@ -394,4 +427,8 @@ let suite =
     Alcotest.test_case "overall icon current priority" `Quick
       test_overall_icon_current_priority;
     Alcotest.test_case "overall icon all done" `Quick test_overall_icon_all_done;
+    Alcotest.test_case "format for room progress" `Quick
+      test_format_for_room_progress;
+    Alcotest.test_case "format final for room progress" `Quick
+      test_format_final_for_room_progress;
   ]
