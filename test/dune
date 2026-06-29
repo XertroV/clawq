@@ -110,6 +110,7 @@
   test_room_progress_checklist
   test_slack_progress_checklist
   test_teams_progress_card
+  test_room_ux_smoke
   test_teams_delivery_lifecycle
   test_teams_delivery_regression
   test_teams_what_can_do

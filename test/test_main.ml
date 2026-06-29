@@ -58,6 +58,7 @@ let () =
        ("room_session_record", Test_room_session_record.suite);
        ("slack_progress_checklist", Test_slack_progress_checklist.suite);
        ("teams_progress_card", Test_teams_progress_card.suite);
+       ("room_ux_smoke", Test_room_ux_smoke.suite);
        ("teams_delivery_lifecycle", Test_teams_delivery_lifecycle.suite);
        ("teams_delivery_regression", Test_teams_delivery_regression.suite);
        ("teams_what_can_do", Test_teams_what_can_do.suite);
