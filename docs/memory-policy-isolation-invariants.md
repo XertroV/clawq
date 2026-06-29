@@ -18,7 +18,7 @@ of invariants that are candidates for formal proof or stronger verification.
 
 ## 1. Memory Scope Isolation
 
-**INV-MEM-ISO-1**: A room session can only list, show, correct, or forget
+**INV-MEM-ISO-1** `[RUNTIME] [TEST] [PROOF-CANDIDATE]`: A room session can only list, show, correct, or forget
 memories belonging to its own scope. The tool layer resolves the room id from
 the session key and filters all operations to `scope_kind = "room"` and
 `scope_key = <resolved_room_id>`.
@@ -33,7 +33,7 @@ the session key and filters all operations to `scope_kind = "room"` and
   `test_cross_channel_save_isolation` — channel-b cannot see, show, correct,
   or forget channel-a memories.
 
-**INV-MEM-ISO-2**: A memory saved by one room is never visible to another room,
+**INV-MEM-ISO-2** `[RUNTIME] [TEST] [PROOF-CANDIDATE]`: A memory saved by one room is never visible to another room,
 regardless of visibility level (public, private, team). Scope boundaries are
 absolute.
 
@@ -42,7 +42,7 @@ absolute.
 - **Test**: `test_three_room_isolation` — three rooms, each sees only its own
   memories.
 
-**INV-MEM-ISO-3**: Raw memory API calls (`query_scoped_memories`,
+**INV-MEM-ISO-3** `[RUNTIME] [TEST]`: Raw memory API calls (`query_scoped_memories`,
 `correct_scoped_memory`, `delete_scoped_memory`) do not enforce scope isolation
 by themselves. Isolation is enforced at the tool layer
 (`tools_builtin_room_memory.ml`). This is intentional: admin-level operations
@@ -54,7 +54,7 @@ may need cross-scope access.
   `test_raw_delete_works_at_raw_level` — raw cross-scope operations succeed,
   confirming isolation is tool-layer enforcement.
 
-**INV-MEM-ISO-4**: Cross-channel search (FTS and content-search) is scoped.
+**INV-MEM-ISO-4** `[RUNTIME] [TEST] [PROOF-CANDIDATE]`: Cross-channel search (FTS and content-search) is scoped.
 Memory search results are filtered by `scope_kind` and `scope_key`, so one
 channel's search never surfaces another channel's content.
 
@@ -67,7 +67,7 @@ channel's search never surfaces another channel's content.
 
 ## 2. Memory Visibility Levels
 
-**INV-VIS-1**: Three visibility levels exist: `Public`, `Private`, `Team`.
+**INV-VIS-1** `[RUNTIME] [TEST] [PROOF-CANDIDATE]`: Three visibility levels exist: `Public`, `Private`, `Team`.
 Default is `Public`.
 
 - **Code**: `memory_visibility` type in `memory_types.ml`. Default applied in
@@ -75,7 +75,7 @@ Default is `Public`.
 - **Test**: `test_private_memory_not_visible_in_list` — public memory visible,
   private memory hidden.
 
-**INV-VIS-2**: Private memory is visible only to the scope owner (the profile
+**INV-VIS-2** `[RUNTIME] [TEST] [PROOF-CANDIDATE]`: Private memory is visible only to the scope owner (the profile
 bound to the scope). Non-owner callers cannot see private memories in list or
 show operations.
 
@@ -85,7 +85,7 @@ show operations.
 - **Test**: `test_private_memory_not_visible_in_list`,
   `test_private_memory_not_visible_in_show`.
 
-**INV-VIS-3**: Team memory is visible only to principals with an explicit team
+**INV-VIS-3** `[RUNTIME] [TEST] [PROOF-CANDIDATE]`: Team memory is visible only to principals with an explicit team
 grant (`memory_team_grants` table). Without a grant, team memory is hidden.
 
 - **Code**: `can_see_memory` calls `has_team_grant` for `Team` visibility.
@@ -93,7 +93,7 @@ grant (`memory_team_grants` table). Without a grant, team memory is hidden.
 - **Test**: `test_team_memory_not_visible_without_grant`,
   `test_team_memory_visible_with_grant`.
 
-**INV-VIS-4**: Team grants do not override scope isolation. A team grant for
+**INV-VIS-4** `[RUNTIME] [TEST] [PROOF-CANDIDATE]`: Team grants do not override scope isolation. A team grant for
 room-a on a memory in room-b's scope does not make room-b's memory visible to
 room-a, because the tool layer filters by scope before checking visibility.
 
@@ -101,7 +101,7 @@ room-a, because the tool layer filters by scope before checking visibility.
   visibility filter.
 - **Test**: `test_team_memory_grant_for_different_room`.
 
-**INV-VIS-5**: Visibility is preserved on upsert when no explicit visibility is
+**INV-VIS-5** `[RUNTIME] [TEST] [PROOF-CANDIDATE]`: Visibility is preserved on upsert when no explicit visibility is
 provided. Changing visibility requires an explicit visibility parameter.
 
 - **Code**: `upsert_scoped_memory` only updates visibility column when
@@ -113,7 +113,7 @@ provided. Changing visibility requires an explicit visibility parameter.
 
 ## 3. Repo Grants (Memory Grant Resolution)
 
-**INV-GRANT-1**: Memory grants are direct, not transitive. Granting access to
+**INV-GRANT-1** `[RUNTIME] [TEST] [PROOF-CANDIDATE]`: Memory grants are direct, not transitive. Granting access to
 a scope does not transitively grant access to that scope's child grants.
 
 - **Code**: `resolve_grants` queries `memory_grants` for the specific
@@ -122,7 +122,7 @@ a scope does not transitively grant access to that scope's child grants.
   `test/test_scope_resolver.ml` — only the directly referenced bundle's grants
   are collected, not child scope grants.
 
-**INV-GRANT-2**: Grant mutations (`grant_access`, `revoke_access`) require
+**INV-GRANT-2** `[RUNTIME] [TEST] [PROOF-CANDIDATE]`: Grant mutations (`grant_access`, `revoke_access`) require
 admin privileges. Non-admin callers receive an error and no grant is created or
 removed.
 
@@ -551,6 +551,7 @@ to determine the room id.
 | `test/test_memory_isolation.ml` | INV-MEM-ISO, INV-VIS, INV-REDACT, INV-UNOWNED, INV-SRES |
 | `test/test_memory_ledger.ml` | INV-LEDGER, INV-CRED |
 | `test/test_scope_resolver.ml` | INV-GRANT (via scope resolution), INV-FILTER (via deny-wins) |
+| `test/test_invariant_conformance.ml` | INV-GRANT-3/4, INV-REDACT-1/3/4, INV-EGR-1/3 |
 | `test/test_access_snapshot.ml` | Snapshot immutability (referenced by scope-resolution-invariants) |
 | `src/memory_scoped.ml` | Scoped memory CRUD, grant resolution, visibility checks, redaction |
 | `src/memory_core.ml` | Session lifecycle, core memory, cleanup |
@@ -558,17 +559,12 @@ to determine the room id.
 | `src/egress_evaluator.ml` | Egress default-deny evaluation |
 | `src/agent_template.ml` | Tool registry filtering (allowed/denied) |
 | `src/room_budget.ml` | Room budget tracking and enforcement |
+| [`docs/verification-boundaries.md`](verification-boundaries.md) | Cross-cutting verification overview |
 
 ## Known Gaps
 
-- **INV-GRANT-3**: No dedicated test for expired grant exclusion from
-  resolution. The SQL clause enforces it, but a unit test would strengthen
-  the guarantee.
-- **INV-GRANT-4**: No dedicated test for revoked grant exclusion when
-  `revoked_at` column exists. Dynamic SQL construction handles it, but a
-  test with column present/absent would be valuable.
-- **INV-EGR-1**: No dedicated egress evaluator unit test. The default-deny
-  fallthrough is structural but untested in isolation.
+- **INV-REDACT-3b**: The `Memory.search` FTS path does not filter
+  `sm.redacted_at IS NULL`. Known security gap; see Section 9 above.
 - **INV-FILTER-2**: Skills filter has no dedicated test. Used by Teams
   connector but not independently verified.
 - **INV-BUDG-1 through INV-BUDG-5**: Budget invariants are enforced by
@@ -576,3 +572,5 @@ to determine the room id.
 - **INV-SESS-1 through INV-SESS-4**: Session lifecycle invariants are
   structural but lack dedicated tests. Integration paths exercise them
   indirectly.
+- **INV-EGR-2**: Unmatched-destinations-remain-denied is a structural
+  invariant of the evaluator, not directly tested in isolation.

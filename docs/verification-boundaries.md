@@ -62,8 +62,8 @@ covered by tests. All are proof candidates for future hardening. No gaps.
 | Visibility | INV-VIS-1..5 | Yes | Yes (7 tests) | Yes (5) | 0 |
 | Grant Resolution | INV-GRANT-1..4 | Yes | Yes (7 tests) | Yes (4) | 0 |
 | Credential | INV-CRED-1..3 | Yes | Yes (3 tests) | Yes (3) | 0 |
-| Egress Default-Deny | INV-EGR-1..3 | Yes | Yes (3 tests) | Yes (3) | 0 |
-| MCP Filter | INV-FILTER-1..3 | Yes | Yes (2 tests) | Yes (3) | 0 |
+| Egress Default-Deny | INV-EGR-1..3 | Yes | Yes (2 of 3 tested) | Yes (3) | 0 |
+| MCP Filter | INV-FILTER-1..3 | Yes | Yes (1 of 3 tested) | Yes (3) | 0 |
 | Budget | INV-BUDG-1..5 | Yes | No | Yes (5) | 0 |
 | Session Lifecycle | INV-SESS-1..4 | Yes | No | Yes (4) | 0 |
 | Redaction | INV-REDACT-1..4 | Yes | Yes (5 tests) | Yes (4) | **1 (REDACT-3b)** |
@@ -163,7 +163,7 @@ dedicated tests. Integration paths exercise them indirectly.
 | INV-BUDG-* | Budget | No dedicated invariant tests | Enforced by code, tests needed |
 | INV-SESS-* | Session Lifecycle | No dedicated invariant tests | Enforced by code, tests needed |
 | INV-FILTER-2 | MCP/Skills | No dedicated skills filter test | Enforced by code, test needed |
-| INV-EGR-* | Egress Evaluator | No dedicated egress evaluator unit test | Enforced by code, test needed |
+| INV-EGR-2 | Egress Evaluator | Unmatched-destinations-remain-denied not directly tested | Enforced by code, test needed |
 
 ### Low
 
