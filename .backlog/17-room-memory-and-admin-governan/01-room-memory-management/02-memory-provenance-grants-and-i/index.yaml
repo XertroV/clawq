@@ -30,7 +30,7 @@ tasks:
       file: T002-add-rooms-memory-grants-list-c.todo
       id: T002
       priority: high
-      status: in_progress
+      status: done
       tags: []
       title: Add rooms memory grants list create revoke
     - complexity: medium
