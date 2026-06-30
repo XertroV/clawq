@@ -1,0 +1,58 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B737
+priority: medium
+status: pending
+tags:
+    - research
+    - plugins
+    - extension
+    - pipelines
+    - claude-tag
+title: 'Research: self-extension/plugin system so clawq grows features ad-hoc (GLM-5.2 authors, GPT-5.5 review-and-fix) — NOT broad third-party integration'
+---
+## Goal
+
+**Research** (not implement) how clawq should grow its feature surface over time so it can extend **itself** ad-hoc — adding capabilities, tools, connectors, and pipelines on demand — without bolting on a pile of heavyweight third-party integrations. The desired direction: let a strong coding model (e.g. GLM-5.2) author the new feature against clawq's own extension points, then harden it with `review-and-fix` loops driven by GPT-5.5. This bug produces a design recommendation and a recommended plugin/extension mechanism; it does **not** integrate a catalogue of external tools.
+
+## Context
+
+Claude Tag ships as a gated hosted product whose value is partly its curated skill catalogue ("tag Claude to chase metrics / triage tickets / find root causes"). clawq already has the *substrate* — MCP client+server (`mcp_client.ml`/`mcp_server.ml`), structured pipelines (`structured_pipeline*`), agent templates (`agent_template_builtins.ml`, 11 archetypes), skills loading, and a tool registry (`tools_builtin.ml`) — but the built-in pipeline catalogue is thin (GAP-5 in `/tmp/clawq-audit/00-gap-report.md`: only `research_report`, `build-review-carm`, `plan-build-carm`, `security-review` referenced). The question is **not** "which integrations to ship" but "what plugin/extension system lets clawq grow the catalogue itself, safely, on demand."
+
+Existing related research/notes to consult (do not duplicate; synthesise):
+- `~/.llm-general/ai-coding/mcp/protocol-fundamentals.md` — MCP as an extension substrate.
+- `~/.llm-general/ai-coding/opencode/plugins.md`, `~/.llm-general/ai-coding/opencode/publishing-oc-plugins.md` — how peer coding agents do plugins.
+- `~/.llm-general/ai-coding/claude-code/plugin-submission.md` — plugin marketplace model.
+- In-repo: ideas **I055** (MCP/plugins for remote runners to relay questions), **I057** (per-room/thread skills loading), **I034** (Daily Briefing Pipeline), **I028** (tie agents into background tasks / slash commands).
+
+## Research Questions
+
+1. **Extension axes** — which clawq surfaces are the right "plugin" boundaries? Candidates: (a) tools (`Tool_registry`), (b) structured pipelines (`~/.clawq/pipelines/`), (c) agent templates (`agent_template`), (d) skills (loaded from workspace), (e) MCP servers (external), (f) connectors (chat platforms). Which should be the primary user-facing extension point vs internal?
+2. **Authoring loop** — how should "clawq extends clawq" actually run? Concretely: a room request ("add a feature that does X") triggers GLM-5.2 (via existing runner dispatch) to author a new tool/pipeline/template against the documented extension contract, then GPT-5.5 runs `review-and-fix` against acceptance criteria, then the artefact is registered (possibly behind a confirmation). What's the minimal safe version of this loop?
+3. **Plugin packaging & isolation** — single-file tools vs packaged plugins (dir with tool + schema + tests + manifest). How to sandbox self-authored code (existing `landlock` stubs, `egress_policy`, `credential_lease` are the safety primitives — reuse, don't reinvent). Versioning, enable/disable, per-room grants.
+4. **Catalogue vs ad-hoc** — the user's explicit steer: **do NOT integrate a bunch of stuff**. Prefer a small set of high-leverage built-in pipelines (the Claude Tag use-cases: metrics-chase, support-ticket-triage, root-cause-bug-hunt) authored via the self-extension loop, over importing third-party integrations. What's the minimal "grown by clawq" catalogue to seed?
+5. **Discovery & review gates** — how does a self-authored extension get from "drafted" to "trusted"? Review-and-fix by GPT-5.5 is the quality bar; what's the registry state machine (draft → reviewed → enabled → room-granted)?
+6. **Existing primitives to lean on** — `subagent` tool (B712), background tasks, `delegate`, structured pipelines, MCP server mode (clawq can expose its own freshly-authored tools to other agents immediately). How much of this is already "an extension system in disguise"?
+
+## Acceptance Criteria (research deliverable)
+
+- [ ] A design memo (`docs/` or `docs/design/`) evaluating ≥3 extension-mechanism options with a recommendation, citing the `~/.llm-general` research above.
+- [ ] A recommended primary extension contract (tool vs pipeline vs template vs plugin-dir), with a concrete "hello world" example of an extension authored by an agent.
+- [ ] A documented authoring-loop spec: model roles (GLM-5.2 authors, GPT-5.5 review-and-fixes), the `review-and-fix` invocation, and the registry state machine (draft → reviewed → enabled → granted).
+- [ ] A shortlist (≤8) of seed pipelines/tools to grow via this loop — mapped to Claude Tag use-cases — explicitly rejecting broad third-party integration.
+- [ ] A risk/safety section: how self-authored extensions are sandboxed (reuse `egress_policy`, `credential_lease`, `landlock`), and how a malicious/broken extension is contained.
+- [ ] Explicit decision on whether to adopt an external plugin standard (e.g. MCP-only) vs a clawq-native plugin dir — with trade-offs.
+- [ ] Links/IDs to follow-up implementation bugs (do not implement here).
+
+## Out of Scope
+
+- Implementing the extension system (this bug is research → design → follow-up bugs).
+- Integrating third-party tools/services en masse (explicitly rejected per user steer).
+- Replacing MCP (MCP remains a first-class extension substrate; this research decides what sits *alongside* it).
+
+## Notes
+
+- User steer: "Ideally we don't actually integrate a bunch of stuff, but we let clawq extend clawq and add features ad-hoc (using a good coding model like GLM-5.2 + `review-and-fix`-es by GPT-5.5)." Keep the recommendation aligned to this.
+- This bug supersedes the "thin pipeline catalogue" framing in GAP-5: the fix is a self-extension mechanism, not hand-authoring more pipelines.
