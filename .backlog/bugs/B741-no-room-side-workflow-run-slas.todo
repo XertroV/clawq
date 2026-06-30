@@ -1,0 +1,11 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B741
+priority: high
+status: pending
+tags: []
+title: No room-side /workflow run slash command despite docs (workflow runs need room invocation)
+---
+docs/github-integration.md previously documented a '/workflow run <name> --env=... --version=...' room slash command, but no /workflow slash command is registered (grep slash_commands*.ml = nothing). Workflow runs are only triggerable via the CLI 'clawq pipeline trigger <name> --input k=v ...' (command_bridge_pipeline.ml:303). Docs corrected to the CLI form with a TODO. Decision: is a room-side /workflow (or generic slash-delegating) command intended? If so implement; else the doc is now correct. Found in docs-audit (lane D, D-03).
