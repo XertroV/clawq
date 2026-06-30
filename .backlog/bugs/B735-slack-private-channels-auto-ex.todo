@@ -1,0 +1,60 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B735
+priority: medium
+status: pending
+tags:
+    - slack
+    - security
+    - privacy
+    - room-agent
+    - claude-tag
+title: 'Slack private channels: auto-exclude by default (defense-in-depth over allow-list, Claude Tag ''no private channel reporting'' parity)'
+---
+## Goal
+
+Add **defense-in-depth** Slack private-channel handling so that a misconfigured `allow_channels` allow-list cannot accidentally let the bot read or operate inside a Slack private channel. Today privacy is enforced solely by operator-maintained allow-list; Claude Tag additionally guarantees "it doesn't report from private channels" automatically.
+
+## Description
+
+`src/slack.ml:86` (`is_allowed_allowlist ~kind:"channel" ~id:channel_id config.allow_channels`) is the sole gate: a channel is accessible iff the operator listed it. Slack private channels (`is_private: true` on channel metadata, or membership-implied) are not introspected. Risks:
+
+- Operator adds a channel ID to `allow_channels` that happens to be private → bot reads a sensitive channel.
+- Workspace rename / channel-privacy flip changes semantics under the operator's allow-list.
+- No explicit "private channels require a second confirmation" guard.
+
+### Approach
+
+1. When a Slack event arrives, fetch channel metadata (`conversations.info`) and inspect `channel.is_private`.
+2. Apply a **private-channel policy** (`config.slack.private_channel_policy`):
+   - `deny` (default): private channels are always refused, even if listed in `allow_channels`. To use a private channel the operator must set an explicit `allow_private_channels` list (separate, intentionally-verbose).
+   - `allow_if_listed`: current behaviour (backward compat).
+3. Log every private-channel refusal to the `room_activity_ledger` / audit log so misconfigurations are visible.
+4. On daemon startup / config reload, validate the allow-list against known private channels and emit a warning for any private channel present in `allow_channels` under the default policy.
+5. Apply the same private-default-deny rule to the ambient watcher and cron room routines (they must not silently read private channels even with a grant — coordinate with GAP-1).
+
+### Files
+
+- `src/slack.ml` (allow-list gate ~line 86, add private check)
+- `src/slack_socket.ml` (Socket Mode path parity)
+- `src/http_server_webhooks.ml` (Events API path parity)
+- `config` types (`src/runtime_config_types.ml` or slack config): `private_channel_policy`, `allow_private_channels`
+- `src/ambient_policy.ml` / `src/room_watcher_decision.ml` (ambient must respect private-deny)
+
+## Acceptance Criteria
+
+- [ ] Under default policy (`deny`), a private channel in `allow_channels` is refused (event dropped, not processed) and logged.
+- [ ] A private channel explicitly listed in `allow_private_channels` under `deny` policy IS allowed (intentional opt-in).
+- [ ] `allow_if_listed` policy reproduces today's behaviour exactly (no regression).
+- [ ] Startup/config-reload warns when `allow_channels` contains a private channel under `deny` policy.
+- [ ] Ambient watcher and cron room routines never read or summarise a private channel unless it is in `allow_private_channels`.
+- [ ] `make test` passes; new tests in `test/test_slack*.ml` cover deny/allow/backcompat + ambient private-deny.
+- [ ] No additional Slack API permission scopes required beyond existing `conversations:read` (verify; if `channels:read` only covers public, document the scope requirement).
+
+## Docs Updates
+
+- `docs/connector-reference.md` Slack section: document `private_channel_policy` (`deny` default vs `allow_if_listed`), `allow_private_channels`, and the "it won't read private channels" guarantee.
+- `docs/setup-guide.md` Slack setup: add a "Private channels" callout — default-deny, how to opt in, audit-log visibility.
+- `docs/cli-reference.md` / room setup wizard (`P17.M2` wizard): add a wizard check that flags private channels in the allow-list.
