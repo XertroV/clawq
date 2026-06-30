@@ -1,14 +1,15 @@
 ---
 claimed_at: "2026-06-30T04:41:56Z"
 claimed_by: cli-user
-completed_at: null
+completed_at: "2026-06-30T06:22:39Z"
 complexity: medium
 depends_on: []
+duration_minutes: 100.72707604205
 estimate_hours: 1
 id: B735
 priority: medium
 started_at: "2026-06-30T04:41:56Z"
-status: in_progress
+status: done
 tags: []
 title: 'Slack private channels: auto-exclude by default (defense-in-depth over allow-list, Claude Tag ''no private channel reporting'' parity)'
 ---
