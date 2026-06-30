@@ -1,0 +1,11 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B745
+priority: high
+status: pending
+tags: []
+title: Private room memories never surfaced via room tools (principal_id wiring mismatch)
+---
+The user-facing guide says Private memories are visible to the room's owning profile, but the tool layer passes principal_id=room_id (the room/conversation id string) while memory_scoped.ml can_see_memory compares against scope_profile_id (stringified profile int id). Structural equality of e.g. '5' vs '19:xxx@thread.tacv2' is always false, so Private memories are never returned via room_memory_list/room_memory_show. Either (a) fix tools_builtin_room_memory.ml:196-198,304-306 to pass the bound profile id as principal_id, or (b) keep the doc corrected to 'Private not surfaced via room tools'. Likely a code bug. Found in docs-audit (lane F, F-003).

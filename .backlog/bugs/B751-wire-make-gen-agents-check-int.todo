@@ -1,0 +1,11 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B751
+priority: high
+status: pending
+tags: []
+title: Wire make gen-agents-check into CI (caught broken generator in docs audit)
+---
+The builtin-agent prompt generator (scripts/gen_agent_builtins.sh) was broken (emitted mk missing the cwd field -> non-compiling regen) and 7 archetype .md files had drifted from code. This went undetected because make gen-agents-check is not wired into CI (.github/workflows/ci.yml has no reference). Add a gen-agents-check step to CI so generator/prompt drift fails the build going forward. Found in docs-audit (lane I, F13) + recommended in P7 completion report.

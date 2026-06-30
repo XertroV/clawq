@@ -1,0 +1,11 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B752
+priority: high
+status: pending
+tags: []
+title: Classify and document the full public CLI command surface
+---
+Many real top-level commands are absent from docs/cli-reference.md and README.md (onboard, provider, channel, memory, session, workspace, subagents, delegate, plan, rig, runtime, tunnel, reset-agent, reset-workspace, otp-show, version, hardware, debug, benchmark, setup, watcher, ec-run, manifest, plus background/pair/rooms subcommand gaps). The doc currently says 'covers the common, user-facing commands'. Decision: which commands are public/support-supported vs internal/debug? Then document the public set. Found in docs-audit (lanes A-5, B-08).

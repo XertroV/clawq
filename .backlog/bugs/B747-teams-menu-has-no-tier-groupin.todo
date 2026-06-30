@@ -1,0 +1,11 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B747
+priority: high
+status: pending
+tags: []
+title: Teams /menu has no tier grouping (Core/Info&Config/Advanced) despite docs
+---
+docs/TOOLS.md described the Teams /menu card as having grouped action buttons (Core / Info & Config / Advanced tiers), but src/slash_commands_manifest.ml:105 menu_adaptive_card_json renders a flat priority-sorted paginated list (9/page, prev/next nav). No tier grouping code exists. Docs now corrected to flat-paginated with TODO. Decision: implement tier grouping or keep doc accurate. Found in docs-audit (lane H, TOOLS-H3).

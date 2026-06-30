@@ -1,0 +1,11 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B749
+priority: high
+status: pending
+tags: []
+title: feature/pipeline-designer/run-task documented as builtin skills but never registered
+---
+docs/builtin-skills/{feature,pipeline-designer,run-task}/SKILL.md present these as builtin skills, but src/builtin_skills.ml:8-480 all_skills registers only test-browser-automation-tool-all, idea, briefing-hourly, briefing-daily. No feature/pipeline-designer/run-task entry exists (grep src/ = nothing; never registered). /skill <name> fails unless user manually copies the file into ~/.clawq/skills/. Decision per skill: register in Builtin_skills.all_skills (so docs truthful), or relabel docs/builtin-skills as 'examples/user-installable' and adjust wording. Note pipeline-designer overlaps the 'pipeline wizard' CLI. Found in docs-audit (lane I, F08/F09/F10).

@@ -1,0 +1,11 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B750
+priority: high
+status: pending
+tags: []
+title: reviewer agent prompt tells it to run tests but shell_exec is denied
+---
+The reviewer builtin agent's system-prompt body instructs 'Run the test suite / Execute make test' (Pre-Review Audit step 3, Prime Directive 4), but src/agent_template_builtins.ml:556-566 denies shell_exec (allowed: file_read, memory_store, memory_recall, debate only). The reviewer literally cannot run make test. The prompt is self-contradictory at runtime. Decision: either restore shell_exec to reviewer (update .md frontmatter + system-prompt), or change the reviewer prompt to delegate test execution to the tester agent. Found in docs-audit (lane I, F14).

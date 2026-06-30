@@ -739,3 +739,10 @@ bugs:
     - file: B742-provenance-comment-backlink-re.todo
     - file: B743-teams-adaptive-card-version-in.todo
     - file: B744-telegram-parse-mode-inconsiste.todo
+    - file: B745-private-room-memories-never-su.todo
+    - file: B746-manifest-telegram-output-file.todo
+    - file: B747-teams-menu-has-no-tier-groupin.todo
+    - file: B749-feature-pipeline-designer-run.todo
+    - file: B750-reviewer-agent-prompt-tells-it.todo
+    - file: B751-wire-make-gen-agents-check-int.todo
+    - file: B752-classify-and-document-the-full.todo

@@ -1,0 +1,11 @@
+---
+complexity: medium
+depends_on: []
+estimate_hours: 1
+id: B746
+priority: high
+status: pending
+tags: []
+title: manifest telegram --output FILE not implemented (documented previously)
+---
+docs/TOOLS.md documented 'clawq manifest telegram --output cmds.json', but src/command_bridge_shared.ml:50-72 cmd_manifest only has a --output branch for teams, not telegram; 'telegram --output ...' falls through to usage. Docs now note stdout-only (redirect with shell >). Decision: add a ["telegram";"--output";path] branch mirroring teams, or keep doc corrected. Found in docs-audit (lane H, TOOLS-H1).
