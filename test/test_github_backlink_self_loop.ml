@@ -832,6 +832,47 @@ let test_multiple_rooms_get_independent_backlinks () =
       in
       Alcotest.(check int) "PR #70 has 2 backlinks" 2 (List.length pr_links))
 
+(* ---- record_provenance_comment: provenance backlink ---- *)
+
+let test_record_provenance_comment () =
+  with_db (fun db ->
+      let _inserted =
+        Room_github_backlinks.record_provenance_comment ~db ~repo:"org/repo"
+          ~pr_number:42 ~github_item_id:"999"
+          ~github_url:"https://github.com/org/repo/pull/42#issuecomment-999"
+          ~room_id:"github:org/repo:pr:42" ~room_item_id:"999" ()
+      in
+      (* Verify the backlink was inserted *)
+      let links =
+        Room_github_backlinks.find_by_repo_pr ~db ~repo:"org/repo" ~pr_number:42
+          ()
+      in
+      Alcotest.(check int) "one provenance backlink" 1 (List.length links);
+      let bl = List.hd links in
+      Alcotest.(check string)
+        "relationship" "provenance_comment"
+        (Room_github_backlinks.relationship_to_string bl.relationship);
+      Alcotest.(check string)
+        "direction" "room_to_github"
+        (Room_github_backlinks.direction_to_string bl.direction);
+      Alcotest.(check string)
+        "github_item_type" "pr_comment"
+        (Room_github_backlinks.github_item_type_to_string bl.github_item_type);
+      Alcotest.(check string)
+        "github_item_id" "999"
+        (Option.value ~default:"" bl.github_item_id);
+      (* Idempotency: duplicate insert is a no-op *)
+      let _inserted2 =
+        Room_github_backlinks.record_provenance_comment ~db ~repo:"org/repo"
+          ~pr_number:42 ~github_item_id:"999" ~room_id:"github:org/repo:pr:42"
+          ~room_item_id:"999" ()
+      in
+      let links2 =
+        Room_github_backlinks.find_by_repo_pr ~db ~repo:"org/repo" ~pr_number:42
+          ()
+      in
+      Alcotest.(check int) "still one after duplicate" 1 (List.length links2))
+
 let suite =
   [
     (* Bot self-loop marker detection *)
@@ -903,4 +944,8 @@ let suite =
       test_dispatch_notification_contains_footer_links;
     Alcotest.test_case "multiple rooms get independent backlinks" `Quick
       test_multiple_rooms_get_independent_backlinks;
+    (* Provenance_comment backlink *)
+    Alcotest.test_case
+      "record_provenance_comment inserts with correct relationship" `Quick
+      test_record_provenance_comment;
   ]

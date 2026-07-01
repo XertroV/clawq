@@ -555,12 +555,7 @@ items and Clawq room items for audit trails, retries, and provenance tracking.
 | `subscription_delivery` | GitHub -> Room | PR event delivered to subscribed room |
 | `ci_notification` | GitHub -> Room | CI status delivered to room |
 | `triggered_run` | Room -> GitHub | Room command triggered a review/workflow run |
-| `provenance_comment` | Room -> GitHub | Background task posted result back to PR (defined; not yet recorded -- see TODO) |
-
-> TODO(follow-up): the `provenance_comment` (a.k.a. `Provenance_comment`)
-relationship variant is defined and round-trips through encode/decode, but no
-helper currently inserts a backlink row with this relationship. Recording it
-is a follow-up.
+| `provenance_comment` | Room -> GitHub | Background task posted result back to PR |
 
 ### Idempotency
 

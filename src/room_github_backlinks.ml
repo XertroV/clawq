@@ -514,6 +514,19 @@ let record_triggered_run ~db ~repo ~pr_number ~github_item_type ?github_url
        ?thread_id ~room_item_type ?room_item_id ~direction:Room_to_github
        ~relationship:Triggered_run ?snapshot_id ())
 
+(** [record_provenance_comment ~db ~repo ~pr_number ?github_item_id ?github_url
+     ~room_id ?thread_id ?room_item_id ?snapshot_id ()] records that a
+    background task / room action posted a result comment back to a GitHub PR.
+    This is the Room -> GitHub direction with [Provenance_comment] relationship.
+*)
+let record_provenance_comment ~db ~repo ~pr_number ?github_item_id ?github_url
+    ~room_id ?thread_id ?room_item_id ?snapshot_id () =
+  ignore
+    (insert ~db ~repo ~pr_number ~github_item_type:Pr_comment ?github_item_id
+       ?github_url ~room_id ?thread_id ~room_item_type:Message ?room_item_id
+       ~direction:Room_to_github ~relationship:Provenance_comment ?snapshot_id
+       ())
+
 (** [record_room_to_room ~db ~room_id ?thread_id ~room_item_type ~room_item_id
      ~linked_room_item_type ~linked_room_item_id ?snapshot_id ()] records a
     backlink between two room-side items (e.g., background task -> review run).
