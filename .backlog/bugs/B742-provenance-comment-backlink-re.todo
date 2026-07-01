@@ -1,14 +1,15 @@
 ---
 claimed_at: "2026-07-01T06:02:04Z"
 claimed_by: cli-user
-completed_at: null
+completed_at: "2026-07-01T07:32:17Z"
 complexity: medium
 depends_on: []
+duration_minutes: 90.2271473373
 estimate_hours: 1
 id: B742
 priority: high
 started_at: "2026-07-01T06:02:04Z"
-status: in_progress
+status: done
 tags: []
 title: provenance_comment backlink relationship defined but never recorded
 ---
