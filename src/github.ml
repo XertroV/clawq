@@ -260,49 +260,66 @@ let post_reply ~(github_config : Runtime_config.github_config)
       in
       match placeholder_id with
       | Some cid ->
-          Github_api.edit_comment
-            ~app_token:(Github_app_token.resolve_app_token ())
-            ~auth:github_config.auth ~resolve_headers ~egress_rules
-            ~egress_audit ~owner ~repo ~comment_id:cid ~body:reply_text ()
+          let* () =
+            Github_api.edit_comment
+              ~app_token:(Github_app_token.resolve_app_token ())
+              ~auth:github_config.auth ~resolve_headers ~egress_rules
+              ~egress_audit ~owner ~repo ~comment_id:cid ~body:reply_text ()
+          in
+          Lwt.return (Some (string_of_int cid))
       | None -> (
           match event with
           | Github_webhook.PrReviewComment e ->
-              Github_api.reply_to_review_comment
-                ~app_token:(Github_app_token.resolve_app_token ())
-                ~auth:github_config.auth ~resolve_headers ~egress_rules
-                ~egress_audit ~owner ~repo ~pull_number:e.pr_number
-                ~comment_id:e.comment_id ~body:reply_text ()
+              let* () =
+                Github_api.reply_to_review_comment
+                  ~app_token:(Github_app_token.resolve_app_token ())
+                  ~auth:github_config.auth ~resolve_headers ~egress_rules
+                  ~egress_audit ~owner ~repo ~pull_number:e.pr_number
+                  ~comment_id:e.comment_id ~body:reply_text ()
+              in
+              (* reply_to_review_comment does not return the new comment ID *)
+              Lwt.return None
           | Github_webhook.PullRequest e ->
-              Github_api.post_comment
-                ~app_token:(Github_app_token.resolve_app_token ())
-                ~auth:github_config.auth ~resolve_headers ~egress_rules
-                ~egress_audit ~owner ~repo ~issue_number:e.pr_number
-                ~body:reply_text ()
+              let* id =
+                Github_api.post_comment_returning_id
+                  ~app_token:(Github_app_token.resolve_app_token ())
+                  ~auth:github_config.auth ~resolve_headers ~egress_rules
+                  ~egress_audit ~owner ~repo ~issue_number:e.pr_number
+                  ~body:reply_text ()
+              in
+              Lwt.return (Option.map string_of_int id)
           | Github_webhook.IssueComment e ->
-              Github_api.post_comment
-                ~app_token:(Github_app_token.resolve_app_token ())
-                ~auth:github_config.auth ~resolve_headers ~egress_rules
-                ~egress_audit ~owner ~repo ~issue_number:e.issue_number
-                ~body:reply_text ()
+              let* id =
+                Github_api.post_comment_returning_id
+                  ~app_token:(Github_app_token.resolve_app_token ())
+                  ~auth:github_config.auth ~resolve_headers ~egress_rules
+                  ~egress_audit ~owner ~repo ~issue_number:e.issue_number
+                  ~body:reply_text ()
+              in
+              Lwt.return (Option.map string_of_int id)
           | Github_webhook.PullRequestReview e ->
-              Github_api.post_comment
-                ~app_token:(Github_app_token.resolve_app_token ())
-                ~auth:github_config.auth ~resolve_headers ~egress_rules
-                ~egress_audit ~owner ~repo ~issue_number:e.pr_number
-                ~body:reply_text ()
+              let* id =
+                Github_api.post_comment_returning_id
+                  ~app_token:(Github_app_token.resolve_app_token ())
+                  ~auth:github_config.auth ~resolve_headers ~egress_rules
+                  ~egress_audit ~owner ~repo ~issue_number:e.pr_number
+                  ~body:reply_text ()
+              in
+              Lwt.return (Option.map string_of_int id)
           | Github_webhook.CheckRun _ | Github_webhook.CheckSuite _
           | Github_webhook.WorkflowRun _ | Github_webhook.Ignored ->
-              Lwt.return_unit))
+              Lwt.return None))
     (fun exn ->
       Logs.err (fun m ->
           m "GitHub: failed to post reply: %s" (Printexc.to_string exn));
-      Lwt.return_unit)
+      Lwt.return None)
 
 let run_clawq_command ~(github_config : Runtime_config.github_config)
     ?(resolve_headers = (None : Github_api.resolve_headers_fn option))
     ?(egress_rules = ([] : Runtime_config_types.egress_rule list))
-    ?(egress_audit = Policy_http_client.no_audit) ~(session_manager : Session.t)
-    ~api_limiter ~owner ~repo ~author event ~user_message ~preamble =
+    ?(egress_audit = Policy_http_client.no_audit) ?(db : Sqlite3.db option)
+    ~(session_manager : Session.t) ~api_limiter ~owner ~repo ~author event
+    ~user_message ~preamble =
   let open Lwt.Syntax in
   let key = Github_webhook.session_key event in
   let full_message = preamble ^ "\n\n" ^ user_message in
@@ -386,10 +403,20 @@ let run_clawq_command ~(github_config : Runtime_config.github_config)
           "error commented" )
   in
   (* Edit placeholder or post new comment with final response *)
-  let* () =
+  let* posted_comment_id =
     post_reply ~github_config ~resolve_headers ~egress_rules ~egress_audit
       ~api_limiter ~owner ~repo ~placeholder_id event ~reply_text
   in
+  (* Record provenance backlink if we have the comment ID and DB *)
+  (match (posted_comment_id, db) with
+  | Some comment_id, Some db ->
+      let pr_number = issue_number_of_event event in
+      if pr_number > 0 then
+        let session_key = Github_webhook.session_key event in
+        let repo_full_name = owner ^ "/" ^ repo in
+        Room_github_backlinks.record_provenance_comment ~db ~repo:repo_full_name
+          ~pr_number ~github_item_id:comment_id ~room_id:session_key ()
+  | _ -> ());
   Logs.info (fun m ->
       m "GitHub: %s/%s %s by @%s -> %s" owner repo
         (Github_webhook.event_type_string event)
@@ -730,10 +757,11 @@ let handle_webhook ~(repo_config : Runtime_config.github_repo_config)
                           ~session_manager ~event ~pr_files
                     | _ -> Lwt.return 0
                   in
+                  let db_opt = Session.get_db session_manager in
                   match Github_webhook.extract_clawq ~event ~pr_files with
                   | Some (user_message, preamble) ->
                       run_clawq_command ~github_config ~resolve_headers
-                        ~egress_rules ~egress_audit ~session_manager
+                        ~egress_rules ~egress_audit ?db:db_opt ~session_manager
                         ~api_limiter ~owner ~repo ~author event ~user_message
                         ~preamble
                   | None ->
